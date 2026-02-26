@@ -1,0 +1,24 @@
+:root {
+    /* Pastel Palette */
+    --color-pastel-green-light: #deeda5;
+    --color-pastel-green: #a0c282;
+    --color-sage: #808b77;
+    --color-lavender: #ac97b4;
+    --color-rose: #b68191;
+    --color-peach: #edbd9a;
+    --color-yellow: #ffe3a4;
+
+    /* Neutrals */
+    --color-white: #ffffff;
+    --color-glass-bg: rgba(255, 255, 255, 0.4);
+    --color-glass-border: rgba(255, 255, 255, 0.5);
+    --color-text-main: #2d3436;
+    --color-text-muted: #636e72;
+
+    /* Shadows */
+    --shadow-soft: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+    --shadow-focus: 0 0 15px rgba(160, 194, 130, 0.3);
+
+    /* Transitions */
+    --transition-smooth: all 0.3s ease-in-out;
+}
