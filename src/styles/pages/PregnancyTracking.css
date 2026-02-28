@@ -1,0 +1,515 @@
+@import '../variables.css';
+
+/* ══════════════════════════════════════════
+   LAYOUT
+══════════════════════════════════════════ */
+.tracking-page {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* ══════════════════════════════════════════
+   TOP STATS GRID
+══════════════════════════════════════════ */
+.tracking-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.track-stat-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    border: 1px solid #eef0f4;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.track-stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.theme-blue .track-stat-icon {
+    background: rgba(91, 174, 208, 0.1);
+    color: #2d7fa3;
+}
+
+.theme-red .track-stat-icon {
+    background: rgba(224, 92, 115, 0.1);
+    color: #b73a52;
+}
+
+.theme-green .track-stat-icon {
+    background: rgba(109, 184, 160, 0.1);
+    color: #3d8870;
+}
+
+.theme-orange .track-stat-icon {
+    background: rgba(249, 162, 108, 0.1);
+    color: #c26922;
+}
+
+.track-stat-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.track-stat-val {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--color-text);
+    line-height: 1;
+}
+
+.track-stat-lbl {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+}
+
+
+/* ══════════════════════════════════════════
+   ANALYTICS PANEL (CSS CHARTS)
+══════════════════════════════════════════ */
+.analytics-panel {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+}
+
+.analytics-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    border: 1px solid #eef0f4;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+    display: flex;
+    flex-direction: column;
+}
+
+.analytics-card.span-2 {
+    grid-column: span 2;
+}
+
+.analytics-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin: 0 0 20px;
+}
+
+/* 1. Trimester Progress Bar */
+.tri-progress-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: auto;
+    margin-bottom: auto;
+}
+
+.tri-progress-bar {
+    height: 16px;
+    border-radius: 99px;
+    background: #eef0f4;
+    display: flex;
+    overflow: hidden;
+}
+
+.tri-seg {
+    height: 100%;
+    transition: width 0.5s ease;
+}
+
+.tri-seg.tri1 {
+    background: var(--color-rose-light);
+}
+
+.tri-seg.tri2 {
+    background: var(--color-yellow);
+}
+
+.tri-seg.tri3 {
+    background: var(--color-sage);
+}
+
+.tri-legend,
+.donut-legend {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+}
+
+.dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+}
+
+.dot.tri1 {
+    background: var(--color-rose-light);
+}
+
+.dot.tri2 {
+    background: var(--color-yellow);
+}
+
+.dot.tri3 {
+    background: var(--color-sage);
+}
+
+/* 2. CSS Donut Chart */
+.css-donut-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.css-donut {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.css-donut-hole {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.css-donut-hole span {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--color-text);
+    line-height: 1;
+}
+
+.css-donut-hole small {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+}
+
+.dot.d-high {
+    background: #e05c73;
+}
+
+.dot.d-mon {
+    background: #f9a26c;
+}
+
+.dot.d-norm {
+    background: #6db8a0;
+}
+
+/* 3. Bar Chart (CSS) */
+.bar-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.bar-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.bar-lbl {
+    width: 50px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+}
+
+.bar-track {
+    flex: 1;
+    height: 8px;
+    background: #eef0f4;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.bar-fill {
+    height: 100%;
+    border-radius: 4px;
+}
+
+.bg-red {
+    background: #e05c73;
+}
+
+
+/* ══════════════════════════════════════════
+   TRACKING TABLE
+══════════════════════════════════════════ */
+.tracking-table-card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #eef0f4;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.table-toolbar {
+    padding: 16px 20px;
+    border-bottom: 1px solid #eef0f4;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.table-filters {
+    display: flex;
+    gap: 12px;
+}
+
+.track-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1000px;
+}
+
+.track-table th {
+    background: #fbfbfc;
+    padding: 14px 16px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--color-text-light);
+    border-bottom: 1px inset #eef0f4;
+}
+
+.track-row {
+    border-bottom: 1px solid #f4f6f9;
+    transition: background 0.15s ease;
+}
+
+.track-row:hover {
+    background: #f8f9fb;
+}
+
+.track-row.expanded {
+    background: #fdfdfe;
+    border-bottom: none;
+}
+
+.track-table td {
+    padding: 14px 16px;
+    vertical-align: middle;
+    font-size: 13.5px;
+}
+
+/* Expand Button */
+.cell-expand {
+    padding-right: 0 !important;
+}
+
+.expand-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-text-light);
+    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+}
+
+.expand-btn:hover {
+    background: #eef0f4;
+    color: var(--color-text);
+}
+
+/* Table Content Classes */
+.track-patient {
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.track-patient:hover .tp-name {
+    color: var(--color-rose);
+}
+
+.tp-name {
+    font-weight: 700;
+    color: var(--color-text);
+    transition: color 0.15s ease;
+}
+
+.tp-id {
+    font-size: 11.5px;
+    color: var(--color-text-muted);
+    font-weight: 600;
+}
+
+.alert-flag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #b73a52;
+    background: rgba(224, 92, 115, 0.08);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.row-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.icon-btn-sm {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid #eef0f4;
+    background: #fff;
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.icon-btn-sm:hover {
+    background: #f4f6f9;
+    border-color: #d1d6e0;
+    color: var(--color-text);
+}
+
+.icon-btn-sm.text-rose:hover {
+    color: var(--color-rose);
+    border-color: var(--color-rose-light);
+    background: rgba(185, 129, 138, 0.05);
+}
+
+/* ══════════════════════════════════════════
+   EXPANDED DRAWER
+══════════════════════════════════════════ */
+.drawer-row {
+    background: #fdfdfe;
+    border-bottom: 1px solid #eef0f4;
+}
+
+.drawer-content {
+    background: #f8f9fb;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 0 16px 16px 40px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    font-size: 13px;
+    color: var(--color-text);
+}
+
+.drawer-lbl {
+    font-size: 11.5px;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--color-text-light);
+    margin-right: 8px;
+}
+
+.drawer-vitals {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+.d-vit strong {
+    font-weight: 600;
+    color: var(--color-text-muted);
+}
+
+.drawer-notes {
+    flex: 1;
+    border-left: 1px solid #d1d6e0;
+    padding-left: 16px;
+}
+
+.drawer-appt {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    color: var(--color-sage);
+}
+
+
+/* ══════════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════════ */
+@media (max-width: 1100px) {
+    .analytics-panel {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .analytics-card.span-2 {
+        grid-column: span 2;
+    }
+}
+
+@media (max-width: 768px) {
+    .analytics-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .analytics-card.span-2 {
+        grid-column: span 1;
+    }
+
+    .drawer-content {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .drawer-notes {
+        border-left: none;
+        padding-left: 0;
+    }
+}
