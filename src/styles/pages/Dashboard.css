@@ -12,29 +12,10 @@
 }
 
 /* ══════════════════════════════════════════
-   PAGE HEADER
+   PAGE HEADER (Global styles applied from DashboardLayout.css)
 ══════════════════════════════════════════ */
-.page-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 12px;
-}
 
-.page-title {
-    font-size: 22px;
-    font-weight: 700;
-    color: var(--color-text);
-    margin: 0 0 2px;
-    letter-spacing: -0.3px;
-}
 
-.page-date {
-    font-size: 13px;
-    color: var(--color-text-muted);
-    margin: 0;
-}
 
 .page-actions {
     display: flex;
@@ -85,6 +66,46 @@
 /* ══════════════════════════════════════════
    WELCOME BANNER
 ══════════════════════════════════════════ */
+.wave-emoji {
+    display: inline-block;
+    animation: wave 2.5s infinite;
+    transform-origin: 70% 70%;
+}
+
+@keyframes wave {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    10% {
+        transform: rotate(14deg);
+    }
+
+    20% {
+        transform: rotate(-8deg);
+    }
+
+    30% {
+        transform: rotate(14deg);
+    }
+
+    40% {
+        transform: rotate(-4deg);
+    }
+
+    50% {
+        transform: rotate(10deg);
+    }
+
+    60% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(0deg);
+    }
+}
+
 .welcome-banner {
     background: linear-gradient(135deg, var(--color-rose) 0%, var(--color-rose-dark) 100%);
     border-radius: 16px;
@@ -171,33 +192,7 @@
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
 }
 
-/* Accent strip */
-.stat-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    border-radius: 16px 16px 0 0;
-}
 
-.stat-card--rose::before {
-    background: var(--color-rose);
-}
-
-.stat-card--orange::before {
-    background: #f9a26c;
-}
-
-.stat-card--pink::before {
-    background: var(--color-pink-light);
-    filter: saturate(1.5);
-}
-
-.stat-card--sage::before {
-    background: var(--color-sage);
-}
 
 .stat-top {
     display: flex;
@@ -307,13 +302,16 @@
     padding: 20px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
     border: 1px solid #eef0f4;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .card-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 16px;
+    margin-bottom: 8px; /* Reduced from 16px to accommodate description */
     flex-wrap: wrap;
     gap: 8px;
 }
@@ -378,6 +376,14 @@
 
 .card-link:hover {
     opacity: 0.7;
+}
+
+.card-description {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    margin: 0 0 16px 0;
+    line-height: 1.4;
+    word-break: break-word;
 }
 
 /* ══════════════════════════════════════════
@@ -458,6 +464,10 @@
     font-size: 11.5px;
     color: var(--color-text-muted);
     margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
 }
 
 /* Tags */
@@ -628,12 +638,17 @@
     align-items: center;
     gap: 8px;
     margin-bottom: 3px;
+    flex-wrap: wrap;
 }
 
 .risk-name {
     font-size: 13.5px;
     font-weight: 600;
     color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 130px;
 }
 
 .risk-status-badge {

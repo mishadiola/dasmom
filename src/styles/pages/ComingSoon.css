@@ -1,0 +1,71 @@
+@import '../variables.css';
+
+.coming-soon-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: calc(100vh - 120px);
+    padding: 24px;
+}
+
+.coming-soon-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 40px;
+    text-align: center;
+    max-width: 420px;
+    width: 100%;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+    border: 1px solid #eef0f4;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    animation: fade-in 0.4s ease-out;
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.coming-soon-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(185, 129, 138, 0.1);
+    color: var(--color-rose);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+}
+
+.coming-soon-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin: 0;
+    letter-spacing: -0.5px;
+}
+
+.coming-soon-text {
+    font-size: 14px;
+    color: var(--color-text-muted);
+    line-height: 1.6;
+    margin: 0 0 8px;
+}
+
+.coming-soon-btn {
+    width: 100%;
+    justify-content: center;
+    margin-top: 8px;
+}

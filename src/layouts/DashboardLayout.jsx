@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard, Users, Baby, AlertTriangle, CalendarCheck,
@@ -20,7 +20,6 @@ const NAV_ITEMS = [
         section: 'Maternal Care',
         items: [
             { label: 'Patient Profiles', icon: Users, path: '/dashboard/patients' },
-            { label: 'Pregnancy Tracking', icon: HeartPulse, path: '/dashboard/pregnancy' },
             { label: 'High Risk Cases', icon: AlertTriangle, path: '/dashboard/high-risk' },
             { label: 'Prenatal Visits', icon: CalendarCheck, path: '/dashboard/prenatal' },
             { label: 'Postpartum Records', icon: FileText, path: '/dashboard/postpartum' },
@@ -60,9 +59,39 @@ const DashboardLayout = () => {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [sidebarMobile, setSidebarMobile] = useState(false);
     const [notifOpen, setNotifOpen] = useState(false);
+    const [notifFilter, setNotifFilter] = useState('all');
+    const [userMenuOpen, setUserMenuOpen] = useState(false);
+    const userMenuRef = useRef(null);
     const navigate = useNavigate();
 
-    const handleLogout = () => navigate('/login');
+    // Click outside to close user menu
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+                setUserMenuOpen(false);
+            }
+        };
+
+        if (userMenuOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [userMenuOpen]);
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setSidebarOpen(false);
+        }, 800);
+        return () => clearTimeout(timer);
+    }, []);
+
+    const handleLogout = () => {
+        if (window.confirm('Are you sure you want to log out?')) {
+            navigate('/login');
+        }
+    };
 
     return (
         <div className={`app-shell ${sidebarOpen ? 'sidebar-expanded' : 'sidebar-collapsed'}`}>
@@ -186,9 +215,21 @@ const DashboardLayout = () => {
                                 <div className="notif-panel" role="dialog" aria-label="Notifications">
                                     <div className="notif-header">
                                         <h3>Notifications</h3>
-                                        <button onClick={() => setNotifOpen(false)} aria-label="Close">
-                                            <X size={15} />
-                                        </button>
+                                        <div className="notif-header-actions">
+                                            <select 
+                                                className="notif-filter-select"
+                                                value={notifFilter}
+                                                onChange={(e) => setNotifFilter(e.target.value)}
+                                            >
+                                                <option value="all">All</option>
+                                                <option value="alert">Alerts</option>
+                                                <option value="warning">Warnings</option>
+                                                <option value="info">Info</option>
+                                            </select>
+                                            <button onClick={() => setNotifOpen(false)} aria-label="Close">
+                                                <X size={15} />
+                                            </button>
+                                        </div>
                                     </div>
                                     <ul className="notif-list">
                                         {[
@@ -197,7 +238,7 @@ const DashboardLayout = () => {
                                             { type: 'info', text: '3 prenatal visits scheduled today', time: '2 hrs ago' },
                                             { type: 'warning', text: 'Ana Cruz missed her 32-week visit', time: 'Yesterday' },
                                             { type: 'info', text: 'New newborn registered – Brgy. 5', time: 'Yesterday' },
-                                        ].map((n, i) => (
+                                        ].filter(n => notifFilter === 'all' || n.type === notifFilter).map((n, i) => (
                                             <li key={i} className={`notif-item notif-item--${n.type}`}>
                                                 <span className="notif-dot" aria-hidden="true" />
                                                 <div>
@@ -212,17 +253,44 @@ const DashboardLayout = () => {
                         </div>
 
                         {/* User profile */}
-                        <div className="topbar-user">
-                            <div className="user-avatar" aria-hidden="true">
-                                {MOCK_USER.avatar}
+                        <div className="topbar-user-wrap" style={{ position: 'relative' }} ref={userMenuRef}>
+                            <div className="topbar-user" onClick={() => setUserMenuOpen(!userMenuOpen)}>
+                                <div className="user-avatar" aria-hidden="true">
+                                    <img src="https://ui-avatars.com/api/?name=Maria+Santos&background=b9818a&color=fff" alt={MOCK_USER.name} className="user-avatar-img" />
+                                </div>
+                                <div className="user-info">
+                                    <span className="user-name">{MOCK_USER.name}</span>
+                                    <span className="user-role">
+                                        <Shield size={10} aria-hidden="true" />
+                                        {MOCK_USER.role}
+                                    </span>
+                                </div>
                             </div>
-                            <div className="user-info">
-                                <span className="user-name">{MOCK_USER.name}</span>
-                                <span className="user-role">
-                                    <Shield size={10} aria-hidden="true" />
-                                    {MOCK_USER.role}
-                                </span>
-                            </div>
+
+                            {userMenuOpen && (
+                                <div className="user-menu-panel">
+                                    <div className="user-menu-header">
+                                        <p className="user-menu-name">{MOCK_USER.name}</p>
+                                        <p className="user-menu-email">maria@dasmom.gov.ph</p>
+                                    </div>
+                                    <div className="user-menu-links">
+                                <button className="user-menu-item" onClick={() => {
+                                            navigate('/dashboard/settings?tab=profile');
+                                            setUserMenuOpen(false);
+                                        }}>
+                                            <Users size={15} /> View Account
+                                        </button>
+                                        <button className="user-menu-item" onClick={() => navigate('/dashboard/settings')}>
+                                            <Settings size={15} /> Settings
+                                        </button>
+                                    </div>
+                                    <div className="user-menu-footer">
+                                        <button className="user-menu-logout" onClick={handleLogout}>
+                                            <LogOut size={15} /> Logout
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </header>

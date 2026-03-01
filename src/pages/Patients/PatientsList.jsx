@@ -88,7 +88,7 @@ const PatientsList = () => {
                         <FileText size={16} />
                         Export List
                     </button>
-                    <button className="btn btn-primary">
+                    <button className="btn btn-primary" onClick={() => navigate('/dashboard/patients/add')}>
                         <Plus size={16} />
                         Add New Patient
                     </button>
@@ -109,6 +109,7 @@ const PatientsList = () => {
                 </div>
 
                 <div className="filters-wrap">
+                    <span className="filters-label">Filters:</span>
                     <div className="filter-group">
                         <span className="filter-icon"><Filter size={14} /></span>
                         <select

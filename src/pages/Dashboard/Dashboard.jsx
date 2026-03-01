@@ -6,6 +6,7 @@ import {
     CheckCircle2, XCircle, Circle, Dot, MoreHorizontal,
     ArrowUpRight, Package, Star
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/Dashboard.css';
 
 /* ════════════════════════════
@@ -15,22 +16,22 @@ const STATS = [
     {
         id: 1, label: 'Total Pregnant Patients', value: 284,
         change: +12, trend: 'up', sub: 'this month',
-        icon: HeartPulse, color: 'rose',
+        icon: HeartPulse, color: 'rose', path: '/dashboard/patients'
     },
     {
         id: 2, label: 'High-Risk Pregnancies', value: 43,
         change: -3, trend: 'down', sub: 'vs last month',
-        icon: AlertTriangle, color: 'orange',
+        icon: AlertTriangle, color: 'orange', path: '/dashboard/high-risk'
     },
     {
         id: 3, label: 'Newborns Registered', value: 31,
         change: +8, trend: 'up', sub: 'this month',
-        icon: Baby, color: 'pink',
+        icon: Baby, color: 'pink', path: '/dashboard/newborns'
     },
     {
         id: 4, label: 'Appointments Today', value: 18,
         change: 0, trend: 'neutral', sub: '6 pending confirmation',
-        icon: CalendarCheck, color: 'sage',
+        icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal'
     },
 ];
 
@@ -99,6 +100,7 @@ const TrimesterBadge = ({ weeks }) => {
    DASHBOARD COMPONENT
 ════════════════════════════ */
 const Dashboard = () => {
+    const navigate = useNavigate();
     const today = new Date().toLocaleDateString('en-PH', {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
     });
@@ -113,22 +115,13 @@ const Dashboard = () => {
                     <h1 className="page-title">Dashboard</h1>
                     <p className="page-date">{today}</p>
                 </div>
-                <div className="page-actions">
-                    <button className="btn btn-outline">
-                        <FileText size={15} />
-                        Export Report
-                    </button>
-                    <button className="btn btn-primary">
-                        <Plus size={15} />
-                        Add Patient
-                    </button>
-                </div>
+                <div className="page-header-empty"></div>
             </div>
 
             {/* ── Welcome Banner ── */}
             <div className="welcome-banner">
                 <div className="welcome-left">
-                    <p className="welcome-greeting">Good morning, Maria 👋</p>
+                    <p className="welcome-greeting">Good morning, Maria <span className="wave-emoji">👋</span></p>
                     <p className="welcome-sub">
                         You have <strong>18 appointments</strong> today and <strong>3 high-risk alerts</strong> requiring attention.
                     </p>
@@ -145,7 +138,12 @@ const Dashboard = () => {
                 {STATS.map((s) => {
                     const Icon = s.icon;
                     return (
-                        <div key={s.id} className={`stat-card stat-card--${s.color}`}>
+                        <div 
+                            key={s.id} 
+                            className={`stat-card stat-card--${s.color}`}
+                            onClick={() => navigate(s.path)}
+                            style={{ cursor: 'pointer' }}
+                        >
                             <div className="stat-top">
                                 <div className={`stat-icon stat-icon--${s.color}`}>
                                     <Icon size={20} />
@@ -181,8 +179,9 @@ const Dashboard = () => {
                                 Today's Appointments
                                 <span className="card-badge card-badge--blue">18</span>
                             </h2>
-                            <button className="card-link">View all <ChevronRight size={13} /></button>
+                            <button className="card-link" onClick={() => navigate('/dashboard/prenatal')}>View all <ChevronRight size={13} /></button>
                         </div>
+                        <p className="card-description">Overview of patients scheduled to visit the clinic today.</p>
                         <div className="table-wrap">
                             <table className="data-table">
                                 <thead>
@@ -246,6 +245,7 @@ const Dashboard = () => {
                                 <button className="card-link">View all <ChevronRight size={13} /></button>
                             </div>
                         </div>
+                        <p className="card-description">Patients with risk conditions needing close observation or priority actions.</p>
                         <div className="risk-list">
                             {HIGH_RISK
                                 .filter(r => riskFilter === 'all' || r.status === riskFilter)
@@ -273,48 +273,6 @@ const Dashboard = () => {
                         </div>
                     </div>
 
-                    {/* BARANGAY OVERVIEW */}
-                    <div className="card">
-                        <div className="card-header">
-                            <h2 className="card-title"><MapPin size={16} />Barangay Overview</h2>
-                            <button className="card-link">Full report <ChevronRight size={13} /></button>
-                        </div>
-                        <div className="table-wrap">
-                            <table className="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>Barangay</th>
-                                        <th>Patients</th>
-                                        <th>High Risk</th>
-                                        <th>Newborns</th>
-                                        <th>Coverage</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {BARANGAY_DATA.map((b) => (
-                                        <tr key={b.name} className="table-row">
-                                            <td className="brgy-name">{b.name}</td>
-                                            <td className="num-cell">{b.total}</td>
-                                            <td>
-                                                <span className={`risk-num ${b.highRisk >= 8 ? 'risk-num--high' : b.highRisk >= 5 ? 'risk-num--med' : 'risk-num--low'}`}>
-                                                    {b.highRisk}
-                                                </span>
-                                            </td>
-                                            <td className="num-cell">{b.newborns}</td>
-                                            <td>
-                                                <div className="coverage-cell">
-                                                    <MiniBar value={b.total - b.highRisk} max={b.total} color="sage" />
-                                                    <span className="coverage-pct">
-                                                        {Math.round(((b.total - b.highRisk) / b.total) * 100)}%
-                                                    </span>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
 
                 </div>{/* end left col */}
 
@@ -326,16 +284,17 @@ const Dashboard = () => {
                         <div className="card-header">
                             <h2 className="card-title">Quick Actions</h2>
                         </div>
+                        <p className="card-description">Shortcuts to frequently used administrative actions.</p>
                         <div className="quick-actions-grid">
                             {[
-                                { label: 'Add Patient', icon: Users, color: 'rose' },
-                                { label: 'Schedule Visit', icon: CalendarCheck, color: 'sage' },
-                                { label: 'Record Vitals', icon: Activity, color: 'blue' },
-                                { label: 'Log Delivery', icon: Baby, color: 'pink' },
-                                { label: 'Issue Vaccine', icon: Syringe, color: 'orange' },
-                                { label: 'Generate Report', icon: FileText, color: 'purple' },
-                            ].map(({ label, icon: Icon, color }) => (
-                                <button key={label} className={`quick-btn quick-btn--${color}`}>
+                                { label: 'Add Patient', icon: Users, color: 'rose', path: '/dashboard/patients/add' },
+                                { label: 'Schedule Visit', icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal' },
+                                { label: 'Record Vitals', icon: Activity, color: 'blue', path: '/dashboard/postpartum' },
+                                { label: 'Log Delivery', icon: Baby, color: 'pink', path: '/dashboard/deliveries' },
+                                { label: 'Issue Vaccine', icon: Syringe, color: 'orange', path: '/dashboard/vaccinations' },
+                                { label: 'Generate Report', icon: FileText, color: 'purple', path: '/dashboard/analytics' },
+                            ].map(({ label, icon: Icon, color, path }) => (
+                                <button key={label} className={`quick-btn quick-btn--${color}`} onClick={() => navigate(path)}>
                                     <Icon size={18} />
                                     <span>{label}</span>
                                 </button>
@@ -348,6 +307,7 @@ const Dashboard = () => {
                         <div className="card-header">
                             <h2 className="card-title"><Activity size={16} />Health Snapshot</h2>
                         </div>
+                        <p className="card-description">A breakdown of prevalent pregnancy conditions for proactive monitoring.</p>
                         <div className="snapshot-list">
                             {[
                                 { label: 'Normal BP', pct: 71, color: 'sage' },
@@ -391,6 +351,7 @@ const Dashboard = () => {
                             </h2>
                             <button className="card-link">Manage <ChevronRight size={13} /></button>
                         </div>
+                        <p className="card-description">Manage real-time inventory levels of vital supplements and vaccines.</p>
                         <div className="stock-list">
                             {VACCINE_STOCK.map((v) => (
                                 <div key={v.name} className={`stock-item stock-item--${v.status}`}>
@@ -421,6 +382,7 @@ const Dashboard = () => {
                             <h2 className="card-title"><Star size={16} />Recent Deliveries</h2>
                             <button className="card-link">View all <ChevronRight size={13} /></button>
                         </div>
+                        <p className="card-description">Recent tracking and records of maternal delivery outcomes.</p>
                         <div className="delivery-list">
                             {RECENT_DELIVERIES.map((d) => (
                                 <div key={d.id} className="delivery-item">
