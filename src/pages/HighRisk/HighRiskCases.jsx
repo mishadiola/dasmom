@@ -17,6 +17,8 @@ const STATS = [
 ];
 
 const HIGH_RISK_PATIENTS = [
+    { id: 'HR-2026-01', name: 'Jane Rose M. Tadeo', age: 28, barangay: 'Brgy. 1', weeks: 32, condition: 'Preeclampsia', level: 'critical', bp: '160/100', lastVisit: '1 week ago', nextVisit: 'Mar 10, 2026', status: 'Needs Visit' },
+    { id: 'HR-2026-02', name: 'Safia C. Baig', age: 30, barangay: 'Brgy. 7', weeks: 36, condition: 'Anemia', level: 'critical', bp: '135/85', lastVisit: '3 days ago', nextVisit: 'Mar 12, 2026', status: 'Upcoming' },
     { id: 1, name: 'Maria Reyes', age: 31, barangay: 'Brgy. 3', weeks: 32, condition: 'Preeclampsia', level: 'critical', bp: '160/100', lastVisit: '2 days ago', nextVisit: 'Today', status: 'Needs Visit' },
     { id: 2, name: 'Susan Flores', age: 28, barangay: 'Brgy. 1', weeks: 28, condition: 'Gestational Diabetes', level: 'warning', bp: '130/85', lastVisit: '1 week ago', nextVisit: 'Tomorrow', status: 'Upcoming' },
     { id: 3, name: 'Nora Villanueva', age: 35, barangay: 'Brgy. 5', weeks: 36, condition: 'Placenta Previa', level: 'critical', bp: '125/80', lastVisit: 'Yesterday', nextVisit: 'In 3 days', status: 'Upcoming' },

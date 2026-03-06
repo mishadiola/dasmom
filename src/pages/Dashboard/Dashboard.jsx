@@ -36,6 +36,11 @@ const STATS = [
 ];
 
 const UPCOMING_APPTS = [
+    { id: 'UA-1', name: 'Naomi Nicole C. Magsino', age: 24, weeks: 24, time: '8:00 AM', type: 'Prenatal', barangay: 'Brgy. 3', risk: 'normal' },
+    { id: 'UA-2', name: 'Jane Rose M. Tadeo', age: 28, weeks: 32, time: '9:30 AM', type: 'High-Risk', risk: 'high' },
+    { id: 'UA-3', name: 'Bhea Mae E. Tria', age: 22, weeks: 10, time: '10:00 AM', type: 'Routine', risk: 'monitor' },
+    { id: 'UA-4', name: 'Guila C. Valdesimo', age: 26, weeks: 20, time: '11:00 AM', type: 'Prenatal', risk: 'normal' },
+    { id: 'UA-5', name: 'Safia C. Baig', age: 30, weeks: 36, time: '2:00 PM', type: 'Follow-up', risk: 'high' },
     { id: 1, name: 'Maria Reyes', age: 28, weeks: 32, time: '8:00 AM', type: 'Prenatal', barangay: 'Brgy. 3', risk: 'high' },
     { id: 2, name: 'Ana Cruz', age: 24, weeks: 20, time: '9:30 AM', type: 'Prenatal', barangay: 'Brgy. 7', risk: 'normal' },
     { id: 3, name: 'Lorna Santos', age: 33, weeks: 36, time: '10:00 AM', type: 'Follow-up', barangay: 'Brgy. 1', risk: 'monitor' },
@@ -44,6 +49,8 @@ const UPCOMING_APPTS = [
 ];
 
 const HIGH_RISK = [
+    { id: 'HR-1', name: 'Jane Rose M. Tadeo', weeks: 32, condition: 'Preeclampsia', bp: '160/100', lastVisit: '1 week ago', status: 'critical' },
+    { id: 'HR-2', name: 'Safia C. Baig', weeks: 36, condition: 'Anemia', bp: '135/85', lastVisit: '3 days ago', status: 'warning' },
     { id: 1, name: 'Maria Reyes', weeks: 32, condition: 'Preeclampsia', bp: '150/95', lastVisit: '2 days ago', status: 'critical' },
     { id: 2, name: 'Susan Flores', weeks: 28, condition: 'Gestional Diabetes', bp: '130/85', lastVisit: '5 days ago', status: 'warning' },
     { id: 3, name: 'Nora Villanueva', weeks: 36, condition: 'Placenta Previa', bp: '125/80', lastVisit: '1 day ago', status: 'critical' },

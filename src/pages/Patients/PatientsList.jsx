@@ -11,29 +11,40 @@ import '../../styles/pages/PatientsList.css';
 /* ════════════════════════════
    MOCK DATA
 ════════════════════════════ */
-const MOCK_PATIENTS = Array.from({ length: 45 }, (_, i) => {
-    const id = `PT-${2026001 + i}`;
-    const riskTypes = ['Normal', 'Monitor', 'High'];
-    const risk = riskTypes[Math.floor(Math.random() * riskTypes.length)];
-    const trimesters = [1, 2, 3];
-    const tri = trimesters[Math.floor(Math.random() * trimesters.length)];
-    const weeks = tri === 1 ? Math.floor(Math.random() * 12) + 1
-        : tri === 2 ? Math.floor(Math.random() * 14) + 13
-            : Math.floor(Math.random() * 14) + 27;
+const TEST_PATIENTS = [
+    { id: 'PT-2026-N1', name: 'Naomi Nicole C. Magsino', barangay: 'Brgy. 3', age: 24, trimester: 2, weeks: 24, risk: 'Normal', lastVisit: '2 days ago', nextAppt: 'Mar 15, 2026', status: 'Healthy' },
+    { id: 'PT-2026-J2', name: 'Jane Rose M. Tadeo', barangay: 'Brgy. 1', age: 28, trimester: 3, weeks: 32, risk: 'High', lastVisit: '1 week ago', nextAppt: 'Mar 10, 2026', status: 'Preeclampsia' },
+    { id: 'PT-2026-B3', name: 'Bhea Mae E. Tria', barangay: 'Brgy. 5', age: 22, trimester: 1, weeks: 10, risk: 'Monitor', lastVisit: '4 days ago', nextAppt: 'Mar 20, 2026', status: 'Gestational Diabetes' },
+    { id: 'PT-2026-G4', name: 'Guila C. Valdesimo', barangay: 'Brgy. 2', age: 26, trimester: 2, weeks: 20, risk: 'Normal', lastVisit: 'Yesterday', nextAppt: 'Mar 25, 2026', status: 'Healthy' },
+    { id: 'PT-2026-S5', name: 'Safia C. Baig', barangay: 'Brgy. 7', age: 30, trimester: 3, weeks: 36, risk: 'High', lastVisit: '3 days ago', nextAppt: 'Mar 12, 2026', status: 'Anemia' },
+];
 
-    return {
-        id,
-        name: `Patient Name ${i + 1}`,
-        barangay: `Brgy. ${Math.floor(Math.random() * 7) + 1}`,
-        age: Math.floor(Math.random() * 20) + 18,
-        trimester: tri,
-        weeks: weeks,
-        risk: risk,
-        lastVisit: `${Math.floor(Math.random() * 30) + 1} days ago`,
-        nextAppt: Math.random() > 0.3 ? `Mar ${Math.floor(Math.random() * 20) + 1}, 2026` : 'Not scheduled',
-        status: risk === 'High' ? 'High BP / Anemia' : risk === 'Monitor' ? 'Gestational Diabetes' : 'Healthy',
-    };
-});
+const MOCK_PATIENTS = [
+    ...TEST_PATIENTS,
+    ...Array.from({ length: 45 }, (_, i) => {
+        const id = `PT-${2026001 + i}`;
+        const riskTypes = ['Normal', 'Monitor', 'High'];
+        const risk = riskTypes[Math.floor(Math.random() * riskTypes.length)];
+        const trimesters = [1, 2, 3];
+        const tri = trimesters[Math.floor(Math.random() * trimesters.length)];
+        const weeks = tri === 1 ? Math.floor(Math.random() * 12) + 1
+            : tri === 2 ? Math.floor(Math.random() * 14) + 13
+                : Math.floor(Math.random() * 14) + 27;
+
+        return {
+            id,
+            name: `Patient Name ${i + 1}`,
+            barangay: `Brgy. ${Math.floor(Math.random() * 7) + 1}`,
+            age: Math.floor(Math.random() * 20) + 18,
+            trimester: tri,
+            weeks: weeks,
+            risk: risk,
+            lastVisit: `${Math.floor(Math.random() * 30) + 1} days ago`,
+            nextAppt: Math.random() > 0.3 ? `Mar ${Math.floor(Math.random() * 20) + 1}, 2026` : 'Not scheduled',
+            status: risk === 'High' ? 'High BP / Anemia' : risk === 'Monitor' ? 'Gestational Diabetes' : 'Healthy',
+        };
+    })
+];
 
 /* ════════════════════════════
    RECORD VITALS MODAL
