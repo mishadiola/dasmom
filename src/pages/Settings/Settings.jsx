@@ -13,12 +13,12 @@ import '../../styles/pages/Settings.css';
    MOCK DATA
 ════════════════════════════ */
 const USERS = [
-    { id: 1, name: 'Mish Diola',   role: 'Super Admin', email: 'mish@dasmom.ph',  status: 'Active',   lastLogin: '2026-03-01 09:14 AM', avatar: 'MD' },
-    { id: 2, name: 'Midwife Elena Perez',role: 'Admin',       email: 'elena.perez@dasmom.ph',   status: 'Active',   lastLogin: '2026-03-01 08:30 AM', avatar: 'EP' },
-    { id: 3, name: 'Nurse Ana Reyes',    role: 'Staff',       email: 'ana.reyes@dasmom.ph',     status: 'Active',   lastLogin: '2026-02-28 04:45 PM', avatar: 'AR' },
-    { id: 4, name: 'Nurse Bea Gomez',    role: 'Staff',       email: 'bea.gomez@dasmom.ph',     status: 'Inactive', lastLogin: '2026-02-20 02:00 PM', avatar: 'BG' },
-    { id: 5, name: 'Midwife Ana Magtibay',role:'Admin',       email: 'ana.magtibay@dasmom.ph',  status: 'Active',   lastLogin: '2026-02-27 10:00 AM', avatar: 'AM' },
-    { id: 6, name: 'Intern Rosa Cruz',   role: 'Staff',       email: 'rosa.cruz@dasmom.ph',     status: 'Active',   lastLogin: '2026-03-01 07:55 AM', avatar: 'RC' },
+    { id: 1, name: 'Mish Diola',   role: 'Super Admin', email: 'mish@gmail.com',  status: 'Active',   lastLogin: '2026-03-01 09:14 AM', avatar: 'MD' },
+    { id: 2, name: 'Midwife Elena Perez',role: 'Admin',       email: 'elena.perez@gmail.com',   status: 'Active',   lastLogin: '2026-03-01 08:30 AM', avatar: 'EP' },
+    { id: 3, name: 'Nurse Ana Reyes',    role: 'Staff',       email: 'ana.reyes@gmail.com',     status: 'Active',   lastLogin: '2026-02-28 04:45 PM', avatar: 'AR' },
+    { id: 4, name: 'Nurse Bea Gomez',    role: 'Staff',       email: 'bea.gomez@gmail.com',     status: 'Inactive', lastLogin: '2026-02-20 02:00 PM', avatar: 'BG' },
+    { id: 5, name: 'Midwife Ana Magtibay',role:'Admin',       email: 'ana.magtibay@gmail.com',  status: 'Active',   lastLogin: '2026-02-27 10:00 AM', avatar: 'AM' },
+    { id: 6, name: 'Intern Rosa Cruz',   role: 'Staff',       email: 'rosa.cruz@gmail.com',     status: 'Active',   lastLogin: '2026-03-01 07:55 AM', avatar: 'RC' },
 ];
 
 const AUDIT_LOGS = [
@@ -117,7 +117,7 @@ const AddUserModal = ({ onClose }) => {
                         </div>
                         <div className="form-group">
                             <label>Email / Username <span className="req">*</span></label>
-                            <input type="email" placeholder="user@dasmom.ph" value={form.email} onChange={e => update('email', e.target.value)} />
+                            <input type="email" placeholder="user@gmail.com" value={form.email} onChange={e => update('email', e.target.value)} />
                         </div>
                         <div className="form-group">
                             <label>Role <span className="req">*</span></label>
@@ -501,7 +501,7 @@ const ProfileTab = () => {
                     <div className="profile-avatar-lg">MD</div>
                     <h3>Mish Diola</h3>
                     <p className="profile-role">Super Admin</p>
-                    <p className="profile-email"><Mail size={13} /> mish@dasmom.ph</p>
+                    <p className="profile-email"><Mail size={13} /> mish@gmail.com</p>
                     <p className="profile-barangay"><MapPin size={13} /> All Barangays</p>
                     <p className="profile-login"><Clock size={13} /> Last login: 2026-03-01 09:14 AM</p>
                     <button className="btn btn-outline logout-btn"><LogOut size={14} /> Sign Out</button>
@@ -519,7 +519,7 @@ const ProfileTab = () => {
                             </div>
                             <div className="form-group">
                                 <label>Email Address</label>
-                                <input type="email" defaultValue="mish@dasmom.ph" />
+                                <input type="email" defaultValue="mish@gmail.com" />
                             </div>
                             <div className="form-group">
                                 <label>Contact Number</label>

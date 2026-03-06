@@ -276,7 +276,7 @@ const DashboardLayout = () => {
                                 <div className="user-menu-panel">
                                     <div className="user-menu-header">
                                         <p className="user-menu-name">{MOCK_USER.name}</p>
-                                        <p className="user-menu-email">mish@dasmom.gov.ph</p>
+                                        <p className="user-menu-email">mish@gmail.com</p>
                                     </div>
                                     <div className="user-menu-links">
                                 <button className="user-menu-item" onClick={() => {
