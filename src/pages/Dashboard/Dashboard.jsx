@@ -133,6 +133,29 @@ const Dashboard = () => {
                 </div>
             </div>
 
+            {/* ── Quick Actions (full-width, below greeting) ── */}
+            <div className="card quick-actions-card">
+                <div className="card-header">
+                    <h2 className="card-title">Quick Actions</h2>
+                </div>
+                <p className="card-description">Shortcuts to frequently used administrative actions.</p>
+                <div className="quick-actions-grid quick-actions-grid--row">
+                    {[
+                        { label: 'Add Patient', icon: Users, color: 'rose', path: '/dashboard/patients/add' },
+                        { label: 'Schedule Visit', icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal' },
+                        { label: 'Record Vitals', icon: Activity, color: 'blue', path: '/dashboard/postpartum' },
+                        { label: 'Log Delivery', icon: Baby, color: 'pink', path: '/dashboard/deliveries' },
+                        { label: 'Issue Vaccine', icon: Syringe, color: 'orange', path: '/dashboard/vaccinations' },
+                        { label: 'Generate Report', icon: FileText, color: 'purple', path: '/dashboard/analytics' },
+                    ].map(({ label, icon: Icon, color, path }) => (
+                        <button key={label} className={`quick-btn quick-btn--${color}`} onClick={() => navigate(path)}>
+                            <Icon size={18} />
+                            <span>{label}</span>
+                        </button>
+                    ))}
+                </div>
+            </div>
+
             {/* ── Stat Cards ── */}
             <div className="stats-grid">
                 {STATS.map((s) => {
@@ -222,85 +245,44 @@ const Dashboard = () => {
                         </div>
                     </div>
 
-                    {/* HIGH RISK CASES */}
+                    {/* VACCINE & SUPPLEMENT STOCK */}
                     <div className="card">
                         <div className="card-header">
                             <h2 className="card-title">
-                                <AlertTriangle size={16} />
-                                High-Risk Cases
-                                <span className="card-badge card-badge--red">43</span>
+                                <Syringe size={16} />Vaccine &amp; Supply Stock
+                                <span className="card-badge card-badge--red">2 Low</span>
                             </h2>
-                            <div className="card-header-right">
-                                <div className="filter-tabs">
-                                    {['all', 'critical', 'warning'].map((f) => (
-                                        <button
-                                            key={f}
-                                            className={`filter-tab${riskFilter === f ? ' active' : ''}`}
-                                            onClick={() => setRiskFilter(f)}
-                                        >
-                                            {f.charAt(0).toUpperCase() + f.slice(1)}
-                                        </button>
-                                    ))}
-                                </div>
-                                <button className="card-link">View all <ChevronRight size={13} /></button>
-                            </div>
+                            <button className="card-link">Manage <ChevronRight size={13} /></button>
                         </div>
-                        <p className="card-description">Patients with risk conditions needing close observation or priority actions.</p>
-                        <div className="risk-list">
-                            {HIGH_RISK
-                                .filter(r => riskFilter === 'all' || r.status === riskFilter)
-                                .map((r) => (
-                                    <div key={r.id} className={`risk-item risk-item--${r.status}`}>
-                                        <div className={`risk-indicator risk-indicator--${r.status}`} aria-hidden="true" />
-                                        <div className="risk-info">
-                                            <div className="risk-name-row">
-                                                <span className="risk-name">{r.name}</span>
-                                                <span className={`risk-status-badge risk-status-badge--${r.status}`}>
-                                                    {r.status}
-                                                </span>
-                                            </div>
-                                            <p className="risk-detail">
-                                                {r.condition} · {r.weeks}w gestation · BP: {r.bp}
-                                            </p>
-                                            <p className="risk-last">Last visit: {r.lastVisit}</p>
+                        <p className="card-description">Manage real-time inventory levels of vital supplements and vaccines.</p>
+                        <div className="stock-list">
+                            {VACCINE_STOCK.map((v) => (
+                                <div key={v.name} className={`stock-item stock-item--${v.status}`}>
+                                    <div className="stock-info">
+                                        <span className="stock-name">{v.name}</span>
+                                        <div className="stock-bar-wrap">
+                                            <MiniBar
+                                                value={v.stock}
+                                                max={Math.max(v.stock, v.min) * 1.5}
+                                                color={v.status === 'ok' ? 'sage' : v.status === 'low' ? 'yellow' : 'rose'}
+                                            />
                                         </div>
-                                        <button className="risk-action" aria-label={`View ${r.name}`}>
-                                            <Eye size={14} />
-                                        </button>
                                     </div>
-                                ))
-                            }
+                                    <div className="stock-meta">
+                                        <span className="stock-qty">{v.stock} {v.unit}</span>
+                                        <span className={`stock-badge stock-badge--${v.status}`}>
+                                            {v.status === 'ok' ? 'In Stock' : v.status === 'low' ? 'Low' : 'Critical'}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
-
 
                 </div>{/* end left col */}
 
                 {/* ── Right Column ── */}
                 <div className="dash-col-right">
-
-                    {/* QUICK ACTIONS */}
-                    <div className="card quick-actions-card">
-                        <div className="card-header">
-                            <h2 className="card-title">Quick Actions</h2>
-                        </div>
-                        <p className="card-description">Shortcuts to frequently used administrative actions.</p>
-                        <div className="quick-actions-grid">
-                            {[
-                                { label: 'Add Patient', icon: Users, color: 'rose', path: '/dashboard/patients/add' },
-                                { label: 'Schedule Visit', icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal' },
-                                { label: 'Record Vitals', icon: Activity, color: 'blue', path: '/dashboard/postpartum' },
-                                { label: 'Log Delivery', icon: Baby, color: 'pink', path: '/dashboard/deliveries' },
-                                { label: 'Issue Vaccine', icon: Syringe, color: 'orange', path: '/dashboard/vaccinations' },
-                                { label: 'Generate Report', icon: FileText, color: 'purple', path: '/dashboard/analytics' },
-                            ].map(({ label, icon: Icon, color, path }) => (
-                                <button key={label} className={`quick-btn quick-btn--${color}`} onClick={() => navigate(path)}>
-                                    <Icon size={18} />
-                                    <span>{label}</span>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
 
                     {/* MATERNAL HEALTH SNAPSHOT */}
                     <div className="card">
@@ -337,67 +319,6 @@ const Dashboard = () => {
                                 <div key={t.label} className={`tri-block tri-block--${t.color}`}>
                                     <span className="tri-count">{t.count}</span>
                                     <span className="tri-label">{t.label}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* VACCINE & SUPPLEMENT STOCK */}
-                    <div className="card">
-                        <div className="card-header">
-                            <h2 className="card-title">
-                                <Syringe size={16} />Vaccine &amp; Supply Stock
-                                <span className="card-badge card-badge--red">2 Low</span>
-                            </h2>
-                            <button className="card-link">Manage <ChevronRight size={13} /></button>
-                        </div>
-                        <p className="card-description">Manage real-time inventory levels of vital supplements and vaccines.</p>
-                        <div className="stock-list">
-                            {VACCINE_STOCK.map((v) => (
-                                <div key={v.name} className={`stock-item stock-item--${v.status}`}>
-                                    <div className="stock-info">
-                                        <span className="stock-name">{v.name}</span>
-                                        <div className="stock-bar-wrap">
-                                            <MiniBar
-                                                value={v.stock}
-                                                max={Math.max(v.stock, v.min) * 1.5}
-                                                color={v.status === 'ok' ? 'sage' : v.status === 'low' ? 'yellow' : 'rose'}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="stock-meta">
-                                        <span className="stock-qty">{v.stock} {v.unit}</span>
-                                        <span className={`stock-badge stock-badge--${v.status}`}>
-                                            {v.status === 'ok' ? 'In Stock' : v.status === 'low' ? 'Low' : 'Critical'}
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* RECENT DELIVERIES */}
-                    <div className="card">
-                        <div className="card-header">
-                            <h2 className="card-title"><Star size={16} />Recent Deliveries</h2>
-                            <button className="card-link">View all <ChevronRight size={13} /></button>
-                        </div>
-                        <p className="card-description">Recent tracking and records of maternal delivery outcomes.</p>
-                        <div className="delivery-list">
-                            {RECENT_DELIVERIES.map((d) => (
-                                <div key={d.id} className="delivery-item">
-                                    <div className="delivery-date">
-                                        <span>{d.date}</span>
-                                        <span className={`delivery-type delivery-type--${d.type.toLowerCase()}`}>{d.type}</span>
-                                    </div>
-                                    <div className="delivery-info">
-                                        <p className="delivery-mother">{d.mother}</p>
-                                        <p className="delivery-newborn">{d.newborn}</p>
-                                    </div>
-                                    <span className={`delivery-outcome delivery-outcome--${d.outcome.toLowerCase()}`}>
-                                        {d.outcome === 'Good' ? <CheckCircle2 size={13} /> : <Circle size={13} />}
-                                        {d.outcome}
-                                    </span>
                                 </div>
                             ))}
                         </div>

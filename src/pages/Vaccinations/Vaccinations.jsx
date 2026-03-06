@@ -11,10 +11,10 @@ import '../../styles/pages/Vaccinations.css';
    MOCK DATA
 ════════════════════════════════════ */
 const SUMMARY_STATS = [
-    { label: 'Total Vaccinations Administered', value: 1250, color: 'blue', icon: Syringe },
-    { label: 'Mothers Pending Vaccines', value: 42, color: 'yellow', icon: AlertCircle },
+    { label: 'Total Vaccinations Administered', value: 1250, color: 'lilac', icon: Syringe },
+    { label: 'Mothers Pending Vaccines', value: 42, color: 'pink', icon: AlertCircle },
     { label: 'Newborns Pending Vaccines', value: 18, color: 'orange', icon: AlertCircle },
-    { label: 'Supplements Distributed', value: '1,500', unit: 'tablets', color: 'green', icon: Pill },
+    { label: 'Supplements Distributed', value: '1,500', unit: 'tablets', color: 'sage', icon: Pill },
     { label: 'Low Stock Items', value: 3, color: 'rose', icon: Package },
 ];
 
@@ -274,10 +274,14 @@ const Vaccinations = () => {
                 {SUMMARY_STATS.map(s => {
                     const Icon = s.icon;
                     return (
-                        <div key={s.label} className={`vacc-stat-card vacc-stat--${s.color}`}>
-                            <div className={`vacc-stat-icon vacc-icon--${s.color}`}><Icon size={20} /></div>
-                            <div className="vacc-stat-value">{s.value}{s.unit && <span className="vacc-stat-unit"> {s.unit}</span>}</div>
-                            <div className="vacc-stat-label">{s.label}</div>
+                        <div key={s.label} className={`stat-card stat-card--${s.color}`}>
+                            <div className="stat-top">
+                                <div className={`stat-icon stat-icon--${s.color}`}>
+                                    <Icon size={20} />
+                                </div>
+                            </div>
+                            <div className="stat-value">{s.value}{s.unit && <span className="stat-unit"> {s.unit}</span>}</div>
+                            <div className="stat-label">{s.label}</div>
                         </div>
                     );
                 })}

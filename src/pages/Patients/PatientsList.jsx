@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
     Search, Filter, Plus, ChevronLeft, ChevronRight,
     MoreHorizontal, Eye, Activity, CalendarPlus,
-    FileText, User, MapPin, Clock, AlertTriangle
+    FileText, User, MapPin, Clock, AlertTriangle,
+    X, CheckCircle2
 } from 'lucide-react';
 import '../../styles/pages/PatientsList.css';
 
@@ -35,6 +36,108 @@ const MOCK_PATIENTS = Array.from({ length: 45 }, (_, i) => {
 });
 
 /* ════════════════════════════
+   RECORD VITALS MODAL
+════════════════════════════ */
+const EMPTY_VITALS = {
+    bp: '',
+    weight: '',
+    temp: '',
+    heartRate: '',
+    gestationalAge: '',
+    fetalHeartRate: '',
+    notes: '',
+    date: new Date().toISOString().split('T')[0],
+};
+
+const RecordVitalsModal = ({ patient, history, onSave, onClose }) => {
+    const [form, setForm] = useState({ ...EMPTY_VITALS });
+    const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!form.bp || !form.weight || !form.date) return;
+        onSave(patient.id, { ...form, patientName: patient.name });
+    };
+
+    return (
+        <div className="pv-modal-overlay" onClick={onClose}>
+            <div className="pv-modal" onClick={e => e.stopPropagation()}>
+                <div className="pv-modal-header">
+                    <div>
+                        <h2 className="pv-modal-title">Record Vital Signs</h2>
+                        <p className="pv-modal-sub">{patient.name} &middot; {patient.id}</p>
+                    </div>
+                    <button className="pv-modal-close" onClick={onClose}><X size={18} /></button>
+                </div>
+
+                <form className="pv-modal-body" onSubmit={handleSubmit}>
+                    <div className="vm-grid">
+                        {/* Row 1 */}
+                        <div className="vm-field">
+                            <label className="vm-label">Blood Pressure <span className="vm-req">*</span></label>
+                            <input className="vm-input" placeholder="e.g. 120/80" value={form.bp} onChange={e => set('bp', e.target.value)} required />
+                        </div>
+                        <div className="vm-field">
+                            <label className="vm-label">Weight (kg) <span className="vm-req">*</span></label>
+                            <input className="vm-input" type="number" step="0.1" min="0" placeholder="e.g. 62" value={form.weight} onChange={e => set('weight', e.target.value)} required />
+                        </div>
+                        {/* Row 2 */}
+                        <div className="vm-field">
+                            <label className="vm-label">Body Temperature (°C)</label>
+                            <input className="vm-input" type="number" step="0.1" min="30" max="45" placeholder="e.g. 36.6" value={form.temp} onChange={e => set('temp', e.target.value)} />
+                        </div>
+                        <div className="vm-field">
+                            <label className="vm-label">Heart Rate / Pulse Rate (bpm)</label>
+                            <input className="vm-input" type="number" min="0" placeholder="e.g. 80" value={form.heartRate} onChange={e => set('heartRate', e.target.value)} />
+                        </div>
+                        {/* Row 3 */}
+                        <div className="vm-field">
+                            <label className="vm-label">Gestational Age (weeks)</label>
+                            <input className="vm-input" type="number" min="0" max="42" placeholder="e.g. 28" value={form.gestationalAge} onChange={e => set('gestationalAge', e.target.value)} />
+                        </div>
+                        <div className="vm-field">
+                            <label className="vm-label">Fetal Heart Rate (bpm)</label>
+                            <input className="vm-input" type="number" min="0" placeholder="e.g. 140" value={form.fetalHeartRate} onChange={e => set('fetalHeartRate', e.target.value)} />
+                        </div>
+                        {/* Row 4 */}
+                        <div className="vm-field">
+                            <label className="vm-label">Date of Checkup <span className="vm-req">*</span></label>
+                            <input className="vm-input" type="date" value={form.date} onChange={e => set('date', e.target.value)} required />
+                        </div>
+                    </div>
+
+                    <div className="vm-field vm-field--full">
+                        <label className="vm-label">Notes / Clinical Remarks</label>
+                        <textarea className="vm-textarea" rows={3} placeholder="Enter clinical observations, prescriptions, or follow-up instructions..." value={form.notes} onChange={e => set('notes', e.target.value)} />
+                    </div>
+
+                    {/* Previous records for this patient */}
+                    {history && history.length > 0 && (
+                        <div className="vm-history">
+                            <h4 className="vm-history-title">Recent Vitals History</h4>
+                            <div className="vm-history-list">
+                                {history.slice(0, 3).map((rec, i) => (
+                                    <div key={i} className="vm-history-item">
+                                        <span className="vm-history-date">{rec.date}</span>
+                                        <span className="vm-history-vals">BP: <strong>{rec.bp}</strong> &middot; Wt: <strong>{rec.weight} kg</strong>{rec.fetalHeartRate ? ` · FHR: ${rec.fetalHeartRate} bpm` : ''}</span>
+                                        {rec.notes && <p className="vm-history-notes">{rec.notes}</p>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="pv-modal-footer">
+                        <button type="button" className="vm-btn vm-btn--cancel" onClick={onClose}>Cancel</button>
+                        <button type="submit" className="vm-btn vm-btn--save"><CheckCircle2 size={15} /> Save Vital Record</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+/* ════════════════════════════
    COMPONENT
 ════════════════════════════ */
 const PatientsList = () => {
@@ -49,6 +152,11 @@ const PatientsList = () => {
     });
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
+
+    // Vitals modal state
+    const [vitalModalPatient, setVitalModalPatient] = useState(null);
+    const [vitalsHistory, setVitalsHistory] = useState({});
+    const [vitalToast, setVitalToast] = useState(false);
 
     /* ── Filtering Logic ── */
     const filteredPatients = MOCK_PATIENTS.filter(p => {
@@ -71,10 +179,21 @@ const PatientsList = () => {
     /* ── Handlers ── */
     const handleFilterChange = (key, value) => {
         setFilters(prev => ({ ...prev, [key]: value }));
-        setCurrentPage(1); // Reset to first page on filter
+        setCurrentPage(1);
+    };
+
+    const handleSaveVitals = (patientId, record) => {
+        setVitalsHistory(prev => ({
+            ...prev,
+            [patientId]: [record, ...(prev[patientId] || [])]
+        }));
+        setVitalModalPatient(null);
+        setVitalToast(true);
+        setTimeout(() => setVitalToast(false), 3500);
     };
 
     return (
+        <>
         <div className="patients-page">
 
             {/* ── Page Header ── */}
@@ -215,10 +334,18 @@ const PatientsList = () => {
                                                 >
                                                     <Eye size={16} />
                                                 </button>
-                                                <button className="action-btn vitals-btn" title="Record Vitals">
+                                                <button
+                                                    className="action-btn vitals-btn"
+                                                    title="Record Vitals"
+                                                    onClick={() => setVitalModalPatient(p)}
+                                                >
                                                     <Activity size={16} />
                                                 </button>
-                                                <button className="action-btn sched-btn" title="Schedule Visit">
+                                                <button
+                                                    className="action-btn sched-btn"
+                                                    title="Add Schedule"
+                                                    onClick={() => navigate('/dashboard/prenatal', { state: { openBooking: true } })}
+                                                >
                                                     <CalendarPlus size={16} />
                                                 </button>
                                             </div>
@@ -277,7 +404,26 @@ const PatientsList = () => {
             </div>
 
         </div>
+
+        {/* Record Vitals Modal */}
+        {vitalModalPatient && (
+            <RecordVitalsModal
+                patient={vitalModalPatient}
+                history={vitalsHistory[vitalModalPatient.id] || []}
+                onSave={handleSaveVitals}
+                onClose={() => setVitalModalPatient(null)}
+            />
+        )}
+
+        {/* Vitals Saved Toast */}
+        {vitalToast && (
+            <div className="vm-toast">
+                <CheckCircle2 size={16} /> Vital signs record saved successfully!
+            </div>
+        )}
+    </>
     );
 };
 
 export default PatientsList;
+

@@ -20,67 +20,6 @@
     gap: 16px;
 }
 
-.track-stat-card {
-    background: #fff;
-    border-radius: 16px;
-    padding: 20px;
-    border: 1px solid #eef0f4;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
-}
-
-.track-stat-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.theme-blue .track-stat-icon {
-    background: rgba(91, 174, 208, 0.1);
-    color: #2d7fa3;
-}
-
-.theme-red .track-stat-icon {
-    background: rgba(224, 92, 115, 0.1);
-    color: #b73a52;
-}
-
-.theme-green .track-stat-icon {
-    background: rgba(109, 184, 160, 0.1);
-    color: #3d8870;
-}
-
-.theme-orange .track-stat-icon {
-    background: rgba(249, 162, 108, 0.1);
-    color: #c26922;
-}
-
-.track-stat-info {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.track-stat-val {
-    font-size: 24px;
-    font-weight: 700;
-    color: var(--color-text);
-    line-height: 1;
-}
-
-.track-stat-lbl {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--color-text-muted);
-}
-
-
 /* ══════════════════════════════════════════
    ANALYTICS PANEL (CSS CHARTS)
 ══════════════════════════════════════════ */

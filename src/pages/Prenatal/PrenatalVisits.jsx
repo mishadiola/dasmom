@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
     Search, Plus, Eye, Edit2, Trash2, CalendarCheck,
     AlertTriangle, HeartPulse, Filter, Clock, ChevronLeft,
@@ -119,6 +119,7 @@ const SearchableDropdown = ({ patients, value, onChange }) => {
 
 const PrenatalVisits = () => {
     const navigate = useNavigate();
+    const location = useLocation();
 
     // UI States
     const [searchTerm, setSearchTerm] = useState('');
@@ -138,6 +139,17 @@ const PrenatalVisits = () => {
         location: 'Main Clinic - Rm 1'
     });
     const [conflictWarning, setConflictWarning] = useState(null);
+
+    // ── Auto-open booking panel when navigated from Patient list ──
+    useEffect(() => {
+        if (location.state?.openBooking) {
+            setSelectedSlot({ date: visibleDays[0]?.date || new Date().toISOString().split('T')[0], time: '08:00 AM' });
+            setBookingPanelOpen(true);
+            // Clear the state so refreshing doesn't re-open the panel
+            window.history.replaceState({}, document.title);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // ── Date Logic ──
     const getWeekDays = (date) => {

@@ -11,9 +11,9 @@ import '../../styles/pages/HighRiskCases.css';
 ════════════════════════════ */
 const STATS = [
     { id: 1, label: 'Total High-Risk', value: 43, color: 'rose', icon: AlertTriangle },
-    { id: 2, label: 'Critical Cases Today', value: 5, color: 'red', icon: Activity },
-    { id: 3, label: 'Missed Follow-ups', value: 12, color: 'orange', icon: Clock },
-    { id: 4, label: 'Needs Immediate Visit', value: 8, color: 'blue', icon: AlertCircle },
+    { id: 2, label: 'Critical Cases Today', value: 5, color: 'orange', icon: Activity },
+    { id: 3, label: 'Missed Follow-ups', value: 12, color: 'pink', icon: Clock },
+    { id: 4, label: 'Needs Immediate Visit', value: 8, color: 'sage', icon: AlertCircle },
 ];
 
 const HIGH_RISK_PATIENTS = [

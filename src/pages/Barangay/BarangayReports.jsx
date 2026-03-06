@@ -12,11 +12,11 @@ import '../../styles/pages/BarangayReports.css';
    MOCK DATA
 ════════════════════════════ */
 const SUMMARY_STATS = [
-    { label: 'Total Pregnant Patients', value: 340, color: 'blue', icon: Users },
+    { label: 'Total Pregnant Patients', value: 340, color: 'sage', icon: Users },
     { label: 'High-Risk Pregnancies', value: 43, color: 'rose', icon: AlertTriangle },
-    { label: 'Total Deliveries (Month)', value: 58, color: 'green', icon: Heart },
-    { label: 'Vaccination Coverage', value: '86%', color: 'teal', icon: Syringe },
-    { label: 'Supplements Distributed', value: '1,500', color: 'purple', icon: Pill },
+    { label: 'Total Deliveries (Month)', value: 58, color: 'orange', icon: Heart },
+    { label: 'Vaccination Coverage', value: '86%', color: 'lilac', icon: Syringe },
+    { label: 'Supplements Distributed', value: '1,500', color: 'pink', icon: Pill },
 ];
 
 const BARANGAYS = [
@@ -504,10 +504,14 @@ const BarangayReports = () => {
                 {SUMMARY_STATS.map(s => {
                     const Icon = s.icon;
                     return (
-                        <div key={s.label} className={`br-stat-card br-stat--${s.color}`}>
-                            <div className={`br-stat-icon br-icon--${s.color}`}><Icon size={20} /></div>
-                            <div className="br-stat-value">{s.value}</div>
-                            <div className="br-stat-label">{s.label}</div>
+                        <div key={s.label} className={`stat-card stat-card--${s.color}`}>
+                            <div className="stat-top">
+                                <div className={`stat-icon stat-icon--${s.color}`}>
+                                    <Icon size={20} />
+                                </div>
+                            </div>
+                            <div className="stat-value">{s.value}</div>
+                            <div className="stat-label">{s.label}</div>
                         </div>
                     );
                 })}

@@ -12,11 +12,11 @@ import '../../styles/pages/NewbornTracking.css';
    MOCK DATA
 ════════════════════════════ */
 const SUMMARY_STATS = [
-    { label: 'Total Newborns This Month', value: 35, color: 'blue', icon: Baby },
-    { label: 'Low Birth Weight (<2.5kg)', value: 4, color: 'orange', icon: Scale },
+    { label: 'Total Newborns This Month', value: 35, color: 'lilac', icon: Baby },
+    { label: 'Low Birth Weight (<2.5kg)', value: 4, color: 'pink', icon: Scale },
     { label: 'High-Risk Newborns', value: 3, color: 'rose', icon: AlertCircle },
-    { label: 'Vaccinations Due', value: 12, color: 'yellow', icon: Syringe },
-    { label: 'Missed Follow-ups', value: 2, color: 'purple', icon: XCircle },
+    { label: 'Vaccinations Due', value: 12, color: 'sage', icon: Syringe },
+    { label: 'Missed Follow-ups', value: 2, color: 'orange', icon: XCircle },
 ];
 
 const NEWBORNS = [
@@ -433,10 +433,14 @@ const NewbornTracking = () => {
                 {SUMMARY_STATS.map(s => {
                     const Icon = s.icon;
                     return (
-                        <div key={s.label} className={`nb-stat-card nb-stat--${s.color}`}>
-                            <div className={`nb-stat-icon nb-icon--${s.color}`}><Icon size={20} /></div>
-                            <div className="nb-stat-value">{s.value}</div>
-                            <div className="nb-stat-label">{s.label}</div>
+                        <div key={s.label} className={`stat-card stat-card--${s.color}`}>
+                            <div className="stat-top">
+                                <div className={`stat-icon stat-icon--${s.color}`}>
+                                    <Icon size={20} />
+                                </div>
+                            </div>
+                            <div className="stat-value">{s.value}</div>
+                            <div className="stat-label">{s.label}</div>
                         </div>
                     );
                 })}

@@ -73,33 +73,33 @@ const Analytics = () => {
 
             {/* ── Top Summary Cards ── */}
             <div className="tracking-stats-grid">
-                <div className="track-stat-card theme-blue">
-                    <div className="track-stat-icon"><Users size={20} /></div>
-                    <div className="track-stat-info">
-                        <span className="track-stat-val">{STATS.total}</span>
-                        <span className="track-stat-lbl">Active Pregnancies</span>
+                <div className="stat-card stat-card--sage">
+                    <div className="stat-top">
+                        <div className="stat-icon stat-icon--sage"><Users size={20} /></div>
                     </div>
+                    <div className="stat-value">{STATS.total}</div>
+                    <div className="stat-label">Active Pregnancies</div>
                 </div>
-                <div className="track-stat-card theme-red">
-                    <div className="track-stat-icon"><AlertTriangle size={20} /></div>
-                    <div className="track-stat-info">
-                        <span className="track-stat-val">{STATS.highRisk}</span>
-                        <span className="track-stat-lbl">High-Risk Cases</span>
+                <div className="stat-card stat-card--rose">
+                    <div className="stat-top">
+                        <div className="stat-icon stat-icon--rose"><AlertTriangle size={20} /></div>
                     </div>
+                    <div className="stat-value">{STATS.highRisk}</div>
+                    <div className="stat-label">High-Risk Cases</div>
                 </div>
-                <div className="track-stat-card theme-green">
-                    <div className="track-stat-icon"><CheckCircle2 size={20} /></div>
-                    <div className="track-stat-info">
-                        <span className="track-stat-val">{STATS.normal}</span>
-                        <span className="track-stat-lbl">Normal Progressions</span>
+                <div className="stat-card stat-card--pink">
+                    <div className="stat-top">
+                        <div className="stat-icon stat-icon--pink"><CheckCircle2 size={20} /></div>
                     </div>
+                    <div className="stat-value">{STATS.normal}</div>
+                    <div className="stat-label">Normal Progressions</div>
                 </div>
-                <div className="track-stat-card theme-orange">
-                    <div className="track-stat-icon"><Activity size={20} /></div>
-                    <div className="track-stat-info">
-                        <span className="track-stat-val">{STATS.upcoming}</span>
-                        <span className="track-stat-lbl">Due &lt; 3 weeks</span>
+                <div className="stat-card stat-card--orange">
+                    <div className="stat-top">
+                        <div className="stat-icon stat-icon--orange"><Activity size={20} /></div>
                     </div>
+                    <div className="stat-value">{STATS.upcoming}</div>
+                    <div className="stat-label">Due &lt; 3 weeks</div>
                 </div>
             </div>
 

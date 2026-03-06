@@ -12,11 +12,11 @@ import '../../styles/pages/PostpartumRecords.css';
    MOCK DATA
 ════════════════════════════ */
 const SUMMARY_STATS = [
-    { label: 'Recent Deliveries (42 days)', value: 58, color: 'blue', icon: Baby },
-    { label: 'Due for Postpartum Visit', value: 21, color: 'yellow', icon: Calendar },
+    { label: 'Recent Deliveries (42 days)', value: 58, color: 'lilac', icon: Baby },
+    { label: 'Due for Postpartum Visit', value: 21, color: 'pink', icon: Calendar },
     { label: 'Missed Follow-ups', value: 6, color: 'orange', icon: XCircle },
     { label: 'With Complications', value: 4, color: 'rose', icon: AlertTriangle },
-    { label: 'Recovered Mothers', value: 27, color: 'green', icon: CheckCircle2 },
+    { label: 'Recovered Mothers', value: 27, color: 'sage', icon: CheckCircle2 },
 ];
 
 const MOCK_MOTHERS = [
@@ -341,10 +341,14 @@ const PostpartumRecords = () => {
                 {SUMMARY_STATS.map((s) => {
                     const Icon = s.icon;
                     return (
-                        <div key={s.label} className={`pp-stat-card pp-stat--${s.color}`}>
-                            <div className={`pp-stat-icon pp-icon--${s.color}`}><Icon size={20} /></div>
-                            <div className="pp-stat-value">{s.value}</div>
-                            <div className="pp-stat-label">{s.label}</div>
+                        <div key={s.label} className={`stat-card stat-card--${s.color}`}>
+                            <div className="stat-top">
+                                <div className={`stat-icon stat-icon--${s.color}`}>
+                                    <Icon size={20} />
+                                </div>
+                            </div>
+                            <div className="stat-value">{s.value}</div>
+                            <div className="stat-label">{s.label}</div>
                         </div>
                     );
                 })}

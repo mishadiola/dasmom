@@ -239,7 +239,7 @@ const PatientProfile = () => {
                                 </div>
                                 <div className="info-item">
                                     <span className="info-label">Current Gestation</span>
-                                    <span className="info-val text-rose">{p.weeks} Weeks (Trimester {p.trimester})</span>
+                                    <span className={`tri-badge tri-badge--${p.trimester}`}>{p.weeks} Weeks &mdash; Trimester {p.trimester}</span>
                                 </div>
                             </div>
                         </div>
