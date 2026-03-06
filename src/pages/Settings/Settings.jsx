@@ -13,7 +13,7 @@ import '../../styles/pages/Settings.css';
    MOCK DATA
 ════════════════════════════ */
 const USERS = [
-    { id: 1, name: 'Dr. Maria Santos',   role: 'Super Admin', email: 'maria.santos@dasmom.ph',  status: 'Active',   lastLogin: '2026-03-01 09:14 AM', avatar: 'MS' },
+    { id: 1, name: 'Mish Diola',   role: 'Super Admin', email: 'mish@dasmom.ph',  status: 'Active',   lastLogin: '2026-03-01 09:14 AM', avatar: 'MD' },
     { id: 2, name: 'Midwife Elena Perez',role: 'Admin',       email: 'elena.perez@dasmom.ph',   status: 'Active',   lastLogin: '2026-03-01 08:30 AM', avatar: 'EP' },
     { id: 3, name: 'Nurse Ana Reyes',    role: 'Staff',       email: 'ana.reyes@dasmom.ph',     status: 'Active',   lastLogin: '2026-02-28 04:45 PM', avatar: 'AR' },
     { id: 4, name: 'Nurse Bea Gomez',    role: 'Staff',       email: 'bea.gomez@dasmom.ph',     status: 'Inactive', lastLogin: '2026-02-20 02:00 PM', avatar: 'BG' },
@@ -22,14 +22,14 @@ const USERS = [
 ];
 
 const AUDIT_LOGS = [
-    { id: 1, user: 'Dr. Maria Santos',    action: 'Generated Report',   details: 'Barangay 3 monthly report exported to PDF', time: '2026-03-01 09:14 AM', ip: '192.168.1.10' },
+    { id: 1, user: 'Mish Diola',    action: 'Generated Report',   details: 'Barangay 3 monthly report exported to PDF', time: '2026-03-01 09:14 AM', ip: '192.168.1.10' },
     { id: 2, user: 'Nurse Ana Reyes',     action: 'Added Patient',      details: 'New patient Maria Cruz (PT-2412) registered', time: '2026-03-01 08:50 AM', ip: '192.168.1.12' },
     { id: 3, user: 'Midwife Elena Perez', action: 'Record Vitals',      details: 'Vitals recorded for PT-2401 – Maria Reyes', time: '2026-03-01 08:30 AM', ip: '192.168.1.11' },
     { id: 4, user: 'Nurse Bea Gomez',     action: 'Login',              details: 'Successful login', time: '2026-02-28 04:45 PM', ip: '192.168.1.13' },
-    { id: 5, user: 'Dr. Maria Santos',    action: 'Created Account',    details: 'New staff account created for Intern Rosa Cruz', time: '2026-02-27 11:00 AM', ip: '192.168.1.10' },
+    { id: 5, user: 'Mish Diola',    action: 'Created Account',    details: 'New staff account created for Intern Rosa Cruz', time: '2026-02-27 11:00 AM', ip: '192.168.1.10' },
     { id: 6, user: 'Midwife Ana Magtibay','action': 'Record Delivery',   details: 'Delivery recorded for PT-2406 – Luz Ramos', time: '2026-02-27 10:00 AM', ip: '192.168.1.15' },
     { id: 7, user: 'Nurse Ana Reyes',     action: 'Record Vaccination', details: 'BCG recorded for NB-001 – Baby Reyes', time: '2026-02-27 09:30 AM', ip: '192.168.1.12' },
-    { id: 8, user: 'Dr. Maria Santos',    action: 'Settings Changed',   details: 'Notification preferences updated', time: '2026-02-26 03:00 PM', ip: '192.168.1.10' },
+    { id: 8, user: 'Mish Diola',    action: 'Settings Changed',   details: 'Notification preferences updated', time: '2026-02-26 03:00 PM', ip: '192.168.1.10' },
 ];
 
 const ROLES_DATA = [
@@ -498,10 +498,10 @@ const ProfileTab = () => {
             <div className="profile-layout">
                 {/* Profile Card */}
                 <div className="profile-card">
-                    <div className="profile-avatar-lg">MS</div>
-                    <h3>Dr. Maria Santos</h3>
+                    <div className="profile-avatar-lg">MD</div>
+                    <h3>Mish Diola</h3>
                     <p className="profile-role">Super Admin</p>
-                    <p className="profile-email"><Mail size={13} /> maria.santos@dasmom.ph</p>
+                    <p className="profile-email"><Mail size={13} /> mish@dasmom.ph</p>
                     <p className="profile-barangay"><MapPin size={13} /> All Barangays</p>
                     <p className="profile-login"><Clock size={13} /> Last login: 2026-03-01 09:14 AM</p>
                     <button className="btn btn-outline logout-btn"><LogOut size={14} /> Sign Out</button>
@@ -515,11 +515,11 @@ const ProfileTab = () => {
                         <div className="form-grid-2">
                             <div className="form-group">
                                 <label>Full Name</label>
-                                <input type="text" defaultValue="Dr. Maria Santos" />
+                                <input type="text" defaultValue="Mish Diola" />
                             </div>
                             <div className="form-group">
                                 <label>Email Address</label>
-                                <input type="email" defaultValue="maria.santos@dasmom.ph" />
+                                <input type="email" defaultValue="mish@dasmom.ph" />
                             </div>
                             <div className="form-group">
                                 <label>Contact Number</label>

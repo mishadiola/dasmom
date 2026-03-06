@@ -107,7 +107,7 @@ const BARANGAYS = [
 ];
 
 /* simple inline bar chart component */
-const MiniBar = ({ value, max = 100, color = '#6db8a0' }) => {
+const MiniBar = ({ value, max = 100, color = '#a0c282' }) => {
     const pct = Math.min(100, Math.round((value / max) * 100));
     return (
         <div className="mini-bar-wrap">
@@ -148,7 +148,7 @@ const DetailModal = ({ brgy, onClose, navigate }) => {
         { id: 'alerts',     label: `Alerts (${brgy.alerts.length})`, icon: AlertTriangle },
     ];
 
-    const coverageColor = (v) => v >= 90 ? '#6db8a0' : v >= 80 ? '#e8b84b' : '#e05c73';
+    const coverageColor = (v) => v >= 90 ? '#a0c282' : v >= 80 ? '#edbd9a' : '#b68191';
 
     return (
         <div className="modal-backdrop" onClick={onClose}>
@@ -280,9 +280,9 @@ const DetailModal = ({ brgy, onClose, navigate }) => {
                                 <h4>Newborn Condition Distribution</h4>
                                 <div className="nb-status-bars">
                                     {[
-                                        { label: 'Healthy', count: brgy.newborns - brgy.lbwBabies - brgy.nicuBabies, total: brgy.newborns, color: '#6db8a0' },
-                                        { label: 'Low Birth Weight', count: brgy.lbwBabies, total: brgy.newborns, color: '#e8b84b' },
-                                        { label: 'NICU', count: brgy.nicuBabies, total: brgy.newborns, color: '#e05c73' },
+                                        { label: 'Healthy', count: brgy.newborns - brgy.lbwBabies - brgy.nicuBabies, total: brgy.newborns, color: '#a0c282' },
+                                        { label: 'Low Birth Weight', count: brgy.lbwBabies, total: brgy.newborns, color: '#edbd9a' },
+                                        { label: 'NICU', count: brgy.nicuBabies, total: brgy.newborns, color: '#b68191' },
                                     ].map(item => (
                                         <div key={item.label} className="nb-status-bar-row">
                                             <label>{item.label} ({item.count})</label>
@@ -339,7 +339,7 @@ const DetailModal = ({ brgy, onClose, navigate }) => {
    CHARTS SECTION
 ════════════════════════════ */
 const ChartsSection = ({ barangays }) => {
-    const coverageColor = (v) => v >= 90 ? '#6db8a0' : v >= 80 ? '#e8b84b' : '#e05c73';
+    const coverageColor = (v) => v >= 90 ? '#a0c282' : v >= 80 ? '#edbd9a' : '#b68191';
     const maxPatients = Math.max(...barangays.map(b => b.totalPatients));
     const maxHighRisk = Math.max(...barangays.map(b => b.highRisk));
 
@@ -385,7 +385,7 @@ const ChartsSection = ({ barangays }) => {
                                     className="horiz-fill"
                                     style={{
                                         width: `${Math.round((b.highRisk / maxHighRisk) * 100)}%`,
-                                        background: b.highRisk >= 10 ? '#e05c73' : b.highRisk >= 6 ? '#e8b84b' : '#6db8a0'
+                                        background: b.highRisk >= 10 ? '#b68191' : b.highRisk >= 6 ? '#edbd9a' : '#a0c282'
                                     }}
                                 />
                             </div>
@@ -407,7 +407,7 @@ const ChartsSection = ({ barangays }) => {
                                     className="horiz-fill"
                                     style={{
                                         width: `${Math.round((b.totalPatients / maxPatients) * 100)}%`,
-                                        background: '#5baed0'
+                                        background: '#ac97b4'
                                     }}
                                 />
                             </div>
@@ -478,8 +478,8 @@ const BarangayReports = () => {
         return 'badge-normal';
     };
 
-    const coverageColor = (v) => v >= 90 ? '#3d8870' : v >= 80 ? '#a87c12' : '#b73a52';
-    const coverageBg = (v) => v >= 90 ? 'rgba(109,184,160,0.12)' : v >= 80 ? 'rgba(232,184,75,0.12)' : 'rgba(224,92,115,0.12)';
+    const coverageColor = (v) => v >= 90 ? '#80a06c' : v >= 80 ? '#b08d70' : '#926674';
+    const coverageBg = (v) => v >= 90 ? 'rgba(160,194,130,0.12)' : v >= 80 ? 'rgba(237,189,154,0.12)' : 'rgba(182,129,145,0.12)';
 
     return (
         <div className="br-page">

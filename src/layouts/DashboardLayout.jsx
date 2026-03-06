@@ -21,14 +21,14 @@ const NAV_ITEMS = [
         items: [
             { label: 'Patient Profiles', icon: Users, path: '/dashboard/patients' },
             { label: 'High Risk Cases', icon: AlertTriangle, path: '/dashboard/high-risk' },
-            { label: 'Prenatal Visits', icon: CalendarCheck, path: '/dashboard/prenatal' },
+            { label: 'Visits & Scheduling', icon: CalendarCheck, path: '/dashboard/prenatal' },
             { label: 'Postpartum Records', icon: FileText, path: '/dashboard/postpartum' },
         ],
     },
     {
         section: 'Health Programs',
         items: [
-            { label: 'Vaccinations & Supplements', icon: Syringe, path: '/dashboard/vaccinations' },
+            { label: 'Vaccines & Supplements', icon: Syringe, path: '/dashboard/vaccinations' },
             { label: 'Delivery Outcomes', icon: Stethoscope, path: '/dashboard/deliveries' },
             { label: 'Newborn Tracking', icon: Baby, path: '/dashboard/newborns' },
         ],
@@ -49,9 +49,9 @@ const NAV_ITEMS = [
 ];
 
 const MOCK_USER = {
-    name: 'Maria Santos',
+    name: 'Mish Diola',
     role: 'CHO Staff',
-    avatar: 'MS',
+    avatar: 'MD',
     notifications: 5,
 };
 
@@ -61,6 +61,7 @@ const DashboardLayout = () => {
     const [notifOpen, setNotifOpen] = useState(false);
     const [notifFilter, setNotifFilter] = useState('all');
     const [userMenuOpen, setUserMenuOpen] = useState(false);
+    const [showLogoutModal, setShowLogoutModal] = useState(false);
     const userMenuRef = useRef(null);
     const navigate = useNavigate();
 
@@ -88,9 +89,13 @@ const DashboardLayout = () => {
     }, []);
 
     const handleLogout = () => {
-        if (window.confirm('Are you sure you want to log out?')) {
-            navigate('/login');
-        }
+        setShowLogoutModal(true);
+        setUserMenuOpen(false);
+    };
+
+    const confirmLogout = () => {
+        setShowLogoutModal(false);
+        navigate('/login');
     };
 
     return (
@@ -256,7 +261,7 @@ const DashboardLayout = () => {
                         <div className="topbar-user-wrap" style={{ position: 'relative' }} ref={userMenuRef}>
                             <div className="topbar-user" onClick={() => setUserMenuOpen(!userMenuOpen)}>
                                 <div className="user-avatar" aria-hidden="true">
-                                    <img src="https://ui-avatars.com/api/?name=Maria+Santos&background=b9818a&color=fff" alt={MOCK_USER.name} className="user-avatar-img" />
+                                    <img src="https://ui-avatars.com/api/?name=Mish+Diola&background=b9818a&color=fff" alt={MOCK_USER.name} className="user-avatar-img" />
                                 </div>
                                 <div className="user-info">
                                     <span className="user-name">{MOCK_USER.name}</span>
@@ -271,7 +276,7 @@ const DashboardLayout = () => {
                                 <div className="user-menu-panel">
                                     <div className="user-menu-header">
                                         <p className="user-menu-name">{MOCK_USER.name}</p>
-                                        <p className="user-menu-email">maria@dasmom.gov.ph</p>
+                                        <p className="user-menu-email">mish@dasmom.gov.ph</p>
                                     </div>
                                     <div className="user-menu-links">
                                 <button className="user-menu-item" onClick={() => {
@@ -300,6 +305,36 @@ const DashboardLayout = () => {
                     <Outlet />
                 </main>
             </div>
+
+            {/* ── Logout Confirmation Modal ── */}
+            {showLogoutModal && (
+                <div className="logout-modal-overlay" onClick={() => setShowLogoutModal(false)}>
+                    <div className="logout-modal-card" onClick={e => e.stopPropagation()}>
+                        <div className="logout-modal-icon">
+                            <LogOut size={28} />
+                        </div>
+                        <h2 className="logout-modal-title">Confirm Logout</h2>
+                        <p className="logout-modal-text">
+                            Are you sure you want to log out of <strong>DasMom+</strong>? 
+                            You will need to sign in again to access the system.
+                        </p>
+                        <div className="logout-modal-actions">
+                            <button 
+                                className="logout-btn-cancel" 
+                                onClick={() => setShowLogoutModal(false)}
+                            >
+                                Stay Logged In
+                            </button>
+                            <button 
+                                className="logout-btn-confirm" 
+                                onClick={confirmLogout}
+                            >
+                                Yes, Logout
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

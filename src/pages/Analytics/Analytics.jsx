@@ -1,163 +1,311 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import {
-    Users, Activity, AlertTriangle, CheckCircle2
+    Users, Activity, AlertTriangle, CheckCircle2, 
+    TrendingUp, Calendar, MapPin, Filter, 
+    ChevronRight, ArrowUpRight, Baby, PieChart,
+    BarChart3, AlertCircle
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import '../../styles/pages/Analytics.css';
 
 /* ════════════════════════════
-   MOCK DATA
+   MOCK DATA ENGINE
 ════════════════════════════ */
-// Generate aggregate pregnancy data
-const generateTrackingData = () => {
-    return Array.from({ length: 60 }, (_, i) => {
-        const id = `PT-${2026001 + i}`;
-        const riskTypes = ['Normal', 'Monitor', 'High'];
-        // Skew towards normal for realism
-        const r = Math.random();
-        const risk = r > 0.85 ? 'High' : r > 0.6 ? 'Monitor' : 'Normal';
+const BARANGAYS = ['Brgy. 1', 'Brgy. 2', 'Brgy. 3', 'Brgy. 4', 'Brgy. 5', 'Brgy. 6', 'Brgy. 7'];
 
-        const trimesters = [1, 2, 3];
-        const tri = trimesters[Math.floor(Math.random() * trimesters.length)];
-        const weeks = tri === 1 ? Math.floor(Math.random() * 12) + 1
-            : tri === 2 ? Math.floor(Math.random() * 14) + 13
-                : Math.floor(Math.random() * 14) + 27;
+const generateMaternalData = () => {
+    const conditions = ['Preeclampsia', 'Anemia', 'Gestational Diabetes', 'None'];
+    return Array.from({ length: 120 }, (_, i) => {
+        const r = Math.random();
+        
+        // Age Distribution (Teenage pregnancies ~15%)
+        const age = r < 0.15 ? Math.floor(Math.random() * 5) + 14 : Math.floor(Math.random() * 20) + 20;
+        
+        // Risk Levels
+        const riskLevel = r > 0.85 ? 'Critical' : r > 0.65 ? 'Warning' : r > 0.4 ? 'Monitor' : 'Normal';
+        
+        // Trimesters
+        const tri = Math.floor(Math.random() * 3) + 1;
+        
+        // Conditions
+        const condition = r > 0.7 ? conditions[Math.floor(Math.random() * 3)] : 'None';
 
         return {
-            id,
-            name: `Patient Name ${i + 1}`,
-            barangay: `Brgy. ${Math.floor(Math.random() * 7) + 1}`,
-            age: Math.floor(Math.random() * 20) + 18,
+            id: `PT-${2026001 + i}`,
+            name: `Patient ${i + 1}`,
+            age,
+            barangay: BARANGAYS[Math.floor(Math.random() * BARANGAYS.length)],
             trimester: tri,
-            weeks: weeks,
-            risk: risk,
-            lmp: '2025-08-10',
-            edd: '2026-05-17',
-            lastVitals: { bp: '120/80', weight: '65kg', fht: '140bpm' },
-            nextAppt: Math.random() > 0.4 ? `Mar ${Math.floor(Math.random() * 20) + 1}, 2026` : 'Pending',
-            flags: risk === 'High' ? 'Preeclampsia Watch' : risk === 'Monitor' ? 'Anemia' : 'None',
-            notes: risk === 'High' ? 'Advised bed rest. Needs BP log.' : 'Routine check scheduled.'
+            riskLevel,
+            condition,
+            isTeenage: age < 20,
+            dateAdded: new Date(2025, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28))
         };
-    }).sort((a, b) => {
-        // Sort high risk first by default
-        if (a.risk === 'High' && b.risk !== 'High') return -1;
-        if (a.risk !== 'High' && b.risk === 'High') return 1;
-        return b.weeks - a.weeks; // Then by most progressed
     });
 };
 
-const MOCK_PREGNANCIES = generateTrackingData();
+const MOCK_DATA = generateMaternalData();
 
-// Analytics summaries
-const STATS = {
-    total: MOCK_PREGNANCIES.length,
-    highRisk: MOCK_PREGNANCIES.filter(p => p.risk === 'High').length,
-    normal: MOCK_PREGNANCIES.filter(p => p.risk === 'Normal').length,
-    upcoming: MOCK_PREGNANCIES.filter(p => p.weeks >= 37).length
+/* ════════════════════════════
+   SUB-COMPONENTS
+════════════════════════════ */
+
+const MiniTrend = ({ data, color }) => (
+    <div className="mini-trend">
+        {data.map((v, i) => (
+            <div 
+                key={i} 
+                className="trend-bar" 
+                style={{ 
+                    height: `${(v / Math.max(...data)) * 100}%`,
+                    background: color 
+                }} 
+            />
+        ))}
+    </div>
+);
+
+const DonutChart = ({ data, total, colors }) => {
+    let cumulativePercent = 0;
+    const slices = data.map((d, i) => {
+        const percent = (d.value / total) * 100;
+        const start = cumulativePercent;
+        cumulativePercent += percent;
+        return { ...d, start, end: cumulativePercent, color: colors[i] };
+    });
+
+    const conicGradient = slices.map(s => `${s.color} ${s.start}% ${s.end}%`).join(', ');
+
+    return (
+        <div className="donut-container">
+            <div className="donut-ring" style={{ background: `conic-gradient(${conicGradient})` }}>
+                <div className="donut-center">
+                    <span className="donut-val">{total}</span>
+                    <span className="donut-lbl">Cases</span>
+                </div>
+            </div>
+            <div className="donut-legend-grid">
+                {slices.map((s, i) => (
+                    <div key={i} className="donut-leg-item">
+                        <span className="leg-dot" style={{ background: s.color }} />
+                        <span className="leg-name">{s.label}</span>
+                        <span className="leg-val">{s.value}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
 };
 
 /* ════════════════════════════
-   COMPONENT
+   MAIN COMPONENT
 ════════════════════════════ */
 const Analytics = () => {
+    const [filters, setFilters] = useState({
+        barangay: 'All',
+        trimester: 'All',
+        timeframe: 'quarterly'
+    });
+
+    // ── Data Filtering ──
+    const filteredData = useMemo(() => {
+        return MOCK_DATA.filter(p => {
+            const matchBrgy = filters.barangay === 'All' || p.barangay === filters.barangay;
+            const matchTri = filters.trimester === 'All' || p.trimester.toString() === filters.trimester;
+            return matchBrgy && matchTri;
+        });
+    }, [filters]);
+
+    // ── Metric Calculations ──
+    const metrics = useMemo(() => {
+        const total = filteredData.length;
+        const teenage = filteredData.filter(p => p.isTeenage);
+        const highRisk = filteredData.filter(p => p.riskLevel === 'Critical');
+        const urgent = filteredData.filter(p => p.condition !== 'None');
+
+        return {
+            total,
+            teenageCount: teenage.length,
+            teenagePct: total > 0 ? Math.round((teenage.length / total) * 100) : 0,
+            highRiskCount: highRisk.length,
+            urgentCount: urgent.length,
+            riskBreakdown: [
+                { label: 'Critical', value: filteredData.filter(p => p.riskLevel === 'Critical').length },
+                { label: 'Warning', value: filteredData.filter(p => p.riskLevel === 'Warning').length },
+                { label: 'Monitor', value: filteredData.filter(p => p.riskLevel === 'Monitor').length },
+            ],
+            conditionStats: [
+                { label: 'Pre-eclampsia', value: filteredData.filter(p => p.condition === 'Preeclampsia').length, color: '#b68191' },
+                { label: 'Anemia', value: filteredData.filter(p => p.condition === 'Anemia').length, color: '#edbd9a' },
+                { label: 'Diabetes', value: filteredData.filter(p => p.condition === 'Gestational Diabetes').length, color: '#ac97b4' },
+            ]
+        };
+    }, [filteredData]);
+
+    const handleFilterChange = (key, val) => setFilters(prev => ({ ...prev, [key]: val }));
 
     return (
-        <div className="analytics-page">
-
+        <div className="analytics-overhaul">
+            
             {/* ── Page Header ── */}
-            <div className="page-header">
+            <header className="analytics-header">
                 <div>
-                    <h1 className="page-title">Analytics & Dashboard</h1>
-                    <p className="page-subtitle">Aggregate population monitoring and high-risk pregnancy identification</p>
+                    <h1 className="page-title">Maternal Health Intelligence</h1>
+                    <p className="page-subtitle">Proactive risk monitoring and population health insights</p>
+                </div>
+                <div className="header-actions">
+                    <button className="btn-export"><Activity size={14} /> Intelligence Report</button>
+                </div>
+            </header>
+
+            {/* ── Filter Bar ── */}
+            <div className="analytics-filters shadow-sm">
+                <div className="filter-group">
+                    <MapPin size={16} className="filter-icon" />
+                    <select value={filters.barangay} onChange={e => handleFilterChange('barangay', e.target.value)}>
+                        <option value="All">All Barangays</option>
+                        {BARANGAYS.map(b => <option key={b} value={b}>{b}</option>)}
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <PieChart size={16} className="filter-icon" />
+                    <select value={filters.trimester} onChange={e => handleFilterChange('trimester', e.target.value)}>
+                        <option value="All">All Trimesters</option>
+                        <option value="1">1st Trimester</option>
+                        <option value="2">2nd Trimester</option>
+                        <option value="3">3rd Trimester</option>
+                    </select>
+                </div>
+                <div className="filter-group">
+                    <Calendar size={16} className="filter-icon" />
+                    <select value={filters.timeframe} onChange={e => handleFilterChange('timeframe', e.target.value)}>
+                        <option value="monthly">Monthly View</option>
+                        <option value="quarterly">Quarterly View</option>
+                    </select>
                 </div>
             </div>
 
-            {/* ── Top Summary Cards ── */}
-            <div className="tracking-stats-grid">
-                <div className="stat-card stat-card--sage">
-                    <div className="stat-top">
-                        <div className="stat-icon stat-icon--sage"><Users size={20} /></div>
+            {/* ── Summary Stats ── */}
+            <section className="analytics-summary-grid">
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="a-stat-card lilac">
+                    <div className="a-stat-icon"><Users size={22} /></div>
+                    <div className="a-stat-info">
+                        <h3>{metrics.teenageCount}</h3>
+                        <p>Teenage Pregnancies ({metrics.teenagePct}%)</p>
                     </div>
-                    <div className="stat-value">{STATS.total}</div>
-                    <div className="stat-label">Active Pregnancies</div>
-                </div>
-                <div className="stat-card stat-card--rose">
-                    <div className="stat-top">
-                        <div className="stat-icon stat-icon--rose"><AlertTriangle size={20} /></div>
+                    <div className="a-stat-trend up">
+                        <TrendingUp size={12} /> +2.4%
                     </div>
-                    <div className="stat-value">{STATS.highRisk}</div>
-                    <div className="stat-label">High-Risk Cases</div>
-                </div>
-                <div className="stat-card stat-card--pink">
-                    <div className="stat-top">
-                        <div className="stat-icon stat-icon--pink"><CheckCircle2 size={20} /></div>
-                    </div>
-                    <div className="stat-value">{STATS.normal}</div>
-                    <div className="stat-label">Normal Progressions</div>
-                </div>
-                <div className="stat-card stat-card--orange">
-                    <div className="stat-top">
-                        <div className="stat-icon stat-icon--orange"><Activity size={20} /></div>
-                    </div>
-                    <div className="stat-value">{STATS.upcoming}</div>
-                    <div className="stat-label">Due &lt; 3 weeks</div>
-                </div>
-            </div>
+                </motion.div>
 
-            {/* ── Analytics Dashboard Panel (CSS Charts) ── */}
-            <div className="analytics-panel">
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="a-stat-card rose">
+                    <div className="a-stat-icon"><AlertTriangle size={22} /></div>
+                    <div className="a-stat-info">
+                        <h3>{metrics.highRiskCount}</h3>
+                        <p>Critical High-Risk Cases</p>
+                    </div>
+                    <div className="a-stat-badge">Urgent</div>
+                </motion.div>
 
-                {/* Chart 1: Trimester Distro */}
-                <div className="analytics-card">
-                    <h3 className="analytics-title">Trimester Distribution</h3>
-                    <div className="tri-progress-wrap">
-                        <div className="tri-progress-bar">
-                            <div className="tri-seg tri1" style={{ width: '30%' }} title="1st Tri: 30%"></div>
-                            <div className="tri-seg tri2" style={{ width: '45%' }} title="2nd Tri: 45%"></div>
-                            <div className="tri-seg tri3" style={{ width: '25%' }} title="3rd Tri: 25%"></div>
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="a-stat-card orange">
+                    <div className="a-stat-icon"><Activity size={22} /></div>
+                    <div className="a-stat-info">
+                        <h3>{metrics.urgentCount}</h3>
+                        <p>With Underlying Conditions</p>
+                    </div>
+                </motion.div>
+
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="a-stat-card sage">
+                    <div className="a-stat-icon"><Baby size={22} /></div>
+                    <div className="a-stat-info">
+                        <h3>{metrics.total}</h3>
+                        <p>Total Managed Cases</p>
+                    </div>
+                </motion.div>
+            </section>
+
+            {/* ── Detailed Reports ── */}
+            <div className="reports-grid">
+                
+                {/* 1. Teenage Pregnancy Trend */}
+                <div className="report-card">
+                    <div className="report-head">
+                        <div>
+                            <h3 className="report-title">Teenage Pregnancy Analytics</h3>
+                            <p className="report-sub">Monthly trend for patients aged &lt;20 years</p>
                         </div>
-                        <div className="tri-legend">
-                            <span><div className="dot tri1"></div>1st (30%)</span>
-                            <span><div className="dot tri2"></div>2nd (45%)</span>
-                            <span><div className="dot tri3"></div>3rd (25%)</span>
-                        </div>
+                        <BarChart3 size={18} className="text-muted" />
                     </div>
-                </div>
-
-                {/* Chart 2: Risk Ratio (CSS Donut) */}
-                <div className="analytics-card">
-                    <h3 className="analytics-title">Risk Ratio</h3>
-                    <div className="css-donut-wrap">
-                        {/* A fallback CSS donut utilizing conic-gradient */}
-                        <div className="css-donut" style={{ background: `conic-gradient(#e05c73 0% ${Math.round(STATS.highRisk / STATS.total * 100)}%, #f9a26c ${Math.round(STATS.highRisk / STATS.total * 100)}% ${Math.round((STATS.highRisk + STATS.normal) / STATS.total * 100)}%, #6db8a0 ${Math.round((STATS.highRisk + STATS.normal) / STATS.total * 100)}% 100%)` }}>
-                            <div className="css-donut-hole">
-                                <span>{STATS.total}</span>
-                                <small>Cases</small>
+                    <div className="trend-visualization">
+                        <div className="trend-main-val">
+                            <span className="big-num">{metrics.teenageCount}</span>
+                            <div className="val-meta">
+                                <span className="text-danger font-bold">-5%</span>
+                                <small className="text-muted">vs last period</small>
                             </div>
                         </div>
-                        <div className="donut-legend">
-                            <span><div className="dot d-high"></div>High ({STATS.highRisk})</span>
-                            <span><div className="dot d-mon"></div>Monitor</span>
-                            <span><div className="dot d-norm"></div>Normal ({STATS.normal})</span>
-                        </div>
+                        <MiniTrend data={[4, 6, 8, 5, 9, 7, 12, 8]} color="#ac97b4" />
+                    </div>
+                    <div className="report-footer">
+                        <p>Targeting awareness programs in <strong>Brgy. 3</strong> could reduce these numbers.</p>
                     </div>
                 </div>
 
-                {/* Chart 3: Barangay Risk Comparisson */}
-                <div className="analytics-card span-2">
-                    <h3 className="analytics-title">High-Risk Cases by Barangay</h3>
-                    <div className="bar-chart">
-                        {[
-                            { b: 'Brgy 1', val: 75 }, { b: 'Brgy 2', val: 40 },
-                            { b: 'Brgy 3', val: 90 }, { b: 'Brgy 4', val: 20 },
-                            { b: 'Brgy 5', val: 60 }
-                        ].map((br, i) => (
-                            <div className="bar-row" key={i}>
-                                <span className="bar-lbl">{br.b}</span>
-                                <div className="bar-track">
-                                    <div className="bar-fill bg-red" style={{ width: `${br.val}%` }}></div>
+                {/* 2. High Risk Categorization */}
+                <div className="report-card">
+                    <div className="report-head">
+                        <div>
+                            <h3 className="report-title">Risk Categorization</h3>
+                            <p className="report-sub">Breakdown of maternal risk severity levels</p>
+                        </div>
+                        <PieChart size={18} className="text-muted" />
+                    </div>
+                    <DonutChart 
+                        total={filteredData.length} 
+                        data={metrics.riskBreakdown} 
+                        colors={['#b68191', '#edbd9a', '#a0c282']} 
+                    />
+                </div>
+
+                {/* 3. Underlying Conditions */}
+                <div className="report-card span-2">
+                    <div className="report-head">
+                        <div>
+                            <h3 className="report-title">Conditions & Co-morbidities</h3>
+                            <p className="report-sub">Prevalence of underlying health complications</p>
+                        </div>
+                        <AlertCircle size={18} className="text-muted" />
+                    </div>
+                    <div className="conditions-grid">
+                        <div className="conditions-bars">
+                            {metrics.conditionStats.sort((a,b) => b.value - a.value).map(c => (
+                                <div key={c.label} className="cond-row">
+                                    <div className="cond-info">
+                                        <span className="cond-name">{c.label}</span>
+                                        <span className="cond-val">{c.value} cases</span>
+                                    </div>
+                                    <div className="cond-bar-track">
+                                        <motion.div 
+                                            initial={{ width: 0 }} 
+                                            animate={{ width: `${(c.value / filteredData.length) * 100}%` }}
+                                            className="cond-bar-fill"
+                                            style={{ background: c.color }}
+                                        />
+                                    </div>
                                 </div>
+                            ))}
+                        </div>
+                        <div className="urgent-highlights">
+                            <div className="highlight-box red">
+                                <h4>Crucial Alert</h4>
+                                <p><strong>{metrics.conditionStats[0].value}</strong> patients with Pre-eclampsia require weekly BP monitoring.</p>
+                                <button className="btn-tiny">View Cases <ChevronRight size={12} /></button>
                             </div>
-                        ))}
+                            <div className="highlight-box orange">
+                                <h4>Monitoring Advice</h4>
+                                <p>Ensure supplement distribution is 100% for Anemic patients.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

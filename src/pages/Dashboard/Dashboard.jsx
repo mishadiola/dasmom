@@ -121,7 +121,7 @@ const Dashboard = () => {
             {/* ── Welcome Banner ── */}
             <div className="welcome-banner">
                 <div className="welcome-left">
-                    <p className="welcome-greeting">Good morning, Maria <span className="wave-emoji">👋</span></p>
+                    <p className="welcome-greeting">Good morning, Mish <span className="wave-emoji">👋</span></p>
                     <p className="welcome-sub">
                         You have <strong>18 appointments</strong> today and <strong>3 high-risk alerts</strong> requiring attention.
                     </p>
@@ -142,13 +142,13 @@ const Dashboard = () => {
                 <div className="quick-actions-grid quick-actions-grid--row">
                     {[
                         { label: 'Add Patient', icon: Users, color: 'rose', path: '/dashboard/patients/add' },
-                        { label: 'Schedule Visit', icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal' },
-                        { label: 'Record Vitals', icon: Activity, color: 'blue', path: '/dashboard/postpartum' },
+                        { label: 'Schedule Visit', icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal', state: { openBooking: true } },
+                        { label: 'Record Vitals', icon: Activity, color: 'blue', path: '/dashboard/patients' },
                         { label: 'Log Delivery', icon: Baby, color: 'pink', path: '/dashboard/deliveries' },
                         { label: 'Issue Vaccine', icon: Syringe, color: 'orange', path: '/dashboard/vaccinations' },
                         { label: 'Generate Report', icon: FileText, color: 'purple', path: '/dashboard/analytics' },
-                    ].map(({ label, icon: Icon, color, path }) => (
-                        <button key={label} className={`quick-btn quick-btn--${color}`} onClick={() => navigate(path)}>
+                    ].map(({ label, icon: Icon, color, path, state }) => (
+                        <button key={label} className={`quick-btn quick-btn--${color}`} onClick={() => navigate(path, state ? { state } : undefined)}>
                             <Icon size={18} />
                             <span>{label}</span>
                         </button>
@@ -289,7 +289,7 @@ const Dashboard = () => {
                         <div className="card-header">
                             <h2 className="card-title"><Activity size={16} />Health Snapshot</h2>
                         </div>
-                        <p className="card-description">A breakdown of prevalent pregnancy conditions for proactive monitoring.</p>
+                        <p className="card-description">Shows the common pregnancy conditions for easier monitoring.</p>
                         <div className="snapshot-list">
                             {[
                                 { label: 'Normal BP', pct: 71, color: 'sage' },

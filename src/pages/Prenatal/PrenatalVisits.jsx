@@ -220,6 +220,18 @@ const PrenatalVisits = () => {
         });
     };
 
+    const coverageColor = (v) => v >= 90 ? '#a0c282' : v >= 80 ? '#edbd9a' : '#b68191';
+
+    // ── Direct Navigation Logic (from Dashboard) ──
+    useEffect(() => {
+        if (location.state?.openBooking) {
+            setSelectedSlot({ date: visibleDays[0].date, time: '08:00 AM' });
+            setBookingPanelOpen(true);
+            // Clear state so it doesn't reopen on refresh
+            window.history.replaceState({}, document.title);
+        }
+    }, [location.state, visibleDays]);
+
     const formatNavLabel = () => {
         if (calendarView === 'day') {
             return currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
