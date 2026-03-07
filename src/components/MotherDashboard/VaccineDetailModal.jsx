@@ -2,7 +2,8 @@ import React from 'react';
 import { 
     X, Syringe, Shield, Activity, 
     AlertTriangle, HeartPulse, Send, 
-    Calendar, CheckCircle2, Clock
+    Calendar, CheckCircle2, Clock, BookOpen,
+    ExternalLink
 } from 'lucide-react';
 import '../../styles/components/VaccineDetailModal.css';
 
@@ -76,6 +77,30 @@ const VaccineDetailModal = ({ vaccine, onClose }) => {
                                     <span className="history-action">Dose administered</span>
                                     <span className="history-date">{vaccine.lastTaken}</span>
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Sources Section */}
+                    {vaccine.sources && vaccine.sources.length > 0 && (
+                        <div className="vdm-section vdm-sources-section">
+                            <h3><BookOpen size={18} /> Sources & References</h3>
+                            <div className="vdm-sources-list">
+                                {vaccine.sources.map((source, i) => (
+                                    <a 
+                                        key={i} 
+                                        href={source.url} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer" 
+                                        className="vdm-source-item"
+                                    >
+                                        <div className="source-info">
+                                            <strong>{source.name}</strong>
+                                            <span>{source.title}</span>
+                                        </div>
+                                        <ExternalLink size={14} />
+                                    </a>
+                                ))}
                             </div>
                         </div>
                     )}

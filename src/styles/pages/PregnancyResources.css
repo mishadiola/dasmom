@@ -1,0 +1,413 @@
+/* PregnancyResources.css */
+.pr-page {
+    padding: 24px;
+    background: #fdfafb;
+    min-height: 100%;
+}
+
+/* ── Header Section ── */
+.pr-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.pr-header-title h1 {
+    font-size: 24px;
+    color: #4a3d40;
+    margin-bottom: 4px;
+}
+
+.pr-header-title p {
+    color: #8c7a7d;
+    font-size: 14px;
+}
+
+.pr-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.pr-btn-add {
+    background: #b9818a;
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pr-btn-add:hover {
+    background: #a36e76;
+    transform: translateY(-1px);
+}
+
+/* ── Filters & Controls ── */
+.pr-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: white;
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid #eee;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.pr-search-wrap {
+    position: relative;
+    width: 320px;
+}
+
+.pr-search-ico {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #b0a0a3;
+}
+
+.pr-search-input {
+    width: 100%;
+    padding: 10px 12px 10px 40px;
+    border: 1px solid #e5e0e1;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.pr-search-input:focus {
+    border-color: #b9818a;
+    box-shadow: 0 0 0 3px rgba(185, 129, 138, 0.1);
+}
+
+.pr-filter-group {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.pr-view-toggle {
+    display: flex;
+    background: #f1eeef;
+    padding: 4px;
+    border-radius: 8px;
+}
+
+.pr-view-btn {
+    padding: 6px 10px;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    color: #8c7a7d;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.pr-view-btn.active {
+    background: white;
+    color: #b9818a;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+/* ── Table View ── */
+.pr-table-container {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #eee;
+    overflow: hidden;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.01);
+}
+
+.pr-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.pr-table th {
+    background: #faf8f9;
+    padding: 14px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #7a6669;
+    border-bottom: 1px solid #eee;
+}
+
+.pr-table td {
+    padding: 14px 16px;
+    font-size: 14px;
+    color: #4a3d40;
+    border-bottom: 1px solid #f5f5f5;
+}
+
+.pr-table tr:hover {
+    background: #fffcfd;
+}
+
+.pr-resource-cell {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.pr-resource-icon {
+    width: 32px;
+    height: 32px;
+    background: #f9f0f2;
+    color: #b9818a;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pr-status {
+    padding: 4px 8px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.pr-status--published { background: #e6f7ef; color: #1e7e4e; }
+.pr-status--draft { background: #fff8e6; color: #b28400; }
+.pr-status--archived { background: #fdf2f2; color: #c81e1e; }
+
+.pr-table-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.pr-icon-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    border: 1px solid #eee;
+    background: white;
+    color: #7a6669;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pr-icon-btn:hover {
+    background: #f9f0f2;
+    color: #b9818a;
+    border-color: #b9818a;
+}
+
+/* ── Grid View ── */
+.pr-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.pr-card {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid #eee;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+.pr-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 20px -8px rgba(185, 129, 138, 0.15);
+}
+
+.pr-card-cover {
+    height: 120px;
+    background: #f9f0f2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #b9818a;
+    position: relative;
+}
+
+.pr-card-status {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+}
+
+.pr-card-body {
+    padding: 16px;
+    flex-grow: 1;
+}
+
+.pr-card-body h3 {
+    font-size: 16px;
+    color: #4a3d40;
+    margin-bottom: 8px;
+}
+
+.pr-card-body p {
+    font-size: 13px;
+    color: #8c7a7d;
+    line-height: 1.5;
+    margin-bottom: 12px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-clamp: 2;
+    overflow: hidden;
+}
+
+.pr-card-footer {
+    padding: 12px 16px;
+    border-top: 1px solid #f5f5f5;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.pr-card-meta {
+    font-size: 12px;
+    color: #b0a0a3;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* ── Modal Styles ── */
+.pr-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.pr-modal {
+    background: white;
+    width: 600px;
+    max-width: 90%;
+    border-radius: 16px;
+    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+}
+
+.pr-modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.pr-modal-header h2 {
+    font-size: 20px;
+    color: #4a3d40;
+}
+
+.pr-modal-close {
+    background: transparent;
+    border: none;
+    color: #8c7a7d;
+    cursor: pointer;
+}
+
+.pr-modal-body {
+    padding: 24px;
+    overflow-y: auto;
+}
+
+.pr-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.pr-form-group {
+    margin-bottom: 20px;
+}
+
+.pr-form-group.full {
+    grid-column: span 2;
+}
+
+.pr-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #7a6669;
+    margin-bottom: 8px;
+}
+
+.pr-input, .pr-select, .pr-textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #e5e0e1;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+}
+
+.pr-input:focus, .pr-select:focus, .pr-textarea:focus {
+    border-color: #b9818a;
+}
+
+.pr-textarea {
+    height: 120px;
+    resize: vertical;
+}
+
+.pr-modal-footer {
+    padding: 20px 24px;
+    border-top: 1px solid #eee;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.pr-btn-cancel {
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: 1px solid #eee;
+    background: #f9f9f9;
+    color: #7a6669;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.pr-btn-save {
+    padding: 10px 24px;
+    border-radius: 8px;
+    border: none;
+    background: #b9818a;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* ── Colors ── */
+.cat-prenatal { background: #fff1f2; color: #e11d48; }
+.cat-nutrition { background: #f0fdf4; color: #16a34a; }
+.cat-postpartum { background: #fdf4ff; color: #a21caf; }
+.cat-newborn { background: #eff6ff; color: #2563eb; }
+.cat-mental { background: #faf5ff; color: #7c3aed; }

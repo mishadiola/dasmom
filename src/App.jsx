@@ -27,6 +27,7 @@ import UserVaccinations from './pages/MotherDashboard/UserVaccinations';
 import PregnancyTips from './pages/MotherDashboard/PregnancyTips';
 import TipDetailPage from './pages/MotherDashboard/TipDetailPage';
 import PregnancyDeliveryInfo from './pages/MotherDashboard/PregnancyDeliveryInfo';
+import PregnancyResources from './pages/Resources/PregnancyResources';
 import './App.css';
 
 function App() {
@@ -58,6 +59,7 @@ function App() {
           <Route path="newborns" element={<NewbornTracking />} />
           <Route path="barangay" element={<BarangayReports />} />
           <Route path="analytics" element={<Analytics />} />
+          <Route path="resources" element={<PregnancyResources />} />
           <Route path="settings" element={<Settings />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

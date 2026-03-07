@@ -20,7 +20,11 @@ const VACCINATION_DATA = [
         status: 'Upcoming',
         importance: 'Protects against maternal and neonatal tetanus, a serious disease caused by bacteria found in soil.',
         sideEffects: 'Mild soreness at the injection site, slight fever.',
-        tips: 'Take with iron supplements for better absorption and stay hydrated.'
+        tips: 'Take with iron supplements for better absorption and stay hydrated.',
+        sources: [
+            { name: 'DOH Philippines', title: 'National Immunization Program Guidelines', url: 'https://doh.gov.ph' },
+            { name: 'World Health Organization (WHO)', title: 'Tetanus vaccine: WHO position paper', url: 'https://www.who.int/publications/i/item/WHO-WER9206' }
+        ]
     },
     {
         id: 2,
@@ -33,7 +37,11 @@ const VACCINATION_DATA = [
         status: 'Completed',
         importance: 'Hepatitis B is a virus that infects the liver. Babies can get it from their mothers during birth.',
         sideEffects: 'Low-grade fever, fussiness.',
-        tips: 'Ensure the baby is comfortable and monitor for any unusual reactions.'
+        tips: 'Ensure the baby is comfortable and monitor for any unusual reactions.',
+        sources: [
+            { name: 'World Health Organization (WHO)', title: 'Hepatitis B', url: 'https://www.who.int/news-room/fact-sheets/detail/hepatitis-b' },
+            { name: 'DOH Philippines', title: 'Hepatitis B Immunization Program', url: 'https://doh.gov.ph' }
+        ]
     },
     {
         id: 3,
@@ -46,7 +54,11 @@ const VACCINATION_DATA = [
         status: 'Upcoming',
         importance: 'Pregnant women are at higher risk for severe illness from the flu.',
         sideEffects: 'Redness at injection site, mild body aches.',
-        tips: 'Best taken before the flu season starts.'
+        tips: 'Best taken before the flu season starts.',
+        sources: [
+            { name: 'CDC', title: 'Flu Vaccine and Pregnancy', url: 'https://www.cdc.gov/flu/highrisk/pregnant.htm' },
+            { name: 'World Health Organization (WHO)', title: 'Influenza (Seasonal)', url: 'https://www.who.int/news-room/fact-sheets/detail/influenza-(seasonal)' }
+        ]
     },
     {
         id: 4,
@@ -59,7 +71,11 @@ const VACCINATION_DATA = [
         status: 'Completed',
         importance: 'Helps prevent severe forms of tuberculosis in infants.',
         sideEffects: 'A small scar typically forms at the site of injection.',
-        tips: 'Keep the injection site clean and dry.'
+        tips: 'Keep the injection site clean and dry.',
+        sources: [
+            { name: 'World Health Organization (WHO)', title: 'BCG vaccine: WHO position paper', url: 'https://www.who.int/publications/i/item/WHO-WER9308' },
+            { name: 'DOH Philippines', title: 'National Tuberculosis Control Program', url: 'https://doh.gov.ph' }
+        ]
     },
     {
         id: 5,
@@ -72,7 +88,11 @@ const VACCINATION_DATA = [
         status: 'Upcoming',
         importance: 'Polio is a crippling and potentially deadly infectious disease.',
         sideEffects: 'Very few reported side effects.',
-        tips: 'Administered orally as drops.'
+        tips: 'Administered orally as drops.',
+        sources: [
+            { name: 'World Health Organization (WHO)', title: 'Poliomyelitis (Polio)', url: 'https://www.who.int/news-room/fact-sheets/detail/poliomyelitis' },
+            { name: 'UNICEF', title: 'Polio Vaccination Strategies', url: 'https://www.unicef.org/immunization/polio' }
+        ]
     }
 ];
 

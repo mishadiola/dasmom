@@ -31,6 +31,7 @@ const NAV_ITEMS = [
             { label: 'Vaccines & Supplements', icon: Syringe, path: '/dashboard/vaccinations' },
             { label: 'Delivery Outcomes', icon: Stethoscope, path: '/dashboard/deliveries' },
             { label: 'Newborn Tracking', icon: Baby, path: '/dashboard/newborns' },
+            { label: 'Pregnancy Resources', icon: HeartPulse, path: '/dashboard/resources' },
         ],
     },
     {

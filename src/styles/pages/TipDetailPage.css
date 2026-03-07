@@ -584,3 +584,111 @@
         padding: 20px;
     }
 }
+
+/* ─────────────────────────────────────────────
+   VERIFIED BADGE & SOURCES
+   ───────────────────────────────────────────── */
+.tdp-verified-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(46, 125, 50, 0.2);
+    color: #81c784;
+    border: 1px solid rgba(129, 199, 132, 0.3);
+    padding: 4px 12px;
+    border-radius: var(--radius-full);
+    backdrop-filter: blur(4px);
+}
+
+.tdp-sources-section {
+    margin-top: 20px;
+    padding: 32px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: var(--radius-lg);
+}
+
+.tdp-sources-section h3 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--color-text);
+    margin: 0 0 8px;
+}
+
+.tdp-sources-intro {
+    font-size: 13.5px;
+    color: var(--color-text-muted);
+    margin-bottom: 20px !important;
+}
+
+.tdp-sources-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+}
+
+.tdp-source-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.tdp-source-card:hover {
+    border-color: var(--color-rose);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    transform: translateY(-2px);
+}
+
+.tdp-source-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.tdp-source-info strong {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-text);
+}
+
+.tdp-source-info span {
+    font-size: 12px;
+    color: var(--color-text-light);
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.tdp-source-link-icon {
+    color: var(--color-text-light);
+    opacity: 0.5;
+    transition: all 0.2s ease;
+}
+
+.tdp-source-card:hover .tdp-source-link-icon {
+    color: var(--color-rose);
+    opacity: 1;
+    transform: translate(2px, -2px);
+}
+
+@media (max-width: 600px) {
+    .tdp-sources-section {
+        padding: 24px;
+    }
+    .tdp-sources-list {
+        grid-template-columns: 1fr;
+    }
+}

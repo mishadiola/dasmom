@@ -5,7 +5,8 @@ import {
     CheckCircle2, AlertCircle
 } from 'lucide-react';
 import '../../styles/pages/MotherDashboard.css';
-import BabySizeCard from '../../components/MotherDashboard/BabySizeCard';
+import BabySizeCard, { sizeMapping } from '../../components/MotherDashboard/BabySizeCard';
+import PregnancyProgressCard from '../../components/MotherDashboard/PregnancyProgressCard';
 
 const MotherDashboard = () => {
     const today = new Date().toLocaleDateString('en-PH', {
@@ -13,9 +14,15 @@ const MotherDashboard = () => {
     });
 
     const pregnancyData = {
+        lmp: '2025-08-20',
         weeks: 28,
         trimester: '3rd Trimester'
     };
+
+    // Get baby size data for the progress card
+    const weeksList = Object.keys(sizeMapping).map(Number).sort((a, b) => b - a);
+    const targetWeek = weeksList.find(w => pregnancyData.weeks >= w) || 8;
+    const babySizeData = sizeMapping[targetWeek];
 
     const appointments = [
         { id: 1, date: 'Mar 15, 2026', time: '9:00 AM', type: 'Prenatal Checkup', staff: 'Midwife Elena P.', status: 'Upcoming' },
@@ -23,8 +30,8 @@ const MotherDashboard = () => {
     ];
 
     const healthTips = [
-        { id: 1, title: 'Stay Hydrated', text: 'Drink at least 8-10 glasses of water daily to support your baby\'s development.' },
-        { id: 2, title: 'Gentle Exercise', text: 'Walking for 30 minutes a day can help improve circulation and mood.' },
+        { id: 1, title: 'Mga Babala sa Kalusugan', text: 'Pumunta agad sa health center kung may pamamanas, sakit ng ulo, o pagdurugo.' },
+        { id: 2, title: 'Malusog na Pagbubuntis', text: 'Kumain nang tama, magpahinga, at umiwas sa masasamang bisyo at maaalat na pagkain.' },
     ];
 
     return (
@@ -36,14 +43,16 @@ const MotherDashboard = () => {
                     <p className="welcome-sub">Welcome to your personal maternal health portal. Here's your update for today.</p>
                     <p className="current-date">{today}</p>
                 </div>
-                <div className="pregnancy-summary">
-                    <div className="gestation-box">
-                        <span className="gestation-val">{pregnancyData.weeks}</span>
-                        <span className="gestation-label">Weeks Pregnant</span>
-                    </div>
-                    <div className="trimester-badge">{pregnancyData.trimester}</div>
+                <div className="pregnancy-summary-simple">
+                   <div className="trimester-badge">{pregnancyData.trimester}</div>
                 </div>
             </div>
+
+            {/* ── Pregnancy Progress Section ── */}
+            <PregnancyProgressCard 
+                lmpDate={pregnancyData.lmp} 
+                babySizeData={babySizeData} 
+            />
 
             <div className="mother-dash-grid">
                 {/* ── Left Column ── */}
@@ -103,26 +112,28 @@ const MotherDashboard = () => {
                     <BabySizeCard currentWeek={pregnancyData.weeks} />
 
                     {/* Health Tips */}
-                    <div className="mother-card tips-card">
-                        <div className="mother-card-header">
-                            <h2 className="mother-card-title">
-                                <Star size={18} /> Daily Health Tips
-                            </h2>
-                        </div>
-                        <div className="mother-tips-list">
-                            {healthTips.map(tip => (
-                                <div key={tip.id} className="mother-tip-item">
-                                    <div className="tip-icon">
-                                        <Heart size={16} />
+                    {healthTips.length > 0 && (
+                        <div className="mother-card tips-card">
+                            <div className="mother-card-header">
+                                <h2 className="mother-card-title">
+                                    <Star size={18} /> Daily Health Tips
+                                </h2>
+                            </div>
+                            <div className="mother-tips-list">
+                                {healthTips.map(tip => (
+                                    <div key={tip.id} className="mother-tip-item">
+                                        <div className="tip-icon">
+                                            <Heart size={16} />
+                                        </div>
+                                        <div className="tip-content">
+                                            <p className="tip-title">{tip.title}</p>
+                                            <p className="tip-text">{tip.text}</p>
+                                        </div>
                                     </div>
-                                    <div className="tip-content">
-                                        <p className="tip-title">{tip.title}</p>
-                                        <p className="tip-text">{tip.text}</p>
-                                    </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     {/* Quick Support */}
                     <div className="mother-card support-card">

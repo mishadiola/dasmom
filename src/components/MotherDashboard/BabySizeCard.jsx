@@ -6,7 +6,7 @@ import watermelonImg from '../../assets/images/baby-size/watermelon.png';
 import raspberryImg from '../../assets/images/baby-size/raspberry.png';
 import BabySizeModal from './BabySizeModal';
 
-const sizeMapping = {
+export const sizeMapping = {
     8: { name: 'Raspberry', length: '1.6 cm', weight: '1 g', fact: 'Your baby is now the size of a raspberry!', image: raspberryImg, emoji: '🍓', color: 'card-pastel-pink' },
     12: { name: 'Lime', length: '5.4 cm', weight: '14 g', fact: 'Your baby can now make a fist!', image: null, emoji: '🍋', color: 'card-pastel-green' },
     16: { name: 'Avocado', length: '11.6 cm', weight: '100 g', fact: 'Your baby is starting to grow hair!', image: avocadoImg, emoji: '🥑', color: 'card-pastel-green' },

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
     Search, HeartPulse, Sparkles, BookOpen, Apple, Dumbbell,
     Brain, Baby, Syringe, Heart, Bookmark, BookmarkCheck,
-    CheckCircle2, ChevronRight, Star, X
+    CheckCircle2, ChevronRight, Star, X, ShieldCheck
 } from 'lucide-react';
 import '../../styles/pages/PregnancyTips.css';
 
@@ -11,374 +11,497 @@ import '../../styles/pages/PregnancyTips.css';
 export const TIPS_DATA = [
     {
         id: '1',
-        title: 'Crucial Nutrients for the First Trimester',
-        category: 'Nutrition',
-        description: 'Learn about folic acid, iron, and why they matter so much early in pregnancy.',
-        fullContent: [
-            {
-                heading: 'Why Nutrition Matters Most Now',
-                body: 'The first trimester is a critical window for your baby\'s development. During these early weeks, your baby\'s brain, spinal cord, heart, and major organs are forming. What you eat directly impacts these processes.'
-            },
-            {
-                heading: 'Folic Acid (Folate)',
-                body: 'Folic acid is the most important nutrient in early pregnancy. It helps prevent neural tube defects — serious birth defects of the brain and spine. Take 400–800 mcg daily. Food sources include leafy greens (spinach, kale), fortified cereals, lentils, and beans.'
-            },
-            {
-                heading: 'Iron',
-                body: 'Iron supports the development of the placenta and fetus. Your body needs more iron during pregnancy to make extra blood for your baby. Aim for 27 mg daily. Good sources: lean red meat, chicken, fish, beans, and tofu. Pair with Vitamin C to boost absorption.'
-            },
-            {
-                heading: 'Calcium & Vitamin D',
-                body: 'These nutrients work together to build your baby\'s bones and teeth. Aim for 1,000 mg of calcium and 600 IU of Vitamin D per day. Sources: dairy products, fortified plant milks, sardines, and sunlight exposure.'
-            },
-            {
-                heading: 'Key Takeaway',
-                body: 'A daily prenatal vitamin is highly recommended to fill any nutritional gaps. Always consult your midwife or doctor before starting any supplement.'
-            }
-        ],
-        readTime: '4 min read',
-        icon: <Apple size={22} />,
-        colorClass: 'cat-nutrition',
-        tipOfDay: false,
-    },
-    {
-        id: '2',
-        title: 'Safe Pregnancy Exercises for Every Trimester',
-        category: 'Exercise & Fitness',
-        description: 'Stay active safely with approved routines that keep you and baby healthy.',
-        fullContent: [
-            {
-                heading: 'Benefits of Exercising During Pregnancy',
-                body: 'Regular physical activity during pregnancy can reduce back pain, ease constipation, decrease your risk of gestational diabetes and preeclampsia, promote healthy weight gain, improve your mood and energy levels, and help you sleep better.'
-            },
-            {
-                heading: 'First Trimester (Weeks 1–12)',
-                body: 'Most exercises are safe if you were active before pregnancy. Good options: brisk walking, swimming, light jogging, prenatal yoga, and strength training with lighter weights. Avoid overheating and stay hydrated.'
-            },
-            {
-                heading: 'Second Trimester (Weeks 13–26)',
-                body: 'As your belly grows, modify exercises. Avoid lying flat on your back for prolonged periods as this can reduce blood flow to the baby. Focus on: modified squats, wall push-ups, pelvic floor (Kegel) exercises, swimming, and stationary cycling.'
-            },
-            {
-                heading: 'Third Trimester (Weeks 27–40)',
-                body: 'Focus on walking, gentle stretching, and prenatal yoga. Practice breathing techniques that will help during labor. Listen to your body — if something feels uncomfortable, stop.'
-            },
-            {
-                heading: 'Warning Signs to Stop Exercising',
-                body: 'Stop immediately and contact your healthcare provider if you experience: chest pain or palpitations, shortness of breath, dizziness or feeling faint, painful contractions, vaginal bleeding, or fluid leaking.'
-            }
-        ],
-        readTime: '6 min read',
-        icon: <Dumbbell size={22} />,
-        colorClass: 'cat-exercise',
-    },
-    {
-        id: '3',
-        title: 'Managing Pregnancy Anxiety & Stress',
-        category: 'Mental Health & Wellness',
-        description: 'Tips for reducing stress and finding peace during your pregnancy journey.',
-        fullContent: [
-            {
-                heading: 'It\'s Normal to Feel Anxious',
-                body: 'Pregnancy brings enormous changes — physical, emotional, and social. Feeling anxious or overwhelmed is common and completely understandable. The important thing is to recognize it and seek support.'
-            },
-            {
-                heading: 'Mindfulness & Deep Breathing',
-                body: 'Practice mindful breathing: inhale for 4 counts, hold for 4, exhale for 6. Do this 5–10 minutes daily. Apps like Calm or Headspace have specific prenatal meditation programs that many mothers find helpful.'
-            },
-            {
-                heading: 'Talk to Someone',
-                body: 'Don\'t bottle up your feelings. Share with your partner, a trusted friend, or a family member. If anxiety is severe, speak with a mental health professional — there is no shame in seeking help.'
-            },
-            {
-                heading: 'Rest and Sleep',
-                body: 'Your body is working hard. Prioritize 7–9 hours of sleep per night. Use a pregnancy pillow for support. Take short naps if needed, especially in the first and third trimesters when fatigue is strongest.'
-            },
-            {
-                heading: 'Limit Stressors',
-                body: 'Reduce unnecessary stress where possible. Set limits on social media time, delegate tasks, and create a calm environment at home. Focus on what you can control and let go of what you cannot.'
-            }
-        ],
-        readTime: '5 min read',
-        icon: <Brain size={22} />,
-        colorClass: 'cat-mental',
-    },
-    {
-        id: '4',
-        title: 'What to Expect at Your Prenatal Visits',
+        title: 'Mga Babala sa Kalusugan Habang Nagbubuntis',
         category: 'Prenatal Care',
-        description: 'A complete guide to tests, ultrasounds, and important questions to ask.',
+        description: 'Pakiramdaman ang iyong katawan at ipagbigay-alam sa doktor, nars, o midwife kung may mapansing nakababahala.',
         fullContent: [
             {
-                heading: 'Why Regular Check-Ups Are Vital',
-                body: 'Prenatal visits allow your healthcare provider to monitor you and your baby\'s health, catch any complications early, and ensure you are getting proper nutrition and rest. Missing visits increases risks for both mother and baby.'
-            },
-            {
-                heading: 'First Visit (Week 6–10)',
-                body: 'Confirms pregnancy, estimates due date, takes complete medical history, orders initial blood tests (CBC, blood type, Rh factor, blood sugar, hepatitis B, HIV, syphilis), urine tests, and schedules your first ultrasound.'
-            },
-            {
-                heading: 'Regular Visit Check-Ups Include',
-                body: 'At each visit expect: blood pressure check, weight measurement, urine test (protein and sugar), abdominal exam to measure uterine growth, listening to fetal heartbeat, and discussion of any symptoms or concerns.'
-            },
-            {
-                heading: 'Recommended Visit Schedule (DOH Philippines)',
-                body: '• Month 1–3: At least one visit\n• Month 4–6: At least one visit\n• Month 7–8: One visit per month\n• Month 9: One visit every 2 weeks\nMore frequent if high-risk.'
-            },
-            {
-                heading: 'Questions to Bring to Your Visit',
-                body: 'Write down your concerns beforehand: "Is my weight gain normal?", "What foods should I avoid?", "Can I travel?", "When should I go to the hospital?", "What are the warning signs I should watch for?"'
+                heading: 'Pumunta agad sa health center!',
+                body: 'Nanay, kung maramdaman o mapansin ang alinman sa mga ito, pumunta agad sa health center!\n\n• Pamamaga o pamamanas ng mga binti, kamay, o mukha\n• Sakit ng ulo, pagkahilo, o panlalabo ng paningin\n• Pagdurugo ng puwerta\n• Pamumutla\n• Lagnat\n• Pagsusuka\n• Hirap na paghinga\n• Mahapdi na pag-ihi\n• Malabnaw o mala-tubig na lumalabas sa puwerta\n• Pagbagal o hindi paggalaw ng bata sa tiyan sa ika-2 trimester ng pagbubuntis (mas mababa sa 10 sipa sa loob ng 12 oras)\n• Matinding pananakit ng ulo na may kasamang panlalabo ng paningin\n• Matinding pananakit ng tiyan\n• Maagang pagputok ng panubigan'
             }
         ],
-        readTime: '7 min read',
+        readTime: '3 min read',
         icon: <HeartPulse size={22} />,
         colorClass: 'cat-prenatal',
         tipOfDay: true,
+        sources: [
+            { name: 'DOH Philippines', title: 'Booklet of Healthy Buntis, Happy Baby', url: 'https://doh.gov.ph' }
+        ]
+    },
+    {
+        id: '2',
+        title: 'Mga Paalala para sa Malusog na Pagbubuntis',
+        category: 'Prenatal Care',
+        description: 'Makinig sa mga payong makabubuti sa iyo at sa dinadalang anak.',
+        fullContent: [
+            {
+                heading: 'Mga Paalala para sa Malusog na Pagbubuntis',
+                body: 'Makinig sa mga payong makabubuti sa iyo at sa dinadalang anak.\n\n• Maghanda para sa eksklusibong pagpapasuso ng anak. Alamin ang tamang paraan.\n• Kumain nang tama at siguraduhing may sapat na sustansiya at bitamina.\n• Umiwas sa mga pagkaing maalat.\n• Mag-ehersisyo nang angkop.\n• Huwag uminom ng gamot para sa anumang karamdaman nang walang pahintulot ng doktor.\n• Siguraduhing may sapat na tulog at pahinga.\n• Iwasan ang masasamang bisyo gaya ng paninigarilyo at pag-inom ng anumang may alcohol.\n• Maghanda ng mga sumusunod para sa posibleng emergency: pera, pagkukuhanan ng dugo, at transportasyon.\n• Ugaliing uminom ng tubig araw-araw.'
+            }
+        ],
+        readTime: '3 min read',
+        icon: <Apple size={22} />,
+        colorClass: 'cat-nutrition',
+        sources: [
+            { name: 'DOH Philippines', title: 'Booklet of Healthy Buntis, Happy Baby', url: 'https://doh.gov.ph' }
+        ]
+    },
+    {
+        id: '3',
+        title: 'Mga Prenatal Check-up',
+        category: 'Prenatal Care',
+        description: 'Alamin ang mga dapat mangyari sa bawat check-up at siguraduhing ito ay magagampanan ng iyong health service provider.',
+        fullContent: [
+            {
+                heading: 'Schedule ng Check-up',
+                body: '• Unang Check-up\n• Pangalawa\n• Pangatlo\n• Pang-apat\n\nAlamin ang mga dapat mangyari sa bawat check-up at siguraduhing ito ay magagampanan ng iyong health service provider.'
+            },
+            {
+                heading: 'Ano ang nangyayari sa prenatal check-up?',
+                body: 'Layunin nito ay masuri, malaman, at malunasan ang mga kondisyon na posibleng maging mapanganib sa iyo at sa iyong baby.\n\n• Kukunin ang iyong medical at pregnancy history.\n• Susuriin ang iyong katawan.\n• Kukunin ang iyong blood pressure (BP), timbang, at iba pang vital signs.\n• Aalamin ang iyong nutritional status.\n• Gagawan ka ng laboratory tests.'
+            },
+            {
+                heading: 'Para sa Kalusugan ni Baby',
+                body: '• Bibigyan ka ng tableta ng iron na may Folic Acid at Calcium Carbonate. Bibigyan ka rin ng 2 iodine capsules na iinumin mo sa bahay, kung ikaw ay nasa ika-4 na buwan ng pagbubuntis.\n• Babakunahan ka laban sa tetano.\n• Papayuhan ka tungkol sa tamang nutrisyon at pagkain, malusog na pamumuhay, paggawa ng birth plan, pagpapasuso, at pagpaplano ng pamilya.'
+            }
+        ],
+        readTime: '5 min read',
+        icon: <BookmarkCheck size={22} />,
+        colorClass: 'cat-prenatal',
+        sources: [
+            { name: 'DOH Philippines', title: 'Booklet of Healthy Buntis, Happy Baby', url: 'https://doh.gov.ph' }
+        ]
+    },
+    {
+        id: '4',
+        title: 'Ang Paglaki ni Baby sa Sinapupunan ni Nanay',
+        category: 'Prenatal Care',
+        description: 'Ito ang iyong buwanang patnubay sa paglaki ni baby sa loob ng iyong sinapupunan.',
+        fullContent: [
+            {
+                heading: 'Gabay sa Paglaki ni Baby',
+                body: 'Anuman ang iyong kainin o gawin ay maaaring makaapekto sa tamang paglaki at paghubog ni baby.'
+            },
+            {
+                heading: '0–4 na Linggo',
+                body: '• Ang sukat ni baby ay humigit-kumulang 2 millimetro ang haba.\n• Nagsisimula nang mahubog ang kanyang utak, gulugod, at mukha.\n• Iwasan ang mga gamot na makakaapekto sa kanya.\n• Maglaan ng oras upang tumingin sa magagandang larawan at tanawin, na nakakatulong sa positibong karanasan sa pagbubuntis.'
+            },
+            {
+                heading: '4–8 na Linggo',
+                body: '• Ang puso ay nagsisimula nang tumibok.\n• Iba’t ibang bahagi ng katawan ay nagsisimula nang mabuo.\n• Nagsisimula nang magkaroon ng hubog ang kanyang mukha, mata, at mga daliri sa kamay at paa.\n• Makinig sa kaaya-ayang musika.\n• Kumain ng iba’t ibang uri ng pagkain tulad ng karne, isda, dilaw at luntiang gulay, at prutas.\n• Anuman ang iyong kainin ay nagbibigay ng sustansya kay baby.\n• Huwag kumain nang higit sa nararapat upang maiwasan ang sobrang pagtaas ng timbang.'
+            },
+            {
+                heading: '8–12 na Linggo',
+                body: '• Ang mga pangunahing bahagi ng katawan ay nahubog na.\n• Ang ulo ay mas malaki kung ikukumpara sa katawan upang mabigyan ng puwang ang paglaki ng utak.\n• Mayroon nang baba, ilong, at talukap ng mata.\n• Nakalutang si baby sa tubig ng bahay-bata (amniotic fluid).\n• Huwag kalimutang uminom ng iron, Folic Acid, at Calcium Carbonate supplements.\n• Gumamit ng iodized salt sa pagluto.\n• Huwag kumain nang higit sa nararapat upang maiwasan ang sobrang pagtaas ng timbang.'
+            }
+        ],
+        readTime: '6 min read',
+        icon: <Baby size={22} />,
+        colorClass: 'cat-prenatal',
+        sources: [
+            { name: 'DOH Philippines', title: 'Booklet of Healthy Buntis, Happy Baby', url: 'https://doh.gov.ph' }
+        ]
     },
     {
         id: '5',
-        title: 'Preparing for Postpartum Recovery',
-        category: 'Postpartum Care',
-        description: 'Essential steps to prepare your body and mind for the 4th trimester.',
+        title: 'Mga Pamahiin at Katotohanan sa Pagbubuntis',
+        category: 'Mental Health & Wellness',
+        description: 'Huwag basta maniwala sa mga sabi-sabi tungkol sa pagbubuntis. Alamin ang totoo at kumonsulta sa mga health service providers.',
         fullContent: [
             {
-                heading: 'The "Fourth Trimester" — What Is It?',
-                body: 'The period right after birth — roughly the first 12 weeks — is sometimes called the "fourth trimester." Your body is recovering from birth while you are also learning to care for a newborn. It can be intense.'
+                heading: 'Tandaan:',
+                body: 'Huwag basta maniwala sa mga sabi-sabi tungkol sa pagbubuntis. Alamin ang totoo at kumonsulta sa mga health service providers.'
             },
             {
-                heading: 'Physical Recovery',
-                body: 'Whether you had a vaginal birth or C-section, your body needs time to heal. Expect: vaginal bleeding (lochia) for 2–6 weeks, breast engorgement, perineal soreness (vaginal birth), or incision pain (C-section). Rest as much as possible.'
+                heading: '1. Kasarian at Hormones',
+                body: 'Sabi-sabi: Kapag ang leeg at singit ni nanay ay maitim habang buntis, siguradong lalaki ang anak.\n\nAng totoo: Ang pangingitim ng leeg, singit, at iba pang bahagi ng katawan ng buntis ay dahil sa mga hormones na nagbabago habang buntis. Hinahanda ng hormones ang katawan ng nanay para sa sanggol sa loob ng siyam (9) na buwan. Hindi ibig sabihin nito na lalaki ang magiging anak. Ugaliing maligo at maalaga sa katawan araw-araw.'
             },
             {
-                heading: 'Postpartum Essentials to Stock Up',
-                body: 'Before giving birth, prepare: thick maxi pads, a peri bottle (for hygiene), comfortable loose clothing, easy nutritious snacks, and prepared meal packs. Having these ready reduces stress after delivery.'
+                heading: '2. Kambal na Saging',
+                body: 'Sabi-sabi: Kapag kumain ng kambal na saging ang buntis, kambal din ang magiging anak.\n\nAng totoo: Ang kasarian at kung magiging kambal ang baby ay natutukoy agad sa sandaling magtagpo ang itlog ng babae at punlay ng lalaki. Ang pagkain ng kambal na saging ay hindi nakaaapekto dito. Ang saging, kambal man o hindi, ay mayaman sa potassium na nakatutulong sa normal na paggana ng puso, kidney, at iba pang organs ng ina.'
             },
             {
-                heading: 'Watch for Warning Signs',
-                body: 'Contact your provider immediately for: heavy bleeding soaking more than one pad per hour, fever above 38°C, signs of wound infection, severe headache, chest pain, or feelings of harming yourself or your baby.'
+                heading: '3. Paglalagas ng Ngipin',
+                body: 'Sabi-sabi: Naglalagas ang ngipin sa bawat pagbubuntis.\n\nAng totoo: Hindi ito totoo. Basta may sapat na calcium sa katawan, makukuha ng dinadalang sanggol ang kailangan mula sa buto ng nanay, hindi sa ngipin.\n\nKumain ng mga pagkaing sagana sa calcium tulad ng: Keso, Gatas, Sardinas, Okra, Orange, Avocado. Mahalaga ring pangalagaan ang ngipin habang buntis dahil ang pagdami ng hormones ay maaaring makaapekto sa kondisyon nito.'
             },
             {
-                heading: 'Postpartum Depression is Real',
-                body: 'Baby blues (mild sadness, mood swings in the first 2 weeks) is normal. But if sadness, hopelessness, or inability to bond with your baby persists beyond 2 weeks, it may be postpartum depression — seek help without shame.'
+                heading: '4. Pagdalaw sa May Sakit',
+                body: 'Sabi-sabi: Bawal dumalaw sa may sakit o pumunta sa mga burol ang buntis.\n\nAng totoo: Ang lumang kasabihan na ito ay base sa praktikal na dahilan, hindi sa pamahiin. Kung pupunta sa ospital, iwasan ang mga lugar na maraming may sakit upang hindi mahawa. Sa burol o lamay, dahil maraming tao, mas mataas ang exposure sa mikrobyo.'
+            },
+            {
+                heading: '5. Pakikipagtalik Habang Buntis',
+                body: 'Sabi-sabi: Huwag makikipagtalik habang buntis — baka mabutas ang inunan!\n\nAng totoo: Walang katotohanan ito. Sa katunayan, ang buntis ay maaaring magkaroon ng mas mataas na libido dahil sa pagbabago ng hormones. Hindi aabot ang ari sa inunan. Siguraduhin lamang na magpa-check-up sa doktor para malaman ang mga dapat pag-ingatan.'
+            },
+            {
+                heading: '6. Pagkain ng Marami',
+                body: 'Sabi-sabi: Huwag kakain ng marami dahil baka lumaki nang masyado ang sanggol sa sinapupunan at mahirapan manganak.\n\nAng totoo: Habang nagbubuntis, ang sanggol ay umaasa sa katawan ng nanay para sa sapat na nutrisyon. Kung hindi kakain nang sapat ang buntis, malaki ang posibilidad na mababa ang timbang ng anak sa pagsilang. Ang tamang pagkain ay nakakatulong sa kalusugan ng nanay at ng sanggol.'
+            }
+        ],
+        readTime: '8 min read',
+        icon: <Brain size={22} />,
+        colorClass: 'cat-mental',
+        sources: [
+            { name: 'DOH Philippines', title: 'Booklet of Healthy Buntis, Happy Baby', url: 'https://doh.gov.ph' }
+        ]
+    },
+    {
+        id: '6',
+        title: 'Labor and Delivery / Kaganapan sa Panganganak',
+        category: 'Postpartum Care',
+        description: 'Kumpletuhin ito sa tulong ng inyong doktor, nars, o midwife. Mahalaga ring magplano at itala ang mismong oras.',
+        fullContent: [
+            {
+                heading: 'Mga Detalye ng Panganganak',
+                body: 'Nagsimula akong makaramdam ng pananakit ng tiyan nang: (oras)\nOras ng Panganganak:\nPetsa ng Panganganak:\nUri ng Panganganak: (Normal / Caesarean)\nLugar ng Panganganak:\nAng nagpaanak sa akin ay si:'
+            },
+            {
+                heading: 'Portograph / Pagsusuri Agad Pagkapanganak',
+                body: '• Umiyak agad\n• Hindi umiyak agad\n• Normal ang paghinga\n• Malakas ang galaw\n• Matamlay / hindi gumagalaw\n• Si baby ay ibinigay agad sa akin para sa Unang Yakap / Skin-to-Skin Contact'
+            },
+            {
+                heading: 'Pagpapasuso at Skin-to-Skin Contact',
+                body: '• Nagsimulang sumuso si baby sa loob ng 30 minuto pagkapanganak (mas mainam kung sa loob ng isang oras)\n• Si baby ay kasama ko pagkapanganak\n• Nabakunahan ng BCG\n• Napabakunahan laban sa Hepa B\n• Nabigyan ng eyedrops\n• Na-ineksyunan ng Vitamin K\n• Naisagawa ang Newborn Screening (NBS) at Newborn Hearing Screening'
+            },
+            {
+                heading: 'Mga Detalye ng Baby',
+                body: 'Kasarian:\nHaba pagkapanganak:\nTimbang pagkapanganak:\nSukat ng ulo:'
+            },
+            {
+                heading: 'Mga Paalala para sa Unang Oras Pagkapanganak',
+                body: '• Siguraduhing ang sanggol ay ibibigay sa iyo agad pagkaluwal.\n• Tiyaking nakalapat ang sanggol sa iyong dibdib (balat-sa-balat / skin-to-skin contact) nang 1 oras para panatilihin ang tamang temperatura at paghinga.\n• Habang nakadapa si baby sa iyong dibdib, takpan ng kumot ang kanyang likod.\n• Simulan ang pagpapasuso sa unang oras ng pagkapanganak.\n• Siguraduhing walang ibang ipapakain o ipapatikim sa iyong bagong sanggol.\n• Sapat na ang gatas ng ina sa unang 6 na buwan ng buhay ni baby.\n• Ipagpatuloy ang pagpapasuso mula 6 na buwan pataas kasama ang tamang pagpapakain sa solid foods.'
+            }
+        ],
+        readTime: '7 min read',
+        icon: <Sparkles size={22} />,
+        colorClass: 'cat-postpartum',
+        sources: [
+            { name: 'DOH Philippines', title: 'Booklet of Healthy Buntis, Happy Baby', url: 'https://doh.gov.ph' }
+        ]
+    },
+    {
+        id: '7',
+        title: 'Pagputol ng Umbilical Cord at Checklist sa Panganganak',
+        category: 'Newborn Care',
+        description: 'Nanay, alam mo ba na may malaking epekto ang timing ng pagputol ng umbilical cord?',
+        fullContent: [
+            {
+                heading: 'Timing ng Pagputol ng Umbilical Cord',
+                body: 'Nanay, alam mo ba na may malaking epekto ang timing ng pagputol ng umbilical cord na nagbibigkis sa inyo ni baby?\n\nKaraniwang pinuputol ang umbilical cord sa loob ng isang minuto pagkapanganak. Pero kung hihintayin ang 2–3 minuto matapos ang panganganak, hanggang tumigil ang daloy ng dugo mula sa inunan papunta sa sanggol, masisiguro na mas maraming iron ang makukuha ni baby hanggang 4 na buwan.'
+            },
+            {
+                heading: 'Checklist sa Panganganak: Para kay Nanay',
+                body: 'SIGURADUHING DALAHIN ANG NANAY BOOK!\n\n• Palda at blusa o maluwag na damit na may bukasan sa harapan\n• Mga panty at bra\n• Bathrobe, Tuwalya\n• Shampoo / sabon, Toilet paper\n• Sipilyo / toothpaste, Tsinelas\n• Pasador / sanitary napkin'
+            },
+            {
+                heading: 'Checklist para sa Baby',
+                body: '• Kumot ng bata, Damit ng bata\n• Lampin / Diaper, Sombrero / Bonnet\n• Supot sa kamay (Mittens), Medyas\n• Bib, Sabon na pang-baby, Cotton buds'
+            },
+            {
+                heading: 'Para sa Pagpapaligo at Pangangalaga',
+                body: '• Bimpong pampaligo, Paliguan / Palangganan\n• Malambot na tuwalya\n• Panapin na di nababasa (hal. rubber mat)\n• Crib / Kunan ng unan ng baby, Kulambo'
+            }
+        ],
+        readTime: '6 min read',
+        icon: <Baby size={22} />,
+        colorClass: 'cat-newborn',
+        sources: [
+            { name: 'DOH Philippines', title: 'Booklet of Healthy Buntis, Happy Baby', url: 'https://doh.gov.ph' }
+        ]
+    },
+    {
+        id: '8',
+        title: 'PhilHealth at Panganganak',
+        category: 'Prenatal Care',
+        description: 'Alamin kung paano makatutulong ang PhilHealth sa iyong panganganak at ang mga benepisyong maaari mong makuha.',
+        fullContent: [
+            {
+                heading: 'Paano makatutulong ang PhilHealth?',
+                body: 'Ang PhilHealth ay tumutulong sa bawat Pilipino na magkaroon ng access sa serbisyong pangkalusugan.\n\n• Maternity Care Package: Babayaran hanggang P8,000 sa birthing homes o P6,500 sa ospital.\n• Cesarean Section Package: Babayaran hanggang P19,000.\n• Newborn Care Package: Babayaran hanggang P1,750.\n• Z Benefit Package: Para sa Prematurity at Low Birth Weight.'
+            },
+            {
+                heading: 'PhilHealth Status at Pag-check',
+                body: 'I-check agad ang status mo bilang miyembro:\n• Magtanong sa PhilHealth office ng inyong munisipyo o health center.\n• Kung miyembro ka na: Lumapit sa PhilHealth Regional Office o tumawag sa PhilHealth Call Center: (02) 441-7442.\n• Kung nasa ospital na, maaaring alamin ang status sa kanilang HCI Portal.'
+            },
+            {
+                heading: 'Kung hindi ka pa miyembro:',
+                body: '• Lumapit sa tanggapan ng DSWD para makapagpalista.\n• Kung nasa ospital na, tumungo sa social welfare unit para sa point-of-care mechanism.\n• Humingi ng tulong sa inyong Municipal Social Welfare and Development Officer para magpa-sponsor.'
+            }
+        ],
+        readTime: '5 min read',
+        icon: <HeartPulse size={22} />,
+        colorClass: 'cat-prenatal',
+        sources: [
+            { name: 'PhilHealth', title: 'Official Website & Social Media Channels', url: 'https://www.philhealth.gov.ph' }
+        ]
+    },
+    {
+        id: '9',
+        title: 'Paghahanda sa Eksklusibong Pagpapasuso ng Anak',
+        category: 'Postpartum Care',
+        description: 'Nanay, alam mo ba na ang pagpapasuso ng anak ay nakabubuti hindi lang para kay baby, kundi para rin sa iyo?',
+        fullContent: [
+            {
+                heading: 'Ano ang Eksklusibong Pagpapasuso?',
+                body: 'Ito ay nangangahulugang gatas ng ina lamang ang ibinibigay sa unang 6 na buwan — walang milk formula, juice, tubig, o bitamina na hindi inireseta ng doktor.'
+            },
+            {
+                heading: 'Mga Benepisyo para kay Baby',
+                body: '• Ligtas, malinis, at madaling tunawin.\n• Sapat na pagkain sa unang 6 na buwan.\n• Proteksyon laban sa sakit tulad ng pagtatae at ubo/sipon.\n• Mas malusog at matibay na katawan.'
+            },
+            {
+                heading: 'Mga Benepisyo para sa Nanay',
+                body: '• Libre ang gatas ng ina.\n• Nakatutulong sa paghahadlang sa agarang pagbuntis (Lactational Amenorrhea Method - LAM).\n• Nakatutulong sa pagpapatibay ng bonding.\n• Mabilis ang pagbalik ng likas na sukat ng katawan dahil sa pag-contract ng uterus.'
+            }
+        ],
+        readTime: '6 min read',
+        icon: <Heart size={22} />,
+        colorClass: 'cat-postpartum',
+        sources: [
+            { name: 'DOH Philippines', title: 'Booklet of Healthy Buntis, Happy Baby', url: 'https://doh.gov.ph' }
+        ]
+    },
+    {
+        id: '10',
+        title: 'Pangangalaga sa Bagong Silang na Sanggol',
+        category: 'Newborn Care',
+        description: 'Mga payo sa tamang pag-aalaga sa sanggol pagkatapos isilang.',
+        fullContent: [
+            {
+                heading: 'Checklist sa Pag-aalaga',
+                body: '✅ Unang Yakap / Skin-to-Skin Contact: Iwasang malamigan ang sanggol sa pamamagitan ng paglalapat ng katawan ng ina at baby.\n✅ Kaligtasan at Kalinisan: Sabunin at hugasan ng mabuti ang mga kamay bago hawakan ang baby.\n✅ Pagpapaligo: Ipagpaliban ang pagpapaligo nang hindi bababa sa 6 na oras.\n✅ Pangangalaga sa Pusod: Hayaang walang takip at huwag lagyan ng anumang bagay. Kusang matatanggal makalipas ang 7–10 araw.\n✅ Kapaligiran: Panatilihing malayo ang baby sa usok.\n✅ Pagpapasuso: Pasususuhin ang baby nang madalas at matagal.'
+            },
+            {
+                heading: 'Kailan dapat magpatingin sa Health Center?',
+                body: 'Magpatingin agad kung mapansin ang mga ito:\n• Hirap o humina ang pagsuso\n• Masamang amoy sa pusod\n• Nilalagnat (Temperatura ≥ 37.8°C)\n• Naninigas o nagkakaroon ng kumbusyon\n• Mabilis o hirap sa paghinga\n• Naninilaw ang balat'
+            }
+        ],
+        readTime: '5 min read',
+        icon: <Baby size={22} />,
+        colorClass: 'cat-newborn',
+        sources: [
+            { name: 'DOH Philippines', title: 'Booklet of Healthy Buntis, Happy Baby', url: 'https://doh.gov.ph' }
+        ]
+    },
+    {
+        id: '11',
+        title: 'Pangangalaga sa Ina Pagkatapos Manganak',
+        category: 'Postpartum Care',
+        description: 'Gabay sa kalusugan ng ina sa loob ng 42 araw pagkatapos manganak.',
+        fullContent: [
+            {
+                heading: 'Sa loob ng 24 oras (Bago pauwiin)',
+                body: 'Obserbahan ang mga "danger signs":\n• Mabigat o hirap sa paghinga\n• Pagdurugo o Lagnat\n• Labis na pananakit ng puson\n• Kombulsyon\n\nPayo sa: Nutrisyon, Family Planning, Pag-aalaga sa sanggol, at suporta sa pagpapasuso.'
+            },
+            {
+                heading: 'Hanggang 7 Araw Pagkatapos Manganak',
+                body: '• Pagsusuring pisikal at BP check.\n• Suriin ang pagdurugo.\n• Bigyan ng Iron/Folic Acid (3 buwan) at Vitamin A.\n• Magpaligo araw-araw at magpalit ng pasador tuwing 4–6 na oras.'
+            },
+            {
+                heading: '8–42 Araw Pagkatapos Manganak',
+                body: '• Patuloy na pagsusuring pisikal at pagmonitor.\n• Pagbibigay ng Iron/Folic Acid.\n• Payo sa nutrisyon at pagpaplano ng pamilya.\n• Dapat masuri ang ina nang 3 beses sa loob ng period na ito.'
             }
         ],
         readTime: '6 min read',
         icon: <Sparkles size={22} />,
         colorClass: 'cat-postpartum',
+        sources: [
+            { name: 'DOH Philippines', title: 'Booklet of Healthy Buntis, Happy Baby', url: 'https://doh.gov.ph' }
+        ]
     },
     {
-        id: '6',
-        title: 'Tetanus Toxoid (TT) Vaccine: What You Need to Know',
-        category: 'Vaccinations & Supplements',
-        description: 'Why TT vaccine is essential and what to expect when you get it.',
+        id: '12',
+        title: 'Family Planning / Tamang Pagpaplano ng Pamilya',
+        category: 'Postpartum Care',
+        description: 'Alamin ang iba\'t ibang pamamaraan ng family planning para sa tamang pag-aagwat ng anak.',
         fullContent: [
             {
-                heading: 'What Is Tetanus Toxoid?',
-                body: 'Tetanus Toxoid (TT) is a vaccine that protects both you and your newborn from tetanus — a serious disease caused by bacteria found in soil, dust, and animal feces. Neonatal tetanus is a leading cause of newborn death in developing countries.'
+                heading: 'Natural Methods',
+                body: '• Standard Days Method (Cycle Beads): Para sa regular cycle (26–32 days).\n• Lactational Amenorrhea Method (LAM): Para sa nagpapasuso (wala pang 6 months, wala pang regla).\n• Symptoms-Based Methods: Pagbabantay sa mucus at temperatura.'
             },
             {
-                heading: 'The DOH-Recommended TT Schedule',
-                body: '• TT1: As early as possible in pregnancy\n• TT2: At least 4 weeks after TT1 (gives 3 years protection)\n• TT3: At least 6 months after TT2 (gives 5 years protection)\n• TT4: At least 1 year later (gives 10 years)\n• TT5: At least 1 year later (lifetime protection)'
+                heading: 'Hormonal at Barrier Methods',
+                body: '• Pills: Daily intake. (Progestin-only para sa nagpapasuso).\n• Condom: Proteksyon laban sa STIs.\n• Injectable: Kada 3 buwan.\n• Implant: Mabisa hanggang 3 taon.'
             },
             {
-                heading: 'Common Side Effects',
-                body: 'Mild soreness, redness, or swelling at the injection site is normal and resolves within 1–3 days. You may also experience slight fever or muscle aches. Serious allergic reactions are extremely rare.'
-            },
-            {
-                heading: 'Iron Supplementation',
-                body: 'Alongside vaccination, iron and folate supplementation is recommended throughout pregnancy. Daily ferrous sulfate + folic acid tablets help prevent iron-deficiency anemia, which is common in pregnant Filipino women.'
-            }
-        ],
-        readTime: '5 min read',
-        icon: <Syringe size={22} />,
-        colorClass: 'cat-vaccine',
-    },
-    {
-        id: '7',
-        title: 'Essential Newborn Care in the First Week',
-        category: 'Newborn Care',
-        description: 'Everything you need to know to care for your baby in those first precious days.',
-        fullContent: [
-            {
-                heading: 'Skin-to-Skin Contact (Kangaroo Care)',
-                body: 'Immediately after birth, skin-to-skin contact with your baby is vital. It regulates the baby\'s body temperature, stabilizes breathing and heart rate, promotes bonding, and stimulates breastfeeding. Hold your baby against your bare chest as much as possible.'
-            },
-            {
-                heading: 'Breastfeeding',
-                body: 'Initiate breastfeeding within the first hour of birth. Colostrum — the thick, yellowish first milk — is packed with antibodies and is the perfect first food. Breastfeed on demand, usually every 1.5–3 hours. Proper latch is key to avoid nipple pain.'
-            },
-            {
-                heading: 'Umbilical Cord Care',
-                body: 'Keep the umbilical cord stump clean and dry. Do NOT apply any substance (oil, powder, alcohol is no longer recommended by DOH). Fold the diaper below the stump. The stump falls off naturally in 1–3 weeks.'
-            },
-            {
-                heading: 'Newborn Danger Signs',
-                body: 'Seek immediate medical help if your baby has: difficulty breathing, yellowish skin within 24 hours of birth, not feeding well, temperature below 36.5°C or above 37.5°C, umbilical cord bleeding or foul smell, or convulsions.'
-            },
-            {
-                heading: 'Newborn Screening',
-                body: 'By law (RA 9288), newborn screening must be done 24–72 hours after birth. It detects metabolic disorders that, if treated early, prevent disability or death. This is done at the health center or hospital.'
+                heading: 'Long-term at Permanent Methods',
+                body: '• IUD: Mabisa hanggang 12 taon.\n• BTL (Babae) at Vasectomy (Lalaki): Permanenteng pamamaraan para sa mga ayaw na ng anak.'
             }
         ],
         readTime: '8 min read',
-        icon: <Baby size={22} />,
-        colorClass: 'cat-newborn',
+        icon: <Heart size={22} />,
+        colorClass: 'cat-postpartum',
+        sources: [
+            { name: 'DOH Philippines', title: 'Booklet of Healthy Buntis, Happy Baby', url: 'https://doh.gov.ph' }
+        ]
     },
     {
-        id: '8',
-        title: 'Healthy Eating Tips for the Second Trimester',
-        category: 'Nutrition',
-        description: 'Your appetite is back — here\'s how to fuel both you and your growing baby right.',
+        id: '13',
+        title: 'Timeline ng Pangangalaga sa Sanggol',
+        category: 'Newborn Care',
+        description: 'Gabay sa mga dapat gawin para kay baby mula 24 oras hanggang 4 na linggo.',
         fullContent: [
             {
-                heading: 'Second Trimester Nutrition Overview',
-                body: 'From weeks 13–26, your baby is growing rapidly and you\'ll likely regain your appetite after first-trimester nausea. This is a great time to focus on nutrient-dense foods that support your baby\'s brain and bone development.'
+                heading: 'Sa loob ng 24 oras',
+                body: '• Skin-to-Skin Contact.\n• Kaagad na pagpapasuso.'
             },
             {
-                heading: 'Omega-3 Fatty Acids',
-                body: 'DHA (a type of omega-3) is crucial for your baby\'s brain and eye development. Eat fish 2–3 times a week. Best choices: salmon, sardines, and bangus (milkfish). Avoid high-mercury fish like swordfish and king mackerel.'
+                heading: 'Unang Linggo (2–3 araw)',
+                body: '• Pag-eksamin sa sanggol at pag-alaga sa pusod.\n• Gatas ng ina lamang.\n• Weight check, Newborn Screening, at Hearing Screening.\n• Vitamin K, BCG, at Hepa B vaccination.'
             },
             {
-                heading: 'Managing Heartburn',
-                body: 'As your uterus grows, it puts pressure on your stomach. To manage heartburn: eat smaller, more frequent meals, avoid spicy and fatty foods, don\'t lie down right after eating, and sleep with your head slightly elevated.'
+                heading: '2–4 na Linggo',
+                body: '• Patuloy na pag-eksamin at weight check.\n• Eksklusibong pagpapasuso.'
             },
             {
-                heading: 'Stay Hydrated',
-                body: 'Aim for 8–10 glasses of water per day. Dehydration can trigger Braxton Hicks contractions and increase the risk of urinary tract infections. Coconut water is an excellent electrolyte-rich option.'
+                heading: 'Mga Palatandaan na dapat Agad Ipa-check',
+                body: '• Di sumuso o ayaw sumuso\n• Paninigas o kumbulsyon\n• Lagnat o nanlalamig\n• Namamaga ang pusod o may nana/dugo\n• Naninilaw ang balat o mata\n• Di kumikilos o matamlay'
+            }
+        ],
+        readTime: '6 min read',
+        icon: <Baby size={22} />,
+        colorClass: 'cat-newborn',
+        sources: [
+            { name: 'DOH Philippines', title: 'Booklet of Healthy Buntis, Happy Baby', url: 'https://doh.gov.ph' }
+        ]
+    },
+    {
+        id: '14',
+        title: 'Mga Pangangailangan ni Baby sa Unang Linggo',
+        category: 'Newborn Care',
+        description: 'Panatilihing ligtas, mainit, at malusog ang iyong bagong silang na sanggol.',
+        fullContent: [
+            {
+                heading: 'Init at Pagmamahal',
+                body: '• Panatilihin ang init gamit ang skin-to-skin contact.\n• Balutin sa kumot para hindi malamigan.\n• Panatilihin si baby sa tabi mo; nasisiyahan siya sa iyong bisig.'
+            },
+            {
+                heading: 'Wastong Pagkain',
+                body: '• Gatas ng ina lamang hanggang 6 na buwan.\n• Huwag painumin ng tubig o ibang gatas.\n• Hayaang kusang sumuso hangga’t gusto niya.'
+            },
+            {
+                heading: 'Proteksyon at Suporta',
+                body: '• Eye drops para maiwasan ang impeksyon.\n• Bakuna laban sa Hepatitis B at BCG.\n• Kumonsulta sa breastfeeding counselors kung nahihirapan.'
+            }
+        ],
+        readTime: '5 min read',
+        icon: <Baby size={22} />,
+        colorClass: 'cat-newborn',
+        sources: [
+            { name: 'DOH Philippines', title: 'Booklet of Healthy Buntis, Happy Baby', url: 'https://doh.gov.ph' }
+        ]
+    },
+    {
+        id: '15',
+        title: 'Mga Kaganapan sa Paglaki ng Sanggol',
+        category: 'Newborn Care',
+        description: 'Tingnan ang mga milestones ni baby sa ika-4 at ika-8 buwan.',
+        fullContent: [
+            {
+                heading: '4 na Buwan',
+                body: '• Kinagigiliwang tingnan ang mga kulay.\n• Susundan ng mga mata ang gumagalaw na bagay.\n• Nagsisimula nang ngumiti, mag-gurgling, at tumugon sa boses/mukha ng magulang.\n• Pakitaan ng matitingkad na bagay, kausapin, at bigyan ng lugar para makaunat.'
+            },
+            {
+                heading: '8 na Buwan',
+                body: '• Nakakaikot na at nakaupo nang maayos; tuwid na ang ulo.\n• Kaya nang abutihin ang mga bagay at isubo sa bibig.\n• Nakikita na ang mga tao at bagay sa paligid.\n• Hayaang hawakan ng ibang pamilya para matuto siyang makipag-interact.\n• Bigyan ng malinis, ligtas, at makukulay na laruan.'
+            }
+        ],
+        readTime: '4 min read',
+        icon: <Star size={22} />,
+        colorClass: 'cat-newborn',
+        sources: [
+            { name: 'DOH Philippines', title: 'Booklet of Healthy Buntis, Happy Baby', url: 'https://doh.gov.ph' }
+        ]
+    },
+    {
+        id: '16',
+        title: 'Mga Simpleng Gabay Para Matiyak ang Kaligtasan ni Baby',
+        category: 'Newborn Care',
+        description: 'Mahalaga ang masusing pag-iingat upang maiwasan ang aksidente o panganib sa buhay.',
+        fullContent: [
+            {
+                heading: 'Mga Paalala sa Araw-araw',
+                body: '• Huwag pabayaan si baby na mag-isa.\n• Patulugin sa kuna (iwasang mahulog) at patulugin nang pahilig o patagilid.\n• Huwag ihagis pataas o paikut-ikutin.\n• Huwag pabayaang maligo nang mag-isa (hanggang 6 yrs old).\n• Ilayo sa usok at naninigarilyo.'
+            },
+            {
+                heading: 'Itago ang Mapanganib na Bagay',
+                body: '• Posporo, kandila, mainit na tubig/sabaw.\n• Gas, insecticide, kemikal.\n• Maliit at matutulis na bagay.\n• Plastic bags (iwas-saklaw sa ulo).\n• Kawad at saksakan ng kuryente.'
+            },
+            {
+                heading: 'Ligtas na Kapaligiran',
+                body: '• Huwag mag-iwan ng timba o palanggana na may tubig.\n• Isusi ang cabinets/drawers at lagyan ng harang ang kama.\n• Huwag hayaang maglaro sa kalsada.\n• Laging gamitan ng seatbelt at huwag iwan sa loob ng sasakyan.\n• Bantayan malapit sa swimming pool, ilog, o sapa.'
+            }
+        ],
+        readTime: '6 min read',
+        icon: <ShieldCheck size={22} />,
+        colorClass: 'cat-newborn',
+        sources: [
+            { name: 'DOH Philippines', title: 'Booklet of Healthy Buntis, Happy Baby', url: 'https://doh.gov.ph' }
+        ]
+    },
+    {
+        id: '17',
+        title: 'Tagubilin sa Pagpapakain ng Baby',
+        category: 'Newborn Care',
+        description: 'Wastong gabay sa pagpapakain mula 0 hanggang 12 buwan.',
+        fullContent: [
+            {
+                heading: '0 hanggang 6 na Buwan',
+                body: '• Tanging gatas ng ina lamang (walang tubig o ibang pagkain).\n• Pasususuhin hangga’t gusto niya (humigit-kumulang 15 mins bawat session).'
+            },
+            {
+                heading: '6 hanggang 12 Buwan',
+                body: '• Patuloy ang pagpapasuso.\n• Bigyan ng karagdagang pagkain na may sapat na enerhiya (dagdagan ng konting mantika).\n• Mga Halimbawa: Dinurog na gulay, monggo, patatas, tinadtad na karne, isda, pula ng itlog, at prutas (saging, mangga, abokado).'
+            },
+            {
+                heading: 'Schedule ng Pagkain',
+                body: '• Magsimula sa 1–2 beses bawat araw pagkatapos sumuso, paakyatin sa 3 beses.\n• Magbigay din ng masustansyang meryenda tulad ng taho.'
             }
         ],
         readTime: '5 min read',
         icon: <Apple size={22} />,
         colorClass: 'cat-nutrition',
+        sources: [
+            { name: 'DOH Philippines', title: 'Booklet of Healthy Buntis, Happy Baby', url: 'https://doh.gov.ph' }
+        ]
     },
     {
-        id: '9',
-        title: 'Understanding and Managing Pregnancy Discomforts',
-        category: 'Prenatal Care',
-        description: 'Common discomforts like back pain, swelling, and nausea — and how to cope.',
+        id: '18',
+        title: 'Pagsubaybay sa Paglaki at Pagbabago ni Baby',
+        category: 'Newborn Care',
+        description: 'Regular na pagtitimbang at pag-monitor sa growth chart ni baby.',
         fullContent: [
             {
-                heading: 'Morning Sickness (Nausea & Vomiting)',
-                body: 'Affects up to 80% of pregnant women, usually in the first trimester. Tips: eat small, frequent meals, keep crackers by your bed for the morning, avoid strong smells, try ginger tea or ginger candies, and stay hydrated with clear fluids.'
+                heading: 'Pagtitimbang at Pag-monitor',
+                body: '• Buwan-buwan mula pagsilang hanggang 2 taon.\n• Tuwing ika-3 buwan mula 2 taon hanggang 6 na taon.\n• Itala ang timbang sa Growth Chart upang makita ang pagtaas o pagbaba nito.'
             },
             {
-                heading: 'Back Pain',
-                body: 'Your center of gravity shifts as your belly grows. Wear supportive, low-heeled shoes. Sleep on your side with a pillow between your knees. Avoid heavy lifting. Gentle prenatal yoga and warm (not hot) baths can help significantly.'
-            },
-            {
-                heading: 'Swollen Feet and Ankles (Edema)',
-                body: 'Some swelling is normal, especially in the third trimester. Elevate your feet when sitting, avoid standing for long periods, wear comfortable shoes, and reduce salt intake. Sudden severe swelling, especially in the face and hands, should be reported to your provider immediately.'
-            },
-            {
-                heading: 'Leg Cramps',
-                body: 'Common at night in the second and third trimesters. Stretch your calf before bed: flex your foot upward. Staying well-hydrated and getting adequate calcium and magnesium can help reduce frequency.'
-            }
-        ],
-        readTime: '6 min read',
-        icon: <HeartPulse size={22} />,
-        colorClass: 'cat-prenatal',
-    },
-    {
-        id: '10',
-        title: 'Breastfeeding: Starting Strong',
-        category: 'Postpartum Care',
-        description: 'A practical guide to initiating and maintaining successful breastfeeding.',
-        fullContent: [
-            {
-                heading: 'The Benefits of Breastfeeding',
-                body: 'Breast milk is the perfect food for your baby. It provides all the nutrients they need in the right amounts, contains antibodies that protect against infections, reduces risks of asthma, allergies, and obesity, and promotes bonding. For the mother, it helps the uterus contract back to size and reduces risk of breast and ovarian cancer.'
-            },
-            {
-                heading: 'Getting a Good Latch',
-                body: 'A proper latch is the key to comfortable and effective breastfeeding. Your baby should take in most of the areola (dark skin around the nipple), not just the nipple. Signs of a good latch: no pain (initial mild discomfort is okay), you can hear swallowing, and baby is satisfied after feeds.'
-            },
-            {
-                heading: 'How Often to Feed',
-                body: 'Newborns need to feed frequently — typically every 1.5 to 3 hours, or 8–12 times in 24 hours. This frequent feeding establishes your milk supply. Do not watch the clock; watch your baby for hunger cues: rooting, hand-to-mouth, fussing.'
-            },
-            {
-                heading: 'Common Challenges & Solutions',
-                body: 'Sore nipples: check latch, apply lanolin cream. Low milk supply: feed more frequently, ensure proper latch, stay hydrated. Engorgement: feed on demand, apply warm compress before feeding. Mastitis: keep feeding from the affected breast, consult a doctor for antibiotics if needed.'
-            }
-        ],
-        readTime: '7 min read',
-        icon: <Heart size={22} />,
-        colorClass: 'cat-postpartum',
-    },
-    {
-        id: '11',
-        title: 'Benefits of Prenatal Yoga and Stretching',
-        category: 'Exercise & Fitness',
-        description: 'How gentle yoga can ease discomfort and prepare you for labor.',
-        fullContent: [
-            {
-                heading: 'Why Prenatal Yoga?',
-                body: 'Prenatal yoga is one of the safest and most beneficial forms of exercise during pregnancy. It combines gentle stretching, breathing techniques, and mindfulness — all of which are directly applicable to labor and delivery.'
-            },
-            {
-                heading: 'Physical Benefits',
-                body: 'Reduces back and pelvic pain, improves flexibility and posture, strengthens muscles used during childbirth (especially hips, thighs, and core), improves circulation and reduces swelling in legs and feet.'
-            },
-            {
-                heading: 'Mental and Emotional Benefits',
-                body: 'Reduces stress and anxiety, improves sleep quality, helps you connect with your body and baby, builds a community with other pregnant mothers (if in a class setting).'
-            },
-            {
-                heading: 'Safe Poses for Pregnancy',
-                body: 'Cat-Cow stretch (relieves back pain), modified Child\'s Pose (hip opener), Butterfly Pose (opens hips for delivery), Warrior II (builds leg strength), and Legs-Up-The-Wall (reduces swelling). Always tell your instructor you are pregnant.'
-            }
-        ],
-        readTime: '5 min read',
-        icon: <Dumbbell size={22} />,
-        colorClass: 'cat-exercise',
-    },
-    {
-        id: '12',
-        title: 'Self-Care for the New Mother',
-        category: 'Mental Health & Wellness',
-        description: 'Why taking care of yourself first makes you a better mom.',
-        fullContent: [
-            {
-                heading: 'You Cannot Pour from an Empty Cup',
-                body: 'New motherhood is incredibly demanding. The pressure to be "perfect" can be overwhelming. But the truth is: when you take care of your own physical and mental health, you are better able to care for your baby.'
-            },
-            {
-                heading: 'Accept Help',
-                body: 'When someone offers to cook, clean, or watch the baby while you sleep — say YES. It takes a village. Let go of any guilt about not doing everything alone. Delegate tasks to your partner, family members, or friends.'
-            },
-            {
-                heading: 'Create Small Rituals',
-                body: 'You don\'t need hours to recharge. Even 10 minutes of something you love — a warm cup of tea, journaling, listening to music, or a short walk — can significantly improve your mood and perspective.'
-            },
-            {
-                heading: 'Stay Connected',
-                body: 'Isolation is one of the biggest risks for postpartum depression. Join a mothers\' group, connect with other new moms online, attend barangay health programs — community support makes a real difference.'
+                heading: 'Paggamit ng Growth Chart',
+                body: '• Dito makikita ang mga mahahalagang milestones sa paglaki.\n• Ang bawat pangyayari ay may simbolo upang mas madaling masundan ang kalusugan ni baby.'
             }
         ],
         readTime: '4 min read',
-        icon: <Brain size={22} />,
-        colorClass: 'cat-mental',
-    },
+        icon: <BookmarkCheck size={22} />,
+        colorClass: 'cat-newborn',
+        sources: [
+            { name: 'DOH Philippines', title: 'Booklet of Healthy Buntis, Happy Baby', url: 'https://doh.gov.ph' }
+        ]
+    }
 ];
 
 const CATEGORIES = [
     'All',
     'Nutrition',
-    'Exercise & Fitness',
     'Mental Health & Wellness',
     'Prenatal Care',
     'Postpartum Care',
-    'Vaccinations & Supplements',
     'Newborn Care',
 ];
 
 const CAT_ICONS = {
     'Nutrition': <Apple size={14} />,
-    'Exercise & Fitness': <Dumbbell size={14} />,
     'Mental Health & Wellness': <Brain size={14} />,
     'Prenatal Care': <HeartPulse size={14} />,
     'Postpartum Care': <Heart size={14} />,
-    'Vaccinations & Supplements': <Syringe size={14} />,
     'Newborn Care': <Baby size={14} />,
 };
 
@@ -465,7 +588,7 @@ const PregnancyTips = () => {
             </div>
 
             {/* ── Tip of the Day Banner ── */}
-            {!isActiveFiler && (
+            {!isActiveFiler && tipOfTheDay && (
                 <div className="pt-tod-banner" onClick={() => handleTipClick(tipOfTheDay.id)}>
                     <div className="pt-tod-deco" />
                     <div className="pt-tod-deco pt-tod-deco--2" />
@@ -492,7 +615,7 @@ const PregnancyTips = () => {
                     <input
                         type="text"
                         className="pt-search-input"
-                        placeholder="Search: 'iron', 'exercise', 'vaccines'…"
+                        placeholder="Maghanap: 'bakuna', 'nutrisyon', 'panganganak'…"
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                     />

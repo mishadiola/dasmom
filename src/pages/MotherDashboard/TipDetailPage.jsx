@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
     ArrowLeft, BookOpen, Bookmark, BookmarkCheck,
     CheckCircle2, Clock, ChevronRight, Heart,
-    Star, Share2
+    Star, Share2, ShieldCheck, ExternalLink
 } from 'lucide-react';
 import { TIPS_DATA } from './PregnancyTips';
 import '../../styles/pages/TipDetailPage.css';
@@ -81,8 +81,14 @@ const TipDetailPage = () => {
                 <div className="tdp-hero-deco" />
                 <div className="tdp-hero-deco tdp-hero-deco--2" />
                 <div className="tdp-hero-content">
+                    {/* Hero Meta */}
                     <div className="tdp-hero-meta">
                         <span className="tdp-cat-badge">{tip.category}</span>
+                        {tip.sources && tip.sources.length > 0 && (
+                            <span className="tdp-verified-badge" title="Verified by credible medical sources">
+                                <ShieldCheck size={12} /> Verified Source
+                            </span>
+                        )}
                         {isRead && (
                             <span className="tdp-read-badge">
                                 <CheckCircle2 size={12} /> You've read this
@@ -131,6 +137,25 @@ const TipDetailPage = () => {
                             <p>Always consult your midwife or doctor before making significant changes to your diet, exercise routine, or supplement intake. Every pregnancy is unique.</p>
                         </div>
                     </div>
+
+                    {/* Sources Section */}
+                    {tip.sources && tip.sources.length > 0 && (
+                        <div className="tdp-sources-section">
+                            <h3><BookOpen size={18} /> Sources & Credentialing</h3>
+                            <p className="tdp-sources-intro">The information in this article is supported by these credible organizations and guidelines:</p>
+                            <div className="tdp-sources-list">
+                                {tip.sources.map((source, i) => (
+                                    <a key={i} href={source.url} target="_blank" rel="noopener noreferrer" className="tdp-source-card">
+                                        <div className="tdp-source-info">
+                                            <strong>{source.name}</strong>
+                                            <span>{source.title}</span>
+                                        </div>
+                                        <ExternalLink size={14} className="tdp-source-link-icon" />
+                                    </a>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Completion Indicator */}
                     <div className="tdp-completed-bar">
