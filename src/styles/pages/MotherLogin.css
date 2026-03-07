@@ -1,0 +1,323 @@
+@import '../variables.css';
+
+.mother-login-container {
+    min-height: 100vh;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    font-family: var(--font);
+    background: linear-gradient(135deg,
+            var(--color-pink-light) 0%,
+            var(--color-yellow) 30%,
+            var(--color-sage) 65%,
+            var(--color-rose) 100%);
+    background-size: 300% 300%;
+    animation: bg-pan 18s ease infinite;
+    background-attachment: fixed;
+    position: relative;
+    overflow-x: hidden;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+/* Soft decorative circle – top right */
+.mother-login-container::before {
+    content: '';
+    position: absolute;
+    width: 40vmax;
+    height: 40vmax;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.18) 0%, transparent 70%);
+    top: -15vmax;
+    right: -15vmax;
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Soft decorative circle – bottom left */
+.mother-login-container::after {
+    content: '';
+    position: absolute;
+    width: 32vmax;
+    height: 32vmax;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.14) 0%, transparent 70%);
+    bottom: -12vmax;
+    left: -12vmax;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.mother-login-main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.mother-login-card {
+    background: white;
+    width: 100%;
+    max-width: 1000px;
+    min-height: 600px;
+    border-radius: var(--radius-xl);
+    display: flex;
+    overflow: hidden;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+    animation: modalSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Left Panel (Login) ── */
+.panel-left {
+    flex: 1;
+    padding: 60px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background: #ffffff;
+}
+
+.login-header {
+    margin-bottom: 40px;
+}
+
+.login-header h1 {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--color-text);
+    margin-bottom: 8px;
+}
+
+.login-header p {
+    color: var(--color-text-muted);
+    font-size: 16px;
+}
+
+.mother-form {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.form-group label {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-text);
+}
+
+.input-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.mother-input {
+    width: 100%;
+    padding: 14px 16px;
+    border: 2px solid #f0f2f5;
+    border-radius: var(--radius-md);
+    font-size: 15px;
+    transition: all 0.3s ease;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.mother-input:focus {
+    border-color: var(--color-rose);
+    box-shadow: 0 0 0 4px rgba(185, 129, 138, 0.1);
+}
+
+.mother-btn-primary {
+    background: var(--color-rose);
+    color: white;
+    padding: 16px;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-top: 10px;
+    box-shadow: 0 4px 12px rgba(185, 129, 138, 0.3);
+}
+
+.mother-btn-primary:hover {
+    background: var(--color-rose-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(185, 129, 138, 0.4);
+}
+
+.forgot-link {
+    text-align: center;
+    color: var(--color-rose);
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.forgot-link:hover {
+    color: var(--color-rose-dark);
+    text-decoration: underline;
+}
+
+/* ── Right Panel (Welcome) ── */
+.panel-right {
+    flex: 1.1;
+    padding: 60px;
+    background: linear-gradient(135deg, #fdd5e5 0%, #ffe3a4 100%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
+}
+
+.welcome-content {
+    color: var(--color-text);
+    z-index: 1;
+}
+
+.welcome-content h2 {
+    font-size: 36px;
+    font-weight: 800;
+    margin-bottom: 20px;
+    line-height: 1.2;
+}
+
+.welcome-message {
+    font-size: 18px;
+    line-height: 1.6;
+    margin-bottom: 40px;
+    color: rgba(45, 34, 52, 0.8);
+}
+
+.highlights-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.highlight-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: rgba(255, 255, 255, 0.4);
+    padding: 14px 20px;
+    border-radius: var(--radius-md);
+    backdrop-filter: blur(4px);
+    transition: transform 0.2s;
+}
+
+.highlight-item:hover {
+    transform: translateX(10px);
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.highlight-icon {
+    width: 40px;
+    height: 40px;
+    background: white;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-rose);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+.highlight-text {
+    font-weight: 600;
+    font-size: 15px;
+}
+
+/* ── Footer ── */
+.mother-footer {
+    padding: 30px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.5);
+    backdrop-filter: blur(10px);
+}
+
+.footer-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.cho-logo {
+    height: 32px;
+    opacity: 0.8;
+}
+
+.footer-text {
+    font-size: 14px;
+    color: var(--color-text-muted);
+    font-weight: 500;
+}
+
+/* ── Animations ── */
+@keyframes modalSlideUp {
+    from { transform: translateY(40px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes bg-pan {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+/* ── Responsiveness ── */
+@media (max-width: 900px) {
+    .mother-login-card {
+        flex-direction: column;
+        max-width: 500px;
+    }
+
+    .panel-left, .panel-right {
+        padding: 40px;
+    }
+
+    .panel-right {
+        order: 2;
+    }
+
+    .panel-left {
+        order: 1;
+    }
+}
+
+@media (max-width: 500px) {
+    .mother-login-card {
+        border-radius: 0;
+        min-height: 100vh;
+    }
+
+    .panel-left, .panel-right {
+        padding: 30px 20px;
+    }
+
+    .welcome-content h2 {
+        font-size: 28px;
+    }
+
+    .welcome-message {
+        font-size: 16px;
+    }
+}

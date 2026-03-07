@@ -6,6 +6,7 @@ import {
     ChevronRight, Calendar as CalendarIcon, Users, MapPin, X,
     CheckCircle2
 } from 'lucide-react';
+import ScheduledVisitModal from '../../components/Prenatal/ScheduledVisitModal';
 import '../../styles/pages/PrenatalVisits.css';
 
 // ── Mock Data ──
@@ -143,6 +144,7 @@ const PrenatalVisits = () => {
     const [currentDate, setCurrentDate] = useState(new Date('2026-02-28T12:00:00'));
     const [toast, setToast] = useState(null);
     const [calendarView, setCalendarView] = useState('week'); // 'day' | 'week' | 'month'
+    const [selectedVisit, setSelectedVisit] = useState(null);
 
     // Booking States
     const [selectedSlot, setSelectedSlot] = useState({ date: null, time: null });
@@ -275,12 +277,27 @@ const PrenatalVisits = () => {
     const handleSlotClick = (date, time, status) => {
         if (status === 'Full') return;
         if (status !== 'Available') {
-            navigate('/dashboard/prenatal/add');
+            // Find patient data if available
+            const patient = MOCK_PATIENTS.find(p => p.name === status.patient);
+            setSelectedVisit({
+                ...status,
+                patientId: patient ? patient.id : 'PT-2026-N1',
+                visitDate: date,
+                time: time,
+                risk: status.risk || 'Normal',
+                visitType: status.type || 'Prenatal'
+            });
             return;
         }
         setSelectedSlot({ date, time });
         setConflictWarning(null);
         setBookingPanelOpen(true);
+    };
+
+    const handleUpdateVisitStatus = (id, updates) => {
+        setToast(`Visit for ${selectedVisit.patientName} updated to ${updates.status}`);
+        setTimeout(() => setToast(null), 3000);
+        // In a real app, we would update the state/API here
     };
 
     const handleSelectPatient = (val) => {
@@ -566,6 +583,15 @@ const PrenatalVisits = () => {
                         </div>
                     </div>
                 </>
+            )}
+
+            {/* ── Scheduled Visit Modal ── */}
+            {selectedVisit && (
+                <ScheduledVisitModal 
+                    visit={selectedVisit}
+                    onClose={() => setSelectedVisit(null)}
+                    onUpdateStatus={handleUpdateVisitStatus}
+                />
             )}
         </div>
     );

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
     Eye, EyeOff, Loader2, Mail, Lock,
     ShieldCheck, AlertCircle, CheckCircle2,
-    Clock, Info, X
+    Clock, Info, X, User
 } from 'lucide-react';
 import '../../styles/pages/Login.css';
 import logo from '../../assets/images/dasmom_logo.png';
@@ -173,7 +173,7 @@ const Login = () => {
                                     reset link has been sent. Check your inbox and spam folder.
                                 </p>
                                 <button className="login-btn modal-btn" onClick={closeForgot}>
-                                    Back to Sign In
+                                    Back to Login
                                 </button>
                             </div>
                         ) : (
@@ -395,6 +395,18 @@ const Login = () => {
                         Authorized personnel only. Access is monitored and
                         recorded for security purposes.
                     </p>
+                </div>
+                
+                {/* Role Switch */}
+                <div className="login-role-switch">
+                    <button 
+                        type="button" 
+                        className="role-switch-btn"
+                        onClick={() => navigate('/')}
+                    >
+                        <User size={14} />
+                        Login as User
+                    </button>
                 </div>
 
             </main>

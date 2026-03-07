@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
     LayoutDashboard, Users, Baby, AlertTriangle, CalendarCheck,
     HeartPulse, Syringe, Truck, Activity, BarChart3, Settings,
     Bell, LogOut, Menu, X, ChevronLeft, Search, Shield,
-    MapPin, FileText, Stethoscope
+    MapPin, FileText, Stethoscope, RefreshCw, ClipboardList
 } from 'lucide-react';
 import '../styles/layouts/DashboardLayout.css';
 import logo from '../assets/images/dasmom_logo.png';
@@ -64,6 +64,10 @@ const DashboardLayout = () => {
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const userMenuRef = useRef(null);
     const navigate = useNavigate();
+    const location = useLocation();
+
+    // Determine if we are in User View based on path
+    const isUserView = location.pathname.includes('/dashboard/user-');
 
     // Click outside to close user menu
     useEffect(() => {
@@ -95,8 +99,28 @@ const DashboardLayout = () => {
 
     const confirmLogout = () => {
         setShowLogoutModal(false);
-        navigate('/login');
+        navigate(isUserView ? '/' : '/login');
     };
+
+    // Filter nav items based on view
+    const filteredNavItems = isUserView ? [
+        {
+            section: 'My Dashboard',
+            items: [
+                { label: 'Home', icon: LayoutDashboard, path: '/dashboard/user-home' },
+                { label: 'My Vitals', icon: Activity, path: '/dashboard/user-vitals' },
+                { label: 'Appointments', icon: CalendarCheck, path: '/dashboard/user-appointments' },
+            ]
+        },
+        {
+            section: 'Health Info',
+            items: [
+                { label: 'Pregnancy Tips', icon: HeartPulse, path: '/dashboard/user-tips' },
+                { label: 'Vaccination Info', icon: Syringe, path: '/dashboard/user-vaccinations' },
+                { label: 'Pregnancy & Delivery Info', icon: ClipboardList, path: '/dashboard/user-delivery-info' },
+            ]
+        }
+    ] : NAV_ITEMS;
 
     return (
         <div className={`app-shell ${sidebarOpen ? 'sidebar-expanded' : 'sidebar-collapsed'}`}>
@@ -137,7 +161,7 @@ const DashboardLayout = () => {
 
                 {/* Nav items */}
                 <nav className="sidebar-nav">
-                    {NAV_ITEMS.map((group) => (
+                    {filteredNavItems.map((group) => (
                         <div key={group.section} className="nav-group">
                             {sidebarOpen && (
                                 <span className="nav-group-label">{group.section}</span>
@@ -216,7 +240,7 @@ const DashboardLayout = () => {
                                     </span>
                                 )}
                             </button>
-                            {notifOpen && (
+                            {notifOpen && !isUserView && (
                                 <div className="notif-panel" role="dialog" aria-label="Notifications">
                                     <div className="notif-header">
                                         <h3>Notifications</h3>
@@ -265,10 +289,12 @@ const DashboardLayout = () => {
                                 </div>
                                 <div className="user-info">
                                     <span className="user-name">{MOCK_USER.name}</span>
-                                    <span className="user-role">
-                                        <Shield size={10} aria-hidden="true" />
-                                        {MOCK_USER.role}
-                                    </span>
+                                    {!isUserView && (
+                                        <span className="user-role">
+                                            <Shield size={10} aria-hidden="true" />
+                                            {MOCK_USER.role}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 
@@ -276,16 +302,19 @@ const DashboardLayout = () => {
                                 <div className="user-menu-panel">
                                     <div className="user-menu-header">
                                         <p className="user-menu-name">{MOCK_USER.name}</p>
-                                        <p className="user-menu-email">mish@gmail.com</p>
+                                        <p className="user-menu-email">{isUserView ? 'user@gmail.com' : 'mish@gmail.com'}</p>
                                     </div>
                                     <div className="user-menu-links">
-                                <button className="user-menu-item" onClick={() => {
-                                            navigate('/dashboard/settings?tab=profile');
+                                        <button className="user-menu-item" onClick={() => {
+                                            navigate(isUserView ? '/dashboard/user-account' : '/dashboard/settings?tab=profile');
                                             setUserMenuOpen(false);
                                         }}>
                                             <Users size={15} /> View Account
                                         </button>
-                                        <button className="user-menu-item" onClick={() => navigate('/dashboard/settings')}>
+                                        <button className="user-menu-item" onClick={() => {
+                                            navigate(isUserView ? '/dashboard/user-settings' : '/dashboard/settings');
+                                            setUserMenuOpen(false);
+                                        }}>
                                             <Settings size={15} /> Settings
                                         </button>
                                     </div>
@@ -316,7 +345,7 @@ const DashboardLayout = () => {
                         <h2 className="logout-modal-title">Confirm Logout</h2>
                         <p className="logout-modal-text">
                             Are you sure you want to log out of <strong>DasMom+</strong>? 
-                            You will need to sign in again to access the system.
+                            You will need to login again to access the system.
                         </p>
                         <div className="logout-modal-actions">
                             <button 

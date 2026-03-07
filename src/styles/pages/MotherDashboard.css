@@ -1,0 +1,301 @@
+@import '../variables.css';
+
+.mother-dashboard {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding-bottom: 40px;
+}
+
+/* ── Welcome Banner ── */
+.mother-welcome-banner {
+    background: linear-gradient(135deg, var(--color-rose), var(--color-rose-dark));
+    padding: 40px;
+    border-radius: 24px;
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 10px 30px rgba(185, 129, 138, 0.3);
+}
+
+.welcome-text h1 {
+    font-size: 32px;
+    font-weight: 800;
+    margin: 0 0 8px;
+}
+
+.welcome-sub {
+    font-size: 16px;
+    opacity: 0.9;
+    margin-bottom: 20px;
+}
+
+.current-date {
+    font-size: 14px;
+    font-weight: 600;
+    opacity: 0.7;
+}
+
+.pregnancy-summary {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+
+.gestation-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 16px 24px;
+    border-radius: 20px;
+    backdrop-filter: blur(10px);
+}
+
+.gestation-val {
+    font-size: 36px;
+    font-weight: 800;
+}
+
+.gestation-label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.trimester-badge {
+    background: var(--color-yellow);
+    color: var(--color-text);
+    padding: 8px 16px;
+    border-radius: 50px;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+/* ── Grid Layout ── */
+.mother-dash-grid {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: 24px;
+}
+
+/* ── Mother Cards ── */
+.mother-card {
+    background: white;
+    border-radius: 20px;
+    padding: 24px;
+    border: 1px solid #eef0f4;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+    margin-bottom: 24px;
+}
+
+.mother-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.mother-card-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+}
+
+.mother-card-link {
+    background: none;
+    border: none;
+    color: var(--color-rose);
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* ── Appointments ── */
+.mother-appt-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.mother-appt-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    background: #f8f9fb;
+    border-radius: 16px;
+    transition: transform 0.2s;
+}
+
+.mother-appt-item:hover {
+    transform: translateX(6px);
+}
+
+.mother-appt-icon {
+    width: 44px;
+    height: 44px;
+    background: white;
+    color: var(--color-rose);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+}
+
+.mother-appt-info {
+    flex: 1;
+}
+
+.mother-appt-type {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--color-text);
+    margin-bottom: 2px;
+}
+
+.mother-appt-meta {
+    font-size: 13px;
+    color: var(--color-text-muted);
+}
+
+.mother-appt-staff {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-rose);
+}
+
+.mother-appt-status {
+    font-size: 11px;
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+}
+
+.status-upcoming { background: #e3f2fd; color: #1976d2; }
+.status-scheduled { background: #f1f8e9; color: #388e3c; }
+
+/* ── Vitals ── */
+.mother-vitals-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.mother-vital-box {
+    padding: 20px;
+    background: #f8f9fb;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+}
+
+.vital-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--color-text-light);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+
+.vital-val {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--color-text);
+}
+
+.vital-desc {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6db8a0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+/* ── Tips ── */
+.mother-tips-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.mother-tip-item {
+    display: flex;
+    gap: 12px;
+}
+
+.tip-icon {
+    width: 32px;
+    height: 32px;
+    background: #fff0f6;
+    color: #e05c73;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.tip-title {
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 2px;
+}
+
+.tip-text {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    line-height: 1.5;
+}
+
+/* ── Support ── */
+.support-text {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--color-text-muted);
+    margin-bottom: 20px;
+}
+
+.mother-btn-contact {
+    width: 100%;
+    padding: 12px;
+    background: var(--color-yellow);
+    border: none;
+    border-radius: 12px;
+    font-weight: 700;
+    font-family: var(--font);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.mother-btn-contact:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+/* ── Responsiveness ── */
+@media (max-width: 900px) {
+    .mother-dash-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .mother-welcome-banner {
+        flex-direction: column;
+        text-align: center;
+        gap: 24px;
+    }
+}
