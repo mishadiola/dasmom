@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, Baby, Timer, ChevronRight } from 'lucide-react';
+import { Calendar, Baby, Timer, TrendingUp } from 'lucide-react';
 import { 
     calculateEDD, 
     calculateGestationalAge, 
@@ -9,7 +9,7 @@ import {
     getTrimester
 } from '../../utils/pregnancyUtils';
 
-const PregnancyProgressCard = ({ lmpDate, babySizeData }) => {
+const PregnancyProgressCard = ({ lmpDate }) => {
     // If no LMP date provided, we can't calculate. For mock, we'll use a default.
     const lmp = lmpDate || '2025-08-20'; // Default for demo if not provided
     
@@ -35,36 +35,25 @@ const PregnancyProgressCard = ({ lmpDate, babySizeData }) => {
                             <Baby size={18} />
                         </div>
                         <div className="gest-content">
-                            <span className="gest-label">You are currently:</span>
+                            <span className="gest-label">Current Status</span>
                             <p className="gest-val">{gestAge.weeks} weeks pregnant</p>
                         </div>
                     </div>
-                    {babySizeData && (
-                        <div className="gest-item">
-                            <div className="gest-icon bg-yellow-soft">
-                                <span>{babySizeData.emoji}</span>
-                            </div>
-                            <div className="gest-content">
-                                <span className="gest-label">Baby size:</span>
-                                <p className="gest-val">{babySizeData.name}</p>
-                            </div>
-                        </div>
-                    )}
                     <div className="gest-item">
                         <div className="gest-icon bg-blue-soft">
                             <Timer size={18} />
                         </div>
                         <div className="gest-content">
-                            <span className="gest-label">Remaining:</span>
-                            <p className="gest-val">{timeRem.weeks} weeks to go!</p>
+                            <span className="gest-label">Remaining</span>
+                            <p className="gest-val">{timeRem.weeks} weeks to go</p>
                         </div>
                     </div>
                 </div>
 
                 <div className="pregnancy-progress-container">
                     <div className="progress-header">
-                        <span className="progress-title">Pregnancy Progress</span>
-                        <span className="progress-stats">{gestAge.weeks} / 40 weeks</span>
+                        <span className="progress-title"><TrendingUp size={16} className="icon-inline" /> Pregnancy Progress</span>
+                        <span className="progress-stats">{gestAge.weeks} / 40 weeks ({Math.round(progress)}%)</span>
                     </div>
                     <div className="custom-progress-bar">
                         <div 
@@ -75,9 +64,15 @@ const PregnancyProgressCard = ({ lmpDate, babySizeData }) => {
                         </div>
                     </div>
                     <div className="trimester-indicator">
-                        <span className={`tri-dot ${gestAge.weeks <= 12 ? 'active' : ''}`}>1st</span>
-                        <span className={`tri-dot ${gestAge.weeks > 12 && gestAge.weeks <= 26 ? 'active' : ''}`}>2nd</span>
-                        <span className={`tri-dot ${gestAge.weeks > 26 ? 'active' : ''}`}>3rd Trimester</span>
+                        <div className={`tri-item ${gestAge.weeks <= 12 ? 'active' : ''}`}>
+                            <span className="tri-label">1st</span>
+                        </div>
+                        <div className={`tri-item ${gestAge.weeks > 12 && gestAge.weeks <= 26 ? 'active' : ''}`}>
+                            <span className="tri-label">2nd</span>
+                        </div>
+                        <div className={`tri-item ${gestAge.weeks > 26 ? 'active' : ''}`}>
+                            <span className="tri-label">3rd Trimester</span>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -241,7 +241,6 @@ const PatientsList = () => {
                 <div className="filters-wrap">
                     <span className="filters-label">Filters:</span>
                     <div className="filter-group">
-                        <span className="filter-icon"><Filter size={14} /></span>
                         <select
                             value={filters.trimester}
                             onChange={(e) => handleFilterChange('trimester', e.target.value)}
@@ -255,7 +254,6 @@ const PatientsList = () => {
                     </div>
 
                     <div className="filter-group">
-                        <span className="filter-icon"><AlertTriangle size={14} /></span>
                         <select
                             value={filters.risk}
                             onChange={(e) => handleFilterChange('risk', e.target.value)}
@@ -269,7 +267,6 @@ const PatientsList = () => {
                     </div>
 
                     <div className="filter-group">
-                        <span className="filter-icon"><MapPin size={14} /></span>
                         <select
                             value={filters.barangay}
                             onChange={(e) => handleFilterChange('barangay', e.target.value)}

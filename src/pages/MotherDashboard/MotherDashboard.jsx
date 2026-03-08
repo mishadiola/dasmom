@@ -5,7 +5,6 @@ import {
     CheckCircle2, AlertCircle
 } from 'lucide-react';
 import '../../styles/pages/MotherDashboard.css';
-import BabySizeCard, { sizeMapping } from '../../components/MotherDashboard/BabySizeCard';
 import PregnancyProgressCard from '../../components/MotherDashboard/PregnancyProgressCard';
 
 const MotherDashboard = () => {
@@ -18,11 +17,6 @@ const MotherDashboard = () => {
         weeks: 28,
         trimester: '3rd Trimester'
     };
-
-    // Get baby size data for the progress card
-    const weeksList = Object.keys(sizeMapping).map(Number).sort((a, b) => b - a);
-    const targetWeek = weeksList.find(w => pregnancyData.weeks >= w) || 8;
-    const babySizeData = sizeMapping[targetWeek];
 
     const appointments = [
         { id: 1, date: 'Mar 15, 2026', time: '9:00 AM', type: 'Prenatal Checkup', staff: 'Midwife Elena P.', status: 'Upcoming' },
@@ -51,7 +45,6 @@ const MotherDashboard = () => {
             {/* ── Pregnancy Progress Section ── */}
             <PregnancyProgressCard 
                 lmpDate={pregnancyData.lmp} 
-                babySizeData={babySizeData} 
             />
 
             <div className="mother-dash-grid">
@@ -108,9 +101,6 @@ const MotherDashboard = () => {
 
                 {/* ── Right Column ── */}
                 <div className="mother-dash-right">
-                    {/* Baby Size Card */}
-                    <BabySizeCard currentWeek={pregnancyData.weeks} />
-
                     {/* Health Tips */}
                     {healthTips.length > 0 && (
                         <div className="mother-card tips-card">
