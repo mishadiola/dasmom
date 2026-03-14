@@ -1,0 +1,224 @@
+@import '../variables.css';
+
+.bs-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(45, 34, 52, 0.4);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    animation: fadeIn 0.3s ease;
+}
+
+.bs-modal {
+    background: white;
+    width: 90%;
+    max-width: 550px;
+    max-height: 90vh;
+    border-radius: 32px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bs-modal-header {
+    padding: 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(to bottom, #fff, #fdf8f9);
+}
+
+.bs-header-info h2 {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--color-text);
+    margin: 0 0 4px;
+}
+
+.bs-header-info p {
+    font-size: 14px;
+    color: var(--color-text-muted);
+    margin: 0;
+}
+
+.bs-close-btn {
+    background: #f5f5f5;
+    border: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    transition: var(--t-fast);
+}
+
+.bs-close-btn:hover {
+    background: #eee;
+    color: var(--color-text);
+    transform: rotate(90deg);
+}
+
+.bs-modal-body {
+    padding: 0 32px 32px;
+    overflow-y: auto;
+}
+
+.bs-main-info {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+.bs-image-box {
+    height: 180px;
+    border-radius: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.bs-image-box img {
+    max-width: 80%;
+    max-height: 80%;
+    object-fit: contain;
+    filter: drop-shadow(0 10px 20px rgba(0,0,0,0.1));
+}
+
+.bs-emoji-large {
+    font-size: 80px;
+}
+
+.bs-stats-column {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    justify-content: center;
+}
+
+.bs-stat-card {
+    background: #f8f9fb;
+    padding: 16px;
+    border-radius: 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+.bs-stat-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--color-text-light);
+    margin-bottom: 4px;
+}
+
+.bs-stat-value {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--color-text);
+}
+
+.bs-content-section {
+    margin-bottom: 24px;
+}
+
+.bs-content-section h3 {
+    font-size: 16px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    color: var(--color-text);
+}
+
+.bs-milestones-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.bs-milestones-list li {
+    font-size: 14px;
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 10px;
+    line-height: 1.5;
+}
+
+.bs-milestones-list li svg {
+    color: #6db8a0;
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+
+.bs-tips-box {
+    background: #fff9f0;
+    padding: 20px;
+    border-radius: 20px;
+    border: 1px solid #fee3a4;
+}
+
+.bs-tips-box p {
+    font-size: 14px;
+    margin-bottom: 12px;
+    line-height: 1.5;
+    color: var(--color-text-muted);
+}
+
+.bs-tips-box p:last-child {
+    margin-bottom: 0;
+}
+
+.bs-tips-box p strong {
+    color: var(--color-text);
+}
+
+.bs-modal-footer {
+    padding: 24px 32px;
+    background: #fdf8f9;
+}
+
+.bs-btn-primary {
+    width: 100%;
+    padding: 16px;
+    background: var(--color-rose);
+    border: none;
+    border-radius: 16px;
+    color: white;
+    font-weight: 700;
+    font-family: var(--font);
+    cursor: pointer;
+    transition: var(--t-fast);
+}
+
+.bs-btn-primary:hover {
+    background: var(--color-rose-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(185, 129, 138, 0.3);
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideUp {
+    from { transform: translateY(30px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}

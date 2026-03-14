@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+    /* ─── Exact Brand Background Palette ─── */
+    --color-rose: #b9818a;
+    --color-yellow: #ffe3a4;
+    --color-sage: #c3cfb7;
+    --color-pink-light: #fdd5e5;
+
+    /* ─── Derived UI Colors ─── */
+    --color-rose-dark: #9c6672;
+    --color-rose-light: #d4a5ab;
+
+    /* ─── Text ─── */
+    --color-text: #2d2234;
+    --color-text-muted: #6e6278;
+    --color-text-light: #a89bae;
+    --color-white: #ffffff;
+
+    /* ─── Surface ─── */
+    --color-surface: rgba(255, 255, 255, 0.82);
+    --color-surface-inp: rgba(255, 255, 255, 0.6);
+
+    /* ─── Borders ─── */
+    --color-border: rgba(185, 129, 138, 0.25);
+    --color-border-focus: #b9818a;
+
+    /* ─── Shadows ─── */
+    --shadow-card: 0 8px 32px rgba(185, 129, 138, 0.18), 0 2px 8px rgba(185, 129, 138, 0.10);
+    --shadow-input: 0 2px 6px rgba(185, 129, 138, 0.08);
+    --shadow-focus: 0 0 0 4px rgba(185, 129, 138, 0.20);
+    --shadow-btn: 0 4px 14px rgba(185, 129, 138, 0.40);
+    --shadow-btn-hv: 0 8px 22px rgba(185, 129, 138, 0.52);
+
+    /* ─── Gradients (using exact brand colors) ─── */
+    --gradient-bg: linear-gradient(135deg, var(--color-pink-light) 0%, var(--color-yellow) 35%, var(--color-sage) 70%, var(--color-rose) 100%);
+    --gradient-btn: linear-gradient(135deg, var(--color-rose) 0%, var(--color-rose-dark) 100%);
+
+    /* ─── Transitions ─── */
+    --t-fast: all 0.2s ease;
+    --t-normal: all 0.3s ease;
+
+    /* ─── Radius ─── */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 20px;
+    --radius-xl: 28px;
+    --radius-full: 9999px;
+
+    /* ─── Font ─── */
+    --font: 'Poppins', sans-serif;
+}

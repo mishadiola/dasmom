@@ -1,0 +1,328 @@
+@import '../variables.css';
+
+.vdm-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(45, 34, 52, 0.4);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+.vdm-modal {
+    background: white;
+    width: 90%;
+    max-width: 550px;
+    max-height: 90vh;
+    border-radius: 32px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.vdm-header {
+    padding: 40px 32px 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    color: white;
+    position: relative;
+}
+
+.vdm-header.status-completed { background: linear-gradient(135deg, #50a88e, #3d8a74); }
+.vdm-header.status-upcoming { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.vdm-header.status-missed { background: linear-gradient(135deg, #ef4444, #dc2626); }
+
+.vdm-header-content {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+}
+
+.vdm-icon-wrap {
+    width: 64px;
+    height: 64px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(10px);
+}
+
+.vdm-title-area h2 {
+    font-size: 24px;
+    font-weight: 800;
+    margin: 0 0 4px;
+}
+
+.vdm-category {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    opacity: 0.9;
+}
+
+.vdm-close-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: white;
+    transition: var(--t-fast);
+}
+
+.vdm-close-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: rotate(90deg);
+}
+
+.vdm-body {
+    padding: 32px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.vdm-status-shelf {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8f9fb;
+    padding: 20px;
+    border-radius: 24px;
+}
+
+.vdm-status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 800;
+    font-size: 18px;
+}
+
+.vdm-status-indicator.status-completed { color: #50a88e; }
+.vdm-status-indicator.status-upcoming { color: #f59e0b; }
+.vdm-status-indicator.status-missed { color: #ef4444; }
+
+.vdm-quick-meta {
+    text-align: right;
+}
+
+.vdm-meta-item .label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--color-text-light);
+    margin-bottom: 2px;
+}
+
+.vdm-meta-item .value {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--color-text);
+}
+
+.vdm-section h3 {
+    font-size: 16px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    color: var(--color-text);
+}
+
+.vdm-section p {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--color-text-muted);
+    margin: 0;
+}
+
+.vdm-tips-box {
+    background: #fff9f0;
+    padding: 20px;
+    border-radius: 20px;
+    border: 1px solid #fee3a4;
+}
+
+.vdm-history-section h3 {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 16px;
+}
+
+.vdm-history-item {
+    display: flex;
+    gap: 16px;
+    position: relative;
+    padding-left: 8px;
+}
+
+.vdm-history-item::before {
+    content: '';
+    position: absolute;
+    left: 11px;
+    top: 24px;
+    bottom: -16px;
+    width: 2px;
+    background: #eef0f4;
+}
+
+.vdm-history-item:last-child::before {
+    display: none;
+}
+
+.history-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #eef0f4;
+    margin-top: 8px;
+    position: relative;
+    z-index: 1;
+}
+
+.history-dot.completed {
+    background: #50a88e;
+    box-shadow: 0 0 0 4px #e7f6f2;
+}
+
+.history-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.history-action {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-text);
+}
+
+.history-date {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.vdm-footer {
+    padding: 24px 32px;
+    background: #f8f9fb;
+    display: flex;
+    gap: 16px;
+}
+
+.vdm-btn-secondary {
+    flex: 1;
+    padding: 14px;
+    border-radius: 14px;
+    border: 1px solid #eef0f4;
+    background: white;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: var(--font);
+    transition: var(--t-fast);
+}
+
+.vdm-btn-primary {
+    flex: 2;
+    padding: 14px;
+    border-radius: 14px;
+    border: none;
+    background: var(--color-rose);
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: var(--font);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: var(--t-fast);
+}
+
+.vdm-btn-primary:hover {
+    background: var(--color-rose-dark);
+    transform: translateY(-2px);
+}
+
+@keyframes slideUp {
+    from { transform: translateY(30px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+/* ─────────────────────────────────────────────
+   SOURCES SECTION
+   ───────────────────────────────────────────── */
+.vdm-sources-section {
+    border-top: 1px solid #eef0f4;
+    padding-top: 24px;
+    margin-top: 8px;
+}
+
+.vdm-sources-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.vdm-source-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.vdm-source-item:hover {
+    border-color: var(--color-rose);
+    background: #fff5f7;
+    transform: translateX(4px);
+}
+
+.vdm-source-item .source-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.vdm-source-item .source-info strong {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-text);
+}
+
+.vdm-source-item .source-info span {
+    font-size: 11px;
+    color: var(--color-text-muted);
+}
+
+.vdm-source-item svg {
+    color: var(--color-text-light);
+    opacity: 0.5;
+    transition: var(--t-fast);
+}
+
+.vdm-source-item:hover svg {
+    color: var(--color-rose);
+    opacity: 1;
+}

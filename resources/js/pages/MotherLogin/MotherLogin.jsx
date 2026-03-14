@@ -97,17 +97,6 @@ const MotherLogin = () => {
                             <a href="#" className="forgot-link" onClick={(e) => e.preventDefault()}>
                                 Forgot Password?
                             </a>
-
-                            <div className="login-role-switch" style={{ textAlign: 'center', marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
-                                <button 
-                                    type="button" 
-                                    onClick={() => navigate('/login')}
-                                    style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', gap: '8px', fontSize: '14px', fontWeight: '500' }}
-                                >
-                                    <ShieldCheck size={16} />
-                                    Login as Staff
-                                </button>
-                            </div>
                         </form>
                     </div>
 
