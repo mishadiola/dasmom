@@ -1,0 +1,127 @@
+@import '../variables.css';
+
+.baby-size-card {
+    background: #fff9f0; /* Soft pastel cream/yellow */
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    border: 1px solid rgba(255, 227, 164, 0.5);
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    transition: var(--t-normal);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+
+.baby-size-card:hover {
+    transform: translateY(-5px) scale(1.02);
+    box-shadow: 0 12px 40px rgba(185, 129, 138, 0.15);
+}
+
+.baby-size-card::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, transparent 70%);
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.baby-size-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.baby-size-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin: 0;
+}
+
+.baby-size-week-badge {
+    background: var(--color-rose);
+    color: white;
+    padding: 4px 12px;
+    border-radius: var(--radius-full);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.baby-size-image-container {
+    width: 120px;
+    height: 120px;
+    margin: 10px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.baby-size-image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 8px 15px rgba(0,0,0,0.1));
+    transition: var(--t-normal);
+}
+
+.baby-size-card:hover .baby-size-image {
+    transform: rotate(5deg) scale(1.1);
+}
+
+.baby-size-fruit-name {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--color-text);
+    margin: 8px 0 4px;
+}
+
+.baby-size-stats {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.baby-size-stat-item {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    background: rgba(255, 255, 255, 0.6);
+    padding: 4px 10px;
+    border-radius: var(--radius-md);
+}
+
+.baby-size-fun-fact {
+    font-size: 13px;
+    font-style: italic;
+    color: var(--color-text-muted);
+    line-height: 1.4;
+    padding: 0 10px;
+}
+
+.baby-size-footer {
+    margin-top: 16px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--color-rose);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Specific background colors for different fruit stages (optional variants) */
+.card-pastel-green { background: #f0f7f2; border-color: #d1e7d8; }
+.baby-size-card.card-pastel-pink { background: #fff0f6; border-color: #ffdce5; }
+.baby-size-card.card-pastel-orange { background: #fff5eb; border-color: #ffe8cc; }
+.baby-size-card.card-pastel-purple { background: #f8f0ff; border-color: #e9d5ff; }

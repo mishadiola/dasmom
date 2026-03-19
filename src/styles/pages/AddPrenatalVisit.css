@@ -1,0 +1,421 @@
+@import '../variables.css';
+
+/* ══════════════════════════════════════════
+   LAYOUT
+══════════════════════════════════════════ */
+.add-pvisit-page {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+    position: relative;
+    padding-bottom: 40px;
+}
+
+.apv-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 8px;
+}
+
+.apv-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin: 0;
+    letter-spacing: -0.5px;
+}
+
+.apv-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.apv-form-container {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+}
+
+.apv-main-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+    /* prevent blowout */
+}
+
+.apv-side-col {
+    width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    position: sticky;
+    top: 24px;
+}
+
+/* ══════════════════════════════════════════
+   MAIN SECTIONS
+══════════════════════════════════════════ */
+.apv-section {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #eef0f4;
+    padding: 24px 30px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+}
+
+.section-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin: 0 0 20px 0;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #eef0f4;
+}
+
+.section-sub {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    margin: -12px 0 16px;
+}
+
+.text-danger {
+    color: #b73a52 !important;
+}
+
+/* ══════════════════════════════════════════
+   PATIENT INFO BANNER
+══════════════════════════════════════════ */
+.sticky-patient-info {
+    background: linear-gradient(to right, #ffffff, #fcfcfd);
+    border-left: 4px solid var(--color-rose);
+}
+
+.pi-grid {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.pi-main h2 {
+    margin: 0 0 4px;
+    font-size: 20px;
+    color: var(--color-text);
+}
+
+.pi-main span {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+}
+
+.pi-stats {
+    display: flex;
+    gap: 16px;
+}
+
+.pi-stat-box {
+    display: flex;
+    flex-direction: column;
+    background: #f8f9fb;
+    padding: 8px 16px;
+    border-radius: 10px;
+    min-width: 90px;
+}
+
+.pi-stat-box small {
+    font-size: 11px;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--color-text-light);
+    margin-bottom: 2px;
+}
+
+.pi-stat-box strong {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.rb-high-risk {
+    background: rgba(224, 92, 115, 0.1);
+}
+
+.rb-high-risk strong {
+    color: #b73a52;
+}
+
+.rb-monitor {
+    background: rgba(249, 162, 108, 0.1);
+}
+
+.rb-monitor strong {
+    color: #b76326;
+}
+
+.rb-normal {
+    background: rgba(109, 184, 160, 0.1);
+}
+
+.rb-normal strong {
+    color: #3d8870;
+}
+
+/* ══════════════════════════════════════════
+   FORM GRIDS & INPUTS
+══════════════════════════════════════════ */
+.vitals-grid,
+.fetal-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 16px;
+}
+
+.notes-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.form-group label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    padding: 10px 14px;
+    border: 1.5px solid #eef0f4;
+    border-radius: 10px;
+    font-size: 13.5px;
+    background: #fff;
+    outline: none;
+    transition: all 0.2s;
+    font-family: inherit;
+    color: var(--color-text);
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    border-color: var(--color-rose);
+    box-shadow: 0 0 0 3px rgba(185, 129, 138, 0.1);
+}
+
+.read-only {
+    background: #f8f9fb !important;
+    color: var(--color-text-muted) !important;
+    font-weight: 600;
+    cursor: default;
+}
+
+/* Custom BP Input Group */
+.bp-inputs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.bp-inputs input {
+    width: 60px;
+    text-align: center;
+    padding: 10px 4px;
+}
+
+.bp-group.has-warning input {
+    border-color: #e05c73;
+    background: rgba(224, 92, 115, 0.05);
+    color: #b73a52;
+    font-weight: 700;
+}
+
+.inline-warn {
+    font-size: 11px;
+    color: #b73a52;
+    background: rgba(224, 92, 115, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+/* ══════════════════════════════════════════
+   SPLIT SECTIONS & CHECKBOXES
+══════════════════════════════════════════ */
+.split-section {
+    display: flex;
+    padding: 0;
+    overflow: hidden;
+}
+
+.split-half {
+    flex: 1;
+    padding: 24px 30px;
+}
+
+.highlight-panel {
+    background: #fbfbfc;
+    border-left: 1px solid #eef0f4;
+}
+
+.check-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.check-lbl {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--color-text);
+    cursor: pointer;
+}
+
+.check-lbl input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--color-rose);
+    cursor: pointer;
+}
+
+/* ══════════════════════════════════════════
+   RISK TAGS
+══════════════════════════════════════════ */
+.alert-section {
+    border: 1.5px dashed #d1d6e0;
+    background: #fcfcfd;
+}
+
+.risk-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.risk-btn {
+    padding: 8px 16px;
+    border-radius: 99px;
+    font-size: 13.5px;
+    font-weight: 600;
+    background: #fff;
+    border: 1px solid #d1d6e0;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.risk-btn:hover {
+    background: #f4f6f9;
+}
+
+.risk-btn.active {
+    background: #e05c73;
+    border-color: #e05c73;
+    color: #fff;
+    box-shadow: 0 4px 10px rgba(224, 92, 115, 0.2);
+}
+
+/* ══════════════════════════════════════════
+   SIDE CARDS
+══════════════════════════════════════════ */
+.apv-side-card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #eef0f4;
+    padding: 20px 24px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+}
+
+.side-head {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin: 0 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.text-primary {
+    color: var(--color-rose) !important;
+}
+
+.mt-2 {
+    margin-top: 12px;
+}
+
+.mt-3 {
+    margin-top: 16px;
+}
+
+.mb-0 {
+    margin-bottom: 0;
+}
+
+.ref-toggle {
+    margin-bottom: 4px;
+}
+
+.appt-card {
+    border: 2px solid var(--color-rose-light);
+    background: #fffafa;
+}
+
+
+/* ══════════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════════ */
+@media (max-width: 1024px) {
+    .apv-form-container {
+        flex-direction: column;
+    }
+
+    .apv-side-col {
+        width: 100%;
+        position: static;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+    }
+}
+
+@media (max-width: 768px) {
+    .pi-stats {
+        flex-wrap: wrap;
+    }
+
+    .split-section {
+        flex-direction: column;
+    }
+
+    .highlight-panel {
+        border-left: none;
+        border-top: 1px solid #eef0f4;
+    }
+}
