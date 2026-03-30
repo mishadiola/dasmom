@@ -1,4 +1,3 @@
-// MotherLogin.jsx
 import React, { useState } from 'react';
 import { 
     Mail, Lock, Eye, EyeOff, Loader2, 
@@ -18,32 +17,29 @@ const MotherLogin = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setIsLoading(true);
+   const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
 
-        try {
-            // Attempt login
-            const user = await authService.login(email, password);
+    try {
+        const user = await authService.login(email, password);
 
-            // Only allow patients (mothers)
-            if (!authService.accessCheck(user, ['patient'])) {
-                alert('You do not have access as a mother.');
-                setIsLoading(false);
-                return;
-            }
-
-            // Store user ID in localStorage (or use context/state management)
-            localStorage.setItem('motherId', user.id);
-
-            // Navigate to mother dashboard
-            navigate('/dashboard/mother-home', { state: { user } });
-        } catch (err) {
-            alert(err.message);
-        } finally {
-            setIsLoading(false);
+        if (!authService.accessCheck(user, 'mother')) {
+            alert('You do not have access as a mother.');
+            return;
         }
-    };
+
+        authService.saveUser(user);
+
+        const route = authService.getRedirectRoute(user.role);
+        navigate(route);
+
+    } catch (err) {
+        alert(err.message);
+    } finally {
+        setIsLoading(false);
+    }
+};
 
     const highlights = [
         { icon: Activity, text: 'Track your pregnancy progress' },

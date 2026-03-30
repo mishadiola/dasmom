@@ -1,17 +1,14 @@
 import supabase from '../config/supabaseclient';
+import { getRoleConfig } from '../config/roleConfig';
 
 export default class AuthService {
     constructor() {
         this.supabase = supabase;
     }
 
-    /**
-     * Login a user by email and password
-     * Returns user info and type if successful
-     */
+    // 🔐 LOGIN
     async login(email, password) {
         try {
-            // Fetch user from Users table; maybeSingle returns object or null
             const { data: user, error: userError } = await this.supabase
                 .from('Users')
                 .select('id, email_address, password, usertype')
@@ -21,17 +18,15 @@ export default class AuthService {
             if (userError) throw userError;
             if (!user) throw new Error('User not found');
 
-            // Password check (plaintext for now; replace with hash check for production)
             if (user.password !== password) {
                 throw new Error('Invalid password');
             }
 
-            // Fetch user type
             const { data: typeData, error: typeError } = await this.supabase
                 .from('User_type')
                 .select('user_type')
                 .eq('id', user.usertype)
-                .maybeSingle(); // assume one type per user
+                .maybeSingle();
 
             if (typeError) throw typeError;
             if (!typeData) throw new Error('User type not found');
@@ -39,22 +34,40 @@ export default class AuthService {
             return {
                 id: user.id,
                 email: user.email_address,
-                usertype: typeData.user_type
+                role: typeData.user_type
             };
+
         } catch (err) {
             console.error('AuthService.login error:', err);
             throw err;
         }
     }
 
-    /**
-     * Check if the user has access to a page based on allowed roles
-     * @param {Object} user - user object from login()
-     * @param {Array} allowedRoles - e.g. ['Staff', 'Admin']
-     * @returns {Boolean} true if access allowed
-     */
-    accessCheck(user, allowedRoles = []) {
-        if (!user || !user.usertype) return false;
-        return allowedRoles.includes(user.usertype);
+    //ACCESS CONTROL
+    accessCheck(user, pageKey) {
+        if (!user || !user.role) return false;
+
+        const config = getRoleConfig(user.role);
+        return config.allowedPages.includes(pageKey);
+    }
+
+    // REDIRECT BASED ON ROLE
+    getRedirectRoute(role) {
+        return getRoleConfig(role).redirect;
+    }
+
+    // STORE USER
+    saveUser(user) {
+        localStorage.setItem('user', JSON.stringify(user));
+    }
+
+    //GET USER
+    getUser() {
+        return JSON.parse(localStorage.getItem('user'));
+    }
+
+    //LOGOUT
+    logout() {
+        localStorage.removeItem('user');
     }
 }
