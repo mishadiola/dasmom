@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Users, Baby, AlertTriangle, CalendarCheck, TrendingUp,
     TrendingDown, Activity, Syringe, HeartPulse, MapPin,
@@ -8,6 +8,10 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/Dashboard.css';
+import AuthService from '../../services/authservice';
+
+const authService = new AuthService();
+
 
 /* ════════════════════════════
    MOCK DATA
@@ -83,7 +87,6 @@ const RECENT_DELIVERIES = [
     { id: 4, mother: 'Daisy Ramos', date: 'Feb 22', type: 'NSD', outcome: 'Good', newborn: 'Boy, 3.3 kg' },
 ];
 
-/* Simple inline bar chart using CSS */
 const MiniBar = ({ value, max, color }) => (
     <div className="mini-bar-track">
         <div
@@ -93,7 +96,6 @@ const MiniBar = ({ value, max, color }) => (
     </div>
 );
 
-/* Trimester progress */
 const TrimesterBadge = ({ weeks }) => {
     const tri = weeks <= 12 ? 1 : weeks <= 26 ? 2 : 3;
     return (
@@ -103,16 +105,77 @@ const TrimesterBadge = ({ weeks }) => {
     );
 };
 
-/* ════════════════════════════
-   DASHBOARD COMPONENT
-════════════════════════════ */
+
+
 const Dashboard = () => {
     const navigate = useNavigate();
+    const [user, setUser] = useState(null);
+
+    useEffect(() => {
+        const currentUser = authService.getUser();
+        if (!currentUser) {
+            navigate('/');
+            return;
+        }
+
+        if (!authService.accessCheck(currentUser, 'admin')) {
+            authService.logout();
+            navigate('/');
+            return;
+        }
+
+        setUser(currentUser);
+    }, [navigate]);
+
+    const displayName = user?.email ? user.email.split('@')[0] : 'User';
+    const roleLabel = user?.role?.toUpperCase() || 'UNKNOWN';
+
     const today = new Date().toLocaleDateString('en-PH', {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
     });
+/*
+const Dashboard = () => {
+    const navigate = useNavigate();
     const [riskFilter, setRiskFilter] = useState('all');
 
+    // ✅ STORE USER IN STATE
+    const [user, setUser] = useState(null);
+
+    // ✅ LOAD USER FROM LOCALSTORAGE
+    useEffect(() => {
+        const currentUser = authService.getUser();
+
+        if (!currentUser) {
+            navigate('/');
+            return;
+        }
+
+        // Block unauthorized roles
+        if (!authService.accessCheck(currentUser, 'admin')) {
+            authService.logout();
+            navigate('/');
+            return;
+        }
+
+        setUser(currentUser);
+    }, [navigate]);
+
+    // ✅ Extract display name
+    const displayName = user?.email
+        ? user.email.split('@')[0]
+        : 'User';
+
+    const roleLabel = user?.role?.toUpperCase() || 'UNKNOWN';
+
+    const today = new Date().toLocaleDateString('en-PH', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+    });*/
     return (
         <div className="dashboard">
 
@@ -128,7 +191,7 @@ const Dashboard = () => {
             {/* ── Welcome Banner ── */}
             <div className="welcome-banner">
                 <div className="welcome-left">
-                    <p className="welcome-greeting">Good morning, Mish <span className="wave-emoji">👋</span></p>
+                    <p className="welcome-greeting">Good morning, {displayName} <span className="wave-emoji">👋</span></p>
                     <p className="welcome-sub">
                         You have <strong>18 appointments</strong> today and <strong>3 high-risk alerts</strong> requiring attention.
                     </p>

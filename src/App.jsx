@@ -33,12 +33,13 @@ import Settings from './pages/Settings/Settings';
 import PregnancyResources from './pages/Resources/PregnancyResources';
 
 import AuthService from './services/authservice';
-
 import './App.css';
 
-// 🔐 SIMPLE INLINE PROTECTION
+const authService = new AuthService();
+
+
+// 🔐 GLOBAL PROTECTED ROUTE (CLEAN + FLEXIBLE)
 const ProtectedRoute = ({ children, pageKey }) => {
-  const authService = new AuthService();
   const user = authService.getUser();
 
   if (!user) {
@@ -46,11 +47,13 @@ const ProtectedRoute = ({ children, pageKey }) => {
   }
 
   if (!authService.accessCheck(user, pageKey)) {
+    authService.logout();
     return <Navigate to="/" replace />;
   }
 
   return children;
 };
+
 
 function App() {
   return (
@@ -64,7 +67,7 @@ function App() {
         {/* DASHBOARD LAYOUT */}
         <Route path="/dashboard" element={<DashboardLayout />}>
 
-          {/* 🔐 MOTHER / PATIENT ROUTES */}
+          {/* 🟣 MOTHER / PATIENT ROUTES */}
           <Route
             path="mother-home"
             element={
@@ -79,15 +82,6 @@ function App() {
             element={
               <ProtectedRoute pageKey="mother">
                 <UserVaccinations />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="user-home"
-            element={
-              <ProtectedRoute pageKey="mother">
-                <MotherDashboard />
               </ProtectedRoute>
             }
           />
@@ -155,7 +149,7 @@ function App() {
             }
           />
 
-          {/* 🔐 ADMIN / STAFF ROUTES */}
+          {/* 🔵 ADMIN / STAFF ROUTES */}
           <Route
             index
             element={
