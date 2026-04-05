@@ -107,8 +107,94 @@ import AuthService from './authservice';
 const authService = new AuthService();
 
 export default class PatientService {
+  static async addPatient(formData) {
+    try {
+      const currentUser = authService.getUser();
+      if (!currentUser) throw new Error("User not logged in");
 
-  static async getPatientById(patientId) {
+      const { data: staffProfile, error: staffError } = await supabase
+        .from('staff_profiles')
+        .select('id, full_name')
+        .eq('id', currentUser.id)
+        .maybeSingle();
+
+      if (staffError) throw staffError;
+      if (!staffProfile) throw new Error("Staff profile not found");
+
+      const createdBy = staffProfile.id;
+
+      const { data: newUser, error: userError } = await supabase
+        .from('Users')
+        .insert([{ email_address: formData.email }])
+        .select()
+        .single();
+
+      if (userError) throw userError;
+
+      const patientId = newUser.id;
+
+      const { error: basicInfoError } = await supabase
+        .from('patient_basic_info')
+        .insert([{
+          id: patientId,
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          suffix: formData.suffix,
+          date_of_birth: formData.dob,
+          bloodtype: formData.bloodType || '', 
+          civil_status: formData.civilStatus,
+          house_no: formData.address,
+          barangay: formData.barangay,
+          municipality: formData.municipality,
+          province: formData.province,
+          philhealthnumber: formData.philhealth,
+          contact_no: formData.contactNumber,
+          created_by: createdBy
+        }]);
+
+      if (basicInfoError) throw basicInfoError;
+
+      const { error: pregError } = await supabase
+        .from('pregnancy_info')
+        .insert([{
+          patient_id: patientId,
+          created_by: createdBy,
+          pregn_postp: formData.pregnancyStatus,
+          lmd: formData.lmp,
+          edd: formData.edd,
+          pregnancy_type: formData.pregnancyType,
+          place_of_delivery: formData.plannedDeliveryPlace
+        }]);
+
+      if (pregError) throw pregError;
+
+      if (formData.firstVisitDate || formData.weight || formData.bp) {
+        const [systolic, diastolic] = formData.bp?.split('/') || [];
+        const { error: prenatalError } = await supabase
+          .from('prenatal_visits')
+          .insert([{
+            patient_id: patientId,
+            created_by: createdBy,
+            visit_date: formData.firstVisitDate,
+            bp_systolic: systolic ? parseInt(systolic) : null,
+            bp_diastolic: diastolic ? parseInt(diastolic) : null,
+            weight_kg: formData.weight || null,
+            fhr_bpm: formData.fhr || null,
+            gestational_age: formData.gestationalAge || null
+          }]);
+
+        if (prenatalError) throw prenatalError;
+      }
+
+      return patientId;
+
+    } catch (err) {
+      console.error("PatientService.addPatient error:", err);
+    throw err;
+  }
+}
+  
+static async getPatientById(patientId) {
     try {
       const { data: basic, error: basicError } = await supabase
         .from('patient_basic_info')
