@@ -19,69 +19,9 @@ const SUMMARY_STATS = [
     { label: 'High-Risk Deliveries', value: 6, color: 'rose', icon: AlertCircle },
 ];
 
-const DELIVERIES = [
-    {
-        id: 'DO-001', patientId: 'PT-2401', patientName: 'Maria Reyes', age: 28, barangay: 'Brgy. 3',
-        deliveryDate: '2026-02-26', deliveryTime: '08:45 AM', deliveryType: 'NSD',
-        gestationalAge: '38w 2d', riskLevel: 'High', complications: 'Elevated BP',
-        babyOutcome: 'Alive', babyWeight: '3.1 kg', babyGender: 'Female',
-        apgar1: 8, apgar5: 9, babyCondition: 'Healthy',
-        staff: 'Midwife Elena P.', facility: 'Main Clinic',
-        postpartumDate: '2026-03-05', notes: 'BP normalized post-delivery.'
-    },
-    {
-        id: 'DO-002', patientId: 'PT-2402', patientName: 'Ana Cruz', age: 32, barangay: 'Brgy. 1',
-        deliveryDate: '2026-02-24', deliveryTime: '02:10 PM', deliveryType: 'CS',
-        gestationalAge: '37w 0d', riskLevel: 'High', complications: 'Placenta Previa',
-        babyOutcome: 'NICU', babyWeight: '2.8 kg', babyGender: 'Male',
-        apgar1: 6, apgar5: 8, babyCondition: 'Special Care',
-        staff: 'Dr. Reyes (OB)', facility: 'Main Clinic',
-        postpartumDate: '2026-03-03', notes: 'CS due to Placenta Previa.'
-    },
-    {
-        id: 'DO-003', patientId: 'PT-2403', patientName: 'Elena Santos', age: 24, barangay: 'Brgy. 5',
-        deliveryDate: '2026-02-20', deliveryTime: '11:30 PM', deliveryType: 'NSD',
-        gestationalAge: '39w 4d', riskLevel: 'Normal', complications: 'None',
-        babyOutcome: 'Alive', babyWeight: '3.4 kg', babyGender: 'Female',
-        apgar1: 9, apgar5: 9, babyCondition: 'Healthy',
-        staff: 'Midwife Ana M.', facility: 'BHS 5',
-        postpartumDate: '2026-03-01', notes: ''
-    },
-    {
-        id: 'DO-004', patientId: 'PT-2404', patientName: 'Rosa Diaz', age: 35, barangay: 'Brgy. 7',
-        deliveryDate: '2026-02-22', deliveryTime: '06:00 AM', deliveryType: 'CS',
-        gestationalAge: '36w 5d', riskLevel: 'Monitor', complications: 'Preterm',
-        babyOutcome: 'NICU', babyWeight: '2.4 kg', babyGender: 'Male',
-        apgar1: 5, apgar5: 7, babyCondition: 'NICU',
-        staff: 'Dr. Reyes (OB)', facility: 'Main Clinic',
-        postpartumDate: '2026-03-01', notes: 'Preterm CS — neonatal team on standby.'
-    },
-    {
-        id: 'DO-005', patientId: 'PT-2405', patientName: 'Clara Gomez', age: 19, barangay: 'Brgy. 2',
-        deliveryDate: '2026-02-18', deliveryTime: '04:15 PM', deliveryType: 'NSD',
-        gestationalAge: '40w 0d', riskLevel: 'Normal', complications: 'None',
-        babyOutcome: 'Alive', babyWeight: '3.6 kg', babyGender: 'Female',
-        apgar1: 9, apgar5: 10, babyCondition: 'Healthy',
-        staff: 'Midwife Elena P.', facility: 'BHS 2',
-        postpartumDate: '2026-02-25', notes: ''
-    },
-    {
-        id: 'DO-006', patientId: 'PT-2406', patientName: 'Luz Ramos', age: 30, barangay: 'Brgy. 4',
-        deliveryDate: '2026-02-15', deliveryTime: '09:50 AM', deliveryType: 'NSD',
-        gestationalAge: '38w 0d', riskLevel: 'Normal', complications: 'Postpartum Hemorrhage',
-        babyOutcome: 'Alive', babyWeight: '3.2 kg', babyGender: 'Male',
-        apgar1: 8, apgar5: 9, babyCondition: 'Healthy',
-        staff: 'Midwife Ana M.', facility: 'Main Clinic',
-        postpartumDate: '2026-02-22', notes: 'Hemorrhage controlled — monitored for 48 hrs.'
-    },
-];
+const DELIVERIES = [];
 
-const ALERTS = [
-    { type: 'critical', text: 'Ana Cruz (DO-002) — baby in NICU, postpartum HIGH RISK', time: '2 days ago' },
-    { type: 'warning', text: 'Rosa Diaz (DO-004) — preterm, newborn tracking required', time: '3 days ago' },
-    { type: 'warning', text: 'Luz Ramos (DO-006) — post-hemorrhage, close monitoring needed', time: '5 days ago' },
-    { type: 'info', text: '3 mothers with CS delivery — wound assessment due this week', time: 'Today' },
-];
+const ALERTS = [];
 
 const COMPLICATION_OPTIONS = ['None', 'Hemorrhage', 'Infection', 'Preeclampsia', 'Placenta Previa', 'Preterm'];
 const STAFF_LIST = ['Midwife Elena P.', 'Midwife Ana M.', 'Dr. Reyes (OB)', 'Nurse Bea'];

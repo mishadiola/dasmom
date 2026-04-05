@@ -126,9 +126,12 @@ const AddPrenatalVisit = () => {
     // Handlers
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
+        const isText = type === 'text' || e.target.tagName === 'TEXTAREA';
+        const finalValue = isText ? value.toUpperCase() : value;
+
         setFormData(prev => ({
             ...prev,
-            [name]: type === 'checkbox' ? checked : value
+            [name]: type === 'checkbox' ? checked : finalValue
         }));
     };
 
@@ -156,7 +159,8 @@ const AddPrenatalVisit = () => {
         <div className="add-pvisit-page">
             {toast && (
                 <div className={`toast toast--${toast.type}`}>
-                    {toast.type === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />} {toast.message}
+                    <span>{toast.type === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />} {toast.message}</span>
+                    <button className="toast-close" onClick={() => setToast(null)}><X size={14} /></button>
                 </div>
             )}
 

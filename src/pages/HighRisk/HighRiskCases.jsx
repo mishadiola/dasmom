@@ -16,22 +16,9 @@ const STATS = [
     { id: 4, label: 'Needs Immediate Visit', value: 8, color: 'sage', icon: AlertCircle },
 ];
 
-const HIGH_RISK_PATIENTS = [
-    { id: 'HR-2026-01', name: 'Jane Rose M. Tadeo', age: 28, barangay: 'Brgy. 1', weeks: 32, condition: 'Preeclampsia', level: 'critical', bp: '160/100', lastVisit: '1 week ago', nextVisit: 'Mar 10, 2026', status: 'Needs Visit' },
-    { id: 'HR-2026-02', name: 'Safia C. Baig', age: 30, barangay: 'Brgy. 7', weeks: 36, condition: 'Anemia', level: 'critical', bp: '135/85', lastVisit: '3 days ago', nextVisit: 'Mar 12, 2026', status: 'Upcoming' },
-    { id: 1, name: 'Maria Reyes', age: 31, barangay: 'Brgy. 3', weeks: 32, condition: 'Preeclampsia', level: 'critical', bp: '160/100', lastVisit: '2 days ago', nextVisit: 'Today', status: 'Needs Visit' },
-    { id: 2, name: 'Susan Flores', age: 28, barangay: 'Brgy. 1', weeks: 28, condition: 'Gestational Diabetes', level: 'warning', bp: '130/85', lastVisit: '1 week ago', nextVisit: 'Tomorrow', status: 'Upcoming' },
-    { id: 3, name: 'Nora Villanueva', age: 35, barangay: 'Brgy. 5', weeks: 36, condition: 'Placenta Previa', level: 'critical', bp: '125/80', lastVisit: 'Yesterday', nextVisit: 'In 3 days', status: 'Upcoming' },
-    { id: 4, name: 'Ruth Gonzalez', age: 24, barangay: 'Brgy. 7', weeks: 24, condition: 'Anemia', level: 'monitor', bp: '110/70', lastVisit: '2 weeks ago', nextVisit: 'Overdue', status: 'Missed' },
-    { id: 5, name: 'Elena Cruz', age: 29, barangay: 'Brgy. 2', weeks: 30, condition: 'Multiple Pregnancy', level: 'warning', bp: '120/80', lastVisit: '4 days ago', nextVisit: 'Next week', status: 'Upcoming' },
-    { id: 6, name: 'Grace Lim', age: 38, barangay: 'Brgy. 4', weeks: 18, condition: 'Advanced Maternal Age', level: 'monitor', bp: '118/75', lastVisit: '1 month ago', nextVisit: 'Next week', status: 'Upcoming' },
-];
+const HIGH_RISK_PATIENTS = [];
 
-const ALERTS = [
-    { id: 1, text: 'Maria Reyes has critically high BP (160/100)', type: 'critical', time: '10 mins ago' },
-    { id: 2, text: 'Ruth Gonzalez missed her 24-week visit', type: 'warning', time: '2 hours ago' },
-    { id: 3, text: '3 patients need follow-up for Gestational Diabetes', type: 'info', time: '5 hours ago' },
-];
+const ALERTS = [];
 
 const BARANGAY_DISTRIBUTION = [
     { name: 'Brgy. 1 – Poblacion', count: 6 },

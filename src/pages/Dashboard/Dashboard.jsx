@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import {
     Users, Baby, AlertTriangle, CalendarCheck, TrendingUp,
     TrendingDown, Activity, Syringe, HeartPulse, MapPin,
-    Clock, ChevronRight, Plus, FileText, Eye, Filter,
+    ChevronRight, Plus, FileText, Eye, Filter,
     CheckCircle2, XCircle, Circle, Dot, MoreHorizontal,
-    ArrowUpRight, Package, Star
+    ArrowUpRight, Star
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/Dashboard.css';
 import AuthService from '../../services/authservice';
+import supabase from '../../config/supabaseclient';
 
 const authService = new AuthService();
 
@@ -16,50 +17,16 @@ const authService = new AuthService();
 /* ════════════════════════════
    MOCK DATA
 ════════════════════════════ */
-const STATS = [
-    {
-        id: 1, label: 'Total Pregnant Patients', value: 284,
-        change: +12, trend: 'up', sub: 'this month',
-        icon: HeartPulse, color: 'rose', path: '/dashboard/patients'
-    },
-    {
-        id: 2, label: 'High-Risk Pregnancies', value: 43,
-        change: -3, trend: 'down', sub: 'vs last month',
-        icon: AlertTriangle, color: 'orange', path: '/dashboard/high-risk'
-    },
-    {
-        id: 3, label: 'Newborns Registered', value: 31,
-        change: +8, trend: 'up', sub: 'this month',
-        icon: Baby, color: 'pink', path: '/dashboard/newborns'
-    },
-    {
-        id: 4, label: 'Appointments Today', value: 18,
-        change: 0, trend: 'neutral', sub: '6 pending confirmation',
-        icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal'
-    },
+const STAT_META = [
+    { id: 1, label: 'Total Pregnant Patients', key: 'totalPatients', trend: 'up', sub: 'registered in system', icon: HeartPulse, color: 'rose', path: '/dashboard/patients' },
+    { id: 2, label: 'High-Risk Pregnancies',   key: 'highRisk',      trend: 'up', sub: 'marked high risk',    icon: AlertTriangle, color: 'orange', path: '/dashboard/high-risk' },
+    { id: 3, label: 'Newborns Registered',      key: 'newborns',      trend: 'up', sub: 'birth records',        icon: Baby, color: 'pink', path: '/dashboard/newborns' },
+    { id: 4, label: 'Appointments Today',       key: 'apptToday',     trend: 'neutral', sub: 'scheduled today', icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal' },
 ];
 
-const UPCOMING_APPTS = [
-    { id: 'UA-1', name: 'Naomi Nicole C. Magsino', age: 24, weeks: 24, time: '8:00 AM', type: 'Prenatal', barangay: 'Brgy. 3', risk: 'normal' },
-    { id: 'UA-2', name: 'Jane Rose M. Tadeo', age: 28, weeks: 32, time: '9:30 AM', type: 'High-Risk', risk: 'high' },
-    { id: 'UA-3', name: 'Bhea Mae E. Tria', age: 22, weeks: 10, time: '10:00 AM', type: 'Routine', risk: 'monitor' },
-    { id: 'UA-4', name: 'Guila C. Valdesimo', age: 26, weeks: 20, time: '11:00 AM', type: 'Prenatal', risk: 'normal' },
-    { id: 'UA-5', name: 'Safia C. Baig', age: 30, weeks: 36, time: '2:00 PM', type: 'Follow-up', risk: 'high' },
-    { id: 1, name: 'Maria Reyes', age: 28, weeks: 32, time: '8:00 AM', type: 'Prenatal', barangay: 'Brgy. 3', risk: 'high' },
-    { id: 2, name: 'Ana Cruz', age: 24, weeks: 20, time: '9:30 AM', type: 'Prenatal', barangay: 'Brgy. 7', risk: 'normal' },
-    { id: 3, name: 'Lorna Santos', age: 33, weeks: 36, time: '10:00 AM', type: 'Follow-up', barangay: 'Brgy. 1', risk: 'monitor' },
-    { id: 4, name: 'Cristina Dela Cruz', age: 29, weeks: 14, time: '11:00 AM', type: 'Prenatal', barangay: 'Brgy. 5', risk: 'normal' },
-    { id: 5, name: 'Joy Bautista', age: 21, weeks: 28, time: '2:00 PM', type: 'Prenatal', barangay: 'Brgy. 2', risk: 'monitor' },
-];
+const UPCOMING_APPTS = [];
 
-const HIGH_RISK = [
-    { id: 'HR-1', name: 'Jane Rose M. Tadeo', weeks: 32, condition: 'Preeclampsia', bp: '160/100', lastVisit: '1 week ago', status: 'critical' },
-    { id: 'HR-2', name: 'Safia C. Baig', weeks: 36, condition: 'Anemia', bp: '135/85', lastVisit: '3 days ago', status: 'warning' },
-    { id: 1, name: 'Maria Reyes', weeks: 32, condition: 'Preeclampsia', bp: '150/95', lastVisit: '2 days ago', status: 'critical' },
-    { id: 2, name: 'Susan Flores', weeks: 28, condition: 'Gestional Diabetes', bp: '130/85', lastVisit: '5 days ago', status: 'warning' },
-    { id: 3, name: 'Nora Villanueva', weeks: 36, condition: 'Placenta Previa', bp: '125/80', lastVisit: '1 day ago', status: 'critical' },
-    { id: 4, name: 'Ruth Gonzalez', weeks: 24, condition: 'Anemia', bp: '110/70', lastVisit: '3 days ago', status: 'warning' },
-];
+const HIGH_RISK = [];
 
 const VACCINE_STOCK = [
     { name: 'Tetanus Toxoid (TT)', stock: 12, min: 20, unit: 'vials', status: 'low' },
@@ -80,12 +47,7 @@ const BARANGAY_DATA = [
     { name: 'Brgy. 7 – Daan Paso', total: 47, highRisk: 10, newborns: 4 },
 ];
 
-const RECENT_DELIVERIES = [
-    { id: 1, mother: 'Elena Torres', date: 'Feb 26', type: 'NSD', outcome: 'Good', newborn: 'Girl, 3.1 kg' },
-    { id: 2, mother: 'Grace Padilla', date: 'Feb 25', type: 'CS', outcome: 'Good', newborn: 'Boy, 2.9 kg' },
-    { id: 3, mother: 'Mylene Aquino', date: 'Feb 24', type: 'NSD', outcome: 'Monitor', newborn: 'Girl, 2.4 kg' },
-    { id: 4, mother: 'Daisy Ramos', date: 'Feb 22', type: 'NSD', outcome: 'Good', newborn: 'Boy, 3.3 kg' },
-];
+const RECENT_DELIVERIES = [];
 
 const MiniBar = ({ value, max, color }) => (
     <div className="mini-bar-track">
@@ -110,6 +72,32 @@ const TrimesterBadge = ({ weeks }) => {
 const Dashboard = () => {
     const navigate = useNavigate();
     const [user, setUser] = useState(null);
+    const [liveStats, setLiveStats] = useState({ totalPatients: 0, highRisk: 0, newborns: 0, apptToday: 0 });
+
+    useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                const todayStr = new Date().toISOString().split('T')[0];
+
+                const [{ count: totalPatients }, { count: highRisk }, { count: newborns }, { count: apptToday }] = await Promise.all([
+                    supabase.from('patient_basic_info').select('id', { count: 'exact', head: true }),
+                    supabase.from('pregnancy_info').select('id', { count: 'exact', head: true }).eq('risk_level', 'High Risk'),
+                    supabase.from('newborn_records').select('id', { count: 'exact', head: true }),
+                    supabase.from('prenatal_visits').select('id', { count: 'exact', head: true }).eq('visit_date', todayStr),
+                ]);
+
+                setLiveStats({
+                    totalPatients: totalPatients ?? 0,
+                    highRisk: highRisk ?? 0,
+                    newborns: newborns ?? 0,
+                    apptToday: apptToday ?? 0,
+                });
+            } catch (err) {
+                console.error('Failed to load dashboard stats:', err);
+            }
+        };
+        fetchStats();
+    }, []);
 
     useEffect(() => {
         const currentUser = authService.getUser();
@@ -188,47 +176,38 @@ const Dashboard = () => {
                 <div className="page-header-empty"></div>
             </div>
 
-            {/* ── Welcome Banner ── */}
+            {/* ── Welcome Banner + Quick Actions ── */}
             <div className="welcome-banner">
                 <div className="welcome-left">
                     <p className="welcome-greeting">Good morning, {displayName} <span className="wave-emoji">👋</span></p>
                     <p className="welcome-sub">
-                        You have <strong>18 appointments</strong> today and <strong>3 high-risk alerts</strong> requiring attention.
+                        You have <strong>{liveStats.apptToday} appointments</strong> today and <strong>{liveStats.highRisk} high-risk alerts</strong> requiring attention.
                     </p>
                 </div>
-                <div className="welcome-pills">
-                    <span className="pill pill--alert"><AlertTriangle size={12} />3 Critical Alerts</span>
-                    <span className="pill pill--warning"><Clock size={12} />2 Missed Visits</span>
-                    <span className="pill pill--info"><Package size={12} />2 Low Stock Items</span>
-                </div>
-            </div>
-
-            {/* ── Quick Actions (full-width, below greeting) ── */}
-            <div className="card quick-actions-card">
-                <div className="card-header">
-                    <h2 className="card-title">Quick Actions</h2>
-                </div>
-                <p className="card-description">Shortcuts to frequently used administrative actions.</p>
-                <div className="quick-actions-grid quick-actions-grid--row">
-                    {[
-                        { label: 'Add Patient', icon: Users, color: 'rose', path: '/dashboard/patients/add' },
-                        { label: 'Schedule Visit', icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal', state: { openBooking: true } },
-                        { label: 'Record Vitals', icon: Activity, color: 'blue', path: '/dashboard/patients' },
-                        { label: 'Log Delivery', icon: Baby, color: 'pink', path: '/dashboard/deliveries' },
-                        { label: 'Issue Vaccine', icon: Syringe, color: 'orange', path: '/dashboard/vaccinations' },
-                        { label: 'Generate Report', icon: FileText, color: 'purple', path: '/dashboard/analytics' },
-                    ].map(({ label, icon: Icon, color, path, state }) => (
-                        <button key={label} className={`quick-btn quick-btn--${color}`} onClick={() => navigate(path, state ? { state } : undefined)}>
-                            <Icon size={18} />
-                            <span>{label}</span>
-                        </button>
-                    ))}
+                <div className="welcome-actions-panel">
+                    <p className="welcome-actions-title">Quick Actions</p>
+                    <div className="welcome-actions">
+                        {[
+                            { label: 'Add Patient', icon: Users, color: 'rose', path: '/dashboard/patients/add' },
+                            { label: 'Schedule Visit', icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal', state: { openBooking: true } },
+                            { label: 'Record Vitals', icon: Activity, color: 'blue', path: '/dashboard/patients' },
+                            { label: 'Log Delivery', icon: Baby, color: 'pink', path: '/dashboard/deliveries' },
+                            { label: 'Issue Vaccine', icon: Syringe, color: 'orange', path: '/dashboard/vaccinations' },
+                            { label: 'Generate Report', icon: FileText, color: 'purple', path: '/dashboard/analytics' },
+                        ].map(({ label, icon: Icon, color, path, state }) => (
+                            <button key={label} className={`quick-btn quick-btn--${color}`} onClick={() => navigate(path, state ? { state } : undefined)}>
+                                <Icon size={15} />
+                                <span>{label}</span>
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
 
             {/* ── Stat Cards ── */}
             <div className="stats-grid">
-                {STATS.map((s) => {
+                {STAT_META.map((s) => {
+                    const value = liveStats[s.key] ?? 0;
                     const Icon = s.icon;
                     return (
                         <div 
@@ -244,13 +223,10 @@ const Dashboard = () => {
                                 <span className={`stat-trend stat-trend--${s.trend}`}>
                                     {s.trend === 'up' && <TrendingUp size={13} />}
                                     {s.trend === 'down' && <TrendingDown size={13} />}
-                                    {s.change !== 0
-                                        ? `${s.trend === 'up' ? '+' : ''}${s.change}`
-                                        : '—'
-                                    }
+                                    {'—'}
                                 </span>
                             </div>
-                            <div className="stat-value">{s.value}</div>
+                            <div className="stat-value">{value}</div>
                             <div className="stat-label">{s.label}</div>
                             <div className="stat-sub">{s.sub}</div>
                         </div>

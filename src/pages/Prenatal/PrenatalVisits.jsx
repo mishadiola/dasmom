@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import ScheduledVisitModal from '../../components/Prenatal/ScheduledVisitModal';
 import '../../styles/pages/PrenatalVisits.css';
+import PatientService from '../../services/patientservice';
 
 // ── Mock Data ──
 const TIME_SLOTS = [
@@ -16,47 +17,11 @@ const TIME_SLOTS = [
     '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM', '04:00 PM'
 ];
 
-const MOCK_APPOINTMENTS = [
-    { id: 'T-1', date: '2026-03-01', time: '08:00 AM', patient: 'Naomi Nicole C. Magsino', type: 'Prenatal', risk: 'Normal', status: 'Completed', midwife: 'Elena P.' },
-    { id: 'T-2', date: '2026-03-01', time: '08:30 AM', patient: 'Jane Rose M. Tadeo', type: 'High-Risk', risk: 'High', status: 'Waiting', midwife: 'Elena P.' },
-    { id: 'T-3', date: '2026-03-01', time: '10:00 AM', patient: 'Bhea Mae E. Tria', type: 'Routine', risk: 'Monitor', status: 'Upcoming', midwife: 'Elena P.' },
-    { id: 'T-4', date: '2026-03-01', time: '11:00 AM', patient: 'Guila C. Valdesimo', type: 'Prenatal', risk: 'Normal', status: 'Upcoming', midwife: 'Ana M.' },
-    { id: 'T-5', date: '2026-03-01', time: '01:00 PM', patient: 'Safia C. Baig', type: 'Follow-up', risk: 'High', status: 'Upcoming', midwife: 'Ana M.' },
-    { id: 1, date: '2026-02-28', time: '08:00 AM', patient: 'Maria Santos', type: 'Routine', risk: 'Normal', status: 'Completed', midwife: 'Elena P.' },
-    { id: 2, date: '2026-02-28', time: '08:30 AM', patient: 'Ana Cruz', type: 'High-Risk', risk: 'High', status: 'Waiting', midwife: 'Elena P.' },
-    { id: 3, date: '2026-02-28', time: '10:00 AM', patient: 'Luz Reyes', type: 'Routine', risk: 'Normal', status: 'Upcoming', midwife: 'Elena P.' },
-    { id: 4, date: '2026-02-27', time: '09:00 AM', patient: 'Rosa Diaz', type: 'Routine', risk: 'Monitor', status: 'Completed', midwife: 'Ana M.' },
-    { id: 5, date: '2026-02-28', time: '01:00 PM', patient: 'Clara Gomez', type: 'Follow-up', risk: 'High', status: 'Upcoming', midwife: 'Ana M.' }
-];
+const MOCK_APPOINTMENTS = [];
 
-const MOCK_VISITS_TABLE = [
-    { id: 'PV-2026-01', patientId: 'PT-2026-N1', patientName: 'Naomi Nicole C. Magsino', visitDate: '2026-03-01', ga: '24w 2d', trimester: 2, bp: '110/70', weight: '58 kg', risk: 'Normal', nextVisit: '2026-03-29', status: 'Completed' },
-    { id: 'PV-2026-02', patientId: 'PT-2026-J2', patientName: 'Jane Rose M. Tadeo', visitDate: '2026-03-01', ga: '32w 0d', trimester: 3, bp: '140/90', weight: '65 kg', risk: 'High Risk', nextVisit: '2026-03-08', status: 'Upcoming' },
-    { id: 'PV-2026-03', patientId: 'PT-2026-B3', patientName: 'Bhea Mae E. Tria', visitDate: '2026-03-01', ga: '10w 4d', trimester: 1, bp: '115/75', weight: '52 kg', risk: 'Low Risk', nextVisit: '2026-03-22', status: 'Upcoming' },
-    { id: 'PV-2026-04', patientId: 'PT-2026-G4', patientName: 'Guila C. Valdesimo', visitDate: '2026-03-01', ga: '20w 1d', trimester: 2, bp: '120/80', weight: '60 kg', risk: 'Normal', nextVisit: '2026-03-29', status: 'Completed' },
-    { id: 'PV-2026-05', patientId: 'PT-2026-S5', patientName: 'Safia C. Baig', visitDate: '2026-03-01', ga: '36w 5d', trimester: 3, bp: '135/85', weight: '68 kg', risk: 'High Risk', nextVisit: '2026-03-08', status: 'Upcoming' },
-    { id: 'PV-1001', patientId: 'PT-2401', patientName: 'Maria Santos', visitDate: '2026-02-28', ga: '24w 2d', trimester: 2, bp: '120/80', weight: '62 kg', risk: 'Normal', nextVisit: '2026-03-28', status: 'Completed' },
-    { id: 'PV-1002', patientId: 'PT-2402', patientName: 'Ana Cruz', visitDate: '2026-02-28', ga: '36w 1d', trimester: 3, bp: '145/95', weight: '75 kg', risk: 'High Risk', nextVisit: '2026-03-05', status: 'Upcoming' },
-    { id: 'PV-1003', patientId: 'PT-2403', patientName: 'Elena Ramos', visitDate: '2026-02-25', ga: '12w 5d', trimester: 1, bp: '110/70', weight: '55 kg', risk: 'Low Risk', nextVisit: '2026-03-25', status: 'Completed' },
-    { id: 'PV-1004', patientId: 'PT-2404', patientName: 'Rosa Diaz', visitDate: '2026-03-01', ga: '30w 3d', trimester: 3, bp: '130/85', weight: '70 kg', risk: 'High Risk', nextVisit: '2026-03-07', status: 'Upcoming' },
-    { id: 'PV-1005', patientId: 'PT-2405', patientName: 'Clara Gomez', visitDate: '2026-02-20', ga: '20w 0d', trimester: 2, bp: '118/76', weight: '60 kg', risk: 'Normal', nextVisit: '2026-03-20', status: 'Completed' },
-];
+const MOCK_VISITS_TABLE = [];
 
-const MOCK_PATIENTS = [
-    { id: 'PT-2026-N1', name: 'Naomi Nicole C. Magsino', risk: 'Normal' },
-    { id: 'PT-2026-J2', name: 'Jane Rose M. Tadeo', risk: 'High' },
-    { id: 'PT-2026-B3', name: 'Bhea Mae E. Tria', risk: 'Monitor' },
-    { id: 'PT-2026-G4', name: 'Guila C. Valdesimo', risk: 'Normal' },
-    { id: 'PT-2026-S5', name: 'Safia C. Baig', risk: 'High' },
-    { id: 'PT-100', name: 'Carla Reyes', risk: 'Normal' },
-    { id: 'PT-101', name: 'Bea Alonzo', risk: 'High' },
-    { id: 'PT-102', name: 'Sarah G.', risk: 'Monitor' },
-    { id: 'PT-103', name: 'Maria Santos', risk: 'Normal' },
-    { id: 'PT-104', name: 'Ana Cruz', risk: 'High' },
-    { id: 'PT-105', name: 'Elena Ramos', risk: 'Normal' },
-    { id: 'PT-106', name: 'Rosa Diaz', risk: 'High' },
-    { id: 'PT-107', name: 'Clara Gomez', risk: 'Monitor' },
-];
+const MOCK_PATIENTS = [];
 
 const STAFF_LIST = ['Midwife Elena P.', 'Midwife Ana M.', 'Dr. Reyes (OB)'];
 
@@ -141,7 +106,7 @@ const PrenatalVisits = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('All');
     const [bookingPanelOpen, setBookingPanelOpen] = useState(false);
-    const [currentDate, setCurrentDate] = useState(new Date('2026-02-28T12:00:00'));
+    const [currentDate, setCurrentDate] = useState(new Date());
     const [toast, setToast] = useState(null);
     const [calendarView, setCalendarView] = useState('week'); // 'day' | 'week' | 'month'
     const [selectedVisit, setSelectedVisit] = useState(null);
@@ -156,6 +121,24 @@ const PrenatalVisits = () => {
         location: 'Main Clinic - Rm 1'
     });
     const [conflictWarning, setConflictWarning] = useState(null);
+    const [livePatients, setLivePatients] = useState([]);
+
+    useEffect(() => {
+        const fetchPatients = async () => {
+            try {
+                const data = await PatientService.getAllPatients();
+                const mapped = data.map(p => ({
+                    id: p.id,
+                    name: p.name,
+                    risk: p.risk || 'Normal'
+                }));
+                setLivePatients(mapped);
+            } catch (err) {
+                console.error("Failed to load patients for search:", err);
+            }
+        };
+        fetchPatients();
+    }, []);
 
     // ── Auto-open booking panel when navigated from Patient list ──
     useEffect(() => {
@@ -334,11 +317,17 @@ const PrenatalVisits = () => {
         return '';
     };
 
-    const TODAY = '2026-02-28';
+    const todayObj = new Date();
+    const TODAY = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, '0')}-${String(todayObj.getDate()).padStart(2, '0')}`;
 
     return (
         <div className="prenatal-visits-overall">
-            {toast && <div className="toast toast--success"><CheckCircle2 size={16} /> {toast}</div>}
+            {toast && (
+                <div className="toast toast--success">
+                    <span><CheckCircle2 size={16} /> {toast}</span>
+                    <button className="toast-close" onClick={() => setToast(null)}><X size={14} /></button>
+                </div>
+            )}
 
             <div className="page-header">
                 <div>
@@ -548,7 +537,7 @@ const PrenatalVisits = () => {
                             <div className="form-group mt-4">
                                 <label>Select Patient</label>
                                 <SearchableDropdown
-                                    patients={MOCK_PATIENTS}
+                                    patients={livePatients}
                                     value={bookingData.patientId}
                                     onChange={handleSelectPatient}
                                 />

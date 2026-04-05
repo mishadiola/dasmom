@@ -141,7 +141,7 @@ export default class PatientService {
           last_name: formData.lastName,
           suffix: formData.suffix,
           date_of_birth: formData.dob,
-          bloodtype: formData.bloodType || '', 
+          bloodtype: formData.bloodType || null, 
           civil_status: formData.civilStatus,
           house_no: formData.address,
           barangay: formData.barangay,
@@ -160,8 +160,8 @@ export default class PatientService {
           patient_id: patientId,
           created_by: createdBy,
           pregn_postp: formData.pregnancyStatus,
-          lmd: formData.lmp,
-          edd: formData.edd,
+          lmd: formData.lmp || null,
+          edd: formData.edd || null,
           pregnancy_type: formData.pregnancyType,
           place_of_delivery: formData.plannedDeliveryPlace
         }]);
@@ -175,7 +175,7 @@ export default class PatientService {
           .insert([{
             patient_id: patientId,
             created_by: createdBy,
-            visit_date: formData.firstVisitDate,
+            visit_date: formData.firstVisitDate || null,
             bp_systolic: systolic ? parseInt(systolic) : null,
             bp_diastolic: diastolic ? parseInt(diastolic) : null,
             weight_kg: formData.weight || null,

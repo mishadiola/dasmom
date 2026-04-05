@@ -779,6 +779,24 @@
     to   { opacity: 1; transform: translateY(0); }
 }
 
+.toast-close {
+    background: transparent;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 0;
+    margin-left: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.toast-close:hover {
+    opacity: 1;
+}
+
 @media (max-width: 680px) {
     .vm-grid {
         grid-template-columns: 1fr;

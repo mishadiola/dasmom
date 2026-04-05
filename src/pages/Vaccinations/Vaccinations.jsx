@@ -18,25 +18,9 @@ const SUMMARY_STATS = [
     { label: 'Low Stock Items', value: 3, color: 'rose', icon: Package },
 ];
 
-const VACCINES = [
-    { id: 'V-001', patientId: 'PT-2401', patientName: 'Maria Reyes', type: 'Mother', vaccine: 'Tetanus Toxoid (TT)', dose: '2nd Dose', dateAdministered: '2026-02-20', nextDue: '2026-04-20', status: 'Pending', staff: 'Nurse Ana', barangay: 'Brgy. 3' },
-    { id: 'V-002', patientId: 'NB-0101', patientName: 'Baby Santos', type: 'Newborn', vaccine: 'BCG', dose: '1st Dose', dateAdministered: '2026-02-22', nextDue: null, status: 'Completed', staff: 'Midwife Elena', barangay: 'Brgy. 1' },
-    { id: 'V-003', patientId: 'PT-2403', patientName: 'Elena Santos', type: 'Mother', vaccine: 'Tetanus Toxoid (TT)', dose: '1st Dose', dateAdministered: '2026-01-15', nextDue: '2026-02-15', status: 'Overdue', staff: 'Nurse Bea', barangay: 'Brgy. 5' },
-    { id: 'V-004', patientId: 'NB-0203', patientName: 'Baby Cruz', type: 'Newborn', vaccine: 'Hepatitis B (HepB)', dose: '1st Dose', dateAdministered: '2026-02-28', nextDue: '2026-03-28', status: 'Pending', staff: 'Midwife Ana', barangay: 'Brgy. 2' },
-    { id: 'V-005', patientId: 'PT-2404', patientName: 'Rosa Diaz', type: 'Mother', vaccine: 'Influenza', dose: 'Annual', dateAdministered: '2026-02-10', nextDue: '2027-02-10', status: 'Completed', staff: 'Dr. Reyes', barangay: 'Brgy. 7' },
-    { id: 'V-006', patientId: 'NB-0305', patientName: 'Baby Gomez', type: 'Newborn', vaccine: 'OPV', dose: '1st Dose', dateAdministered: '2026-02-25', nextDue: '2026-03-25', status: 'Pending', staff: 'Nurse Ana', barangay: 'Brgy. 2' },
-    { id: 'V-007', patientId: 'PT-2405', patientName: 'Clara Gomez', type: 'Mother', vaccine: 'Tetanus Toxoid (TT)', dose: '3rd Dose', dateAdministered: '2026-01-05', nextDue: '2026-02-05', status: 'Overdue', staff: 'Midwife Elena', barangay: 'Brgy. 4' },
-    { id: 'V-008', patientId: 'NB-0407', patientName: 'Baby Ramos', type: 'Newborn', vaccine: 'BCG', dose: '1st Dose', dateAdministered: null, nextDue: '2026-03-05', status: 'Pending', staff: '—', barangay: 'Brgy. 6' },
-];
+const VACCINES = [];
 
-const SUPPLEMENTS = [
-    { id: 'S-001', patientId: 'PT-2401', patientName: 'Maria Reyes', type: 'Mother', supplement: 'Iron', dose: '60 mg/day', startDate: '2026-01-10', endDate: '2026-04-10', status: 'Ongoing', staff: 'Nurse Ana', barangay: 'Brgy. 3' },
-    { id: 'S-002', patientId: 'PT-2402', patientName: 'Ana Cruz', type: 'Mother', supplement: 'Folic Acid', dose: '400 mcg/day', startDate: '2026-02-01', endDate: '2026-05-01', status: 'Ongoing', staff: 'Midwife Elena', barangay: 'Brgy. 1' },
-    { id: 'S-003', patientId: 'PT-2403', patientName: 'Elena Santos', type: 'Mother', supplement: 'Calcium', dose: '500 mg/day', startDate: '2026-01-15', endDate: '2026-04-15', status: 'Missed', staff: 'Nurse Bea', barangay: 'Brgy. 5' },
-    { id: 'S-004', patientId: 'NB-0101', patientName: 'Baby Santos', type: 'Newborn', supplement: 'Vitamin D', dose: '400 IU/day', startDate: '2026-02-22', endDate: '2026-08-22', status: 'Ongoing', staff: 'Midwife Elena', barangay: 'Brgy. 1' },
-    { id: 'S-005', patientId: 'PT-2405', patientName: 'Clara Gomez', type: 'Mother', supplement: 'Iron', dose: '60 mg/day', startDate: '2026-01-30', endDate: '2026-04-30', status: 'Missed', staff: 'Midwife Ana', barangay: 'Brgy. 4' },
-    { id: 'S-006', patientId: 'PT-2406', patientName: 'Luz Ramos', type: 'Mother', supplement: 'Folic Acid', dose: '400 mcg/day', startDate: '2025-09-01', endDate: '2026-01-01', status: 'Completed', staff: 'Nurse Ana', barangay: 'Brgy. 6' },
-];
+const SUPPLEMENTS = [];
 
 const STOCK = [
     { item: 'Tetanus Toxoid (TT)', quantity: 12, unit: 'vials', threshold: 20, status: 'Low' },
@@ -49,12 +33,7 @@ const STOCK = [
     { item: 'OPV', quantity: 22, unit: 'vials', threshold: 15, status: 'Sufficient' },
 ];
 
-const STOCK_ALERTS = [
-    { text: 'Iron Tablets critically low — only 320 remaining', type: 'critical', time: '1 hour ago' },
-    { text: 'Folic Acid stock below threshold — reorder needed', type: 'critical', time: '2 hours ago' },
-    { text: 'Tetanus Toxoid (TT) running low — 12 vials left', type: 'warning', time: '5 hours ago' },
-    { text: 'Elena Santos TT 1st dose is 2 weeks overdue', type: 'warning', time: 'Yesterday' },
-];
+const STOCK_ALERTS = [];
 
 const VACCINE_TYPES = ['Tetanus Toxoid (TT)', 'BCG', 'Hepatitis B (HepB)', 'Influenza', 'OPV', 'DPT'];
 const SUPPLEMENT_TYPES = ['Iron', 'Folic Acid', 'Calcium', 'Vitamin D'];

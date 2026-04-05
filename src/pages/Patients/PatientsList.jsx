@@ -334,7 +334,8 @@ const PatientsList = () => {
 
         {vitalToast && (
             <div className="vm-toast">
-                <CheckCircle2 size={16} /> Vital signs record saved successfully!
+                <span><CheckCircle2 size={16} /> Vital signs record saved successfully!</span>
+                <button className="toast-close" onClick={() => setVitalToast(false)}><X size={14} /></button>
             </div>
         )}
         </>

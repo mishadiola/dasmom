@@ -19,114 +19,9 @@ const SUMMARY_STATS = [
     { label: 'Recovered Mothers', value: 27, color: 'sage', icon: CheckCircle2 },
 ];
 
-const MOCK_MOTHERS = [
-    {
-        id: 'PP-2026-01', patientId: 'PT-2026-N1', name: 'Naomi Nicole C. Magsino', age: 24,
-        barangay: 'Brgy. 3', deliveryDate: '2026-02-28', deliveryType: 'NSD',
-        daysPostpartum: 6, babyOutcome: 'Alive', recoveryStatus: 'Normal',
-        lastCheckup: '2026-03-01', nextFollowUp: '2026-03-14',
-        complications: 'None', followUpStatus: 'Upcoming',
-        weight: '58 kg', bp: '110/70', temp: '36.5°C',
-        progress: 95,
-    },
-    {
-        id: 'PP-2026-02', patientId: 'PT-2026-J2', name: 'Jane Rose M. Tadeo', age: 28,
-        barangay: 'Brgy. 1', deliveryDate: '2026-02-25', deliveryType: 'CS',
-        daysPostpartum: 9, babyOutcome: 'Alive', recoveryStatus: 'Monitoring',
-        lastCheckup: '2026-03-01', nextFollowUp: '2026-03-10',
-        complications: 'Preeclampsia History', followUpStatus: 'Upcoming',
-        weight: '65 kg', bp: '140/90', temp: '36.7°C',
-        progress: 75,
-    },
-    {
-        id: 'PP-2026-03', patientId: 'PT-2026-B3', name: 'Bhea Mae E. Tria', age: 22,
-        barangay: 'Brgy. 5', deliveryDate: '2026-03-01', deliveryType: 'NSD',
-        daysPostpartum: 5, babyOutcome: 'Alive', recoveryStatus: 'Normal',
-        lastCheckup: '2026-03-05', nextFollowUp: '2026-03-12',
-        complications: 'None', followUpStatus: 'Upcoming',
-        weight: '52 kg', bp: '115/75', temp: '36.6°C',
-        progress: 90,
-    },
-    {
-        id: 'PP-2026-04', patientId: 'PT-2026-G4', name: 'Guila C. Valdesimo', age: 26,
-        barangay: 'Brgy. 2', deliveryDate: '2026-02-20', deliveryType: 'NSD',
-        daysPostpartum: 14, babyOutcome: 'Alive', recoveryStatus: 'Normal',
-        lastCheckup: '2026-03-01', nextFollowUp: '2026-03-15',
-        complications: 'None', followUpStatus: 'Completed',
-        weight: '60 kg', bp: '120/80', temp: '36.4°C',
-        progress: 100,
-    },
-    {
-        id: 'PP-2026-05', patientId: 'PT-2026-S5', name: 'Safia C. Baig', age: 30,
-        barangay: 'Brgy. 7', deliveryDate: '2026-02-27', deliveryType: 'CS',
-        daysPostpartum: 7, babyOutcome: 'Alive', recoveryStatus: 'Complication',
-        lastCheckup: '2026-03-01', nextFollowUp: '2026-03-08',
-        complications: 'Anemia', followUpStatus: 'Upcoming',
-        weight: '68 kg', bp: '135/85', temp: '36.8°C',
-        progress: 60,
-    },
-    {
-        id: 'PP-001', patientId: 'PT-2401', name: 'Maria Reyes', age: 28,
-        barangay: 'Brgy. 3', deliveryDate: '2026-02-10', deliveryType: 'NSD',
-        daysPostpartum: 18, babyOutcome: 'Alive', recoveryStatus: 'Monitoring',
-        lastCheckup: '2026-02-22', nextFollowUp: '2026-03-03',
-        complications: 'Elevated BP', followUpStatus: 'Upcoming',
-        weight: '58 kg', bp: '140/90', temp: '36.8°C',
-        progress: 65,
-    },
-    {
-        id: 'PP-002', patientId: 'PT-2402', name: 'Ana Cruz', age: 32,
-        barangay: 'Brgy. 1', deliveryDate: '2026-02-18', deliveryType: 'CS',
-        daysPostpartum: 10, babyOutcome: 'Alive', recoveryStatus: 'Normal',
-        lastCheckup: '2026-02-25', nextFollowUp: '2026-03-07',
-        complications: 'None', followUpStatus: 'Completed',
-        weight: '65 kg', bp: '120/80', temp: '36.5°C',
-        progress: 82,
-    },
-    {
-        id: 'PP-003', patientId: 'PT-2403', name: 'Elena Santos', age: 24,
-        barangay: 'Brgy. 5', deliveryDate: '2026-02-05', deliveryType: 'NSD',
-        daysPostpartum: 23, babyOutcome: 'NICU', recoveryStatus: 'Complication',
-        lastCheckup: '2026-02-14', nextFollowUp: '2026-02-21',
-        complications: 'Infection / Heavy Bleeding', followUpStatus: 'Missed',
-        weight: '54 kg', bp: '150/100', temp: '38.2°C',
-        progress: 30,
-    },
-    {
-        id: 'PP-004', patientId: 'PT-2404', name: 'Rosa Diaz', age: 35,
-        barangay: 'Brgy. 7', deliveryDate: '2026-02-20', deliveryType: 'CS',
-        daysPostpartum: 8, babyOutcome: 'Alive', recoveryStatus: 'Normal',
-        lastCheckup: '2026-02-24', nextFollowUp: '2026-03-06',
-        complications: 'None', followUpStatus: 'Upcoming',
-        weight: '70 kg', bp: '118/76', temp: '36.6°C',
-        progress: 90,
-    },
-    {
-        id: 'PP-005', patientId: 'PT-2405', name: 'Clara Gomez', age: 19,
-        barangay: 'Brgy. 2', deliveryDate: '2026-01-30', deliveryType: 'NSD',
-        daysPostpartum: 29, babyOutcome: 'Alive', recoveryStatus: 'Monitoring',
-        lastCheckup: '2026-02-10', nextFollowUp: '2026-02-17',
-        complications: 'Depression Signs', followUpStatus: 'Missed',
-        weight: '52 kg', bp: '110/70', temp: '36.7°C',
-        progress: 50,
-    },
-    {
-        id: 'PP-006', patientId: 'PT-2406', name: 'Luz Ramos', age: 30,
-        barangay: 'Brgy. 4', deliveryDate: '2026-02-01', deliveryType: 'NSD',
-        daysPostpartum: 27, babyOutcome: 'Alive', recoveryStatus: 'Normal',
-        lastCheckup: '2026-02-28', nextFollowUp: '2026-03-15',
-        complications: 'None', followUpStatus: 'Completed',
-        weight: '60 kg', bp: '116/74', temp: '36.5°C',
-        progress: 95,
-    },
-];
+const MOCK_MOTHERS = [];
 
-const SYSTEM_ALERTS = [
-    { id: 1, type: 'critical', text: 'Elena Santos missed postpartum visit — Day 23 unassessed', time: '1 hour ago' },
-    { id: 2, type: 'warning', text: 'Maria Reyes BP still elevated (140/90) — follow-up needed', time: '3 hours ago' },
-    { id: 3, type: 'warning', text: 'Clara Gomez missed 7-day and 14-day checkups', time: '6 hours ago' },
-    { id: 4, type: 'info', text: '4 CS mothers due for wound assessment this week', time: 'Today' },
-];
+const SYSTEM_ALERTS = [];
 
 const BARANGAY_RECOVERY = [
     { name: 'Brgy. 1', total: 12, recovered: 9 },
@@ -147,37 +42,7 @@ const FOLLOW_UP_SCHEDULE = [
     { label: '6 Weeks', key: 'w6' },
 ];
 
-const MOCK_DETAIL = {
-    'PP-001': {
-        deliveryFacility: 'Dasmariñas CHO Main',
-        attendingStaff: 'Midwife Elena P.',
-        deliveryComplications: 'Prolonged labor',
-        birthWeight: '3.1 kg',
-        breastfeeding: 'Exclusive',
-        mhStatus: 'Needs Counseling',
-        woundCondition: 'N/A (NSD)',
-        followUps: { d1: 'Completed', d7: 'Completed', d14: 'Upcoming', w6: 'Upcoming' },
-        vitals: [
-            { date: 'Feb 12', bp: '138/88', temp: '36.9°C', weight: '57 kg' },
-            { date: 'Feb 17', bp: '142/92', temp: '36.8°C', weight: '58 kg' },
-            { date: 'Feb 22', bp: '140/90', temp: '36.8°C', weight: '58 kg' },
-        ]
-    },
-    'PP-003': {
-        deliveryFacility: 'Barangay Health Center 5',
-        attendingStaff: 'Midwife Ana M.',
-        deliveryComplications: 'Postpartum hemorrhage',
-        birthWeight: '2.7 kg',
-        breastfeeding: 'Difficulty',
-        mhStatus: 'Normal',
-        woundCondition: 'N/A (NSD)',
-        followUps: { d1: 'Completed', d7: 'Missed', d14: 'Missed', w6: 'Upcoming' },
-        vitals: [
-            { date: 'Feb 07', bp: '148/98', temp: '38.0°C', weight: '53 kg' },
-            { date: 'Feb 14', bp: '150/100', temp: '38.2°C', weight: '54 kg' },
-        ]
-    }
-};
+const MOCK_DETAIL = {};
 
 const DetailModal = ({ mother, onClose }) => {
     const detail = MOCK_DETAIL[mother.id] || {

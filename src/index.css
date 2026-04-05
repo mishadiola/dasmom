@@ -47,3 +47,9 @@ img {
   max-width: 100%;
   display: block;
 }
+
+input[type="text"],
+input[type="search"],
+textarea {
+  text-transform: uppercase;
+}

@@ -45,7 +45,7 @@ const AddPatient = () => {
         conditions: [], otherConditions: '', riskLevel: 'Low Risk',
 
         // Prenatal
-        firstVisitDate: '', assignedMidwife: '', healthFacility: '',
+        firstVisitDate: '', assignedMidwife: '',
         bhwAssigned: '',
 
         // Vitals
@@ -192,6 +192,7 @@ const AddPatient = () => {
         } catch (err) {
             console.error('Error saving patient:', err);
             setToast({ type: 'error', message: 'Failed to save patient. Please check your connection.' });
+            setTimeout(() => setToast(null), 4000);
             setIsSaving(false);
         }
     };
@@ -265,6 +266,7 @@ const AddPatient = () => {
     const [activeTab, setActiveTab] = useState('personal');
     const [toast, setToast] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [missingFields, setMissingFields] = useState([]);
 
     const [currentStaff, setCurrentStaff] = useState({ id: null, fullName: '' });
 
@@ -284,7 +286,7 @@ const AddPatient = () => {
         conditions: [], otherConditions: '', riskLevel: 'Low Risk',
 
         // Prenatal
-        firstVisitDate: '', assignedMidwife: '', healthFacility: '',
+        firstVisitDate: '', assignedMidwife: '',
         bhwAssigned: '',
 
         // Vitals
@@ -364,8 +366,19 @@ const AddPatient = () => {
     fetchStaff();
 }, [navigate]);
     const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        const { name, value, type } = e.target;
+        const isText = type === 'text' || e.target.tagName === 'TEXTAREA';
+        let finalValue = isText ? value.toUpperCase() : value;
+
+        if (name === 'contactNumber' || name === 'emPhone') {
+            finalValue = finalValue.replace(/\D/g, '').slice(0, 11);
+        }
+
+        setFormData(prev => ({ ...prev, [name]: finalValue }));
+
+        if (missingFields.includes(name) || missingFields.includes(name + '-invalid')) {
+            setMissingFields(prev => prev.filter(f => f !== name && f !== name + '-invalid'));
+        }
     };
 
     const handleCheckbox = (condition) => {
@@ -382,19 +395,41 @@ const AddPatient = () => {
         e.preventDefault();
         if (isSaving) return;
 
-        const missingPersonal = !formData.firstName || !formData.lastName || !formData.dob || !formData.email || !formData.contactNumber;
-        const missingEmergency = !formData.emName || !formData.emRel || !formData.emPhone || !formData.emAddress;
+        const requiredPersonal = ['firstName', 'lastName', 'dob', 'email', 'contactNumber', 'address', 'barangay'];
+        const requiredEmergency = ['emName', 'emRel', 'emPhone', 'emAddress'];
+        const requiredPregnancy = ['gravida', 'para', 'lmp'];
+        const requiredVitals = ['bp', 'weight', 'height'];
 
-        if (missingPersonal || missingEmergency) {
-            setToast({ type: 'error', message: 'Please fill in all required fields (Name, Date of Birth, Email, Phone, Emergency).' });
-            setTimeout(() => setToast(null), 3000);
-            if (missingPersonal) setActiveTab('personal');
-            else if (missingEmergency) setActiveTab('prenatal');
+        const missing = [];
+        const checkFields = (fields) => fields.forEach(f => {
+            if (!formData[f]) {
+                missing.push(f);
+            } else if ((f === 'contactNumber' || f === 'emPhone') && formData[f].length !== 11) {
+                missing.push(f + '-invalid');
+            }
+        });
+        checkFields(requiredPersonal);
+        checkFields(requiredEmergency);
+        checkFields(requiredPregnancy);
+        checkFields(requiredVitals);
+
+        if (missing.length > 0) {
+            setMissingFields(missing);
+            setToast({ type: 'error', message: 'Please fill in all required fields marked with an asterisk (*).' });
+            setTimeout(() => setToast(null), 4000);
+
+            if (requiredPersonal.some(f => missing.includes(f))) setActiveTab('personal');
+            else if (requiredPregnancy.some(f => missing.includes(f))) setActiveTab('pregnancy');
+            else if (requiredVitals.some(f => missing.includes(f))) setActiveTab('prenatal');
+            else if (requiredEmergency.some(f => missing.includes(f))) setActiveTab('prenatal');
+            
             return;
         }
+        setMissingFields([]);
 
         if (!currentStaff.id) {
             setToast({ type: 'error', message: 'Cannot save patient without a valid staff profile.' });
+            setTimeout(() => setToast(null), 4000);
             return;
         }
 
@@ -420,6 +455,7 @@ const AddPatient = () => {
         } catch (err) {
             console.error('Error saving patient:', err);
             setToast({ type: 'error', message: 'Failed to save patient. Please check your connection.' });
+            setTimeout(() => setToast(null), 4000);
             setIsSaving(false);
         }
     };
@@ -428,7 +464,8 @@ const AddPatient = () => {
             {/* Toast Notification */}
             {toast && (
                 <div className={`toast toast--${toast.type}`}>
-                    {toast.type === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />} {toast.message}
+                    <span>{toast.type === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />} {toast.message}</span>
+                    <button className="toast-close" onClick={() => setToast(null)}><X size={14} /></button>
                 </div>
             )}
 
@@ -492,7 +529,7 @@ const AddPatient = () => {
                             <div className="form-grid-3">
                                 <div className="form-group">
                                     <label>First Name <span className="req">*</span></label>
-                                    <input type="text" name="firstName" value={formData.firstName} onChange={handleChange} required />
+                                    <input type="text" name="firstName" value={formData.firstName} onChange={handleChange} required className={missingFields.includes('firstName') ? 'error-field' : ''} />
                                 </div>
                                 <div className="form-group">
                                     <label>Middle Name</label>
@@ -500,7 +537,7 @@ const AddPatient = () => {
                                 </div>
                                 <div className="form-group">
                                     <label>Last Name <span className="req">*</span></label>
-                                    <input type="text" name="lastName" value={formData.lastName} onChange={handleChange} required />
+                                    <input type="text" name="lastName" value={formData.lastName} onChange={handleChange} required className={missingFields.includes('lastName') ? 'error-field' : ''} />
                                 </div>
                             </div>
 
@@ -511,7 +548,7 @@ const AddPatient = () => {
                                 </div>
                                 <div className="form-group">
                                     <label>Date of Birth <span className="req">*</span></label>
-                                    <input type="date" name="dob" value={formData.dob} onChange={handleChange} required />
+                                    <input type="date" name="dob" value={formData.dob} onChange={handleChange} required className={missingFields.includes('dob') ? 'error-field' : ''} />
                                 </div>
                                 <div className="form-group">
                                     <label>Age <i>(Auto-computed)</i></label>
@@ -532,23 +569,24 @@ const AddPatient = () => {
                                 </div>
                                 <div className="form-group">
                                     <label>Email Address <span className="req">*</span></label>
-                                    <input type="email" name="email" value={formData.email} onChange={handleChange} required />
+                                    <input type="email" name="email" value={formData.email} onChange={handleChange} required className={missingFields.includes('email') ? 'error-field' : ''} />
                                 </div>
                                 <div className="form-group">
                                     <label>Phone Number <span className="req">*</span></label>
-                                    <input type="tel" name="contactNumber" value={formData.contactNumber} onChange={handleChange} required />
+                                    <input type="tel" name="contactNumber" value={formData.contactNumber} onChange={handleChange} required className={missingFields.includes('contactNumber') || missingFields.includes('contactNumber-invalid') ? 'error-field' : ''} />
+                                    {missingFields.includes('contactNumber-invalid') && <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>Phone number must be exactly 11 digits</span>}
                                 </div>
                             </div>
 
                             <h3 className="section-subtitle">Address Details</h3>
                             <div className="form-grid-2">
                                 <div className="form-group">
-                                    <label>House No. / Street</label>
-                                    <input type="text" name="address" value={formData.address} onChange={handleChange} />
+                                    <label>House No. / Street <span className="req">*</span></label>
+                                    <input type="text" name="address" value={formData.address} onChange={handleChange} required className={missingFields.includes('address') ? 'error-field' : ''} />
                                 </div>
                                 <div className="form-group">
-                                    <label>Barangay</label>
-                                    <select name="barangay" value={formData.barangay} onChange={handleChange}>
+                                    <label>Barangay <span className="req">*</span></label>
+                                    <select name="barangay" value={formData.barangay} onChange={handleChange} required className={missingFields.includes('barangay') ? 'error-field' : ''}>
                                         <option value="">Select Barangay</option>
                                         {[1, 2, 3, 4, 5, 6, 7].map(n => (
                                             <option key={n} value={`Brgy. ${n}`}>Brgy. {n}</option>
@@ -594,20 +632,20 @@ const AddPatient = () => {
                                 </div>
                                 <div className="form-group duo">
                                     <div>
-                                        <label>Gravida (Total)</label>
-                                        <input type="number" name="gravida" value={formData.gravida} onChange={handleChange} min="1" />
+                                        <label>Gravida (Total) <span className="req">*</span></label>
+                                        <input type="number" name="gravida" value={formData.gravida} onChange={handleChange} min="1" className={missingFields.includes('gravida') ? 'error-field' : ''} />
                                     </div>
                                     <div>
-                                        <label>Para (Births)</label>
-                                        <input type="number" name="para" value={formData.para} onChange={handleChange} min="0" />
+                                        <label>Para (Births) <span className="req">*</span></label>
+                                        <input type="number" name="para" value={formData.para} onChange={handleChange} min="0" className={missingFields.includes('para') ? 'error-field' : ''} />
                                     </div>
                                 </div>
                             </div>
 
                             <div className="form-grid-3">
                                 <div className="form-group">
-                                    <label>Last Menstrual Period Date</label>
-                                    <input type="date" name="lmp" value={formData.lmp} onChange={handleChange} />
+                                    <label>Last Menstrual Period Date <span className="req">*</span></label>
+                                    <input type="date" name="lmp" value={formData.lmp} onChange={handleChange} className={missingFields.includes('lmp') ? 'error-field' : ''} />
                                 </div>
                                 <div className="form-group">
                                     <label>Expected Date of Delivery</label>
@@ -686,10 +724,7 @@ const AddPatient = () => {
                                     <label>Date of First Prenatal Visit</label>
                                     <input type="date" name="firstVisitDate" value={formData.firstVisitDate} onChange={handleChange} />
                                 </div>
-                                <div className="form-group">
-                                    <label>Health Facility</label>
-                                    <input type="text" name="healthFacility" value={formData.healthFacility} onChange={handleChange} />
-                                </div>
+
                                 <div className="form-group">
                                     <label>Assigned Midwife / Doctor</label>
                                     <input type="text" name="assignedMidwife" value={formData.assignedMidwife} readOnly />
@@ -701,19 +736,19 @@ const AddPatient = () => {
                             </div>
 
                             <hr className="divider" />
-                            <h3 className="section-subtitle">Initial Vital Signs (Optional)</h3>
+                            <h3 className="section-subtitle">Initial Vital Signs</h3>
                             <div className="form-grid-3">
                                 <div className="form-group">
-                                    <label>Blood Pressure (mmHg)</label>
-                                    <input type="text" name="bp" placeholder="e.g. 120/80" value={formData.bp} onChange={handleChange} />
+                                    <label>Blood Pressure (mmHg) <span className="req">*</span></label>
+                                    <input type="text" name="bp" placeholder="e.g. 120/80" value={formData.bp} onChange={handleChange} className={missingFields.includes('bp') ? 'error-field' : ''} />
                                 </div>
                                 <div className="form-group">
-                                    <label>Weight (kg)</label>
-                                    <input type="number" name="weight" step="0.1" value={formData.weight} onChange={handleChange} />
+                                    <label>Weight (kg) <span className="req">*</span></label>
+                                    <input type="number" name="weight" step="0.1" value={formData.weight} onChange={handleChange} className={missingFields.includes('weight') ? 'error-field' : ''} />
                                 </div>
                                 <div className="form-group">
-                                    <label>Height (cm)</label>
-                                    <input type="number" name="height" value={formData.height} onChange={handleChange} />
+                                    <label>Height (cm) <span className="req">*</span></label>
+                                    <input type="number" name="height" value={formData.height} onChange={handleChange} className={missingFields.includes('height') ? 'error-field' : ''} />
                                 </div>
                                 <div className="form-group">
                                     <label>Fetal Heart Rate (bpm)</label>
@@ -730,19 +765,28 @@ const AddPatient = () => {
                             <div className="form-grid-2">
                                 <div className="form-group">
                                     <label>Contact Person Name <span className="req">*</span></label>
-                                    <input type="text" name="emName" value={formData.emName} onChange={handleChange} required />
+                                    <input type="text" name="emName" value={formData.emName} onChange={handleChange} required className={missingFields.includes('emName') ? 'error-field' : ''} />
                                 </div>
                                 <div className="form-group">
                                     <label>Relationship to Patient <span className="req">*</span></label>
-                                    <input type="text" name="emRel" value={formData.emRel} onChange={handleChange} required />
+                                    <select name="emRel" value={formData.emRel} onChange={handleChange} required className={missingFields.includes('emRel') ? 'error-field' : ''}>
+                                        <option value="" disabled>Select Relationship</option>
+                                        <option value="Spouse">Spouse</option>
+                                        <option value="Partner">Partner</option>
+                                        <option value="Parent">Parent</option>
+                                        <option value="Sibling">Sibling</option>
+                                        <option value="Guardian">Guardian</option>
+                                        <option value="Other">Other</option>
+                                    </select>
                                 </div>
                                 <div className="form-group">
                                     <label>Phone Number <span className="req">*</span></label>
-                                    <input type="tel" name="emPhone" value={formData.emPhone} onChange={handleChange} required />
+                                    <input type="tel" name="emPhone" value={formData.emPhone} onChange={handleChange} required className={missingFields.includes('emPhone') || missingFields.includes('emPhone-invalid') ? 'error-field' : ''} />
+                                    {missingFields.includes('emPhone-invalid') && <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>Phone number must be exactly 11 digits</span>}
                                 </div>
                                 <div className="form-group">
                                     <label>Address <span className="req">*</span></label>
-                                    <input type="text" name="emAddress" value={formData.emAddress} onChange={handleChange} required />
+                                    <input type="text" name="emAddress" value={formData.emAddress} onChange={handleChange} required className={missingFields.includes('emAddress') ? 'error-field' : ''} />
                                 </div>
                             </div>
                         </div>

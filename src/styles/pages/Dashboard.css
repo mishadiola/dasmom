@@ -140,36 +140,93 @@
     color: #fff;
 }
 
-.welcome-pills {
+.welcome-actions-panel {
+    background: rgba(255, 255, 255, 0.22);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1.5px solid rgba(255, 255, 255, 0.45);
+    border-radius: 14px;
+    padding: 14px 18px;
     display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 300px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 16px rgba(0,0,0,0.1);
 }
 
-.pill {
+.welcome-actions-title {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: rgba(255, 255, 255, 0.9);
+    margin: 0;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.welcome-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+/* Base button inside banner */
+.welcome-actions .quick-btn {
     display: flex;
     align-items: center;
     gap: 5px;
     padding: 6px 12px;
-    border-radius: 99px;
-    font-size: 12px;
+    border-radius: 8px;
+    font-size: 11.5px;
     font-weight: 600;
+    cursor: pointer;
+    border: 1.5px solid transparent;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
     white-space: nowrap;
 }
 
-.pill--alert {
-    background: rgba(255, 255, 255, 0.18);
-    color: #fff;
+.welcome-actions .quick-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 
-.pill--warning {
-    background: rgba(249, 162, 108, 0.30);
-    color: #fff;
+/* Per-button pastel accent colors */
+.welcome-actions .quick-btn--rose {
+    background: #fce8ed;
+    color: #9c5a65;
+    border-color: #f5c5d0;
 }
 
-.pill--info {
-    background: rgba(195, 207, 183, 0.30);
-    color: #fff;
+.welcome-actions .quick-btn--sage {
+    background: #e8f0e4;
+    color: #5a7a5e;
+    border-color: #c8d9c0;
+}
+
+.welcome-actions .quick-btn--blue {
+    background: #e0f2fb;
+    color: #3a7f9e;
+    border-color: #b8dff0;
+}
+
+.welcome-actions .quick-btn--pink {
+    background: #fde8f3;
+    color: #a04878;
+    border-color: #f5c5e0;
+}
+
+.welcome-actions .quick-btn--orange {
+    background: #fef0e0;
+    color: #9a6228;
+    border-color: #f9d8ac;
+}
+
+.welcome-actions .quick-btn--purple {
+    background: #ede8f8;
+    color: #6e4fa0;
+    border-color: #d5c8ee;
 }
 
 
