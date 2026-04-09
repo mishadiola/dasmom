@@ -1,212 +1,6 @@
-/*
+
 import supabase from '../config/supabaseclient';
 import { getRoleConfig } from '../config/roleConfig';
-
-export default class AuthService {
-    constructor() {
-        this.supabase = supabase;
-    }
-
-    // ===============================
-    // LOGIN using Users table (manual)
-    // ===============================
-    async login(email, password) {
-        try {
-            const normalizedEmail = email.trim().toLowerCase();
-            const trimmedPassword = password.trim();
-
-            // Fetch user from Users table
-            const { data: user, error: userError } = await this.supabase
-                .from('Users')
-                .select('id, email_address, password, usertype')
-                .eq('email_address', normalizedEmail)
-                .maybeSingle();
-
-            if (userError) throw userError;
-            if (!user) throw new Error('User not found');
-
-            // Compare password manually
-            if (user.password.trim() !== trimmedPassword) {
-                throw new Error('Invalid password');
-            }
-
-            // Fetch role/type
-            const { data: typeData, error: typeError } = await this.supabase
-                .from('User_type')
-                .select('user_type')
-                .eq('id', user.usertype)
-                .maybeSingle();
-
-            if (typeError) throw typeError;
-            if (!typeData) throw new Error('User type not found');
-
-            const loggedInUser = {
-                id: user.id,
-                email: user.email_address,
-                role: typeData.user_type
-            };
-
-            // Save to localStorage
-            this.saveUser(loggedInUser);
-
-            return loggedInUser;
-
-        } catch (err) {
-            console.error('AuthService.login error:', err);
-            throw err;
-        }
-    }
-
-    // ===============================
-    // SAVE / GET / LOGOUT USER
-    // ===============================
-    saveUser(user) {
-        localStorage.setItem('user', JSON.stringify(user));
-    }
-
-    getUser() {
-        try {
-            return JSON.parse(localStorage.getItem('user'));
-        } catch {
-            return null;
-        }
-    }
-
-    logout() {
-        localStorage.removeItem('user');
-    }
-
-    // ===============================
-    // ACCESS CONTROL
-    // ===============================
-    accessCheck(user, pageKey) {
-        if (!user || !user.role) return false;
-        const config = getRoleConfig(user.role);
-        return config.allowedPages.includes(pageKey);
-    }
-
-    getRedirectRoute(role) {
-        return getRoleConfig(role).redirect;
-    }
-
-    // ===============================
-    // GET CURRENT STAFF INFO
-    // ===============================
-    async getCurrentUser() {
-        const user = this.getUser();
-        if (!user) return null;
-
-        const { data, error } = await this.supabase
-            .from('staff_profiles')
-            .select('id, full_name')
-            .eq('id', user.id)
-            .maybeSingle();
-
-        if (error) {
-            console.error('AuthService.getCurrentStaff error:', error);
-            return null;
-        }
-
-        return data; // { id, full_name }
-    }
-}*/
-
-/*
-import supabase from '../config/supabaseclient';
-import { getRoleConfig } from '../config/roleConfig';
-
-export default class AuthService {
-    constructor() {
-        this.supabase = supabase;
-    }
-
-    async login(email, password) {
-        const normalizedEmail = email.trim().toLowerCase();
-        const trimmedPassword = password.trim();
-
-        const { data: user, error: userError } = await this.supabase
-            .from('Users')
-            .select('id, email_address, password, usertype')
-            .eq('email_address', normalizedEmail)
-            .maybeSingle();
-
-        if (userError) throw userError;
-        if (!user) throw new Error('User not found');
-
-        if (user.password.trim() !== trimmedPassword) {
-            throw new Error('Invalid password');
-        }
-
-        const { data: typeData, error: typeError } = await this.supabase
-            .from('User_type')
-            .select('user_type')
-            .eq('id', user.usertype)
-            .maybeSingle();
-
-        if (typeError) throw typeError;
-        if (!typeData) throw new Error('User type not found');
-
-        const loggedInUser = {
-            id: user.id,          
-            email: user.email_address,
-            role: typeData.user_type
-        };
-
-        this.saveUser(loggedInUser);
-
-        return loggedInUser;
-    }
-
-    saveUser(user) {
-        localStorage.setItem('user', JSON.stringify(user));
-    }
-r
-    getUser() {
-        try {
-            return JSON.parse(localStorage.getItem('user'));
-        } catch {
-            return null;
-        }
-    }
-
-    async getCurrentStaffProfile() {
-        const user = this.getUser();
-
-        console.log("CURRENT USER:", user);
-
-        if (!user || !user.id) {
-            console.error("No user or user.id");
-            return null;
-        }
-
-        const { data, error } = await this.supabase
-            .from('staff_profiles')
-            .select('*')
-            .eq('id', user.id);
-
-        console.log("STAFF QUERY RESULT:", data);
-        console.log("STAFF QUERY ERROR:", error);
-
-        if (error) return null;
-
-        return data && data.length > 0 ? data[0] : null;
-    }
-
-    logout() {
-        localStorage.removeItem('user');
-    }
-
-    accessCheck(user, pageKey) {
-        if (!user || !user.role) return false;
-        const config = getRoleConfig(user.role);
-        return config.allowedPages.includes(pageKey);
-    }
-
-    getRedirectRoute(role) {
-        return getRoleConfig(role).redirect;
-    }
-}*/
-import supabase from '../config/supabaseclient';
 
 export default class AuthService {
   constructor() {
@@ -224,6 +18,7 @@ export default class AuthService {
     const { data: { user: authUser } } = await this.supabase.auth.getUser();
     if (!authUser) throw new Error('Session not established');
 
+    // 1. Fetch user role and info from internal 'users' table
     const { data: userData, error: userError } = await this.supabase
       .from('users')
       .select('id, email_address, usertype')
@@ -231,10 +26,9 @@ export default class AuthService {
       .maybeSingle();
 
     if (userError) throw userError;
-    if (!userData) throw new Error('User not found');
+    if (!userData) throw new Error('User record not found in database');
 
-    console.log('RAW userFull from DB:', userData);
- 
+    // 2. Resolve Role
     let role = 'user';
     if (userData.usertype) {
       const { data: typeData, error: typeError } = await this.supabase
@@ -247,24 +41,168 @@ export default class AuthService {
       if (typeData && typeData.user_type) role = typeData.user_type.toLowerCase();
     }
 
+    // 3. Fetch Full Name based on role
+    const profile = await this.fetchProfileName(userData.id, role);
+
     this._currentUser = {
       id: userData.id,
       email: userData.email_address,
       role: role,
+      displayName: profile.displayName,
+      fullName: profile.fullName,
     };
 
-    console.log('LOGIN SUCCESS:', this._currentUser);
+    return this._currentUser;
+  }
+
+  async fetchProfileName(userId, role) {
+    let fullName = null;
+    let displayName = null;
+
+    try {
+      if (role === 'admin' || role.includes('staff') || role.includes('midwife') || role.includes('doctor')) {
+        const { data, error } = await this.supabase
+          .from('staff_profiles')
+          .select('full_name')
+          .eq('id', userId)
+          .maybeSingle();
+        
+        if (data?.full_name) {
+          fullName = data.full_name;
+          displayName = data.full_name.split(' ')[0];
+        }
+      } else if (role === 'mother' || role === 'patient') {
+        const { data, error } = await this.supabase
+          .from('patient_basic_info')
+          .select('first_name, last_name')
+          .eq('id', userId)
+          .maybeSingle();
+        
+        if (data?.first_name) {
+          fullName = `${data.first_name} ${data.last_name}`;
+          displayName = data.first_name;
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching profile name:', err);
+    }
+
+    // Fallback if no profile found
+    if (!fullName) {
+      const email = this._currentUser?.email || 'User';
+      displayName = email.split('@')[0];
+      fullName = displayName;
+    }
+
+    return { fullName, displayName };
+  }
+
+  async getAuthUser() {
+    if (this._currentUser) return this._currentUser;
+
+    // Try to re-hydrate from active Supabase session
+    const { data: { session } } = await this.supabase.auth.getSession();
+    if (!session?.user) return null;
+
+    // Re-login logic without password (using session)
+    const authUser = session.user;
+    
+    const { data: userData } = await this.supabase
+      .from('users')
+      .select('id, email_address, usertype')
+      .eq('id', authUser.id)
+      .maybeSingle();
+
+    if (!userData) return null;
+
+    let role = 'user';
+    const { data: typeData } = await this.supabase
+      .from('user_type')
+      .select('user_type')
+      .eq('id', userData.usertype)
+      .maybeSingle();
+    if (typeData?.user_type) role = typeData.user_type.toLowerCase();
+
+    const profile = await this.fetchProfileName(userData.id, role);
+
+    this._currentUser = {
+      id: userData.id,
+      email: userData.email_address,
+      role: role,
+      displayName: profile.displayName,
+      fullName: profile.fullName,
+    };
 
     return this._currentUser;
   }
 
-  getAuthUser() {
-    return this._currentUser;
-  }
 
   async logout() {
     await this.supabase.auth.signOut();
     this._currentUser = null;
+    localStorage.removeItem('user');
     console.log('User logged out');
+  }
+
+  saveUser(user) {
+    localStorage.setItem('user', JSON.stringify(user));
+  }
+
+  getUser() {
+    try {
+      return JSON.parse(localStorage.getItem('user'));
+    } catch {
+      return null;
+    }
+  }
+
+  accessCheck(user, pageKey) {
+    if (!user || !user.role) return false;
+    const config = getRoleConfig(user.role);
+    return config.allowedPages.includes(pageKey);
+  }
+
+  getRedirectRoute(role) {
+    if (!role) return '/';
+    const config = getRoleConfig(role);
+    return config ? config.redirect : '/';
+  }
+
+  // ─── Profile & Security ───
+
+  async getFullStaffProfile(userId) {
+    const { data, error } = await this.supabase
+      .from('staff_profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async updateStaffProfile(userId, { fullName, contactNo, barangayAssignment }) {
+    const { data, error } = await this.supabase
+      .from('staff_profiles')
+      .update({
+        full_name: fullName,
+        contact_no: contactNo,
+        barangay_assignment: barangayAssignment
+      })
+      .eq('id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async updatePassword(newPassword) {
+    const { data, error } = await this.supabase.auth.updateUser({
+      password: newPassword
+    });
+
+    if (error) throw error;
+    return data;
   }
 }

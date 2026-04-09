@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { AuthContext } from '../../context/AuthContext';
+import AuthService from '../../services/authservice';
 import {
     Users, Shield, Settings as SettingsIcon, FileText, User,
     Plus, Search, Filter, Edit2, Trash2, RotateCcw, X, Eye, EyeOff,
@@ -489,83 +491,199 @@ const AuditLogsTab = () => {
    TAB 5: PROFILE & SECURITY
 ════════════════════════════ */
 const ProfileTab = () => {
+    const { user, logout: handleLogout } = useContext(AuthContext);
+    const authService = new AuthService();
+
+    const [fullProfile, setFullProfile] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [updating, setUpdating] = useState(false);
+    const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+    // Profile Form
+    const [profileForm, setProfileForm] = useState({ fullName: '', contactNo: '', title: '' });
+    
+    // Password Form
+    const [pwdForm, setPwdForm] = useState({ current: '', new: '', confirm: '' });
     const [showOld, setShowOld] = useState(false);
     const [showNew, setShowNew] = useState(false);
+    
     const [twoFA, setTwoFA] = useState(false);
+
+    useEffect(() => {
+        const fetchProfile = async () => {
+            if (!user) return;
+            try {
+                const data = await authService.getFullStaffProfile(user.id);
+                if (data) {
+                    setFullProfile(data);
+                    setProfileForm({
+                        fullName: data.full_name || '',
+                        contactNo: data.contact_no || '',
+                        title: data.role || '' // Assuming title/role
+                    });
+                }
+            } catch (err) {
+                console.error('Failed to fetch profile:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchProfile();
+    }, [user]);
+
+    const showToast = (message, type = 'success') => {
+        setToast({ show: true, message, type });
+        setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 4000);
+    };
+
+    const handleUpdateProfile = async (e) => {
+        e.preventDefault();
+        setUpdating(true);
+        try {
+            await authService.updateStaffProfile(user.id, {
+                fullName: profileForm.fullName,
+                contactNo: profileForm.contactNo,
+                barangayAssignment: fullProfile?.barangay_assignment
+            });
+            showToast('Profile updated successfully!');
+        } catch (err) {
+            console.error(err);
+            showToast('Failed to update profile.', 'error');
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    const handleUpdatePassword = async (e) => {
+        e.preventDefault();
+        if (pwdForm.new !== pwdForm.confirm) {
+            return showToast('Passwords do not match.', 'error');
+        }
+        if (pwdForm.new.length < 8) {
+            return showToast('Password must be at least 8 characters.', 'error');
+        }
+
+        setUpdating(true);
+        try {
+            await authService.updatePassword(pwdForm.new);
+            showToast('Password updated successfully!');
+            setPwdForm({ current: '', new: '', confirm: '' });
+        } catch (err) {
+            console.error(err);
+            showToast('Failed to update password.', 'error');
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="tab-loading">
+                <div className="set-spinner"></div>
+                <p>Loading your profile...</p>
+            </div>
+        );
+    }
 
     return (
         <div className="tab-content">
             <div className="profile-layout">
-                {/* Profile Card */}
+                {/* Profile Summary Card */}
                 <div className="profile-card">
-                    <div className="profile-avatar-lg">MD</div>
-                    <h3>Mish Diola</h3>
-                    <p className="profile-role">Super Admin</p>
-                    <p className="profile-email"><Mail size={13} /> mish@gmail.com</p>
-                    <p className="profile-barangay"><MapPin size={13} /> All Barangays</p>
-                    <p className="profile-login"><Clock size={13} /> Last login: 2026-03-01 09:14 AM</p>
-                    <button className="btn btn-outline logout-btn"><LogOut size={14} /> Sign Out</button>
+                    <div className="profile-avatar-lg">
+                        {user?.fullName?.split(' ').map(n => n[0]).slice(0, 2).join('') || 'U'}
+                    </div>
+                    <h3>{user?.fullName || 'User Account'}</h3>
+                    <p className="profile-role">{user?.role?.toUpperCase() || 'Staff'}</p>
+                    <p className="profile-email"><Mail size={13} /> {user?.email}</p>
+                    <p className="profile-barangay">
+                        <MapPin size={13} /> {fullProfile?.barangay_assignment || 'No Assignment'}
+                    </p>
+                    <p className="profile-login"><Clock size={13} /> Active Session</p>
+                    <button className="btn btn-outline logout-btn" onClick={handleLogout}>
+                        <LogOut size={14} /> Sign Out
+                    </button>
                 </div>
 
                 {/* Right side forms */}
                 <div className="profile-forms">
                     {/* Update Info */}
-                    <div className="settings-section">
+                    <form className="settings-section" onSubmit={handleUpdateProfile}>
                         <div className="section-header"><User size={16} /><h3>Update Profile</h3></div>
                         <div className="form-grid-2">
                             <div className="form-group">
                                 <label>Full Name</label>
-                                <input type="text" defaultValue="Mish Diola" />
+                                <input 
+                                    type="text" 
+                                    value={profileForm.fullName} 
+                                    onChange={e => setProfileForm(p => ({ ...p, fullName: e.target.value }))}
+                                />
                             </div>
                             <div className="form-group">
-                                <label>Email Address</label>
-                                <input type="email" defaultValue="mish@gmail.com" />
+                                <label>Email Address (View-only)</label>
+                                <input type="email" value={user?.email || ''} disabled readOnly style={{ background: '#f8f9fb', cursor: 'not-allowed' }} />
                             </div>
                             <div className="form-group">
                                 <label>Contact Number</label>
-                                <input type="tel" defaultValue="+63 912 345 6789" />
+                                <input 
+                                    type="tel" 
+                                    value={profileForm.contactNo} 
+                                    onChange={e => setProfileForm(p => ({ ...p, contactNo: e.target.value }))}
+                                />
                             </div>
                             <div className="form-group">
                                 <label>Position / Title</label>
-                                <input type="text" defaultValue="Medical Officer" />
+                                <input 
+                                    type="text" 
+                                    value={profileForm.title} 
+                                    onChange={e => setProfileForm(p => ({ ...p, title: e.target.value }))}
+                                    disabled
+                                />
                             </div>
                         </div>
-                        <button className="btn btn-primary mt-action"><Save size={14} /> Save Changes</button>
-                    </div>
+                        <button type="submit" className="btn btn-primary mt-action" disabled={updating}>
+                            <Save size={14} /> {updating ? 'Saving...' : 'Save Changes'}
+                        </button>
+                    </form>
 
                     {/* Change Password */}
-                    <div className="settings-section">
+                    <form className="settings-section" onSubmit={handleUpdatePassword}>
                         <div className="section-header"><Lock size={16} /><h3>Change Password</h3></div>
                         <div className="form-grid-2">
                             <div className="form-group form-group--full">
-                                <label>Current Password</label>
-                                <div className="pwd-wrap">
-                                    <input type={showOld ? 'text' : 'password'} placeholder="Enter current password" />
-                                    <button type="button" className="pwd-toggle" onClick={() => setShowOld(v => !v)}>
-                                        {showOld ? <EyeOff size={14} /> : <Eye size={14} />}
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="form-group">
                                 <label>New Password</label>
                                 <div className="pwd-wrap">
-                                    <input type={showNew ? 'text' : 'password'} placeholder="Min. 8 characters" />
+                                    <input 
+                                        type={showNew ? 'text' : 'password'} 
+                                        placeholder="Min. 8 characters" 
+                                        value={pwdForm.new}
+                                        onChange={e => setPwdForm(p => ({ ...p, new: e.target.value }))}
+                                        required
+                                    />
                                     <button type="button" className="pwd-toggle" onClick={() => setShowNew(v => !v)}>
                                         {showNew ? <EyeOff size={14} /> : <Eye size={14} />}
                                     </button>
                                 </div>
                             </div>
-                            <div className="form-group">
+                            <div className="form-group form-group--full">
                                 <label>Confirm New Password</label>
-                                <input type="password" placeholder="Re-enter new password" />
+                                <input 
+                                    type="password" 
+                                    placeholder="Re-enter new password" 
+                                    value={pwdForm.confirm}
+                                    onChange={e => setPwdForm(p => ({ ...p, confirm: e.target.value }))}
+                                    required
+                                />
                             </div>
                         </div>
-                        <button className="btn btn-primary mt-action"><Key size={14} /> Update Password</button>
-                    </div>
+                        <button type="submit" className="btn btn-primary mt-action" disabled={updating}>
+                            <Key size={14} /> {updating ? 'Updating...' : 'Update Password'}
+                        </button>
+                    </form>
 
-                    {/* 2FA */}
+                    {/* Security Extras */}
                     <div className="settings-section">
-                        <div className="section-header"><Shield size={16} /><h3>Security</h3></div>
+                        <div className="section-header"><Shield size={16} /><h3>Security Settings</h3></div>
                         <div className="setting-row">
                             <div className="setting-info">
                                 <span className="setting-label">Two-Factor Authentication (2FA)</span>
@@ -577,21 +695,21 @@ const ProfileTab = () => {
                         </div>
                         <div className="setting-row">
                             <div className="setting-info">
-                                <span className="setting-label">Login History</span>
-                                <span className="setting-desc">View all recent sessions</span>
+                                <span className="setting-label">Active Sessions</span>
+                                <span className="setting-desc">View your currently logged in devices</span>
                             </div>
-                            <button className="btn btn-outline btn-sm"><Activity size={13} /> View History</button>
-                        </div>
-                        <div className="setting-row">
-                            <div className="setting-info">
-                                <span className="setting-label">Sign Out All Devices</span>
-                                <span className="setting-desc">Terminate all active sessions for your account</span>
-                            </div>
-                            <button className="btn btn-outline btn-sm btn-danger"><LogOut size={13} /> Sign Out All</button>
+                            <button className="btn btn-outline btn-sm"><Activity size={13} /> View Log</button>
                         </div>
                     </div>
                 </div>
             </div>
+
+            {toast.show && (
+                <div className={`set-toast toast-${toast.type}`}>
+                    {toast.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                    <span>{toast.message}</span>
+                </div>
+            )}
         </div>
     );
 };

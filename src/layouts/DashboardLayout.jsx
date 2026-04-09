@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
     LayoutDashboard, Users, Baby, AlertTriangle, CalendarCheck,
@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import '../styles/layouts/DashboardLayout.css';
 import logo from '../assets/images/dasmom_logo.png';
+import { AuthContext } from '../context/AuthContext';
 
 const NAV_ITEMS = [
     {
@@ -49,12 +50,7 @@ const NAV_ITEMS = [
     },
 ];
 
-const MOCK_USER = {
-    name: 'Mish Diola',
-    role: 'CHO Staff',
-    avatar: 'MD',
-    notifications: 5,
-};
+
 
 const DashboardLayout = () => {
     const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -66,9 +62,10 @@ const DashboardLayout = () => {
     const userMenuRef = useRef(null);
     const navigate = useNavigate();
     const location = useLocation();
+    const { user, logout: authLogout } = useContext(AuthContext);
 
     // Determine if we are in User View based on path
-    const isUserView = location.pathname.includes('/dashboard/user-');
+    const isUserView = location.pathname.startsWith('/mother-home');
 
     // Click outside to close user menu
     useEffect(() => {
@@ -98,9 +95,10 @@ const DashboardLayout = () => {
         setUserMenuOpen(false);
     };
 
-    const confirmLogout = () => {
+    const confirmLogout = async () => {
         setShowLogoutModal(false);
-        navigate(isUserView ? '/' : '/login');
+        await authLogout();
+        navigate(isUserView ? '/mother-login' : '/');
     };
 
     // Filter nav items based on view
@@ -108,17 +106,17 @@ const DashboardLayout = () => {
         {
             section: 'My Dashboard',
             items: [
-                { label: 'Home', icon: LayoutDashboard, path: '/dashboard/user-home' },
-                { label: 'My Vitals', icon: Activity, path: '/dashboard/user-vitals' },
-                { label: 'Appointments', icon: CalendarCheck, path: '/dashboard/user-appointments' },
+                { label: 'Home', icon: LayoutDashboard, path: '/mother-home' },
+                { label: 'My Vitals', icon: Activity, path: '/mother-home/user-vitals' },
+                { label: 'Appointments', icon: CalendarCheck, path: '/mother-home/user-appointments' },
             ]
         },
         {
             section: 'Health Info',
             items: [
-                { label: 'Pregnancy Tips', icon: HeartPulse, path: '/dashboard/user-tips' },
-                { label: 'Vaccination Info', icon: Syringe, path: '/dashboard/user-vaccinations' },
-                { label: 'Pregnancy & Delivery Info', icon: ClipboardList, path: '/dashboard/user-delivery-info' },
+                { label: 'Pregnancy Tips', icon: HeartPulse, path: '/mother-home/user-tips' },
+                { label: 'Vaccination Info', icon: Syringe, path: '/mother-home/user-vaccinations' },
+                { label: 'Pregnancy & Delivery Info', icon: ClipboardList, path: '/mother-home/user-delivery-info' },
             ]
         }
     ] : NAV_ITEMS;
@@ -231,15 +229,11 @@ const DashboardLayout = () => {
                             <button
                                 className="topbar-icon-btn"
                                 onClick={() => setNotifOpen((v) => !v)}
-                                aria-label={`Notifications (${MOCK_USER.notifications} unread)`}
+                                aria-label="Notifications"
                                 aria-expanded={notifOpen}
                             >
                                 <Bell size={19} />
-                                {MOCK_USER.notifications > 0 && (
-                                    <span className="notif-badge" aria-hidden="true">
-                                        {MOCK_USER.notifications}
-                                    </span>
-                                )}
+                                {/* Optional: notifications can be added back when data is available */}
                             </button>
                             {notifOpen && !isUserView && (
                                 <div className="notif-panel" role="dialog" aria-label="Notifications">
@@ -286,14 +280,14 @@ const DashboardLayout = () => {
                         <div className="topbar-user-wrap" style={{ position: 'relative' }} ref={userMenuRef}>
                             <div className="topbar-user" onClick={() => setUserMenuOpen(!userMenuOpen)}>
                                 <div className="user-avatar" aria-hidden="true">
-                                    <img src="https://ui-avatars.com/api/?name=Mish+Diola&background=b9818a&color=fff" alt={MOCK_USER.name} className="user-avatar-img" />
+                                    <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.fullName || 'User')}&background=b9818a&color=fff`} alt={user?.fullName || 'User'} className="user-avatar-img" />
                                 </div>
                                 <div className="user-info">
-                                    <span className="user-name">{MOCK_USER.name}</span>
+                                    <span className="user-name">{user?.fullName || 'User'}</span>
                                     {!isUserView && (
                                         <span className="user-role">
                                             <Shield size={10} aria-hidden="true" />
-                                            {MOCK_USER.role}
+                                            {user?.role?.toUpperCase() || 'STAFF'}
                                         </span>
                                     )}
                                 </div>
@@ -302,18 +296,18 @@ const DashboardLayout = () => {
                             {userMenuOpen && (
                                 <div className="user-menu-panel">
                                     <div className="user-menu-header">
-                                        <p className="user-menu-name">{MOCK_USER.name}</p>
-                                        <p className="user-menu-email">{isUserView ? 'user@gmail.com' : 'mish@gmail.com'}</p>
+                                        <p className="user-menu-name">{user?.fullName || 'User'}</p>
+                                        <p className="user-menu-email">{user?.email || 'user@example.com'}</p>
                                     </div>
                                     <div className="user-menu-links">
                                         <button className="user-menu-item" onClick={() => {
-                                            navigate(isUserView ? '/dashboard/user-account' : '/dashboard/settings?tab=profile');
+                                            navigate(isUserView ? '/mother-home/user-account' : '/dashboard/settings?tab=profile');
                                             setUserMenuOpen(false);
                                         }}>
                                             <Users size={15} /> View Account
                                         </button>
                                         <button className="user-menu-item" onClick={() => {
-                                            navigate(isUserView ? '/dashboard/user-settings' : '/dashboard/settings');
+                                            navigate(isUserView ? '/mother-home/user-settings' : '/dashboard/settings');
                                             setUserMenuOpen(false);
                                         }}>
                                             <Settings size={15} /> Settings

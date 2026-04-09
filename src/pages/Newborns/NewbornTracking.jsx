@@ -414,8 +414,8 @@ const NewbornTracking = () => {
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td>
-                                                    <span className="nb-mother-name">{b.motherName}</span>
+                                                <td onClick={() => navigate(`/dashboard/patients/${b.motherId}`)} style={{ cursor: 'pointer' }}>
+                                                    <span className="nb-mother-name patient-name-link">{b.motherName}</span>
                                                     <span className="nb-mother-id">{b.motherId} · {b.barangay}</span>
                                                 </td>
                                                 <td className="nb-date">{b.birthDate}</td>

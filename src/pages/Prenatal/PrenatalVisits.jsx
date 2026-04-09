@@ -140,17 +140,6 @@ const PrenatalVisits = () => {
         fetchPatients();
     }, []);
 
-    // ── Auto-open booking panel when navigated from Patient list ──
-    useEffect(() => {
-        if (location.state?.openBooking) {
-            setSelectedSlot({ date: visibleDays[0]?.date || new Date().toISOString().split('T')[0], time: '08:00 AM' });
-            setBookingPanelOpen(true);
-            // Clear the state so refreshing doesn't re-open the panel
-            window.history.replaceState({}, document.title);
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
     // ── Date Logic ──
     const getWeekDays = (date) => {
         const start = new Date(date);
@@ -194,11 +183,37 @@ const PrenatalVisits = () => {
         return days;
     };
 
-    const visibleDays = calendarView === 'day'
-        ? getDayView(currentDate)
-        : calendarView === 'week'
-            ? getWeekDays(currentDate)
-            : getMonthDays(currentDate);
+    const visibleDays = React.useMemo(() => (
+        calendarView === 'day'
+            ? getDayView(currentDate)
+            : calendarView === 'week'
+                ? getWeekDays(currentDate)
+                : getMonthDays(currentDate)
+    ), [calendarView, currentDate]);
+
+    // ── Auto-open booking panel when navigated from Dashboard ──
+    useEffect(() => {
+        if (location.state?.openBooking && visibleDays.length > 0) {
+            setSelectedSlot({ 
+                date: visibleDays[0].date, 
+                time: '08:00 AM' 
+            });
+            setBookingPanelOpen(true);
+            
+            // ✅ Clear the state properly in history
+            navigate(location.pathname, { replace: true, state: {} });
+        }
+    }, [location.state, visibleDays, navigate, location.pathname]);
+
+    // ── Close on Escape Key ──
+    useEffect(() => {
+        const handleEsc = (e) => {
+            if (e.key === 'Escape') setBookingPanelOpen(false);
+        };
+        window.addEventListener('keydown', handleEsc);
+        return () => window.removeEventListener('keydown', handleEsc);
+    }, []);
+
 
     const handlePrev = () => {
         setCurrentDate(prev => {
@@ -222,15 +237,6 @@ const PrenatalVisits = () => {
 
     const coverageColor = (v) => v >= 90 ? '#a0c282' : v >= 80 ? '#edbd9a' : '#b68191';
 
-    // ── Direct Navigation Logic (from Dashboard) ──
-    useEffect(() => {
-        if (location.state?.openBooking) {
-            setSelectedSlot({ date: visibleDays[0].date, time: '08:00 AM' });
-            setBookingPanelOpen(true);
-            // Clear state so it doesn't reopen on refresh
-            window.history.replaceState({}, document.title);
-        }
-    }, [location.state, visibleDays]);
 
     const formatNavLabel = () => {
         if (calendarView === 'day') {
@@ -284,14 +290,11 @@ const PrenatalVisits = () => {
     };
 
     const handleSelectPatient = (val) => {
-        const p = MOCK_PATIENTS.find(pt => pt.id === val);
+        const p = livePatients.find(pt => pt.id === val);
         if (p) {
             setBookingData({ ...bookingData, patientId: p.id, patientName: p.name });
-            if (p.id === 'PT-100' && selectedSlot.time === '08:00 AM') {
-                setConflictWarning('Patient already has a conflicting appointment at this time.');
-            } else {
-                setConflictWarning(null);
-            }
+            // Conflict check logic (optional expansion here)
+            setConflictWarning(null);
         } else {
             setBookingData({ ...bookingData, patientId: '', patientName: '' });
             setConflictWarning(null);

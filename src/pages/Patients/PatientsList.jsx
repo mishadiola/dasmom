@@ -96,7 +96,8 @@ const PatientsList = () => {
     const [filters, setFilters] = useState({
         trimester: 'All',
         risk: 'All',
-        barangay: 'All'
+        barangay: 'All',
+        sortBy: 'newest' // newest, oldest, nearest_edd, farthest_edd
     });
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
@@ -127,15 +128,45 @@ const PatientsList = () => {
             (p.barangay || '').toLowerCase().includes(searchTerm.toLowerCase());
 
         const matchesTri = filters.trimester === 'All' || String(p.trimester) === filters.trimester;
-        const matchesRisk = filters.risk === 'All' || p.risk === filters.risk;
+        
+        // Fix Risk Level matching: Handle "High" filter mapping to "High Risk" database value
+        const normalizedRisk = (p.risk || '').toLowerCase();
+        const matchesRisk = filters.risk === 'All' || 
+            (filters.risk === 'High' && normalizedRisk.includes('high')) ||
+            normalizedRisk === filters.risk.toLowerCase();
+
         const matchesBrgy = filters.barangay === 'All' || p.barangay === filters.barangay;
 
         return matchesSearch && matchesTri && matchesRisk && matchesBrgy;
     });
 
-    const totalPages = Math.ceil(filteredPatients.length / itemsPerPage);
+    // Integrated Sorting Logic
+    const sortedPatients = [...filteredPatients].sort((a, b) => {
+        if (filters.sortBy === 'newest') {
+            return new Date(b.createdAt) - new Date(a.createdAt);
+        }
+        if (filters.sortBy === 'oldest') {
+            return new Date(a.createdAt) - new Date(b.createdAt);
+        }
+        if (filters.sortBy === 'nearest_edd') {
+            if (!a.edd) return 1;
+            if (!b.edd) return -1;
+            return new Date(a.edd) - new Date(b.edd);
+        }
+        if (filters.sortBy === 'farthest_edd') {
+            if (!a.edd) return 1;
+            if (!b.edd) return -1;
+            return new Date(b.edd) - new Date(a.edd);
+        }
+        return 0;
+    });
+
+    // Dynamic Barangay List from patient data
+    const availableBarangays = [...new Set(patients.map(p => p.barangay).filter(Boolean))].sort();
+
+    const totalPages = Math.ceil(sortedPatients.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
-    const paginatedPatients = filteredPatients.slice(startIndex, startIndex + itemsPerPage);
+    const paginatedPatients = sortedPatients.slice(startIndex, startIndex + itemsPerPage);
 
     const handleFilterChange = (key, value) => {
         setFilters(prev => ({ ...prev, [key]: value }));
@@ -212,9 +243,19 @@ const PatientsList = () => {
                         <span className="filter-icon"><MapPin size={14} /></span>
                         <select value={filters.barangay} onChange={(e) => handleFilterChange('barangay', e.target.value)} className="filter-select">
                             <option value="All">All Barangays</option>
-                            {[1,2,3,4,5,6,7].map(n => (
-                                <option key={n} value={`Brgy. ${n}`}>Brgy. {n}</option>
+                            {availableBarangays.map(name => (
+                                <option key={name} value={name}>{name}</option>
                             ))}
+                        </select>
+                    </div>
+
+                    <div className="filter-group filter-group--sort">
+                        <span className="filter-icon"><Clock size={14} /></span>
+                        <select value={filters.sortBy} onChange={(e) => handleFilterChange('sortBy', e.target.value)} className="filter-select">
+                            <option value="newest">Newest to Oldest</option>
+                            <option value="oldest">Oldest to Newest</option>
+                            <option value="nearest_edd">Nearest Due Date</option>
+                            <option value="farthest_edd">Farthest Due Date</option>
                         </select>
                     </div>
                 </div>
@@ -243,7 +284,7 @@ const PatientsList = () => {
                                         <td className="cell-id">{p.id}</td>
 
                                         <td>
-                                            <div className="cell-name-wrap" onClick = {() => navigate(`/dashboard/patients/${p.id.replace('PT-','')}`)}>
+                                            <div className="cell-name-wrap" onClick = {() => navigate(`/dashboard/patients/${p.id}`)}>
                                                 <div className="avatar-sm">
                                                     {p.name.split(' ').map(n => n[0]).slice(0,2).join('')}
                                                 </div>

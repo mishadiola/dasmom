@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import PatientService from '../../services/patientservice';
+
 import { useNavigate } from 'react-router-dom';
 import {
     Search, Filter, Plus, X, Syringe, Pill, Package,
@@ -160,6 +162,19 @@ const RecordModal = ({ mode, onClose }) => {
 ════════════════════════════════════ */
 const Vaccinations = () => {
     const navigate = useNavigate();
+    const patientService = new PatientService();
+
+    // State
+    const [stats, setStats] = useState({
+        totalAdministered: 0,
+        mothersPending: 0,
+        newbornsPending: 0,
+        supplementsDistributed: 0,
+        lowStockAlerts: 0
+    });
+    const [inventory, setInventory] = useState([]);
+    const [loading, setLoading] = useState(true);
+
     const [activeTab, setActiveTab] = useState('vaccines');    // 'vaccines' | 'supplements'
     const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState({ patientType: 'All', status: 'All', item: 'All' });
@@ -167,6 +182,34 @@ const Vaccinations = () => {
     const [expandedRows, setExpandedRows] = useState({});
     const [sortField, setSortField] = useState('');
     const [sortAsc, setSortAsc] = useState(true);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                setLoading(true);
+                const [newStats, newInventory] = await Promise.all([
+                    patientService.getVaccinationStats(),
+                    patientService.getVaccineInventory()
+                ]);
+                setStats(newStats);
+                setInventory(newInventory);
+            } catch (error) {
+                console.error('Error loading dashboard data:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, []);
+
+    // Derived Stats for UI mapping
+    const dynamicSummaryStats = [
+        { label: 'Total Vaccinations Administered', value: stats.totalAdministered, color: 'lilac', icon: Syringe },
+        { label: 'Mothers Pending Vaccines', value: stats.mothersPending, color: 'pink', icon: AlertCircle },
+        { label: 'Newborns Pending Vaccines', value: stats.newbornsPending, color: 'orange', icon: AlertCircle },
+        { label: 'Supplements Distributed', value: stats.supplementsDistributed, unit: 'units', color: 'sage', icon: Pill },
+        { label: 'Low Stock Items', value: stats.lowStockAlerts, color: 'rose', icon: Package },
+    ];
 
     const handleFilter = (k, v) => setFilters(prev => ({ ...prev, [k]: v }));
 
@@ -250,16 +293,16 @@ const Vaccinations = () => {
 
             {/* ── Summary Stats ── */}
             <div className="vacc-stats-grid">
-                {SUMMARY_STATS.map(s => {
+                {dynamicSummaryStats.map(s => {
                     const Icon = s.icon;
                     return (
-                        <div key={s.label} className={`stat-card stat-card--${s.color}`}>
+                        <div key={s.label} className={`stat-card stat-card--${s.color} ${loading ? 'skeleton-loading' : ''}`}>
                             <div className="stat-top">
                                 <div className={`stat-icon stat-icon--${s.color}`}>
                                     <Icon size={20} />
                                 </div>
                             </div>
-                            <div className="stat-value">{s.value}{s.unit && <span className="stat-unit"> {s.unit}</span>}</div>
+                            <div className="stat-value">{loading ? '...' : s.value}{s.unit && <span className="stat-unit"> {s.unit}</span>}</div>
                             <div className="stat-label">{s.label}</div>
                         </div>
                     );
@@ -470,21 +513,23 @@ const Vaccinations = () => {
                             <button className="icon-btn-sm" title="Refresh"><RefreshCw size={13} /></button>
                         </div>
                         <div className="stock-list">
-                            {STOCK.map(s => (
-                                <div key={s.item} className={`stock-row stock-row--${s.status.toLowerCase()}`}>
+                            {inventory.length > 0 ? inventory.map(s => (
+                                <div key={s.name} className={`stock-row stock-row--${s.status.toLowerCase()}`}>
                                     <div className="stock-info">
-                                        <span className="stock-name">{s.item}</span>
-                                        <span className="stock-qty">{s.quantity} {s.unit}</span>
+                                        <span className="stock-name">{s.name}</span>
+                                        <span className="stock-qty">{s.stock} {s.unit}</span>
                                     </div>
                                     <div className="stock-bar-bg">
                                         <div
                                             className="stock-bar-fill"
-                                            style={{ width: `${stockPct(s)}%`, background: s.status === 'Sufficient' ? '#6db8a0' : s.status === 'Low' ? '#e8b84b' : '#e05c73' }}
+                                            style={{ width: `${(s.stock / (s.min * 2)) * 100}%`, background: s.status === 'ok' ? '#6db8a0' : s.status === 'low' ? '#e8b84b' : '#e05c73' }}
                                         ></div>
                                     </div>
-                                    <span className={`stock-badge ${stockStatusClass(s.status)}`}>{s.status}</span>
+                                    <span className={`stock-badge stock-badge--${s.status.toLowerCase()}`}>{s.status}</span>
                                 </div>
-                            ))}
+                            )) : (
+                                <div className="stock-empty">No inventory data available.</div>
+                            )}
                         </div>
                     </div>
 

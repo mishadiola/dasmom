@@ -9,6 +9,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/Dashboard.css';
 import AuthService from '../../services/authservice';
+import PatientService from '../../services/patientservice';
 import supabase from '../../config/supabaseclient';
 import { AuthContext } from '../../context/AuthContext';
 const authService = new AuthService();
@@ -72,8 +73,12 @@ const TrimesterBadge = ({ weeks }) => {
 const Dashboard = () => {
     const navigate = useNavigate();
     const {user} = useContext(AuthContext);
+    const patientService = new PatientService();
+    
     //const [user, setUser] = useState(null);
     const [liveStats, setLiveStats] = useState({ totalPatients: 0, highRisk: 0, newborns: 0, apptToday: 0 });
+    const [vaccineStock, setVaccineStock] = useState([]);
+    const [loadingStock, setLoadingStock] = useState(true);
 
     useEffect(() => {
     const fetchStats = async () => {
@@ -94,8 +99,15 @@ const Dashboard = () => {
                 newborns: newborns ?? 0,
                 apptToday: apptToday ?? 0,
             });
+
+            // Fetch Vaccine Stock
+            setLoadingStock(true);
+            const stockData = await patientService.getVaccineInventory();
+            setVaccineStock(stockData);
+            setLoadingStock(false);
         } catch (err) {
             console.error('Failed to load dashboard stats:', err);
+            setLoadingStock(false);
         }
     };
     fetchStats();
@@ -103,7 +115,7 @@ const Dashboard = () => {
 
 
 
-    const displayName = user?.email ? user.email.split('@')[0] : 'User';
+    const displayName = user?.displayName || (user?.email ? user.email.split('@')[0] : 'User');
     const roleLabel = user?.role?.toUpperCase() || 'UNKNOWN';
 
     const today = new Date().toLocaleDateString('en-PH', {
@@ -167,7 +179,7 @@ const Dashboard = () => {
             {/* ── Welcome Banner + Quick Actions ── */}
             <div className="welcome-banner">
                 <div className="welcome-left">
-                    <p className="welcome-greeting">Good morning, {displayName} <span className="wave-emoji">👋</span></p>
+                    <p className="welcome-greeting">Good day, {displayName} <span className="wave-emoji">👋</span></p>
                     <p className="welcome-sub">
                         You have <strong>{liveStats.apptToday} appointments</strong> today and <strong>{liveStats.highRisk} high-risk alerts</strong> requiring attention.
                     </p>
@@ -290,26 +302,32 @@ const Dashboard = () => {
                         </div>
                         <p className="card-description">Manage real-time inventory levels of vital supplements and vaccines.</p>
                         <div className="stock-list">
-                            {VACCINE_STOCK.map((v) => (
-                                <div key={v.name} className={`stock-item stock-item--${v.status}`}>
-                                    <div className="stock-info">
-                                        <span className="stock-name">{v.name}</span>
-                                        <div className="stock-bar-wrap">
-                                            <MiniBar
-                                                value={v.stock}
-                                                max={Math.max(v.stock, v.min) * 1.5}
-                                                color={v.status === 'ok' ? 'sage' : v.status === 'low' ? 'yellow' : 'rose'}
-                                            />
+                            {loadingStock ? (
+                                <div className="stock-loading">Loading inventory...</div>
+                            ) : vaccineStock.length > 0 ? (
+                                vaccineStock.map((v) => (
+                                    <div key={v.name} className={`stock-item stock-item--${v.status}`}>
+                                        <div className="stock-info">
+                                            <span className="stock-name">{v.name}</span>
+                                            <div className="stock-bar-wrap">
+                                                <MiniBar
+                                                    value={v.stock}
+                                                    max={Math.max(v.stock, v.min) * 1.5}
+                                                    color={v.status === 'ok' ? 'sage' : v.status === 'low' ? 'yellow' : 'rose'}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="stock-meta">
+                                            <span className="stock-qty">{v.stock} {v.unit}</span>
+                                            <span className={`stock-badge stock-badge--${v.status}`}>
+                                                {v.status === 'ok' ? 'In Stock' : v.status === 'low' ? 'Low' : 'Critical'}
+                                            </span>
                                         </div>
                                     </div>
-                                    <div className="stock-meta">
-                                        <span className="stock-qty">{v.stock} {v.unit}</span>
-                                        <span className={`stock-badge stock-badge--${v.status}`}>
-                                            {v.status === 'ok' ? 'In Stock' : v.status === 'low' ? 'Low' : 'Critical'}
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
+                                ))
+                            ) : (
+                                <div className="stock-empty">No inventory data available.</div>
+                            )}
                         </div>
                     </div>
 

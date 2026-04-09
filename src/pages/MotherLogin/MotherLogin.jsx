@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import { 
     Mail, Lock, Eye, EyeOff, Loader2, 
     Calendar, Activity, Heart, Baby 
@@ -7,9 +7,11 @@ import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/MotherLogin.css';
 import logo from '../../assets/images/dasmom_logo.png';
 import AuthService from '../../services/authservice';
+import { AuthContext } from '../../context/AuthContext';
 
 const MotherLogin = () => {
     const navigate = useNavigate();
+    const { setUser } = useContext(AuthContext);
     const authService = new AuthService();
 
     const [email, setEmail] = useState('');
@@ -29,7 +31,7 @@ const MotherLogin = () => {
             return;
         }
 
-        authService.saveUser(user);
+        setUser(user);
 
         const route = authService.getRedirectRoute(user.role);
         navigate(route);

@@ -12,11 +12,18 @@ export const AuthProvider = ({ children }) => {
   const authService = new AuthService();
 
   useEffect(() => {
-    const current = authService.getAuthUser();
-    if (current) {
-      setUser(current);
-      console.log('AuthContext: current user found on mount', current);
-    }
+    const initAuth = async () => {
+      try {
+        const current = await authService.getAuthUser();
+        if (current) {
+          setUser(current);
+          console.log('AuthContext: User re-hydrated from session', current);
+        }
+      } catch (err) {
+        console.error('AuthContext: Error re-hydrating user', err);
+      }
+    };
+    initAuth();
   }, []);
 
   const logout = async () => {

@@ -331,10 +331,10 @@ const PostpartumRecords = () => {
                                     {filtered.map(m => (
                                         <tr key={m.id} className={getRecoveryClass(m.recoveryStatus)}>
                                             <td>
-                                                <div className="pp-patient-cell">
+                                                <div className="pp-patient-cell" onClick={() => navigate(`/dashboard/patients/${m.patientId}`)} style={{ cursor: 'pointer' }}>
                                                     <div className="pp-avatar">{m.name.split(' ').map(n => n[0]).slice(0, 2).join('')}</div>
                                                     <div>
-                                                        <span className="pp-name">{m.name}</span>
+                                                        <span className="pp-name patient-name-link">{m.name}</span>
                                                         <span className="pp-meta">{m.patientId} · {m.barangay}</span>
                                                     </div>
                                                 </div>
