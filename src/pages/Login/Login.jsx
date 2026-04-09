@@ -182,71 +182,75 @@ const handleSubmit = async (e) => {
 
 
 
-
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Loader2, ShieldCheck, CheckCircle2, Clock, User, X, Mail, Lock, AlertCircle } from 'lucide-react';
 import '../../styles/pages/Login.css';
 import logo from '../../assets/images/dasmom_logo.png';
 import AuthService from '../../services/authservice.js';
+import { AuthContext } from '../../context/AuthContext';
 
 const authService = new AuthService();
 const MAX_ATTEMPTS = 5;
 const MOCK_LAST_LOGIN = { time: 'Feb 26, 2026 · 3:42 PM', device: 'Chrome on Windows' };
 
 export default function Login() {
-    const navigate = useNavigate();
-    const emailRef = useRef(null);
-    const forgotBtnRef = useRef(null);
+  const navigate = useNavigate();
+  const { setUser } = useContext(AuthContext);
 
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
-    const [rememberMe, setRememberMe] = useState(false);
+  const emailRef = useRef(null);
+  const forgotBtnRef = useRef(null);
 
-    const [errors, setErrors] = useState({ email: '', password: '', form: '', general: '' });
-    const [isLoading, setIsLoading] = useState(false);
-    const [attempts, setAttempts] = useState(0);
-    const [isLocked, setIsLocked] = useState(false);
-    const [lockTimer, setLockTimer] = useState(0);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
-    // Forgot password modal state
-    const [showForgot, setShowForgot] = useState(false);
-    const [forgotEmail, setForgotEmail] = useState('');
-    const [forgotSent, setForgotSent] = useState(false);
+  const [errors, setErrors] = useState({ email: '', password: '', form: '', general: '' });
+  const [isLoading, setIsLoading] = useState(false);
+  const [attempts, setAttempts] = useState(0);
+  const [isLocked, setIsLocked] = useState(false);
+  const [lockTimer, setLockTimer] = useState(0);
 
-    // Lock timer effect
-    useEffect(() => {
-        if (!isLocked) return;
-        const interval = setInterval(() => {
-            setLockTimer(prev => {
-                if (prev <= 1) {
-                    clearInterval(interval);
-                    setIsLocked(false);
-                    setAttempts(0);
-                    setErrors(e => ({ ...e, form: '' }));
-                    return 0;
-                }
-                return prev - 1;
-            });
-        }, 1000);
-        return () => clearInterval(interval);
-    }, [isLocked]);
+  // Forgot password modal state
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSent, setForgotSent] = useState(false);
 
-    const validate = () => {
-        const newErrors = { email: '', password: '', form: '', general: '' };
-        const trimmedEmail = email.trim();
-        const trimmedPassword = password.trim();
+  // Lock timer effect
+  useEffect(() => {
+    if (!isLocked) return;
+    const interval = setInterval(() => {
+      setLockTimer(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          setIsLocked(false);
+          setAttempts(0);
+          setErrors(e => ({ ...e, form: '' }));
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isLocked]);
 
-        if (!trimmedEmail) newErrors.email = 'Email address is required.';
-        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) newErrors.email = 'Enter a valid email address.';
-        if (!trimmedPassword) newErrors.password = 'Password is required.';
+  // ----------------- VALIDATION -----------------
+  const validate = () => {
+    const newErrors = { email: '', password: '', form: '', general: '' };
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
 
-        setErrors(newErrors);
-        return !newErrors.email && !newErrors.password;
-    };
+    if (!trimmedEmail) newErrors.email = 'Email address is required.';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) newErrors.email = 'Enter a valid email address.';
+    if (!trimmedPassword) newErrors.password = 'Password is required.';
 
-const handleSubmit = async (e) => {
+    setErrors(newErrors);
+    return !newErrors.email && !newErrors.password;
+  };
+
+  // ----------------- LOGIN SUBMIT -----------------
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (isLocked || !validate()) return;
 
@@ -254,52 +258,52 @@ const handleSubmit = async (e) => {
     setErrors({ email: '', password: '', form: '', general: '' });
 
     try {
-        const user = await authService.login(email, password);
+      const user = await authService.login(email, password);
 
-        console.log("LOGIN SUCCESS:", user);
+      setUser(user);
 
-        // Allow BOTH admin and staff
-        if (user.role === 'patient') {
-            setErrors(prev => ({
-                ...prev,
-                general: 'Patients must use the mother login page.'
-            }));
-            return;
-        }
+      console.log('LOGIN SUCCESS:', user);
 
-        // ✅ REMOVE overly strict access check for now
-        // if (!authService.accessCheck(user, 'admin')) { ... }
+      let redirect = '/';
+      if (user.role === 'admin') redirect = '/dashboard'; 
+      else if (user.role === 'mother') redirect = '/mother-home'; 
+      else redirect = '/dashboard'; 
 
-        navigate(authService.getRedirectRoute(user.role));
-
+      console.log('Redirecting to:', redirect);
+      navigate(redirect);
     } catch (err) {
-        console.error(err);
-        setErrors(prev => ({
-            ...prev,
-            general: err.message || 'Login failed'
-        }));
+      console.error(err);
+      setErrors(prev => ({ ...prev, general: err.message || 'Login failed' }));
+      setAttempts(prev => {
+        const next = prev + 1;
+        if (next >= MAX_ATTEMPTS) {
+          setIsLocked(true);
+          setLockTimer(30);
+        }
+        return next;
+      });
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
-};
+  };
 
-    const handleForgotSubmit = (e) => {
-        e.preventDefault();
-        if (!forgotEmail.trim()) return;
+  const handleForgotSubmit = (e) => {
+    e.preventDefault();
+    if (!forgotEmail.trim()) return;
 
-        setIsLoading(true);
-        setTimeout(() => {
-            setIsLoading(false);
-            setForgotSent(true);
-        }, 1400);
-    };
+    setIsLoading(true);
+    setTimeout(() => {
+      setIsLoading(false);
+      setForgotSent(true);
+    }, 1400);
+  };
 
-    const closeForgot = () => {
-        setShowForgot(false);
-        setForgotSent(false);
-        setForgotEmail('');
-        setTimeout(() => forgotBtnRef.current?.focus(), 50);
-    };
+  const closeForgot = () => {
+    setShowForgot(false);
+    setForgotSent(false);
+    setForgotEmail('');
+    setTimeout(() => forgotBtnRef.current?.focus(), 50);
+  };
 
     return (
         <div className="login-page">

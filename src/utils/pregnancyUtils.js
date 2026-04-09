@@ -1,10 +1,4 @@
 /**
- * Pregnancy Utility Functions
- */
-
-/**
- * Calculates the Estimated Due Date (EDD) based on Last Menstrual Period (LMP).
- * Standard pregnancy is approx 280 days (40 weeks) from LMP.
  * @param {string|Date} lmpDate 
  * @returns {Date}
  */
@@ -33,7 +27,6 @@ export const calculateGestationalAge = (lmpDate) => {
 };
 
 /**
- * Calculates time remaining until EDD.
  * @param {Date} edd 
  * @returns {{weeks: number, days: number, totalDays: number}}
  */
@@ -52,7 +45,6 @@ export const calculateTimeRemaining = (edd) => {
 };
 
 /**
- * Calculates pregnancy progress percentage based on 40 weeks (280 days).
  * @param {string|Date} lmpDate 
  * @returns {number}
  */
@@ -67,7 +59,6 @@ export const calculateProgress = (lmpDate) => {
 };
 
 /**
- * Determines current trimester.
  * @param {number} weeks 
  * @returns {string}
  */
@@ -78,7 +69,6 @@ export const getTrimester = (weeks) => {
 };
 
 /**
- * Formats a date to 'Month Day, Year' (e.g., November 12, 2026).
  * @param {Date} date 
  * @returns {string}
  */

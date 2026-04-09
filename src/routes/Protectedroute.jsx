@@ -1,17 +1,29 @@
+import React, { useContext } from 'react';
 import { Navigate } from 'react-router-dom';
-import AuthService from './services/authservice';
+import { AuthContext } from '../context/AuthContext'; 
 
-const authService = new AuthService();
+export default function ProtectedRoute({ pageKey, children }) {
+  const { user } = useContext(AuthContext); 
 
-export default function ProtectedRoute({ children }) {
-    const user = authService.getUser();
+  console.log('ProtectedRoute: checking access', { pageKey, user });
 
-    if (!user) return <Navigate to="/" />;
+  if (!user) {
+    console.log('No user in context, redirecting to /');
+    return <Navigate to="/" replace />;
+  }
+  const roleConfig = {
+    admin: { allowedPages: ['admin'], redirect: '/dashboard' },
+    mother: { allowedPages: ['mother'], redirect: '/mother-home' },
+    user: { allowedPages: [], redirect: '/' },
+  };
 
-    if (!authService.accessCheck(user, 'admin')) {
-        authService.logout();
-        return <Navigate to="/" />;
-    }
+  const userRole = user.role || 'user';
+  const config = roleConfig[userRole] || roleConfig['user'];
 
-    return children;
+  if (!config.allowedPages.includes(pageKey)) {
+    console.log(`Access denied for ${userRole} on ${pageKey}`);
+    return <Navigate to={config.redirect} replace />;
+  }
+
+  return children;
 }

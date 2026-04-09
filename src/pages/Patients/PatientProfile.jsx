@@ -30,7 +30,8 @@ const PatientProfile = () => {
     useEffect(() => {
         const fetchPatient = async () => {
             try {
-                const data = await PatientService.getPatientById(id);
+                const patientService = new PatientService();  
+                const data = await patientService.getPatientById(id);  
                 setP(data);
             } catch (err) {
                 console.error(err);
@@ -41,6 +42,7 @@ const PatientProfile = () => {
 
         fetchPatient();
     }, [id]);
+
 
     if (loading) return <div className="profile-page">Loading...</div>;
     if (!p) return <div className="profile-page">Patient not found</div>;

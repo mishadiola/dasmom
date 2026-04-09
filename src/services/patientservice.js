@@ -1,393 +1,357 @@
-// services/patientService.js
-/*
 import supabase from '../config/supabaseclient';
 import AuthService from './authservice';
 
 const authService = new AuthService();
-
 export default class PatientService {
-  static async addPatient(formData) {
+  constructor() {
+    this.supabase = supabase;
+  }
+
+  // barangay
+  async getAvailableBarangays() {
     try {
-      const currentUser = authService.getUser();
-      if (!currentUser) throw new Error("User not logged in");
-
-      // 1. Get staff profile id
-      const { data: staffProfile, error: staffError } = await supabase
+      const { data, error } = await this.supabase
         .from('staff_profiles')
-        .select('id, full_name')
-        .eq('id', currentUser.id)
-        .maybeSingle();
+        .select('barangay_assignment')
+        .not('barangay_assignment', 'is', null)
+        .order('barangay_assignment');
 
-      if (staffError) throw staffError;
-      if (!staffProfile) throw new Error("Staff profile not found");
-
-      const createdBy = staffProfile.id;
-
-      // 2. Insert new user (for patient)
-      const { data: newUser, error: userError } = await supabase
-        .from('Users')
-        .insert([{ email_address: formData.email }])
-        .select()
-        .single();
-
-      if (userError) throw userError;
-
-      const patientId = newUser.id;
-
-      // 3. Insert patient_basic_info
-      const { error: basicInfoError } = await supabase
-        .from('patient_basic_info')
-        .insert([{
-          id: patientId,
-          first_name: formData.firstName,
-          last_name: formData.lastName,
-          suffix: formData.suffix,
-          date_of_birth: formData.dob,
-          bloodtype: formData.bloodType || '', // optional
-          civil_status: formData.civilStatus,
-          house_no: formData.address,
-          barangay: formData.barangay,
-          municipality: formData.municipality,
-          province: formData.province,
-          philhealthnumber: formData.philhealth,
-          contact_no: formData.contactNumber,
-          created_by: createdBy
-        }]);
-
-      if (basicInfoError) throw basicInfoError;
-
-      // 4. Insert pregnancy_info
-      const { error: pregError } = await supabase
-        .from('pregnancy_info')
-        .insert([{
-          patient_id: patientId,
-          created_by: createdBy,
-          pregn_postp: formData.pregnancyStatus,
-          lmd: formData.lmp,
-          edd: formData.edd,
-          pregnancy_type: formData.pregnancyType,
-          place_of_delivery: formData.plannedDeliveryPlace
-        }]);
-
-      if (pregError) throw pregError;
-
-      // 5. Insert initial prenatal visit (optional)
-      if (formData.firstVisitDate || formData.weight || formData.bp) {
-        const [systolic, diastolic] = formData.bp?.split('/') || [];
-        const { error: prenatalError } = await supabase
-          .from('prenatal_visits')
-          .insert([{
-            patient_id: patientId,
-            created_by: createdBy,
-            visit_date: formData.firstVisitDate,
-            bp_systolic: systolic ? parseInt(systolic) : null,
-            bp_diastolic: diastolic ? parseInt(diastolic) : null,
-            weight_kg: formData.weight || null,
-            fhr_bpm: formData.fhr || null,
-            gestational_age: formData.gestationalAge || null
-          }]);
-
-        if (prenatalError) throw prenatalError;
-      }
-
-      return patientId;
-
+      if (error) return ['Brgy. 1', 'Brgy. 2', 'Brgy. 3'];
+      return [...new Set(data.map(s => s.barangay_assignment).filter(Boolean))].sort();
     } catch (err) {
-      console.error("PatientService.addPatient error:", err);
-      throw err;
+      return ['Brgy. 1', 'Brgy. 2', 'Brgy. 3'];
     }
   }
-}
-*/
 
-// GET FULL PATIENT PROFILE
-import supabase from '../config/supabaseclient';
-import AuthService from './authservice';
+  async getAllMidwives() {
+    const { data, error } = await this.supabase
+      .from('staff_profiles')
+      .select('id, full_name, barangay_assignment, role')
+      .ilike('role', '%midwife%')
+      .order('full_name');
+    return error ? [] : (data || []);
+  }
 
-const authService = new AuthService();
+  async getDoctorsByBarangay(barangay) {
+    const { data, error } = await this.supabase
+      .from('staff_profiles')
+      .select('id, full_name, barangay_assignment')
+      .eq('barangay_assignment', barangay)
+      .ilike('role', '%doctor%')
+      .order('full_name');
+    return error ? [] : (data || []);
+  }
 
-export default class PatientService {
-  static async addPatient(formData) {
+  //patient creation + scheduling
+  async addPatient(patientData, createdBy) {
     try {
-      const currentUser = authService.getUser();
-      if (!currentUser) throw new Error("User not logged in");
+      console.log('🔄 Creating patient + visits...');
 
-      const { data: staffProfile, error: staffError } = await supabase
-        .from('staff_profiles')
-        .select('id, full_name')
-        .eq('id', currentUser.id)
-        .maybeSingle();
+      const { data: userTypeData, error: typeError } = await this.supabase
+        .from('user_type')
+        .select('id')
+        .ilike('user_type', '%patient%')
+        .limit(1);
 
-      if (staffError) throw staffError;
-      if (!staffProfile) throw new Error("Staff profile not found");
-
-      const createdBy = staffProfile.id;
-
-      const { data: newUser, error: userError } = await supabase
-        .from('Users')
-        .insert([{ email_address: formData.email }])
-        .select()
-        .single();
-
-      if (userError) throw userError;
-
-      const patientId = newUser.id;
-
-      const { error: basicInfoError } = await supabase
-        .from('patient_basic_info')
-        .insert([{
-          id: patientId,
-          first_name: formData.firstName,
-          last_name: formData.lastName,
-          suffix: formData.suffix,
-          date_of_birth: formData.dob,
-          bloodtype: formData.bloodType || null, 
-          civil_status: formData.civilStatus,
-          house_no: formData.address,
-          barangay: formData.barangay,
-          municipality: formData.municipality,
-          province: formData.province,
-          philhealthnumber: formData.philhealth,
-          contact_no: formData.contactNumber,
-          created_by: createdBy
-        }]);
-
-      if (basicInfoError) throw basicInfoError;
-
-      const { error: pregError } = await supabase
-        .from('pregnancy_info')
-        .insert([{
-          patient_id: patientId,
-          created_by: createdBy,
-          pregn_postp: formData.pregnancyStatus,
-          lmd: formData.lmp || null,
-          edd: formData.edd || null,
-          pregnancy_type: formData.pregnancyType,
-          place_of_delivery: formData.plannedDeliveryPlace
-        }]);
-
-      if (pregError) throw pregError;
-
-      if (formData.firstVisitDate || formData.weight || formData.bp) {
-        const [systolic, diastolic] = formData.bp?.split('/') || [];
-        const { error: prenatalError } = await supabase
-          .from('prenatal_visits')
-          .insert([{
-            patient_id: patientId,
-            created_by: createdBy,
-            visit_date: formData.firstVisitDate || null,
-            bp_systolic: systolic ? parseInt(systolic) : null,
-            bp_diastolic: diastolic ? parseInt(diastolic) : null,
-            weight_kg: formData.weight || null,
-            fhr_bpm: formData.fhr || null,
-            gestational_age: formData.gestationalAge || null
-          }]);
-
-        if (prenatalError) throw prenatalError;
+      if (typeError || !userTypeData?.length) {
+        throw new Error('No patient usertype found in user_type table');
       }
 
-      return patientId;
+      const patientUserTypeId = userTypeData[0].id;
+      console.log('✅ Found patient usertype:', patientUserTypeId);
 
-    } catch (err) {
-      console.error("PatientService.addPatient error:", err);
-    throw err;
-  }
-}
-  
-static async getPatientById(patientId) {
-    try {
-      const { data: basic, error: basicError } = await supabase
+      // patient acc
+      const patientId = crypto.randomUUID();
+      const { error: userError } = await this.supabase
+        .from('users')
+        .insert({
+          id: patientId,
+          email_address: patientData.email,
+          password: 'Patient123!',  
+          usertype: patientUserTypeId  
+        });
+
+      if (userError) throw userError;
+      console.log('✅ users record created:', patientId);
+        const createdBy = authService.getAuthUser()?.id || null;
+      const { error: basicError } = await this.supabase
         .from('patient_basic_info')
-        .select('*')
-        .eq('id', patientId)
-        .single();
+        .insert({
+          id: patientId,  
+          first_name: patientData.firstName,
+          middle_name: patientData.middleName || null,
+          last_name: patientData.lastName,
+          suffix: patientData.suffix || null,
+          date_of_birth: patientData.dob,
+          civil_status: patientData.civilStatus || null,
+          contact_no: patientData.contactNumber,
+          house_no: patientData.address || '',
+          municipality: patientData.municipality,
+          barangay: patientData.barangay,
+          province: patientData.province,
+          philhealthnumber: patientData.philhealth || null,
+          created_by: createdBy,
+        });
 
       if (basicError) throw basicError;
+      console.log('✅ patient_basic_info created');
 
-      const { data: pregnancy } = await supabase
+      // pregnancy_info
+      const { error: pregError } = await this.supabase
         .from('pregnancy_info')
-        .select('*')
-        .eq('patient_id', patientId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .insert({
+          patient_id: patientId,
+          created_by: createdBy,
+          pregn_postp: patientData.pregnancyStatus,
+          lmd: patientData.lmp,
+          edd: patientData.edd,
+          pregnancy_type: patientData.pregnancyType,
+          place_of_delivery: patientData.plannedDeliveryPlace
+        });
 
-      const { data: visits } = await supabase
-        .from('prenatal_visits')
-        .select('*')
-        .eq('patient_id', patientId)
-        .order('visit_date', { ascending: false });
+      if (pregError) throw pregError;
+      console.log('✅ pregnancy_info created');
 
-      const { data: vaccines } = await supabase
-        .from('vaccinations')
-        .select(`
-          *,
-          vaccine_inventory (vaccine_name)
-        `)
-        .eq('patient_id', patientId);
-
-      const { data: supplements } = await supabase
-        .from('supplements')
-        .select(`
-          *,
-          supplement_inventory (supplement_name)
-        `)
-        .eq('patient_id', patientId);
-
-
-      const fullName = `${basic.first_name} ${basic.last_name}`;
-
-      const today = new Date();
-      const dob = new Date(basic.date_of_birth);
-      let age = today.getFullYear() - dob.getFullYear();
-
-      const mapped = {
-        id: `PT-${patientId}`,
-        name: fullName,
-        age,
-        dob: basic.date_of_birth,
-        barangay: basic.barangay,
-        phone: basic.contact_no,
-        emergencyContact: "N/A",
-        risk: "Low",
-        bloodType: basic.bloodtype || '-',
-
-        gravida: '-',
-        para: '-',
-        abortions: '-',
-        living: '-',
-        pastPregnancies: [],
-        conditions: [],
-
-        lmp: pregnancy?.lmd,
-        edd: pregnancy?.edd,
-        trimester: '-',
-        weeks: '-',
-
-        issues: [],
-
-        visits: (visits || []).map(v => ({
-          date: v.visit_date,
-          type: "Prenatal",
-          bp: v.bp_systolic && v.bp_diastolic
-            ? `${v.bp_systolic}/${v.bp_diastolic}`
-            : '-',
-          weight: v.weight_kg ? `${v.weight_kg} kg` : '-',
-          fh: v.fundal_height_cm ? `${v.fundal_height_cm} cm` : '-',
-          fht: v.fhr_bpm ? `${v.fhr_bpm} bpm` : '-',
-          notes: v.clinical_notes || ''
-        })),
-
-        vaccines: (vaccines || []).map(v => ({
-          name: v.vaccine_inventory?.vaccine_name || 'Unknown',
-          date: v.date_administered,
-          status: v.status
-        })),
-
-        supplements: (supplements || []).map(s => ({
-          name: s.supplement_inventory?.supplement_name || 'Unknown',
-          status: s.status
-        }))
-      };
-
-      return mapped;
-
-    } catch (err) {
-      console.error("getPatientById error:", err);
-      throw err;
-    }
-  }
-
-  static async getAllPatients() {
-    try {
-      const { data, error } = await supabase
-        .from('patient_basic_info')
-        .select(`
-          id,
-          first_name,
-          last_name,
-          barangay,
-          date_of_birth
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      const { data: pregnancies } = await supabase
-        .from('pregnancy_info')
-        .select('*');
-
-      const { data: visits } = await supabase
-        .from('prenatal_visits')
-        .select('*');
-
-      const mapped = (data || []).map(p => {
-        const pregnancy = pregnancies?.find(pr => pr.patient_id === p.id);
-
-        const patientVisits = visits?.filter(v => v.patient_id === p.id) || [];
-
-        const latestVisit = patientVisits.sort(
-          (a, b) => new Date(b.visit_date) - new Date(a.visit_date)
-        )[0];
-
-        const today = new Date();
-        const dob = new Date(p.date_of_birth);
-        const age = today.getFullYear() - dob.getFullYear();
-
-        return {
-          id: `PT-${p.id}`,
-          name: `${p.first_name} ${p.last_name}`,
-          barangay: p.barangay,
-          age: age,
-
-          trimester: this.calculateTrimester(pregnancy?.lmd),
-          weeks: this.calculateWeeks(pregnancy?.lmd),
-
-          risk: "Normal", 
-
-          lastVisit: latestVisit
-            ? this.formatRelativeDate(latestVisit.visit_date)
-            : 'No visits',
-
-          nextAppt: latestVisit?.next_appt_date || 'Not scheduled',
-
-          status: "Active"
-        };
+      // scheduling na may limit
+      await this.autoScheduleVisitsOldStyle({
+        patientId,
+        lmp: patientData.lmp,
+        barangay: patientData.barangay,
+        bhwAssigned: patientData.bhwAssigned,
+        midwifeId: patientData.assignedMidwife,
+        doctorId: patientData.assignedDoctor,
+        createdBy
       });
 
-      return mapped;
+      console.log('🎉 COMPLETE: users + patient + visits!');
+      const fullPatient = await this.getPatientById(patientId);
+      console.log('👶 New patient profile:', fullPatient);
+      return fullPatient;
 
-    } catch (err) {
-      console.error("getAllPatients error:", err);
-      throw err;
+    } catch (error) {
+      console.error('💥 addPatient FAILED:', error);
+      throw new Error(`Failed to add patient: ${error.message}`);
     }
   }
 
+  async autoScheduleVisitsOldStyle({ patientId, lmp, barangay, bhwAssigned, midwifeId, doctorId, createdBy }) {
+    const lmpDate = new Date(lmp);
+    const today = new Date();
+    const diffDays = Math.ceil(Math.abs(today - lmpDate) / (1000 * 60 * 60 * 24));
+    const currentWeeks = Math.floor(diffDays / 7);
 
-  static calculateWeeks(lmp) {
-    if (!lmp) return '-';
-    const start = new Date(lmp);
-    const now = new Date();
-    const diff = Math.floor((now - start) / (1000 * 60 * 60 * 24 * 7));
-    return diff;
+    const semesters = 4;
+    const visitsPerSemester = 3;
+    let visitsCreated = 0;
+
+    console.log(`📅 OLD STYLE: ${currentWeeks}w → scheduling (max 35/day)`);
+
+  
+    for (let semester = 0; semester < semesters; semester++) {
+      const trimesterLength = 13;
+      const spacing = Math.floor(trimesterLength / visitsPerSemester);
+
+      const semesterStart = semester * trimesterLength;
+
+      for (let visit = 1; visit <= visitsPerSemester; visit++) {
+        const visitWeek = semesterStart + (visit * spacing);
+        if (visitWeek > 40) break;  // ✅ Original break condition
+
+        const visitDate = this.addWeeksToDate(lmpDate, visitWeek);
+        const visitNumber = (semester * 3) + visit;
+        const trimester = Math.ceil(visitWeek / 13);
+
+        const visitData = {
+          patient_id: patientId,
+          created_by: createdBy,
+          visit_date: visitDate,
+          visit_number: visitNumber,
+          trimester,
+          gestational_age: `${visitWeek}w 0d`,
+          next_appt_type: 'Routine Prenatal',
+          bhw_assigned: createdBy,
+          assigned_midwife: midwifeId || null,
+          assigned_doctor: doctorId || null,
+          created_at: new Date().toISOString()
+        };
+
+        const success = await this.bookVisitIfSlotAvailable(visitData, barangay);
+        if (success) visitsCreated++;
+      }
+    }
+
+    console.log(`✅ ${visitsCreated} visits scheduled!`);
   }
 
-  static calculateTrimester(lmp) {
-    const weeks = this.calculateWeeks(lmp);
-    if (weeks === '-') return '-';
+  // ----------------- ✅ 35 MAX SLOTS + IF/ELSE -----------------
+  async bookVisitIfSlotAvailable(visitData, barangay) {
+    // Count existing visits for this date
+    const { count } = await this.supabase
+      .from('prenatal_visits')
+      .select('*', { count: 'exact', head: true })
+      .eq('visit_date', visitData.visit_date);
 
-    if (weeks <= 12) return 1;
-    if (weeks <= 27) return 2;
-    return 3;
+    if (count >= 35) {
+      console.warn(`❌ MAX SLOTS (35/${count}): ${visitData.visit_date}`);
+      return false;  
+    } 
+    else if (count < 35) {
+      const { error } = await this.supabase.from('prenatal_visits').insert(visitData);
+      if (error) {
+        console.error('Insert failed:', error);
+        return false;
+      }
+      console.log(`✅ Booked (${count + 1}/35): ${visitData.visit_date}`);
+      return true;
+    }
   }
 
-  static formatRelativeDate(date) {
-    const d = new Date(date);
-    const now = new Date();
-    const diffDays = Math.floor((now - d) / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    return `${diffDays} days ago`;
+  addWeeksToDate(date, weeks) {
+    const result = new Date(date);
+    result.setDate(result.getDate() + weeks * 7);
+    return result.toISOString().split('T')[0];
   }
+
+  async getPatientById(patientId) {
+  try {
+    const { data: basic } = await this.supabase
+      .from('patient_basic_info')
+      .select('*')
+      .eq('id', patientId)
+      .single();
+
+    if (!basic) return null;
+
+    const { data: pregnancy } = await this.supabase
+      .from('pregnancy_info')
+      .select('*')
+      .eq('patient_id', patientId)
+      .single();
+
+    const { data: visits } = await this.supabase
+      .from('prenatal_visits')
+      .select('*')
+      .eq('patient_id', patientId)
+      .order('visit_date', { ascending: true });
+
+    return {
+      id: basic.id,
+      name: `${basic.first_name} ${basic.middle_name || ''} ${basic.last_name} ${basic.suffix || ''}`.trim(),
+      firstName: basic.first_name,
+      lastName: basic.last_name,
+      dob: basic.date_of_birth,
+      age: this.calculateAge(basic.date_of_birth),
+      phone: basic.contact_no,
+      barangay: basic.barangay,
+      municipality: basic.municipality,
+      province: basic.province,
+      emergencyContact: basic.emergency_contact || 'N/A',
+      bloodType: basic.blood_type || 'N/A',
+      philhealth: basic.philhealthnumber,
+      risk: pregnancy?.risk_level || 'Low', 
+      
+      pregnancyStatus: pregnancy?.pregn_postp,
+      lmp: pregnancy?.lmd,
+      edd: pregnancy?.edd,
+      pregnancyType: pregnancy?.pregnancy_type,
+      plannedDeliveryPlace: pregnancy?.place_of_delivery,
+      
+      visits: visits || [],
+      vaccines: [],
+    };
+  } catch (error) {
+    console.error('Error fetching patient:', error);
+    return null;
+  }
+}
+
+calculateAge(dob) {
+  const birthDate = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+}
+
+
+async getAllPatients() {
+  try {
+    const { data: basics } = await this.supabase
+      .from('patient_basic_info')
+      .select('*')
+      .order('last_name', { ascending: true });
+
+    if (!basics || basics.length === 0) return [];
+
+    const patientIds = basics.map(b => b.id);
+
+    const { data: pregnancies } = await this.supabase
+      .from('pregnancy_info')
+      .select('*')
+      .in('patient_id', patientIds);
+
+    const { data: visits } = await this.supabase
+      .from('prenatal_visits')
+      .select('patient_id, visit_date, next_appt_type')
+      .in('patient_id', patientIds)
+      .order('visit_date', { ascending: true });
+
+    const patients = basics.map(basic => {
+      const pregnancy = pregnancies?.find(p => p.patient_id === basic.id);
+      const patientVisits = visits?.filter(v => v.patient_id === basic.id) || [];
+      const nextVisit = patientVisits[0];
+
+      return {
+        id: basic.id,
+        name: `${basic.first_name} ${basic.middle_name || ''} ${basic.last_name}${basic.suffix ? `, ${basic.suffix}` : ''}`.trim(),
+        firstName: basic.first_name,
+        lastName: basic.last_name,
+        dob: basic.date_of_birth,
+        age: this.calculateAge(basic.date_of_birth),
+        phone: basic.contact_no || '',
+        barangay: basic.barangay || '',
+        municipality: basic.municipality || '',
+        bloodType: basic.blood_type || 'N/A',
+        philhealth: basic.philhealthnumber || '',
+        risk: pregnancy?.risk_level || 'Normal',
+        trimester: pregnancy ? this.calculateTrimester(pregnancy.lmd) : 1,
+        weeks: pregnancy ? this.calculateGestationalWeeks(pregnancy.lmd) : 0,
+        lmp: pregnancy?.lmd || '',
+        edd: pregnancy?.edd || '',
+        nextAppt: nextVisit ? nextVisit.visit_date : '-',
+        nextApptType: nextVisit?.next_appt_type || 'Routine'
+      };
+    });
+
+    return patients;
+  } 
+  catch (error) {
+    console.error('Error fetching patients list:', error);
+    return [];
+  }
+}
+
+calculateTrimester(lmp) {
+  if (!lmp) return 1;
+  const lmpDate = new Date(lmp);
+  const today = new Date();
+  const diffDays = Math.ceil(Math.abs(today - lmpDate) / (1000 * 60 * 60 * 24));
+  const weeks = Math.floor(diffDays / 7);
+  if (weeks < 13) return 1;
+  if (weeks < 27) return 2;
+  return 3;
+}
+
+calculateGestationalWeeks(lmp) {
+  if (!lmp) return 0;
+  const lmpDate = new Date(lmp);
+  const today = new Date();
+  const diffDays = Math.ceil(Math.abs(today - lmpDate) / (1000 * 60 * 60 * 24));
+  return Math.floor(diffDays / 7);
+}
+
+
 }

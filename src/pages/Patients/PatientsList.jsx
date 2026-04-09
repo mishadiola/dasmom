@@ -106,17 +106,19 @@ const PatientsList = () => {
     const [vitalToast, setVitalToast] = useState(false);
 
     useEffect(() => {
-        const fetchPatients = async () => {
-            try {
-                const data = await PatientService.getAllPatients();
-                setPatients(data);
-            } catch (err) {
-                console.error(err);
-            }
-        };
+    const fetchPatients = async () => {
+        try {
+            const patientService = new PatientService();  // 🔥 ADD THIS
+            const data = await patientService.getAllPatients();  // 🔥 CHANGE THIS
+            setPatients(data);
+        } catch (err) {
+            console.error(err);
+        }
+    };
 
-        fetchPatients();
-    }, []);
+    fetchPatients();
+}, []);
+
 
     const filteredPatients = patients.filter(p => {
         const matchesSearch =
@@ -241,7 +243,7 @@ const PatientsList = () => {
                                         <td className="cell-id">{p.id}</td>
 
                                         <td>
-                                            <div className="cell-name-wrap" onClick={() => navigate(`/dashboard/patients/${p.id.replace('PT-','')}`)}>
+                                            <div className="cell-name-wrap" onClick = {() => navigate(`/dashboard/patients/${p.id.replace('PT-','')}`)}>
                                                 <div className="avatar-sm">
                                                     {p.name.split(' ').map(n => n[0]).slice(0,2).join('')}
                                                 </div>

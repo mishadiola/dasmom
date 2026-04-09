@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
     Users, Baby, AlertTriangle, CalendarCheck, TrendingUp,
     TrendingDown, Activity, Syringe, HeartPulse, MapPin,
@@ -10,7 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/Dashboard.css';
 import AuthService from '../../services/authservice';
 import supabase from '../../config/supabaseclient';
-
+import { AuthContext } from '../../context/AuthContext';
 const authService = new AuthService();
 
 
@@ -71,49 +71,37 @@ const TrimesterBadge = ({ weeks }) => {
 
 const Dashboard = () => {
     const navigate = useNavigate();
-    const [user, setUser] = useState(null);
+    const {user} = useContext(AuthContext);
+    //const [user, setUser] = useState(null);
     const [liveStats, setLiveStats] = useState({ totalPatients: 0, highRisk: 0, newborns: 0, apptToday: 0 });
 
     useEffect(() => {
-        const fetchStats = async () => {
-            try {
-                const todayStr = new Date().toISOString().split('T')[0];
+    const fetchStats = async () => {
+        try {
+            // ✅ Define todayStr FIRST
+            const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+            
+            const [{ count: totalPatients }, { count: highRisk }, { count: newborns }, { count: apptToday }] = await Promise.all([
+                supabase.from('patient_basic_info').select('id', { count: 'exact', head: true }),
+                supabase.from('pregnancy_info').select('id', { count: 'exact', head: true }).eq('risk_level', 'High Risk'),
+                supabase.from('newborns').select('id', { count: 'exact', head: true }),
+                supabase.from('prenatal_visits').select('id', { count: 'exact', head: true }).eq('visit_date', todayStr),
+            ]);
 
-                const [{ count: totalPatients }, { count: highRisk }, { count: newborns }, { count: apptToday }] = await Promise.all([
-                    supabase.from('patient_basic_info').select('id', { count: 'exact', head: true }),
-                    supabase.from('pregnancy_info').select('id', { count: 'exact', head: true }).eq('risk_level', 'High Risk'),
-                    supabase.from('newborn_records').select('id', { count: 'exact', head: true }),
-                    supabase.from('prenatal_visits').select('id', { count: 'exact', head: true }).eq('visit_date', todayStr),
-                ]);
-
-                setLiveStats({
-                    totalPatients: totalPatients ?? 0,
-                    highRisk: highRisk ?? 0,
-                    newborns: newborns ?? 0,
-                    apptToday: apptToday ?? 0,
-                });
-            } catch (err) {
-                console.error('Failed to load dashboard stats:', err);
-            }
-        };
-        fetchStats();
-    }, []);
-
-    useEffect(() => {
-        const currentUser = authService.getUser();
-        if (!currentUser) {
-            navigate('/');
-            return;
+            setLiveStats({
+                totalPatients: totalPatients ?? 0,
+                highRisk: highRisk ?? 0,
+                newborns: newborns ?? 0,
+                apptToday: apptToday ?? 0,
+            });
+        } catch (err) {
+            console.error('Failed to load dashboard stats:', err);
         }
+    };
+    fetchStats();
+}, []);
 
-        if (!authService.accessCheck(currentUser, 'admin')) {
-            authService.logout();
-            navigate('/');
-            return;
-        }
 
-        setUser(currentUser);
-    }, [navigate]);
 
     const displayName = user?.email ? user.email.split('@')[0] : 'User';
     const roleLabel = user?.role?.toUpperCase() || 'UNKNOWN';

@@ -110,6 +110,8 @@ export default class AuthService {
         return data; // { id, full_name }
     }
 }*/
+
+/*
 import supabase from '../config/supabaseclient';
 import { getRoleConfig } from '../config/roleConfig';
 
@@ -203,4 +205,66 @@ r
     getRedirectRoute(role) {
         return getRoleConfig(role).redirect;
     }
+}*/
+import supabase from '../config/supabaseclient';
+
+export default class AuthService {
+  constructor() {
+    this.supabase = supabase;
+    this._currentUser = null; 
+  }
+
+  async login(email, password) {
+    const { data: authData, error: authError } = await this.supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password: password.trim(),
+    });
+    if (authError) throw authError;
+
+    const { data: { user: authUser } } = await this.supabase.auth.getUser();
+    if (!authUser) throw new Error('Session not established');
+
+    const { data: userData, error: userError } = await this.supabase
+      .from('users')
+      .select('id, email_address, usertype')
+      .eq('id', authUser.id)
+      .maybeSingle();
+
+    if (userError) throw userError;
+    if (!userData) throw new Error('User not found');
+
+    console.log('RAW userFull from DB:', userData);
+ 
+    let role = 'user';
+    if (userData.usertype) {
+      const { data: typeData, error: typeError } = await this.supabase
+        .from('user_type')
+        .select('user_type')
+        .eq('id', userData.usertype)
+        .maybeSingle();
+
+      if (typeError) console.error('Error fetching user_type:', typeError);
+      if (typeData && typeData.user_type) role = typeData.user_type.toLowerCase();
+    }
+
+    this._currentUser = {
+      id: userData.id,
+      email: userData.email_address,
+      role: role,
+    };
+
+    console.log('LOGIN SUCCESS:', this._currentUser);
+
+    return this._currentUser;
+  }
+
+  getAuthUser() {
+    return this._currentUser;
+  }
+
+  async logout() {
+    await this.supabase.auth.signOut();
+    this._currentUser = null;
+    console.log('User logged out');
+  }
 }

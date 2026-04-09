@@ -1,6 +1,9 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
+import { AuthProvider } from './context/AuthContext';
+import ProtectedRoute from './routes/ProtectedRoute';
+
 import Login from './pages/Login/Login';
 import MotherLogin from './pages/MotherLogin/MotherLogin';
 
@@ -32,266 +35,65 @@ import BarangayReports from './pages/Barangay/BarangayReports';
 import Settings from './pages/Settings/Settings';
 import PregnancyResources from './pages/Resources/PregnancyResources';
 
-import AuthService from './services/authservice';
 import './App.css';
-
-const authService = new AuthService();
-
-
-// 🔐 GLOBAL PROTECTED ROUTE (CLEAN + FLEXIBLE)
-const ProtectedRoute = ({ children, pageKey }) => {
-  const user = authService.getUser();
-
-  if (!user) {
-    return <Navigate to="/" replace />;
-  }
-
-  if (!authService.accessCheck(user, pageKey)) {
-    authService.logout();
-    return <Navigate to="/" replace />;
-  }
-
-  return children;
-};
-
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
 
-        {/* PUBLIC */}
-        <Route path="/" element={<Login />} />
-        <Route path="/mother-login" element={<MotherLogin />} />
+          {/* PUBLIC ROUTES */}
+          <Route path="/" element={<Login />} />
+          <Route path="/mother-login" element={<MotherLogin />} />
+          
 
-        {/* DASHBOARD LAYOUT */}
-        <Route path="/dashboard" element={<DashboardLayout />}>
+          {/* DASHBOARD LAYOUT - ADMIN / STAFF */}
+          <Route path="/dashboard" element={
+            <ProtectedRoute pageKey="admin">
+              <DashboardLayout />
+            </ProtectedRoute>
+          }>
+            <Route index element={<Dashboard />} />
+            <Route path="patients" element={<PatientsList />} />
+            <Route path="patients/add" element={<AddPatient />} />
+            <Route path="patients/:id" element={<PatientProfile />} />
+            <Route path="high-risk" element={<HighRiskCases />} />
+            <Route path="prenatal" element={<PrenatalVisits />} />
+            <Route path="prenatal/add" element={<AddPrenatalVisit />} />
+            <Route path="postpartum" element={<PostpartumRecords />} />
+            <Route path="vaccinations" element={<Vaccinations />} />
+            <Route path="deliveries" element={<DeliveryOutcomes />} />
+            <Route path="newborns" element={<NewbornTracking />} />
+            <Route path="barangay" element={<BarangayReports />} />
+            <Route path="analytics" element={<Analytics />} />
+            <Route path="resources" element={<PregnancyResources />} />
+            <Route path="settings" element={<Settings />} />
+          </Route>
 
-          {/* 🟣 MOTHER / PATIENT ROUTES */}
-          <Route
-            path="mother-home"
-            element={
-              <ProtectedRoute pageKey="mother">
-                <MotherDashboard />
-              </ProtectedRoute>
-            }
-          />
+          {/* DASHBOARD LAYOUT - MOTHER / PATIENT */}
+          <Route path="/mother-home" element={
+            <ProtectedRoute pageKey="mother">
+              <DashboardLayout />
+            </ProtectedRoute>
+          }>
+            <Route index element={<MotherDashboard />} />
+            <Route path="user-vaccinations" element={<UserVaccinations />} />
+            <Route path="user-account" element={<UserAccount />} />
+            <Route path="user-settings" element={<UserSettings />} />
+            <Route path="user-vitals" element={<MyVitals />} />
+            <Route path="user-appointments" element={<MyAppointments />} />
+            <Route path="user-tips" element={<PregnancyTips />} />
+            <Route path="user-tips/:id" element={<TipDetailPage />} />
+            <Route path="user-delivery-info" element={<PregnancyDeliveryInfo />} />
+          </Route>
 
-          <Route
-            path="user-vaccinations"
-            element={
-              <ProtectedRoute pageKey="mother">
-                <UserVaccinations />
-              </ProtectedRoute>
-            }
-          />
+          {/* FALLBACK */}
+          <Route path="*" element={<Navigate to="/" replace />} />
 
-          <Route
-            path="user-account"
-            element={
-              <ProtectedRoute pageKey="mother">
-                <UserAccount />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="user-settings"
-            element={
-              <ProtectedRoute pageKey="mother">
-                <UserSettings />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="user-vitals"
-            element={
-              <ProtectedRoute pageKey="mother">
-                <MyVitals />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="user-appointments"
-            element={
-              <ProtectedRoute pageKey="mother">
-                <MyAppointments />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="user-tips"
-            element={
-              <ProtectedRoute pageKey="mother">
-                <PregnancyTips />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="user-tips/:id"
-            element={
-              <ProtectedRoute pageKey="mother">
-                <TipDetailPage />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="user-delivery-info"
-            element={
-              <ProtectedRoute pageKey="mother">
-                <PregnancyDeliveryInfo />
-              </ProtectedRoute>
-            }
-          />
-
-          {/* 🔵 ADMIN / STAFF ROUTES */}
-          <Route
-            index
-            element={
-              <ProtectedRoute pageKey="admin">
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="patients"
-            element={
-              <ProtectedRoute pageKey="admin">
-                <PatientsList />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="patients/add"
-            element={
-              <ProtectedRoute pageKey="admin">
-                <AddPatient />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="patients/:id"
-            element={
-              <ProtectedRoute pageKey="admin">
-                <PatientProfile />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="high-risk"
-            element={
-              <ProtectedRoute pageKey="admin">
-                <HighRiskCases />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="prenatal"
-            element={
-              <ProtectedRoute pageKey="admin">
-                <PrenatalVisits />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="prenatal/add"
-            element={
-              <ProtectedRoute pageKey="admin">
-                <AddPrenatalVisit />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="postpartum"
-            element={
-              <ProtectedRoute pageKey="admin">
-                <PostpartumRecords />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="vaccinations"
-            element={
-              <ProtectedRoute pageKey="admin">
-                <Vaccinations />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="deliveries"
-            element={
-              <ProtectedRoute pageKey="admin">
-                <DeliveryOutcomes />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="newborns"
-            element={
-              <ProtectedRoute pageKey="admin">
-                <NewbornTracking />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="barangay"
-            element={
-              <ProtectedRoute pageKey="admin">
-                <BarangayReports />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="analytics"
-            element={
-              <ProtectedRoute pageKey="admin">
-                <Analytics />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="resources"
-            element={
-              <ProtectedRoute pageKey="admin">
-                <PregnancyResources />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="settings"
-            element={
-              <ProtectedRoute pageKey="admin">
-                <Settings />
-              </ProtectedRoute>
-            }
-          />
-
-        </Route>
-
-        {/* FALLBACK */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-
-      </Routes>
-    </BrowserRouter>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 
