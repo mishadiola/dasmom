@@ -24,12 +24,12 @@ const MOCK_MOTHERS = [];
 const SYSTEM_ALERTS = [];
 
 const BARANGAY_RECOVERY = [
-    { name: 'Brgy. 1', total: 12, recovered: 9 },
-    { name: 'Brgy. 2', total: 8, recovered: 5 },
-    { name: 'Brgy. 3', total: 14, recovered: 10 },
-    { name: 'Brgy. 4', total: 10, recovered: 8 },
-    { name: 'Brgy. 5', total: 7, recovered: 3 },
-    { name: 'Brgy. 7', total: 7, recovered: 6 },
+    { name: 'Station 1', total: 12, recovered: 9 },
+    { name: 'Station 2', total: 8, recovered: 5 },
+    { name: 'Station 3', total: 14, recovered: 10 },
+    { name: 'Station 4', total: 10, recovered: 8 },
+    { name: 'Station 5', total: 7, recovered: 3 },
+    { name: 'Station 7', total: 7, recovered: 6 },
 ];
 
 /* ════════════════════════════
@@ -195,7 +195,7 @@ const PostpartumRecords = () => {
     const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState({
-        deliveryType: 'All', stage: 'All', recovery: 'All', barangay: 'All', followUp: 'All'
+        deliveryType: 'All', stage: 'All', recovery: 'All', station: 'All', followUp: 'All'
     });
     const [selectedMother, setSelectedMother] = useState(null);
 
@@ -203,12 +203,12 @@ const PostpartumRecords = () => {
 
     const filtered = MOCK_MOTHERS.filter(m => {
         const s = searchTerm.toLowerCase();
-        const matchSearch = m.name.toLowerCase().includes(s) || m.patientId.toLowerCase().includes(s) || m.barangay.toLowerCase().includes(s);
+        const matchSearch = m.name.toLowerCase().includes(s) || m.patientId.toLowerCase().includes(s) || m.station.toLowerCase().includes(s);
         const matchDT = filters.deliveryType === 'All' || m.deliveryType === filters.deliveryType;
         const matchRec = filters.recovery === 'All' || m.recoveryStatus === filters.recovery;
-        const matchBrgy = filters.barangay === 'All' || m.barangay === filters.barangay;
+        const matchStation = filters.station === 'All' || m.station === filters.station;
         const matchFU = filters.followUp === 'All' || m.followUpStatus === filters.followUp;
-        return matchSearch && matchDT && matchRec && matchBrgy && matchFU;
+        return matchSearch && matchDT && matchRec && matchStation && matchFU;
     });
 
     const getRecoveryClass = (status) => {
@@ -229,7 +229,7 @@ const PostpartumRecords = () => {
         return 'fu-badge-upcoming';
     };
 
-    const maxBrgy = Math.max(...BARANGAY_RECOVERY.map(b => b.total));
+    const maxStation = Math.max(...BARANGAY_RECOVERY.map(b => b.total));
 
     return (
         <div className="pp-page">
@@ -271,7 +271,7 @@ const PostpartumRecords = () => {
                     <input
                         type="text"
                         className="pp-search-input"
-                        placeholder="Search by name, patient ID, or barangay..."
+                        placeholder="Search by name, patient ID, or station..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                     />
@@ -295,9 +295,9 @@ const PostpartumRecords = () => {
                         <option value="Upcoming">Upcoming</option>
                         <option value="Missed">Missed</option>
                     </select>
-                    <select value={filters.barangay} onChange={e => handleFilter('barangay', e.target.value)}>
-                        <option value="All">All Barangays</option>
-                        {[1, 2, 3, 4, 5, 7].map(n => <option key={n} value={`Brgy. ${n}`}>Brgy. {n}</option>)}
+                    <select value={filters.station} onChange={e => handleFilter('station', e.target.value)}>
+                        <option value="All">All Stations</option>
+                        {[1, 2, 3, 4, 5, 7].map(n => <option key={n} value={`Station ${n}`}>Station {n}</option>)}
                     </select>
                 </div>
             </div>
@@ -335,7 +335,7 @@ const PostpartumRecords = () => {
                                                     <div className="pp-avatar">{m.name.split(' ').map(n => n[0]).slice(0, 2).join('')}</div>
                                                     <div>
                                                         <span className="pp-name patient-name-link">{m.name}</span>
-                                                        <span className="pp-meta">{m.patientId} · {m.barangay}</span>
+                                                        <span className="pp-meta">{m.patientId} · {m.station}</span>
                                                     </div>
                                                 </div>
                                             </td>
@@ -391,7 +391,7 @@ const PostpartumRecords = () => {
                     </div>
                 </div>
 
-                {/* ── RIGHT: Alerts + Barangay ── */}
+                {/* ── RIGHT: Alerts + Station ── */}
                 <div className="pp-side-col">
 
                     {/* Alerts Panel */}
@@ -412,22 +412,22 @@ const PostpartumRecords = () => {
                         </div>
                     </div>
 
-                    {/* Barangay Recovery Distribution */}
+                    {/* Station Recovery Distribution */}
                     <div className="pp-card">
                         <div className="pp-card-head">
-                            <h2><MapPin size={17} /> Barangay Recovery</h2>
+                            <h2><MapPin size={17} /> Station Recovery</h2>
                         </div>
-                        <div className="brgy-list">
+                        <div className="station-list">
                             {BARANGAY_RECOVERY.map(b => {
                                 const pct = Math.round((b.recovered / b.total) * 100);
                                 return (
-                                    <div key={b.name} className="brgy-row">
-                                        <div className="brgy-name-row">
-                                            <span className="brgy-name">{b.name}</span>
-                                            <span className="brgy-count">{b.recovered}/{b.total} recovered</span>
+                                    <div key={b.name} className="station-row">
+                                        <div className="station-name-row">
+                                            <span className="station-name">{b.name}</span>
+                                            <span className="station-count">{b.recovered}/{b.total} recovered</span>
                                         </div>
-                                        <div className="brgy-bar-bg">
-                                            <div className="brgy-bar-fill" style={{ width: `${pct}%`, background: pct >= 70 ? '#6db8a0' : pct >= 50 ? '#e8b84b' : '#e05c73' }}></div>
+                                        <div className="station-bar-bg">
+                                            <div className="station-bar-fill" style={{ width: `${pct}%`, background: pct >= 70 ? '#6db8a0' : pct >= 50 ? '#e8b84b' : '#e05c73' }}></div>
                                         </div>
                                     </div>
                                 );

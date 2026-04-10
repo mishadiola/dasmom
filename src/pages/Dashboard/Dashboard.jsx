@@ -39,13 +39,13 @@ const VACCINE_STOCK = [
 ];
 
 const BARANGAY_DATA = [
-    { name: 'Brgy. 1 – Poblacion', total: 42, highRisk: 6, newborns: 5 },
-    { name: 'Brgy. 2 – Sta. Cruz', total: 38, highRisk: 4, newborns: 3 },
-    { name: 'Brgy. 3 – San Jose', total: 51, highRisk: 9, newborns: 7 },
-    { name: 'Brgy. 4 – Bagong Pag-asa', total: 29, highRisk: 2, newborns: 2 },
-    { name: 'Brgy. 5 – Maliwanag', total: 44, highRisk: 7, newborns: 6 },
-    { name: 'Brgy. 6 – Mabini', total: 33, highRisk: 5, newborns: 4 },
-    { name: 'Brgy. 7 – Daan Paso', total: 47, highRisk: 10, newborns: 4 },
+    { name: 'Station 1 – Poblacion', total: 42, highRisk: 6, newborns: 5 },
+    { name: 'Station 2 – Sta. Cruz', total: 38, highRisk: 4, newborns: 3 },
+    { name: 'Station 3 – San Jose', total: 51, highRisk: 9, newborns: 7 },
+    { name: 'Station 4 – Bagong Pag-asa', total: 29, highRisk: 2, newborns: 2 },
+    { name: 'Station 5 – Maliwanag', total: 44, highRisk: 7, newborns: 6 },
+    { name: 'Station 6 – Mabini', total: 33, highRisk: 5, newborns: 4 },
+    { name: 'Station 7 – Daan Paso', total: 47, highRisk: 10, newborns: 4 },
 ];
 
 const RECENT_DELIVERIES = [];
@@ -272,7 +272,7 @@ const Dashboard = () => {
                                                     </div>
                                                     <div>
                                                         <p className="patient-name">{a.name}</p>
-                                                        <p className="patient-meta">{a.barangay} · {a.age} yrs</p>
+                                                        <p className="patient-meta">{a.station} · {a.age} yrs</p>
                                                     </div>
                                                 </div>
                                             </td>

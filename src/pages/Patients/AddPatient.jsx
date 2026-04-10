@@ -32,9 +32,9 @@ const AddPatient = () => {
     const [toast, setToast] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
     const [missingFields, setMissingFields] = useState([]);
-    const [loadingBarangays, setLoadingBarangays] = useState(true);
+    const [loadingStations, setLoadingStations] = useState(true);
 
-    const [availableBarangays, setAvailableBarangays] = useState([]);
+    const [availableStations, setAvailableStations] = useState([]);
     const [midwifeList, setMidwifeList] = useState([]);
     const [doctorList, setDoctorList] = useState([]);
 
@@ -46,7 +46,7 @@ const AddPatient = () => {
     const [formData, setFormData] = useState({
         firstName: '', middleName: '', lastName: '', suffix: '',
         dob: '', age: '', civilStatus: '', contactNumber: '', email: '',
-        alternateContact: '', address: '', barangay: '', municipality: 'Dasmariñas',
+        alternateContact: '', address: '', station: '', municipality: 'Dasmariñas',
         province: 'Cavite', philhealth: '', validId: '',
         pregnancyStatus: 'Pregnant', gravida: '', para: '',
         lmp: '', edd: '', gestationalAge: '', pregnancyType: 'Singleton',
@@ -59,18 +59,18 @@ const AddPatient = () => {
     });
 
     useEffect(() => {
-        const loadBarangays = async () => {
+        const loadStations = async () => {
             try {
-                const barangays = await patientService.getAvailableBarangays();
-                setAvailableBarangays(barangays);
-                console.log('✅ Available barangays loaded:', barangays);
+                const stations = await patientService.getAvailableStations();
+                setAvailableStations(stations);
+                console.log('✅ Available stations loaded:', stations);
             } catch (err) {
                 console.error(err);
             } finally {
-                setLoadingBarangays(false);
+                setLoadingStations(false);
             }
         };
-        loadBarangays();
+        loadStations();
     }, []);
 
     useEffect(() => {
@@ -83,21 +83,21 @@ const AddPatient = () => {
 
     useEffect(() => {
         const filterStaff = async () => {
-            if (!formData.barangay || loadingBarangays) return;
+            if (!formData.station || loadingStations) return;
             try {
                 const allMidwives = await patientService.getAllMidwives();
-                const filteredMidwives = allMidwives.filter(mw => mw.barangay_assignment === formData.barangay);
+                const filteredMidwives = allMidwives.filter(mw => mw.station_assignment === formData.station);
                 setMidwifeList(filteredMidwives);
 
-                const doctors = await patientService.getDoctorsByBarangay(formData.barangay);
+                const doctors = await patientService.getDoctorsByStation(formData.station);
                 setDoctorList(doctors);
-                console.log(`✅ Staff filtered for ${formData.barangay}:`, { midwives: filteredMidwives.length, doctors: doctors.length });
+                console.log(`✅ Staff filtered for ${formData.station}:`, { midwives: filteredMidwives.length, doctors: doctors.length });
             } catch (err) {
                 console.error(err);
             }
         };
         filterStaff();
-    }, [formData.barangay, loadingBarangays]);
+    }, [formData.station, loadingStations]);
 
     useEffect(() => {
         if (formData.dob) {
@@ -175,7 +175,7 @@ const AddPatient = () => {
         e.preventDefault();
         if (isSaving || !user?.id) return;
 
-        const requiredPersonal = ['firstName', 'lastName', 'dob', 'email', 'contactNumber', 'address', 'barangay'];
+        const requiredPersonal = ['firstName', 'lastName', 'dob', 'email', 'contactNumber', 'address', 'station'];
         const requiredEmergency = ['emName', 'emRel', 'emPhone', 'emAddress'];
         const requiredPregnancy = ['gravida', 'para', 'lmp'];
         const requiredVitals = ['bp', 'weight', 'height'];
@@ -212,7 +212,7 @@ const AddPatient = () => {
                 message: `✅ Patient saved successfully!
                 👤 ${newPatient.name || formData.firstName + ' ' + formData.lastName}
                 📅 12 visits auto-scheduled
-                🏘️ ${formData.barangay}` 
+                🏘️ ${formData.station}` 
             });
 
             navigate(`/dashboard/patients/${newPatient.id}`);
@@ -242,7 +242,7 @@ const AddPatient = () => {
                         <ArrowLeft size={16} /> Back to Patient List
                     </button>
                     <h1 className="ap-title">Add New Pregnant Patient</h1>
-                    <p>BHW: {currentStaff.full_name} | Available Brgys: {availableBarangays.length}</p>
+                    <p>BHW: {currentStaff.full_name} | Available Stations: {availableStations.length}</p>
                 </div>
                 <div className="ap-actions">
                     <button className="btn btn-outline" onClick={() => navigate(-1)} disabled={isSaving}>
@@ -261,7 +261,7 @@ const AddPatient = () => {
                     Auto Risk: {formData.riskLevel}
                 </div>
                 {formData.gestationalAge && <div className="smart-badge">GA: {formData.gestationalAge}</div>}
-                <div className="smart-badge">35 slots/day per Brgy</div>
+                <div className="smart-badge">35 slots/day per Station</div>
             </div>
 
             <div className="ap-container">
@@ -400,16 +400,16 @@ const AddPatient = () => {
                                     />
                                 </div>
                                 <div className="form-group">
-                                    <label>Barangay <span className="req">*</span></label>
+                                    <label>Station <span className="req">*</span></label>
                                     <select 
-                                        name="barangay" 
-                                        value={formData.barangay} 
+                                        name="station" 
+                                        value={formData.station} 
                                         onChange={handleChange} 
                                         required 
-                                        className={missingFields.includes('barangay') ? 'error-field' : ''}
+                                        className={missingFields.includes('station') ? 'error-field' : ''}
                                     >
-                                        <option value="">Select Barangay ({availableBarangays.length} areas)</option>
-                                        {availableBarangays.map(bgy => (
+                                        <option value="">Select Station ({availableStations.length} areas)</option>
+                                        {availableStations.map(bgy => (
                                             <option key={bgy} value={bgy}>{bgy}</option>
                                         ))}
                                     </select>
@@ -579,18 +579,18 @@ const AddPatient = () => {
                             {/* NEW: BARANGAY-SPECIFIC STAFF DROPDOWNS */}
                             <div className="form-grid-2">
                                 <div className="form-group">
-                                    <label>Assigned Midwife ({formData.barangay})</label>
+                                    <label>Assigned Midwife ({formData.station})</label>
                                     <select name="assignedMidwife" value={formData.assignedMidwife} onChange={handleChange}>
-                                        <option value="">{midwifeList.length} available in {formData.barangay}</option>
+                                        <option value="">{midwifeList.length} available in {formData.station}</option>
                                         {midwifeList.map(mw => (
                                             <option key={mw.id} value={mw.id}>{mw.full_name}</option>
                                         ))}
                                     </select>
                                 </div>
                                 <div className="form-group">
-                                    <label>Assigned Doctor ({formData.barangay})</label>
+                                    <label>Assigned Doctor ({formData.station})</label>
                                     <select name="assignedDoctor" value={formData.assignedDoctor} onChange={handleChange}>
-                                        <option value="">{doctorList.length} available in {formData.barangay}</option>
+                                        <option value="">{doctorList.length} available in {formData.station}</option>
                                         {doctorList.map(doc => (
                                             <option key={doc.id} value={doc.id}>Dr. {doc.full_name}</option>
                                         ))}

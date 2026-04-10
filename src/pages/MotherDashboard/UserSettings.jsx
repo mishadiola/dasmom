@@ -26,7 +26,7 @@ const UserSettings = () => {
         name: "Mish Diola",
         dob: "June 12, 1997",
         age: 28,
-        barangay: "Poblacion Uno",
+        station: "Poblacion Uno",
         address: "123 Mabini St., Poblacion Uno, Dasmariñas City",
         lastLogin: "March 07, 2026 at 2:45 PM"
     };
@@ -64,8 +64,8 @@ const UserSettings = () => {
                             <p>{userData.dob} ({userData.age} years old)</p>
                         </div>
                         <div className="field-group">
-                            <label>Barangay</label>
-                            <p>{userData.barangay}</p>
+                            <label>Station</label>
+                            <p>{userData.station}</p>
                         </div>
                         <div className="field-group">
                             <label>Home Address</label>

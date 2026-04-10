@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
     Search, Filter, AlertTriangle, Eye, 
     FileText, MapPin, Calendar, HeartPulse,
-    ChevronRight, ArrowUpRight
+    ChevronRight, ArrowUpRight, AlertCircle, Activity
 } from 'lucide-react';
 import PatientService from '../../services/patientservice';
 import '../../styles/pages/HighRiskCases.css';
@@ -27,7 +27,7 @@ const HighRiskCases = () => {
     });
     const [patients, setPatients] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterBarangay, setFilterBarangay] = useState('All');
+    const [filterStation, setFilterStation] = useState('All');
 
     const loadHighRiskData = useCallback(async () => {
         try {
@@ -65,20 +65,33 @@ const HighRiskCases = () => {
     const filteredPatients = patients.filter(p => {
         const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                              p.id.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesBrgy = filterBarangay === 'All' || p.barangay === filterBarangay;
-        return matchesSearch && matchesBrgy;
+        const matchesStation = filterStation === 'All' || p.station === filterStation;
+        return matchesSearch && matchesStation;
     });
 
-    const getBrgyDistribution = () => {
+    const getStationDistribution = () => {
         const counts = {};
         patients.forEach(p => {
-            counts[p.barangay] = (counts[p.barangay] || 0) + 1;
+            counts[p.station] = (counts[p.station] || 0) + 1;
         });
         return Object.entries(counts).map(([name, count]) => ({ name, count }))
             .sort((a, b) => b.count - a.count);
     };
 
-    const brgyDistribution = getBrgyDistribution();
+    const stationDistribution = getStationDistribution();
+
+    const getRowClass = (p) => {
+        if (p.riskLevel === 'High Risk') return 'row-high-risk';
+        if (p.riskLevel === 'Moderate Risk') return 'row-moderate-risk';
+        return 'row-monitor';
+    };
+
+    const STAT_CARDS = [
+        { label: 'Total High-Risk', value: stats.totalHighRisk, color: 'rose', icon: AlertTriangle },
+        { label: 'Critical Today', value: stats.criticalToday, color: 'orange', icon: HeartPulse },
+        { label: 'Missed Follow-ups', value: stats.missedFollowups, color: 'pink', icon: Calendar },
+        { label: 'Needs Referral', value: stats.needsImmediate, color: 'lilac', icon: ChevronRight },
+    ];
 
     if (loading) return (
         <div className="high-risk-page">
@@ -91,12 +104,17 @@ const HighRiskCases = () => {
 
     return (
         <div className="high-risk-page animate-fade">
-            <div className="hr-header">
+
+            {/* ── Page Header ── */}
+            <div className="page-header">
                 <div>
-                    <h1 className="hr-title">High-Risk Case Management</h1>
-                    <p className="hr-subtitle">Dynamic monitoring of critical pregnancies and priority follow-ups</p>
+                    <h1 className="page-title">
+                        <AlertTriangle size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} />
+                        High-Risk Case Management
+                    </h1>
+                    <p className="page-subtitle">Dynamic monitoring of critical pregnancies and priority follow-ups</p>
                 </div>
-                <div className="hr-actions">
+                <div className="header-actions">
                     <div className="live-pill">
                         <span className="live-dot"></span>
                         LIVE UPDATES
@@ -106,61 +124,62 @@ const HighRiskCases = () => {
 
             {/* ── Summary Stats ── */}
             <div className="hr-stats-grid">
-                <div className="hr-stat-card border-rose">
-                    <div className="stat-icon-wrap bg-rose"><AlertTriangle size={20} /></div>
-                    <div>
-                        <p className="stat-label">Total High Risk</p>
-                        <h3 className="stat-value">{stats.totalHighRisk}</h3>
-                    </div>
+                {STAT_CARDS.map(s => {
+                    const Icon = s.icon;
+                    return (
+                        <div key={s.label} className={`stat-card stat-card--${s.color}`}>
+                            <div className="stat-top">
+                                <div className={`stat-icon stat-icon--${s.color}`}>
+                                    <Icon size={20} />
+                                </div>
+                            </div>
+                            <div className="stat-value">{s.value}</div>
+                            <div className="stat-label">{s.label}</div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* ── Search & Filters ── */}
+            <div className="hr-controls-card">
+                <div className="hr-search-wrap">
+                    <Search size={16} className="hr-search-icon" />
+                    <input 
+                        type="text"
+                        className="hr-search-input"
+                        placeholder="Search by name or patient ID..." 
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
                 </div>
-                <div className="hr-stat-card border-orange">
-                    <div className="stat-icon-wrap bg-orange"><HeartPulse size={20} /></div>
-                    <div>
-                        <p className="stat-label">Critical Today</p>
-                        <h3 className="stat-value text-orange">{stats.criticalToday}</h3>
-                    </div>
-                </div>
-                <div className="hr-stat-card border-amber">
-                    <div className="stat-icon-wrap bg-amber"><Calendar size={20} /></div>
-                    <div>
-                        <p className="stat-label">Missed Follow-ups</p>
-                        <h3 className="stat-value text-amber">{stats.missedFollowups}</h3>
-                    </div>
-                </div>
-                <div className="hr-stat-card border-lilac">
-                    <div className="stat-icon-wrap bg-lilac"><ChevronRight size={20} /></div>
-                    <div>
-                        <p className="stat-label">Needs Referral</p>
-                        <h3 className="stat-value">{stats.needsImmediate}</h3>
-                    </div>
+                <div className="hr-filters-row">
+                    <span className="filters-label"><Filter size={13} /> Filters:</span>
+                    <select 
+                        value={filterStation}
+                        onChange={(e) => setFilterStation(e.target.value)}
+                    >
+                        <option value="All">All Stations</option>
+                        {stationDistribution.map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
+                    </select>
                 </div>
             </div>
 
+            {/* ── Main Layout ── */}
             <div className="hr-main-grid">
+
                 {/* ── Left Column: Table ── */}
-                <div className="dash-col-left">
-                    <div className="card">
-                        <div className="card-header-flex">
-                            <h2 className="card-title">Real-Time High-Risk Monitoring</h2>
-                            <div className="filter-controls">
-                                <div className="search-box">
-                                    <Search size={14} />
-                                    <input 
-                                        type="text" 
-                                        placeholder="Search name or ID..." 
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                    />
-                                </div>
-                                <select 
-                                    className="brgy-select"
-                                    value={filterBarangay}
-                                    onChange={(e) => setFilterBarangay(e.target.value)}
-                                >
-                                    <option value="All">All Barangays</option>
-                                    {brgyDistribution.map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
-                                </select>
+                <div className="hr-table-col">
+                    <div className="hr-card">
+                        <div className="hr-card-head">
+                            <h2>
+                                <HeartPulse size={17} /> Real-Time High-Risk Monitoring
+                            </h2>
+                            <div className="hr-legend">
+                                <span className="legend-chip chip-high"><AlertCircle size={11} /> High Risk</span>
+                                <span className="legend-chip chip-monitor"><AlertTriangle size={11} /> Monitor</span>
+                                <span className="legend-chip chip-normal"><Activity size={11} /> Stable</span>
                             </div>
+                            <span className="hr-count">{filteredPatients.length} patients</span>
                         </div>
 
                         <div className="table-responsive">
@@ -178,7 +197,7 @@ const HighRiskCases = () => {
                                 </thead>
                                 <tbody>
                                     {filteredPatients.length > 0 ? filteredPatients.map((p) => (
-                                        <tr key={p.id} className={`table-row row-${p.riskLevel?.toLowerCase().replace(' ', '-')}`}>
+                                        <tr key={p.id} className={getRowClass(p)}>
                                             <td>
                                                 <div className="patient-cell" onClick={() => navigate(`/dashboard/patients/${p.id}`)} style={{ cursor: 'pointer' }}>
                                                     <div className="patient-avatar">
@@ -194,7 +213,7 @@ const HighRiskCases = () => {
                                             <td>
                                                 <div className="condition-wrap">
                                                     <span className="condition-main">{p.condition}</span>
-                                                    <span className="condition-meta">{p.barangay}</span>
+                                                    <span className="condition-meta">{p.station}</span>
                                                 </div>
                                             </td>
                                             <td><span className="due-date-val">{p.edd}</span></td>
@@ -206,19 +225,20 @@ const HighRiskCases = () => {
                                             </td>
                                             <td>
                                                 <div className="action-buttons">
-                                                    <button className="action-btn" title="View Profile" onClick={() => navigate(`/dashboard/patients/${p.id}`)}>
-                                                        <Eye size={16} />
+                                                    <button className="action-btn view-btn" title="View Profile" onClick={() => navigate(`/dashboard/patients/${p.id}`)}>
+                                                        <Eye size={14} />
                                                     </button>
-                                                    <button className="action-btn" title="Record Visit">
-                                                        <FileText size={16} />
+                                                    <button className="action-btn record-btn" title="Record Visit">
+                                                        <FileText size={14} />
                                                     </button>
                                                 </div>
                                             </td>
                                         </tr>
                                     )) : (
                                         <tr>
-                                            <td colSpan="7" className="empty-table-msg">
-                                                No high-risk patients found matching your criteria.
+                                            <td colSpan="7" className="hr-empty">
+                                                <AlertTriangle size={28} />
+                                                <p>No high-risk patients found matching your criteria.</p>
                                             </td>
                                         </tr>
                                     )}
@@ -229,19 +249,20 @@ const HighRiskCases = () => {
                 </div>
 
                 {/* ── Right Column: Panels ── */}
-                <div className="dash-col-right">
+                <div className="hr-side-col">
                     
                     {/* Alerts Panel */}
-                    <div className="card">
-                        <div className="card-header">
-                            <h2 className="card-title">
+                    <div className="hr-card">
+                        <div className="hr-card-head">
+                            <h2>
                                 <AlertTriangle size={16} /> Critical Alerts
                             </h2>
                         </div>
                         <div className="alerts-list">
                             {filteredPatients.filter(p => p.riskLevel?.toLowerCase().includes('high')).slice(0, 8).map(p => (
                                 <div key={p.id} className="alert-item alert-critical" onClick={() => navigate(`/dashboard/patients/${p.id}`)} style={{ cursor: 'pointer' }}>
-                                    <div className="alert-content">
+                                    <div className="alert-dot"></div>
+                                    <div className="alert-body">
                                         <p><strong>{p.name}</strong></p>
                                         <p className="alert-reason">{p.condition}</p>
                                         <div className="alert-footer">
@@ -251,28 +272,32 @@ const HighRiskCases = () => {
                                     </div>
                                 </div>
                             ))}
-                            {filteredPatients.length === 0 && <p className="p-4 text-center text-muted">No urgent alerts</p>}
+                            {filteredPatients.filter(p => p.riskLevel?.toLowerCase().includes('high')).length === 0 && (
+                                <p className="empty-alerts">No urgent alerts at this time.</p>
+                            )}
                         </div>
                     </div>
 
-                    {/* Barangay Distribution */}
-                    <div className="card">
-                        <div className="card-header">
-                            <h2 className="card-title">
-                                <MapPin size={16} /> Barangay Distribution
+                    {/* Station Distribution */}
+                    <div className="hr-card">
+                        <div className="hr-card-head">
+                            <h2>
+                                <MapPin size={16} /> Station Distribution
                             </h2>
                         </div>
-                        <div className="brgy-dist-list">
-                            {brgyDistribution.map(b => (
-                                <div key={b.name} className="brgy-dist-item">
+                        <div className="station-dist-list">
+                            {stationDistribution.map(b => (
+                                <div key={b.name} className="station-dist-item">
                                     <span>{b.name}</span>
-                                    <div className="brgy-bar-wrap">
-                                        <div className="brgy-bar-fill" style={{ width: `${(b.count / patients.length) * 100}%` }}></div>
-                                        <span className="brgy-dist-count">{b.count}</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <div className="station-bar-wrap">
+                                            <div className="station-bar-fill" style={{ width: `${(b.count / patients.length) * 100}%` }}></div>
+                                        </div>
+                                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-rose)', minWidth: '20px', textAlign: 'right' }}>{b.count}</span>
                                     </div>
                                 </div>
                             ))}
-                            {brgyDistribution.length === 0 && <p className="p-4 text-center text-muted">No records found</p>}
+                            {stationDistribution.length === 0 && <p className="empty-alerts">No records found.</p>}
                         </div>
                     </div>
                 </div>

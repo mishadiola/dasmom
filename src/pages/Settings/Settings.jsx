@@ -24,7 +24,7 @@ const USERS = [
 ];
 
 const AUDIT_LOGS = [
-    { id: 1, user: 'Mish Diola',    action: 'Generated Report',   details: 'Barangay 3 monthly report exported to PDF', time: '2026-03-01 09:14 AM', ip: '192.168.1.10' },
+    { id: 1, user: 'Mish Diola',    action: 'Generated Report',   details: 'Station 3 monthly report exported to PDF', time: '2026-03-01 09:14 AM', ip: '192.168.1.10' },
     { id: 2, user: 'Nurse Ana Reyes',     action: 'Added Patient',      details: 'New patient Maria Cruz (PT-2412) registered', time: '2026-03-01 08:50 AM', ip: '192.168.1.12' },
     { id: 3, user: 'Midwife Elena Perez', action: 'Record Vitals',      details: 'Vitals recorded for PT-2401 – Maria Reyes', time: '2026-03-01 08:30 AM', ip: '192.168.1.11' },
     { id: 4, user: 'Nurse Bea Gomez',     action: 'Login',              details: 'Successful login', time: '2026-02-28 04:45 PM', ip: '192.168.1.13' },
@@ -45,7 +45,7 @@ const ROLES_DATA = [
             deliveries:{ view: true, add: true,  edit: true,  delete: true  },
             newborns:  { view: true, add: true,  edit: true,  delete: true  },
             vaccinations:{view:true, add: true,  edit: true,  delete: true  },
-            barangay:  { view: true, add: true,  edit: true,  delete: true  },
+            station:  { view: true, add: true,  edit: true,  delete: true  },
             analytics: { view: true, add: true,  edit: true,  delete: true  },
             settings:  { view: true, add: true,  edit: true,  delete: true  },
         }
@@ -60,7 +60,7 @@ const ROLES_DATA = [
             deliveries:{ view: true, add: true,  edit: true,  delete: false },
             newborns:  { view: true, add: true,  edit: true,  delete: false },
             vaccinations:{view:true, add: true,  edit: true,  delete: false },
-            barangay:  { view: true, add: false, edit: false, delete: false },
+            station:  { view: true, add: false, edit: false, delete: false },
             analytics: { view: true, add: false, edit: false, delete: false },
             settings:  { view: false,add: false, edit: false, delete: false },
         }
@@ -75,7 +75,7 @@ const ROLES_DATA = [
             deliveries:{ view: true, add: true,  edit: false, delete: false },
             newborns:  { view: true, add: true,  edit: false, delete: false },
             vaccinations:{view:true, add: true,  edit: false, delete: false },
-            barangay:  { view: false,add: false, edit: false, delete: false },
+            station:  { view: false,add: false, edit: false, delete: false },
             analytics: { view: false,add: false, edit: false, delete: false },
             settings:  { view: false,add: false, edit: false, delete: false },
         }
@@ -86,7 +86,7 @@ const MODULE_LABELS = {
     patients: 'Patient Profiles', prenatal: 'Prenatal Visits',
     highRisk: 'High-Risk Cases', postpartum: 'Postpartum Records',
     deliveries: 'Delivery Outcomes', newborns: 'Newborn Tracking',
-    vaccinations: 'Vaccinations', barangay: 'Barangay Reports',
+    vaccinations: 'Vaccinations', station: 'Station Reports',
     analytics: 'Analytics', settings: 'Settings',
 };
 
@@ -95,7 +95,7 @@ const MODULE_LABELS = {
 ════════════════════════════ */
 const AddUserModal = ({ onClose }) => {
     const [showPwd, setShowPwd] = useState(false);
-    const [form, setForm] = useState({ name: '', email: '', password: '', role: 'Staff', barangay: '', status: 'Active' });
+    const [form, setForm] = useState({ name: '', email: '', password: '', role: 'Staff', station: '', status: 'Active' });
     const update = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
     const genPassword = () => {
@@ -129,10 +129,10 @@ const AddUserModal = ({ onClose }) => {
                             </select>
                         </div>
                         <div className="form-group">
-                            <label>Assign Barangay</label>
-                            <select value={form.barangay} onChange={e => update('barangay', e.target.value)}>
-                                <option value="">All Barangays</option>
-                                {[1,2,3,4,5,6,7].map(n => <option key={n} value={`Brgy. ${n}`}>Brgy. {n}</option>)}
+                            <label>Assign Station</label>
+                            <select value={form.station} onChange={e => update('station', e.target.value)}>
+                                <option value="">All Stations</option>
+                                {[1,2,3,4,5,6,7].map(n => <option key={n} value={`Station ${n}`}>Station {n}</option>)}
                             </select>
                         </div>
                         <div className="form-group">
@@ -301,7 +301,7 @@ const RolesTab = () => {
 ════════════════════════════ */
 const SystemSettingsTab = () => {
     const [notifs, setNotifs] = useState({ highRiskEmail: true, appointmentReminder: true, lowStock: true, missedFollowUp: false });
-    const [reports, setReports] = useState({ format: 'PDF', includeBarangay: true, includePatientSummary: true });
+    const [reports, setReports] = useState({ format: 'PDF', includeStation: true, includePatientSummary: true });
     const [dash, setDash] = useState({ landingPage: 'Dashboard', showHighRisk: true, showAlerts: true, showStats: true });
 
     const toggle = (group, setter, key) => setter(prev => ({ ...prev, [key]: !prev[key] }));
@@ -365,9 +365,9 @@ const SystemSettingsTab = () => {
                         </div>
                     </div>
                     <ToggleSwitch
-                        value={reports.includeBarangay} label="Include Barangay Summary"
-                        desc="Add barangay-level breakdown in reports"
-                        onChange={() => toggle(reports, setReports, 'includeBarangay')}
+                        value={reports.includeStation} label="Include Station Summary"
+                        desc="Add station-level breakdown in reports"
+                        onChange={() => toggle(reports, setReports, 'includeStation')}
                     />
                     <ToggleSwitch
                         value={reports.includePatientSummary} label="Include Patient Summary"
@@ -543,7 +543,7 @@ const ProfileTab = () => {
             await authService.updateStaffProfile(user.id, {
                 fullName: profileForm.fullName,
                 contactNo: profileForm.contactNo,
-                barangayAssignment: fullProfile?.barangay_assignment
+                stationAssignment: fullProfile?.station_assignment
             });
             showToast('Profile updated successfully!');
         } catch (err) {
@@ -596,8 +596,8 @@ const ProfileTab = () => {
                     <h3>{user?.fullName || 'User Account'}</h3>
                     <p className="profile-role">{user?.role?.toUpperCase() || 'Staff'}</p>
                     <p className="profile-email"><Mail size={13} /> {user?.email}</p>
-                    <p className="profile-barangay">
-                        <MapPin size={13} /> {fullProfile?.barangay_assignment || 'No Assignment'}
+                    <p className="profile-station">
+                        <MapPin size={13} /> {fullProfile?.station_assignment || 'No Assignment'}
                     </p>
                     <p className="profile-login"><Clock size={13} /> Active Session</p>
                     <button className="btn btn-outline logout-btn" onClick={handleLogout}>

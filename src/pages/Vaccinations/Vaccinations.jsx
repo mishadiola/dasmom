@@ -224,7 +224,7 @@ const Vaccinations = () => {
     const filteredVaccines = VACCINES
         .filter(v => {
             const s = searchTerm.toLowerCase();
-            const matchSearch = v.patientName.toLowerCase().includes(s) || v.patientId.toLowerCase().includes(s) || v.barangay.toLowerCase().includes(s);
+            const matchSearch = v.patientName.toLowerCase().includes(s) || v.patientId.toLowerCase().includes(s) || v.station.toLowerCase().includes(s);
             const matchType = filters.patientType === 'All' || v.type === filters.patientType;
             const matchStatus = filters.status === 'All' || v.status === filters.status;
             const matchItem = filters.item === 'All' || v.vaccine === filters.item;
@@ -240,7 +240,7 @@ const Vaccinations = () => {
     const filteredSupplements = SUPPLEMENTS
         .filter(s => {
             const q = searchTerm.toLowerCase();
-            const matchSearch = s.patientName.toLowerCase().includes(q) || s.patientId.toLowerCase().includes(q) || s.barangay.toLowerCase().includes(q);
+            const matchSearch = s.patientName.toLowerCase().includes(q) || s.patientId.toLowerCase().includes(q) || s.station.toLowerCase().includes(q);
             const matchType = filters.patientType === 'All' || s.type === filters.patientType;
             const matchStatus = filters.status === 'All' || s.status === filters.status;
             const matchItem = filters.item === 'All' || s.supplement === filters.item;
@@ -316,7 +316,7 @@ const Vaccinations = () => {
                     <input
                         type="text"
                         className="vacc-search-input"
-                        placeholder="Search by patient name, ID, or barangay..."
+                        placeholder="Search by patient name, ID, or station..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                     />
@@ -407,7 +407,7 @@ const Vaccinations = () => {
                                                             <div className="vacc-avatar">{v.patientName.split(' ').map(n=>n[0]).slice(0,2).join('')}</div>
                                                             <div>
                                                                 <span className="vacc-name">{v.patientName}</span>
-                                                                <span className="vacc-pid">{v.patientId} · {v.barangay}</span>
+                                                                <span className="vacc-pid">{v.patientId} · {v.station}</span>
                                                             </div>
                                                         </div>
                                                     </td>
@@ -430,7 +430,7 @@ const Vaccinations = () => {
                                                         <td colSpan="9">
                                                             <div className="expand-detail">
                                                                 <div><strong>Patient ID:</strong> {v.patientId}</div>
-                                                                <div><strong>Barangay:</strong> {v.barangay}</div>
+                                                                <div><strong>Station:</strong> {v.station}</div>
                                                                 <div><strong>Vaccine:</strong> {v.vaccine} — {v.dose}</div>
                                                                 <div><strong>Administered by:</strong> {v.staff}</div>
                                                                 {v.dateAdministered && <div><strong>Date Given:</strong> {v.dateAdministered}</div>}
@@ -474,7 +474,7 @@ const Vaccinations = () => {
                                                         <div className="vacc-avatar">{s.patientName.split(' ').map(n=>n[0]).slice(0,2).join('')}</div>
                                                         <div>
                                                             <span className="vacc-name">{s.patientName}</span>
-                                                            <span className="vacc-pid">{s.patientId} · {s.barangay}</span>
+                                                            <span className="vacc-pid">{s.patientId} · {s.station}</span>
                                                         </div>
                                                     </div>
                                                 </td>

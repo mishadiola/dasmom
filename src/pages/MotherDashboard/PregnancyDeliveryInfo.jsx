@@ -409,7 +409,7 @@ const PregnancyDeliveryInfo = () => {
                         By checking below, I confirm that the information I have provided — including my past
                         pregnancy history, delivery preferences, and medical considerations — is accurate and
                         truthful to the best of my knowledge. I consent to this information being used by the
-                        Barangay Health Office (BHO) / Community Health Office (CHO) staff for the purpose of
+                        Station Health Office (BHO) / Community Health Office (CHO) staff for the purpose of
                         planning and managing my prenatal and delivery care under the DasMom+ maternal health system.
                     </p>
                     <p>

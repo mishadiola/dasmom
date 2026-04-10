@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-    Search, Filter, Plus, ChevronLeft, ChevronRight,
-    Eye, Activity, CalendarPlus,
+    Search, Filter, Plus, ChevronLeft, ChevronRight, ChevronDown, Check,
+    Eye, Edit, Trash, Activity, CalendarPlus,
     FileText, User, MapPin, Clock, AlertTriangle,
     X, CheckCircle2
 } from 'lucide-react';
@@ -94,11 +94,29 @@ const PatientsList = () => {
 
     const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState({
-        trimester: 'All',
-        risk: 'All',
-        barangay: 'All',
-        sortBy: 'newest' // newest, oldest, nearest_edd, farthest_edd
+        trimesters: [],
+        risks: [],
+        stations: [],
+        sortBy: 'newest'
     });
+    
+    // UI state for custom popovers
+    const [activePopover, setActivePopover] = useState(null);
+    const [stationSearch, setStationSearch] = useState('');
+    
+    // Added scroll listener for sticky header
+    useEffect(() => {
+        const handleScroll = () => {
+            const controls = document.querySelector('.controls-card');
+            if (controls) {
+                if (window.scrollY > 120) controls.classList.add('sticky');
+                else controls.classList.remove('sticky');
+            }
+        };
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
+
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
@@ -125,29 +143,28 @@ const PatientsList = () => {
         const matchesSearch =
             p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             p.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (p.barangay || '').toLowerCase().includes(searchTerm.toLowerCase());
+            (p.station || '').toLowerCase().includes(searchTerm.toLowerCase());
 
-        const matchesTri = filters.trimester === 'All' || String(p.trimester) === filters.trimester;
+        const matchesTri = filters.trimesters.length === 0 || filters.trimesters.includes(String(p.trimester || 1));
         
-        // Fix Risk Level matching: Handle "High" filter mapping to "High Risk" database value
-        const normalizedRisk = (p.risk || '').toLowerCase();
-        const matchesRisk = filters.risk === 'All' || 
-            (filters.risk === 'High' && normalizedRisk.includes('high')) ||
-            normalizedRisk === filters.risk.toLowerCase();
+        const normalizedRisk = (p.risk || 'Normal').toLowerCase();
+        let derivedRisk = normalizedRisk;
+        if (normalizedRisk.includes('high')) derivedRisk = 'High';
+        else if (normalizedRisk.includes('monitor')) derivedRisk = 'Monitor';
+        else derivedRisk = 'Normal';
+        
+        const matchesRisk = filters.risks.length === 0 || filters.risks.includes(derivedRisk);
+        const matchesStation = filters.stations.length === 0 || filters.stations.includes(p.station);
 
-        const matchesBrgy = filters.barangay === 'All' || p.barangay === filters.barangay;
-
-        return matchesSearch && matchesTri && matchesRisk && matchesBrgy;
+        return matchesSearch && matchesTri && matchesRisk && matchesStation;
     });
 
-    // Integrated Sorting Logic
     const sortedPatients = [...filteredPatients].sort((a, b) => {
-        if (filters.sortBy === 'newest') {
-            return new Date(b.createdAt) - new Date(a.createdAt);
-        }
-        if (filters.sortBy === 'oldest') {
-            return new Date(a.createdAt) - new Date(b.createdAt);
-        }
+        if (filters.sortBy === 'newest') return new Date(b.createdAt) - new Date(a.createdAt);
+        if (filters.sortBy === 'oldest') return new Date(a.createdAt) - new Date(b.createdAt);
+        if (filters.sortBy === 'alpha_az') return a.name.localeCompare(b.name);
+        if (filters.sortBy === 'alpha_za') return b.name.localeCompare(a.name);
+        
         if (filters.sortBy === 'nearest_edd') {
             if (!a.edd) return 1;
             if (!b.edd) return -1;
@@ -161,8 +178,8 @@ const PatientsList = () => {
         return 0;
     });
 
-    // Dynamic Barangay List from patient data
-    const availableBarangays = [...new Set(patients.map(p => p.barangay).filter(Boolean))].sort();
+    // Dynamic Station List from patient data
+    const availableStations = [...new Set(patients.map(p => p.station).filter(Boolean))].sort();
 
     const totalPages = Math.ceil(sortedPatients.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -172,6 +189,27 @@ const PatientsList = () => {
         setFilters(prev => ({ ...prev, [key]: value }));
         setCurrentPage(1);
     };
+
+    const toggleArrayFilter = (field, value) => {
+        setFilters(prev => {
+            const current = [...prev[field]];
+            const updated = current.includes(value) 
+                ? current.filter(item => item !== value)
+                : [...current, value];
+            return { ...prev, [field]: updated };
+        });
+        setCurrentPage(1);
+    };
+
+    const clearFilters = () => {
+        setFilters({ trimesters: [], risks: [], stations: [], sortBy: 'newest' });
+        setSearchTerm('');
+        setCurrentPage(1);
+        setActivePopover(null);
+    };
+
+    const hasActiveFilters = filters.trimesters.length > 0 || filters.risks.length > 0 || filters.stations.length > 0 || filters.sortBy !== 'newest';
+
 
     const handleSaveVitals = (patientId, record) => {
         setVitalsHistory(prev => ({
@@ -209,7 +247,7 @@ const PatientsList = () => {
                     <Search className="search-icon" size={18} />
                     <input
                         type="text"
-                        placeholder="Search by name, ID, or barangay..."
+                        placeholder="Search by name, ID, or station..."
                         value={searchTerm}
                         onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                         className="search-input"
@@ -218,46 +256,122 @@ const PatientsList = () => {
 
                 <div className="filters-wrap">
                     <span className="filters-label">Filters:</span>
-
-                    <div className="filter-group">
-                        <span className="filter-icon"><Filter size={14} /></span>
-                        <select value={filters.trimester} onChange={(e) => handleFilterChange('trimester', e.target.value)} className="filter-select">
-                            <option value="All">All Trimesters</option>
-                            <option value="1">1st Trimester</option>
-                            <option value="2">2nd Trimester</option>
-                            <option value="3">3rd Trimester</option>
-                        </select>
+                    
+                    {/* Pregnancy Details Popover */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${(filters.trimesters.length > 0 || filters.risks.length > 0) ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'pregnancy' ? null : 'pregnancy')}
+                        >
+                            <AlertTriangle size={14} className="filter-btn-icon" />
+                            Pregnancy Details
+                            {(filters.trimesters.length + filters.risks.length) > 0 && <span className="filter-badge">{filters.trimesters.length + filters.risks.length}</span>}
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        
+                        {activePopover === 'pregnancy' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Trimester</div>
+                                <div className="popover-options">
+                                    {['1', '2', '3'].map(tri => (
+                                        <label key={tri} className="popover-checkbox-label">
+                                            <input type="checkbox" checked={filters.trimesters.includes(tri)} onChange={() => toggleArrayFilter('trimesters', tri)} />
+                                            {tri}{tri === '1' ? 'st' : tri === '2' ? 'nd' : 'rd'} Trimester
+                                        </label>
+                                    ))}
+                                </div>
+                                
+                                <div className="popover-title" style={{ marginTop: '12px' }}>Risk Level</div>
+                                <div className="popover-options">
+                                    {['Normal', 'Monitor', 'High'].map(risk => (
+                                        <label key={risk} className="popover-checkbox-label">
+                                            <input type="checkbox" checked={filters.risks.includes(risk)} onChange={() => toggleArrayFilter('risks', risk)} />
+                                            {risk} {risk === 'High' ? 'Risk' : ''}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
-                    <div className="filter-group">
-                        <span className="filter-icon"><AlertTriangle size={14} /></span>
-                        <select value={filters.risk} onChange={(e) => handleFilterChange('risk', e.target.value)} className="filter-select">
-                            <option value="All">All Risks</option>
-                            <option value="Normal">Normal</option>
-                            <option value="Monitor">Monitor</option>
-                            <option value="High">High Risk</option>
-                        </select>
+                    {/* Location Popover */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${filters.stations.length > 0 ? 'active-filter' : ''}`}
+                            onClick={() => {
+                                setActivePopover(activePopover === 'location' ? null : 'location');
+                                setStationSearch('');
+                            }}
+                        >
+                            <MapPin size={14} className="filter-btn-icon" />
+                            Location
+                            {filters.stations.length > 0 && <span className="filter-badge">{filters.stations.length}</span>}
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        
+                        {activePopover === 'location' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Station</div>
+                                <input 
+                                    type="text" 
+                                    placeholder="Search stations..." 
+                                    className="popover-search"
+                                    value={stationSearch}
+                                    onChange={(e) => setStationSearch(e.target.value)}
+                                    autoFocus
+                                />
+                                <div className="popover-options">
+                                    {availableStations
+                                        .filter(s => s.toLowerCase().includes(stationSearch.toLowerCase()))
+                                        .map(station => (
+                                            <label key={station} className="popover-checkbox-label">
+                                                <input type="checkbox" checked={filters.stations.includes(station)} onChange={() => toggleArrayFilter('stations', station)} />
+                                                {station}
+                                            </label>
+                                    ))}
+                                    {availableStations.filter(s => s.toLowerCase().includes(stationSearch.toLowerCase())).length === 0 && (
+                                        <div style={{ fontSize: '12px', padding: '8px', color: '#888' }}>No stations found.</div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
-                    <div className="filter-group">
-                        <span className="filter-icon"><MapPin size={14} /></span>
-                        <select value={filters.barangay} onChange={(e) => handleFilterChange('barangay', e.target.value)} className="filter-select">
-                            <option value="All">All Barangays</option>
-                            {availableBarangays.map(name => (
-                                <option key={name} value={name}>{name}</option>
-                            ))}
-                        </select>
+                    {/* Record Sorting Popover */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${filters.sortBy !== 'newest' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'sort' ? null : 'sort')}
+                        >
+                            <Clock size={14} className="filter-btn-icon" />
+                            Sort By
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        
+                        {activePopover === 'sort' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Date Added</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${filters.sortBy === 'newest' ? 'selected' : ''}`} onClick={() => { handleFilterChange('sortBy', 'newest'); setActivePopover(null); }}>Newest to Oldest</button>
+                                    <button className={`popover-opt-btn ${filters.sortBy === 'oldest' ? 'selected' : ''}`} onClick={() => { handleFilterChange('sortBy', 'oldest'); setActivePopover(null); }}>Oldest to Newest</button>
+                                </div>
+                                <div className="popover-title" style={{ marginTop: '8px' }}>Due Date</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${filters.sortBy === 'nearest_edd' ? 'selected' : ''}`} onClick={() => { handleFilterChange('sortBy', 'nearest_edd'); setActivePopover(null); }}>Due Date: Soonest</button>
+                                    <button className={`popover-opt-btn ${filters.sortBy === 'farthest_edd' ? 'selected' : ''}`} onClick={() => { handleFilterChange('sortBy', 'farthest_edd'); setActivePopover(null); }}>Due Date: Farthest</button>
+                                </div>
+                                <div className="popover-title" style={{ marginTop: '8px' }}>Alphabetical</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${filters.sortBy === 'alpha_az' ? 'selected' : ''}`} onClick={() => { handleFilterChange('sortBy', 'alpha_az'); setActivePopover(null); }}>Name: A-Z</button>
+                                    <button className={`popover-opt-btn ${filters.sortBy === 'alpha_za' ? 'selected' : ''}`} onClick={() => { handleFilterChange('sortBy', 'alpha_za'); setActivePopover(null); }}>Name: Z-A</button>
+                                </div>
+                            </div>
+                        )}
                     </div>
-
-                    <div className="filter-group filter-group--sort">
-                        <span className="filter-icon"><Clock size={14} /></span>
-                        <select value={filters.sortBy} onChange={(e) => handleFilterChange('sortBy', e.target.value)} className="filter-select">
-                            <option value="newest">Newest to Oldest</option>
-                            <option value="oldest">Oldest to Newest</option>
-                            <option value="nearest_edd">Nearest Due Date</option>
-                            <option value="farthest_edd">Farthest Due Date</option>
-                        </select>
-                    </div>
+                    
+                    {hasActiveFilters && (
+                        <button className="clear-filters-btn" onClick={clearFilters}>Clear All</button>
+                    )}
                 </div>
             </div>
 
@@ -268,7 +382,7 @@ const PatientsList = () => {
                             <tr>
                                 <th>Patient ID</th>
                                 <th>Name</th>
-                                <th>Barangay</th>
+                                <th>Station</th>
                                 <th>Age</th>
                                 <th>Gestation</th>
                                 <th>Risk Level</th>
@@ -295,7 +409,7 @@ const PatientsList = () => {
                                             </div>
                                         </td>
 
-                                        <td className="cell-muted">{p.barangay}</td>
+                                        <td className="cell-muted">{p.station}</td>
                                         <td className="cell-bold">{p.age}</td>
 
                                         <td>
@@ -319,16 +433,21 @@ const PatientsList = () => {
 
                                         <td>
                                             <div className="actions-group">
-                                                <button className="action-btn view-btn" onClick={() => navigate(`/dashboard/patients/${p.id.replace('PT-','')}`)}>
+                                                <button className="action-btn view-btn" data-tooltip="View Profile" onClick={() => navigate(`/dashboard/patients/${p.id.replace('PT-','')}`)}>
                                                     <Eye size={16} />
                                                 </button>
 
-                                                <button className="action-btn vitals-btn" onClick={() => setVitalModalPatient(p)}>
-                                                    <Activity size={16} />
+                                                <button className="action-btn edit-btn" data-tooltip="Edit Patient" onClick={() => navigate(`/dashboard/patients/${p.id.replace('PT-','')}/edit`)}>
+                                                    <Edit size={16} />
                                                 </button>
 
-                                                <button className="action-btn sched-btn" onClick={() => navigate('/dashboard/prenatal')}>
-                                                    <CalendarPlus size={16} />
+                                                <button className="action-btn delete-btn" data-tooltip="Delete Patient" onClick={() => {
+                                                    if(window.confirm('Are you sure you want to delete this patient?')) {
+                                                        // Fallback implementation, integration ready
+                                                        console.log('Delete logic triggered');
+                                                    }
+                                                }}>
+                                                    <Trash size={16} />
                                                 </button>
                                             </div>
                                         </td>

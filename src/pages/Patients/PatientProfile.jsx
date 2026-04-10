@@ -85,7 +85,7 @@ const PatientProfile = () => {
                             </span>
                         </div>
                         <p className="profile-meta">
-                            ID: {p.id.slice(0, 8)}... · {p.age} years old · <MapPin size={12} /> {p.barangay}
+                            ID: {p.id.slice(0, 8)}... · {p.age} years old · <MapPin size={12} /> {p.station}
                         </p>
                     </div>
                 </div>
@@ -166,7 +166,7 @@ const PatientProfile = () => {
                                 </div>
                                 <div className="info-item">
                                     <span className="info-label">Full Address</span>
-                                    <span className="info-val">{p.address}, {p.barangay}, {p.municipality}</span>
+                                    <span className="info-val">{p.address}, {p.station}, {p.municipality}</span>
                                 </div>
                             </div>
                             <h3 className="info-card-title mt-4"><Shield size={16} /> Emergency Contact</h3>

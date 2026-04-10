@@ -171,7 +171,7 @@ const UserAccount = () => {
     const userData = {
         name: 'Mish Diola',
         dob: 'June 12, 1997',
-        barangay: 'Poblacion Uno',
+        station: 'Poblacion Uno',
         address: '123 Mabini St., Poblacion Uno, Dasmariñas City',
     };
 
@@ -230,7 +230,7 @@ const UserAccount = () => {
                     <div className="account-avatar-info">
                         <h1>{userData.name}</h1>
                         <p className="account-location">
-                            <MapPin size={14} /> {userData.barangay}
+                            <MapPin size={14} /> {userData.station}
                         </p>
                     </div>
                 </div>
@@ -250,8 +250,8 @@ const UserAccount = () => {
                             <input type="text" value={userData.dob} readOnly className="read-only-input" />
                         </div>
                         <div className="form-field">
-                            <label>Barangay</label>
-                            <input type="text" value={userData.barangay} readOnly className="read-only-input" />
+                            <label>Station</label>
+                            <input type="text" value={userData.station} readOnly className="read-only-input" />
                         </div>
                         <div className="form-field">
                             <label>Home Address</label>

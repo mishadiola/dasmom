@@ -46,7 +46,7 @@ export default class DeliveryService {
                     id: baby.id,
                     patientId: baby.patient_id,
                     patientName: mother ? `${mother.first_name} ${mother.last_name}` : 'Unknown',
-                    barangay: mother?.barangay || 'N/A',
+                    station: mother?.barangay || 'N/A',
                     deliveryDate: baby.birth_date,
                     deliveryTime: baby.birth_time || '--:--',
                     deliveryType: baby.delivery_type || 'NSD',
@@ -92,7 +92,7 @@ export default class DeliveryService {
             return data.map(p => ({
                 patientId: p.patient_id,
                 patientName: `${p.patient_basic_info.first_name} ${p.patient_basic_info.last_name}`,
-                barangay: p.patient_basic_info.barangay,
+                station: p.patient_basic_info.barangay,
                 edd: p.edd,
                 riskLevel: p.risk_level,
                 status: 'Upcoming'
@@ -169,7 +169,7 @@ export default class DeliveryService {
             return data.map(p => ({
                 id: p.id,
                 name: `${p.first_name} ${p.last_name}`,
-                barangay: p.barangay,
+                station: p.barangay,
                 riskLevel: p.pregnancy_info?.[0]?.risk_level || 'Normal',
                 isPregnant: p.pregnancy_info?.[0]?.pregn_postp === 'Pregnant'
             }));

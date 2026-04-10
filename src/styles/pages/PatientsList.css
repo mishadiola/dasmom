@@ -88,41 +88,179 @@
     margin-right: 4px;
 }
 
-.filter-group {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
-
-.filter-icon {
-    position: absolute;
-    left: 12px;
-    color: var(--color-text-light);
-    pointer-events: none;
-    display: flex;
-}
-
-.filter-select {
+/* Custom Filter Popover Target Button */
+.filter-btn {
     appearance: none;
-    padding: 9px 36px 9px 34px;
+    padding: 8px 14px;
     border: 1.5px solid #eef0f4;
     border-radius: 10px;
     font-family: var(--font);
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--color-text);
-    background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238f97a3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 12px center;
+    background: #fff;
     cursor: pointer;
     transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.filter-select:hover {
+.filter-btn:hover {
     border-color: #d1d6e0;
+    background: #f8f9fb;
 }
 
-.filter-select:focus {
+.filter-btn.active-filter {
+    border-color: var(--color-rose);
+    color: var(--color-rose);
+    background: rgba(185, 129, 138, 0.05);
+}
+
+.filter-btn-icon {
+    color: var(--color-text-light);
+}
+.filter-btn.active-filter .filter-btn-icon {
+    color: var(--color-rose);
+}
+
+.filter-badge {
+    background: var(--color-rose);
+    color: #fff;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    font-weight: 700;
+}
+
+/* Dropdown Container */
+.filter-dropdown-container {
+    position: relative;
+}
+
+.filter-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    border: 1px solid #eef0f4;
+    min-width: 220px;
+    z-index: 50;
+    padding: 12px;
+    animation: pop-in 0.15s ease;
+}
+
+@keyframes pop-in {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.popover-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--color-text-light);
+    margin-bottom: 8px;
+    padding: 0 4px;
+    letter-spacing: 0.5px;
+}
+
+.popover-search {
+    width: 100%;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    border-radius: 8px;
+    border: 1.5px solid #eef0f4;
+    font-size: 13px;
+    background: #fcfcfd;
+    font-family: var(--font);
+    box-sizing: border-box;
+}
+
+.popover-search:focus {
     border-color: var(--color-rose);
     outline: none;
+    background: #fff;
+}
+
+.popover-options {
+    max-height: 240px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    scrollbar-width: thin;
+}
+
+.popover-opt-btn {
+    text-align: left;
+    width: 100%;
+    background: transparent;
+    border: none;
+    padding: 8px 12px;
+    font-family: var(--font);
+    font-size: 13px;
+    color: var(--color-text);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+    font-weight: 500;
+}
+
+.popover-opt-btn:hover {
+    background: #f4f6f9;
+}
+
+.popover-opt-btn.selected {
+    background: rgba(185, 129, 138, 0.1);
+    color: var(--color-rose);
+    font-weight: 600;
+}
+
+/* Checkbox specific */
+.popover-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 4px;
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: 6px;
+    color: var(--color-text);
+}
+
+.popover-checkbox-label:hover {
+    background: #f4f6f9;
+}
+
+/* Clear all button */
+.clear-filters-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-text-light);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    transition: all 0.2s;
+}
+
+.clear-filters-btn:hover {
+    color: var(--color-rose);
+    text-decoration-color: var(--color-rose);
+}
+
+/* Sticky styles applied dynamically */
+.controls-card.sticky {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    border-radius: 0 0 16px 16px;
+    margin-top: -20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.05);
 }
 
 /* ══════════════════════════════════════════
@@ -133,7 +271,6 @@
     border-radius: 16px;
     border: 1px solid #eef0f4;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
-    overflow: hidden;
 }
 
 .table-responsive {
@@ -144,10 +281,15 @@
     width: 100%;
     border-collapse: collapse;
     min-width: 900px;
-    /* Forces scroll on small screens */
 }
 
 /* Headers */
+.patients-table th:first-child {
+    border-top-left-radius: 16px;
+}
+.patients-table th:last-child {
+    border-top-right-radius: 16px;
+}
 .patients-table th {
     background: #fcfcfd;
     padding: 14px 20px;
@@ -329,6 +471,18 @@
     transition: all 0.2s ease;
 }
 
+.action-btn svg {
+    width: 16px;
+    height: 16px;
+    display: block;
+    flex-shrink: 0;
+    stroke: currentColor !important;
+    stroke-width: 2 !important;
+    fill: none !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
 .view-btn {
     background: #f4f6f9;
     color: var(--color-text-muted);
@@ -339,22 +493,22 @@
     color: #fff;
 }
 
-.vitals-btn {
+.edit-btn {
     background: rgba(91, 174, 208, 0.1);
     color: #2d7fa3;
 }
 
-.vitals-btn:hover {
+.edit-btn:hover {
     background: rgba(91, 174, 208, 0.2);
 }
 
-.sched-btn {
-    background: rgba(195, 207, 183, 0.2);
-    color: #5a8060;
+.delete-btn {
+    background: rgba(224, 92, 115, 0.12);
+    color: #b73a52;
 }
 
-.sched-btn:hover {
-    background: rgba(195, 207, 183, 0.35);
+.delete-btn:hover {
+    background: rgba(224, 92, 115, 0.25);
 }
 
 /* Empty State */
@@ -801,4 +955,61 @@
     .vm-grid {
         grid-template-columns: 1fr;
     }
+}
+
+/* ══════════════════════════════════════════
+   CUSTOM TOOLTIPS
+══════════════════════════════════════════ */
+[data-tooltip] {
+    position: relative;
+    cursor: pointer;
+}
+
+[data-tooltip]::before,
+[data-tooltip]::after {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.2s ease;
+    z-index: 1000;
+}
+
+/* Tooltip text */
+[data-tooltip]::after {
+    content: attr(data-tooltip);
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%) translateY(4px);
+    background: #1e293b;
+    color: #fff;
+    font-size: 11px;
+    font-family: var(--font);
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 6px;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* Tooltip arrow */
+[data-tooltip]::before {
+    content: '';
+    bottom: calc(100% + 2px);
+    left: 50%;
+    transform: translateX(-50%) translateY(4px);
+    border: 6px solid transparent;
+    border-top-color: #1e293b;
+}
+
+[data-tooltip]:hover::before,
+[data-tooltip]:hover::after {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* Fix table clipping for tooltips if possible, otherwise they stay above */
+.table-responsive {
+    overflow-x: auto; /* Required to prevent the right side of the table from being hidden off-screen! */
+    overflow-y: visible;
 }

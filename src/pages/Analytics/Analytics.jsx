@@ -11,7 +11,7 @@ import '../../styles/pages/Analytics.css';
 /* ════════════════════════════
    MOCK DATA ENGINE
 ════════════════════════════ */
-const BARANGAYS = ['Brgy. 1', 'Brgy. 2', 'Brgy. 3', 'Brgy. 4', 'Brgy. 5', 'Brgy. 6', 'Brgy. 7'];
+const STATIONS = ['Station 1', 'Station 2', 'Station 3', 'Station 4', 'Station 5', 'Station 6', 'Station 7'];
 
 const generateMaternalData = () => {
     const conditions = ['Preeclampsia', 'Anemia', 'Gestational Diabetes', 'None'];
@@ -34,7 +34,7 @@ const generateMaternalData = () => {
             id: `PT-${2026001 + i}`,
             name: `Patient ${i + 1}`,
             age,
-            barangay: BARANGAYS[Math.floor(Math.random() * BARANGAYS.length)],
+            station: STATIONS[Math.floor(Math.random() * STATIONS.length)],
             trimester: tri,
             riskLevel,
             condition,
@@ -102,7 +102,7 @@ const DonutChart = ({ data, total, colors }) => {
 ════════════════════════════ */
 const Analytics = () => {
     const [filters, setFilters] = useState({
-        barangay: 'All',
+        station: 'All',
         trimester: 'All',
         timeframe: 'quarterly'
     });
@@ -110,9 +110,9 @@ const Analytics = () => {
     // ── Data Filtering ──
     const filteredData = useMemo(() => {
         return MOCK_DATA.filter(p => {
-            const matchBrgy = filters.barangay === 'All' || p.barangay === filters.barangay;
+            const matchStation = filters.station === 'All' || p.station === filters.station;
             const matchTri = filters.trimester === 'All' || p.trimester.toString() === filters.trimester;
-            return matchBrgy && matchTri;
+            return matchStation && matchTri;
         });
     }, [filters]);
 
@@ -162,9 +162,9 @@ const Analytics = () => {
             <div className="analytics-filters shadow-sm">
                 <div className="filter-group">
                     <MapPin size={16} className="filter-icon" />
-                    <select value={filters.barangay} onChange={e => handleFilterChange('barangay', e.target.value)}>
-                        <option value="All">All Barangays</option>
-                        {BARANGAYS.map(b => <option key={b} value={b}>{b}</option>)}
+                    <select value={filters.station} onChange={e => handleFilterChange('station', e.target.value)}>
+                        <option value="All">All Stations</option>
+                        {STATIONS.map(b => <option key={b} value={b}>{b}</option>)}
                     </select>
                 </div>
                 <div className="filter-group">
@@ -247,7 +247,7 @@ const Analytics = () => {
                         <MiniTrend data={[4, 6, 8, 5, 9, 7, 12, 8]} color="#ac97b4" />
                     </div>
                     <div className="report-footer">
-                        <p>Targeting awareness programs in <strong>Brgy. 3</strong> could reduce these numbers.</p>
+                        <p>Targeting awareness programs in <strong>Station 3</strong> could reduce these numbers.</p>
                     </div>
                 </div>
 

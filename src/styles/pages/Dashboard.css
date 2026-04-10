@@ -659,7 +659,7 @@
 /* ══════════════════════════════════════════
    BARANGAY TABLE
 ══════════════════════════════════════════ */
-.brgy-name {
+.station-name {
     font-weight: 600 !important;
     font-size: 12.5px !important;
     color: var(--color-text) !important;

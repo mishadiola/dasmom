@@ -385,31 +385,31 @@
     color: var(--color-text-muted);
 }
 
-/* Barangay Recovery */
-.brgy-list {
+/* Station Recovery */
+.station-list {
     padding: 12px 16px 16px;
     display: flex;
     flex-direction: column;
     gap: 12px;
 }
 
-.brgy-row { display: flex; flex-direction: column; gap: 5px; }
+.station-row { display: flex; flex-direction: column; gap: 5px; }
 
-.brgy-name-row {
+.station-name-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
-.brgy-name { font-size: 12px; font-weight: 700; color: var(--color-text); }
-.brgy-count { font-size: 11px; color: var(--color-text-muted); }
+.station-name { font-size: 12px; font-weight: 700; color: var(--color-text); }
+.station-count { font-size: 11px; color: var(--color-text-muted); }
 
-.brgy-bar-bg {
+.station-bar-bg {
     height: 6px;
     background: #f0f2f5;
     border-radius: 4px;
     overflow: hidden;
 }
-.brgy-bar-fill {
+.station-bar-fill {
     height: 100%;
     border-radius: 4px;
     transition: width 0.5s ease;

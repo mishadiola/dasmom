@@ -8,7 +8,7 @@ export default class PatientService {
   }
 
   // barangay
-  async getAvailableBarangays() {
+  async getAvailableStations() {
     try {
       const { data, error } = await this.supabase
         .from('staff_profiles')
@@ -32,11 +32,11 @@ export default class PatientService {
     return error ? [] : (data || []);
   }
 
-  async getDoctorsByBarangay(barangay) {
+  async getDoctorsByStation(station) {
     const { data, error } = await this.supabase
       .from('staff_profiles')
       .select('id, full_name, barangay_assignment')
-      .eq('barangay_assignment', barangay)
+      .eq('barangay_assignment', station)
       .ilike('role', '%doctor%')
       .order('full_name');
     return error ? [] : (data || []);
@@ -86,7 +86,7 @@ export default class PatientService {
           contact_no: patientData.contactNumber,
           house_no: patientData.address || '',
           municipality: patientData.municipality,
-          barangay: patientData.barangay,
+          barangay: patientData.station,
           province: patientData.province,
           philhealthnumber: patientData.philhealth || null,
           emergency_contact: JSON.stringify({
@@ -145,7 +145,7 @@ export default class PatientService {
       await this.autoScheduleVisitsOldStyle({
         patientId,
         lmp: patientData.lmp,
-        barangay: patientData.barangay,
+        barangay: patientData.station,
         bhwAssigned: patientData.bhwAssigned,
         midwifeId: patientData.assignedMidwife,
         doctorId: patientData.assignedDoctor,
@@ -282,7 +282,7 @@ export default class PatientService {
         dob: basic.date_of_birth,
         age: this.calculateAge(basic.date_of_birth),
         phone: basic.contact_no,
-        barangay: basic.barangay,
+        station: basic.barangay,
         address: basic.house_no,
         municipality: basic.municipality,
         province: basic.province,
@@ -361,7 +361,7 @@ export default class PatientService {
           dob: basic.date_of_birth,
           age: this.calculateAge(basic.date_of_birth),
           phone: basic.contact_no || '',
-          barangay: basic.barangay || '',
+          station: basic.barangay || '',
           municipality: basic.municipality || '',
           bloodType: basic.blood_type || 'N/A',
           philhealth: basic.philhealthnumber || '',
@@ -484,7 +484,7 @@ export default class PatientService {
         return {
           id: p.patient_id,
           name: basic ? `${basic.first_name} ${basic.last_name}` : 'Unknown',
-          barangay: basic?.barangay || 'N/A',
+          station: basic?.barangay || 'N/A',
           riskLevel: p.risk_level,
           edd: p.edd || 'TBD',
           weeks: this.calculateGestationalWeeks(p.lmd),

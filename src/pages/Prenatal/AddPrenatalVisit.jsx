@@ -12,7 +12,7 @@ const MOCK_PATIENT = {
     id: 'PT-2026105',
     name: 'Maria Santos',
     age: 28,
-    barangay: 'Brgy. 3',
+    station: 'Station 3',
     gravida: 2,
     para: 1,
     lmp: '2025-09-10',
@@ -190,7 +190,7 @@ const AddPrenatalVisit = () => {
                         <div className="pi-grid">
                             <div className="pi-main">
                                 <h2>{formData.name}</h2>
-                                <span>{formData.id} · {formData.age} yrs · {formData.barangay}</span>
+                                <span>{formData.id} · {formData.age} yrs · {formData.station}</span>
                             </div>
                             <div className="pi-stats">
                                 <div className="pi-stat-box">

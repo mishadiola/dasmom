@@ -38,7 +38,7 @@ const AddDeliveryModal = ({ onClose, onSuccess }) => {
     const [showResults, setShowResults] = useState(false);
     
     const [form, setForm] = useState({
-        patientId: '', patientName: '', age: '', barangay: '', gestationalAge: '', riskLevel: 'Normal',
+        patientId: '', patientName: '', age: '', station: '', gestationalAge: '', riskLevel: 'Normal',
         deliveryDate: new Date().toISOString().split('T')[0], deliveryTime: '', deliveryType: 'NSD', deliveryMode: '',
         staff: STAFF_LIST[0], facility: FACILITIES[0],
         complications: ['None'],
@@ -66,7 +66,7 @@ const AddDeliveryModal = ({ onClose, onSuccess }) => {
             ...prev,
             patientId: p.id,
             patientName: p.name,
-            barangay: p.barangay,
+            station: p.station,
             riskLevel: p.riskLevel
         }));
         setShowResults(false);
@@ -151,7 +151,7 @@ const AddDeliveryModal = ({ onClose, onSuccess }) => {
                                                 {searchResults.map(p => (
                                                     <div key={p.id} className="search-result-item" onClick={() => selectPatient(p)}>
                                                         <div className="res-name">{p.name}</div>
-                                                        <div className="res-meta">{p.id} · {p.barangay} · {p.isPregnant ? 'Pregnant' : 'Status: ' + p.riskLevel}</div>
+                                                        <div className="res-meta">{p.id} · {p.station} · {p.isPregnant ? 'Pregnant' : 'Status: ' + p.riskLevel}</div>
                                                     </div>
                                                 ))}
                                             </div>
@@ -163,8 +163,8 @@ const AddDeliveryModal = ({ onClose, onSuccess }) => {
                                     <input type="text" value={form.patientId} readOnly className="readonly-field" />
                                 </div>
                                 <div className="form-group">
-                                    <label>Barangay</label>
-                                    <input type="text" value={form.barangay} readOnly className="readonly-field" />
+                                    <label>Station</label>
+                                    <input type="text" value={form.station} readOnly className="readonly-field" />
                                 </div>
                                 <div className="form-group">
                                     <label>Risk Level</label>
@@ -273,7 +273,7 @@ const DeliveryOutcomes = () => {
         type: 'All', 
         risk: 'All', 
         complication: 'All', 
-        barangay: 'All',
+        station: 'All',
         view: 'outcomes' // 'outcomes' | 'upcoming'
     });
     const [showModal, setShowModal] = useState(false);
@@ -336,18 +336,18 @@ const DeliveryOutcomes = () => {
             const s = searchTerm.toLowerCase();
             const patientName = d.patientName || '';
             const patientId = d.patientId || '';
-            const barangay = d.barangay || '';
+            const station = d.station || '';
             
             const matchSearch = patientName.toLowerCase().includes(s) || 
                                patientId.toLowerCase().includes(s) || 
-                               barangay.toLowerCase().includes(s);
+                               station.toLowerCase().includes(s);
                                
             const matchType = filters.type === 'All' || d.deliveryType === filters.type;
             const matchRisk = filters.risk === 'All' || d.riskLevel === filters.risk;
             const matchComp = filters.complication === 'All' || (filters.complication === 'None' ? d.complications === 'None' : d.complications !== 'None');
-            const matchBrgy = filters.barangay === 'All' || d.barangay === filters.barangay;
+            const matchStation = filters.station === 'All' || d.station === filters.station;
             
-            return matchSearch && matchType && matchRisk && matchComp && matchBrgy;
+            return matchSearch && matchType && matchRisk && matchComp && matchStation;
         })
         .sort((a, b) => {
             const currentSortField = sortField || (filters.view === 'outcomes' ? 'deliveryDate' : 'edd');
@@ -443,7 +443,7 @@ const DeliveryOutcomes = () => {
                     <input
                         type="text"
                         className="do-search-input"
-                        placeholder="Search by mother name, patient ID, or barangay..."
+                        placeholder="Search by mother name, patient ID, or station..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                     />
@@ -472,9 +472,9 @@ const DeliveryOutcomes = () => {
                         <option value="None">No Complications</option>
                         <option value="HasComp">With Complications</option>
                     </select>
-                    <select value={filters.barangay} onChange={e => handleFilter('barangay', e.target.value)}>
-                        <option value="All">All Barangays</option>
-                        {[1,2,3,4,5,6,7].map(n => <option key={n} value={`Brgy. ${n}`}>Brgy. {n}</option>)}
+                    <select value={filters.station} onChange={e => handleFilter('station', e.target.value)}>
+                        <option value="All">All Stations</option>
+                        {[1,2,3,4,5,6,7].map(n => <option key={n} value={`Station ${n}`}>Station {n}</option>)}
                     </select>
                 </div>
             </div>
@@ -517,7 +517,7 @@ const DeliveryOutcomes = () => {
                                         ) : (
                                             <>
                                                 <th>Risk Level</th>
-                                                <th>Barangay</th>
+                                                <th>Station</th>
                                                 <th>Last Checkup</th>
                                                 <th>Status</th>
                                             </>
@@ -536,7 +536,7 @@ const DeliveryOutcomes = () => {
                                                         <div className="do-avatar">{d.patientName?.split(' ').map(n=>n[0]).slice(0,2).join('')}</div>
                                                         <div>
                                                             <span className="do-name">{d.patientName}</span>
-                                                            <span className="do-pid">{d.patientId} · {d.barangay}</span>
+                                                            <span className="do-pid">{d.patientId} · {d.station}</span>
                                                         </div>
                                                     </div>
                                                 </td>
@@ -559,7 +559,7 @@ const DeliveryOutcomes = () => {
                                                 ) : (
                                                     <>
                                                         <td><span className={`risk-badge ${getRiskBadge(d.riskLevel)}`}>{d.riskLevel}</span></td>
-                                                        <td>{d.barangay}</td>
+                                                        <td>{d.station}</td>
                                                         <td>-</td>
                                                         <td><span className="status-pill pill-upcoming">Upcoming</span></td>
                                                     </>

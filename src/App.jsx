@@ -31,7 +31,7 @@ import PostpartumRecords from './pages/Postpartum/PostpartumRecords';
 import Vaccinations from './pages/Vaccinations/Vaccinations';
 import DeliveryOutcomes from './pages/Deliveries/DeliveryOutcomes';
 import NewbornTracking from './pages/Newborns/NewbornTracking';
-import BarangayReports from './pages/Barangay/BarangayReports';
+import StationReports from './pages/Station/StationReports';
 import Settings from './pages/Settings/Settings';
 import PregnancyResources from './pages/Resources/PregnancyResources';
 
@@ -65,7 +65,7 @@ function App() {
             <Route path="vaccinations" element={<Vaccinations />} />
             <Route path="deliveries" element={<DeliveryOutcomes />} />
             <Route path="newborns" element={<NewbornTracking />} />
-            <Route path="barangay" element={<BarangayReports />} />
+            <Route path="stations" element={<StationReports />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="resources" element={<PregnancyResources />} />
             <Route path="settings" element={<Settings />} />

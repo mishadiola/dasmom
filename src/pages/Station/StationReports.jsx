@@ -6,7 +6,7 @@ import {
     Eye, ChevronDown, ChevronUp, CheckCircle2, AlertCircle,
     FileText, Activity, Heart
 } from 'lucide-react';
-import '../../styles/pages/BarangayReports.css';
+import '../../styles/pages/StationReports.css';
 
 /* ════════════════════════════
    MOCK DATA
@@ -19,10 +19,10 @@ const SUMMARY_STATS = [
     { label: 'Supplements Distributed', value: '1,500', color: 'pink', icon: Pill },
 ];
 
-const BARANGAYS = [
+const stationS = [
     {
-        id: 'brgy-1',
-        name: 'Brgy. 1 – Poblacion Norte',
+        id: 'station-1',
+        name: 'Station 1 – Poblacion Norte',
         totalPatients: 52, highRisk: 8, recentDeliveries: 10,
         vaccCoverage: 90, newborns: 10, suppCoverage: 92,
         riskStatus: 'Normal',
@@ -33,8 +33,8 @@ const BARANGAYS = [
         maternalVaccCoverage: 92, newbornVaccCoverage: 88,
     },
     {
-        id: 'brgy-2',
-        name: 'Brgy. 2 – Barangay Uno',
+        id: 'station-2',
+        name: 'Station 2 – Station Uno',
         totalPatients: 45, highRisk: 5, recentDeliveries: 7,
         vaccCoverage: 78, newborns: 7, suppCoverage: 80,
         riskStatus: 'Monitor',
@@ -45,8 +45,8 @@ const BARANGAYS = [
         maternalVaccCoverage: 80, newbornVaccCoverage: 75,
     },
     {
-        id: 'brgy-3',
-        name: 'Brgy. 3 – San Jose',
+        id: 'station-3',
+        name: 'Station 3 – San Jose',
         totalPatients: 61, highRisk: 12, recentDeliveries: 11,
         vaccCoverage: 82, newborns: 11, suppCoverage: 85,
         riskStatus: 'Monitor',
@@ -57,8 +57,8 @@ const BARANGAYS = [
         maternalVaccCoverage: 84, newbornVaccCoverage: 79,
     },
     {
-        id: 'brgy-4',
-        name: 'Brgy. 4 – Aplaya',
+        id: 'station-4',
+        name: 'Station 4 – Aplaya',
         totalPatients: 38, highRisk: 3, recentDeliveries: 6,
         vaccCoverage: 94, newborns: 6, suppCoverage: 96,
         riskStatus: 'Normal',
@@ -69,8 +69,8 @@ const BARANGAYS = [
         maternalVaccCoverage: 96, newbornVaccCoverage: 92,
     },
     {
-        id: 'brgy-5',
-        name: 'Brgy. 5 – Sala',
+        id: 'station-5',
+        name: 'Station 5 – Sala',
         totalPatients: 44, highRisk: 6, recentDeliveries: 8,
         vaccCoverage: 70, newborns: 8, suppCoverage: 68,
         riskStatus: 'Critical',
@@ -81,8 +81,8 @@ const BARANGAYS = [
         maternalVaccCoverage: 72, newbornVaccCoverage: 67,
     },
     {
-        id: 'brgy-6',
-        name: 'Brgy. 6 – Bagong Nayon',
+        id: 'station-6',
+        name: 'Station 6 – Bagong Nayon',
         totalPatients: 55, highRisk: 5, recentDeliveries: 9,
         vaccCoverage: 88, newborns: 9, suppCoverage: 90,
         riskStatus: 'Normal',
@@ -93,8 +93,8 @@ const BARANGAYS = [
         maternalVaccCoverage: 90, newbornVaccCoverage: 86,
     },
     {
-        id: 'brgy-7',
-        name: 'Brgy. 7 – Mapalad',
+        id: 'station-7',
+        name: 'Station 7 – Mapalad',
         totalPatients: 45, highRisk: 4, recentDeliveries: 7,
         vaccCoverage: 86, newborns: 7, suppCoverage: 88,
         riskStatus: 'Normal',
@@ -137,7 +137,7 @@ const TriBar = ({ b }) => {
 /* ════════════════════════════
    DETAIL MODAL
 ════════════════════════════ */
-const DetailModal = ({ brgy, onClose, navigate }) => {
+const DetailModal = ({ station, onClose, navigate }) => {
     const [tab, setTab] = useState('overview');
 
     const TABS = [
@@ -145,27 +145,27 @@ const DetailModal = ({ brgy, onClose, navigate }) => {
         { id: 'deliveries', label: 'Delivery Summary',  icon: Heart },
         { id: 'vacc',       label: 'Vaccinations',      icon: Syringe },
         { id: 'newborns',   label: 'Newborn Status',    icon: Baby },
-        { id: 'alerts',     label: `Alerts (${brgy.alerts.length})`, icon: AlertTriangle },
+        { id: 'alerts',     label: `Alerts (${station.alerts.length})`, icon: AlertTriangle },
     ];
 
     const coverageColor = (v) => v >= 90 ? '#a0c282' : v >= 80 ? '#edbd9a' : '#b68191';
 
     return (
         <div className="modal-backdrop" onClick={onClose}>
-            <div className="br-modal" onClick={e => e.stopPropagation()}>
+            <div className="st-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
                     <div>
-                        <h2><MapPin size={16} /> {brgy.name}</h2>
-                        <p>{brgy.totalPatients} patients tracked · {brgy.recentDeliveries} deliveries this month</p>
+                        <h2><MapPin size={16} /> {station.name}</h2>
+                        <p>{station.totalPatients} patients tracked · {station.recentDeliveries} deliveries this month</p>
                     </div>
                     <button className="modal-close" onClick={onClose}><X size={20} /></button>
                 </div>
 
-                <div className="br-tab-nav">
+                <div className="st-tab-nav">
                     {TABS.map(t => {
                         const Icon = t.icon;
                         return (
-                            <button key={t.id} className={`br-tab-btn ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+                            <button key={t.id} className={`st-tab-btn ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
                                 <Icon size={13} /> {t.label}
                             </button>
                         );
@@ -178,23 +178,23 @@ const DetailModal = ({ brgy, onClose, navigate }) => {
                     {tab === 'overview' && (
                         <div>
                             <div className="detail-stats-grid">
-                                <div className="detail-stat"><span>Total Patients</span><strong>{brgy.totalPatients}</strong></div>
-                                <div className="detail-stat detail-stat--rose"><span>High-Risk</span><strong>{brgy.highRisk}</strong></div>
-                                <div className="detail-stat detail-stat--blue"><span>1st Trimester</span><strong>{brgy.trimester.first}</strong></div>
-                                <div className="detail-stat detail-stat--yellow"><span>2nd Trimester</span><strong>{brgy.trimester.second}</strong></div>
-                                <div className="detail-stat detail-stat--purple"><span>3rd Trimester</span><strong>{brgy.trimester.third}</strong></div>
+                                <div className="detail-stat"><span>Total Patients</span><strong>{station.totalPatients}</strong></div>
+                                <div className="detail-stat detail-stat--rose"><span>High-Risk</span><strong>{station.highRisk}</strong></div>
+                                <div className="detail-stat detail-stat--blue"><span>1st Trimester</span><strong>{station.trimester.first}</strong></div>
+                                <div className="detail-stat detail-stat--yellow"><span>2nd Trimester</span><strong>{station.trimester.second}</strong></div>
+                                <div className="detail-stat detail-stat--purple"><span>3rd Trimester</span><strong>{station.trimester.third}</strong></div>
                             </div>
                             <div className="detail-section">
                                 <h4>Trimester Distribution</h4>
                                 <div className="tri-bar-large">
-                                    <div className="tri-seg tri-1" style={{ flex: brgy.trimester.first }}>
-                                        <span>1st: {brgy.trimester.first}</span>
+                                    <div className="tri-seg tri-1" style={{ flex: station.trimester.first }}>
+                                        <span>1st: {station.trimester.first}</span>
                                     </div>
-                                    <div className="tri-seg tri-2" style={{ flex: brgy.trimester.second }}>
-                                        <span>2nd: {brgy.trimester.second}</span>
+                                    <div className="tri-seg tri-2" style={{ flex: station.trimester.second }}>
+                                        <span>2nd: {station.trimester.second}</span>
                                     </div>
-                                    <div className="tri-seg tri-3" style={{ flex: brgy.trimester.third }}>
-                                        <span>3rd: {brgy.trimester.third}</span>
+                                    <div className="tri-seg tri-3" style={{ flex: station.trimester.third }}>
+                                        <span>3rd: {station.trimester.third}</span>
                                     </div>
                                 </div>
                                 <div className="tri-legend">
@@ -210,26 +210,26 @@ const DetailModal = ({ brgy, onClose, navigate }) => {
                     {tab === 'deliveries' && (
                         <div>
                             <div className="detail-stats-grid">
-                                <div className="detail-stat detail-stat--green"><span>Total Deliveries</span><strong>{brgy.recentDeliveries}</strong></div>
-                                <div className="detail-stat"><span>NSD</span><strong>{brgy.deliveryTypes.nsd}</strong></div>
-                                <div className="detail-stat detail-stat--purple"><span>CS</span><strong>{brgy.deliveryTypes.cs}</strong></div>
-                                <div className="detail-stat detail-stat--rose"><span>With Complications</span><strong>{brgy.complications}</strong></div>
+                                <div className="detail-stat detail-stat--green"><span>Total Deliveries</span><strong>{station.recentDeliveries}</strong></div>
+                                <div className="detail-stat"><span>NSD</span><strong>{station.deliveryTypes.nsd}</strong></div>
+                                <div className="detail-stat detail-stat--purple"><span>CS</span><strong>{station.deliveryTypes.cs}</strong></div>
+                                <div className="detail-stat detail-stat--rose"><span>With Complications</span><strong>{station.complications}</strong></div>
                             </div>
                             <div className="detail-section">
                                 <h4>NSD vs CS Breakdown</h4>
                                 <div className="do-bar-row">
-                                    <label>NSD ({brgy.deliveryTypes.nsd})</label>
+                                    <label>NSD ({station.deliveryTypes.nsd})</label>
                                     <div className="do-bar-track">
-                                        <div className="do-bar-nsd" style={{ width: `${Math.round((brgy.deliveryTypes.nsd / brgy.recentDeliveries) * 100)}%` }} />
+                                        <div className="do-bar-nsd" style={{ width: `${Math.round((station.deliveryTypes.nsd / station.recentDeliveries) * 100)}%` }} />
                                     </div>
-                                    <span>{Math.round((brgy.deliveryTypes.nsd / brgy.recentDeliveries) * 100)}%</span>
+                                    <span>{Math.round((station.deliveryTypes.nsd / station.recentDeliveries) * 100)}%</span>
                                 </div>
                                 <div className="do-bar-row">
-                                    <label>CS ({brgy.deliveryTypes.cs})</label>
+                                    <label>CS ({station.deliveryTypes.cs})</label>
                                     <div className="do-bar-track">
-                                        <div className="do-bar-cs" style={{ width: `${Math.round((brgy.deliveryTypes.cs / brgy.recentDeliveries) * 100)}%` }} />
+                                        <div className="do-bar-cs" style={{ width: `${Math.round((station.deliveryTypes.cs / station.recentDeliveries) * 100)}%` }} />
                                     </div>
-                                    <span>{Math.round((brgy.deliveryTypes.cs / brgy.recentDeliveries) * 100)}%</span>
+                                    <span>{Math.round((station.deliveryTypes.cs / station.recentDeliveries) * 100)}%</span>
                                 </div>
                             </div>
                         </div>
@@ -239,18 +239,18 @@ const DetailModal = ({ brgy, onClose, navigate }) => {
                     {tab === 'vacc' && (
                         <div>
                             <div className="detail-stats-grid">
-                                <div className="detail-stat"><span>Overall Coverage</span><strong>{brgy.vaccCoverage}%</strong></div>
-                                <div className="detail-stat"><span>Maternal Vaccines</span><strong>{brgy.maternalVaccCoverage}%</strong></div>
-                                <div className="detail-stat"><span>Newborn Vaccines</span><strong>{brgy.newbornVaccCoverage}%</strong></div>
-                                <div className="detail-stat"><span>Supplement Coverage</span><strong>{brgy.suppCoverage}%</strong></div>
+                                <div className="detail-stat"><span>Overall Coverage</span><strong>{station.vaccCoverage}%</strong></div>
+                                <div className="detail-stat"><span>Maternal Vaccines</span><strong>{station.maternalVaccCoverage}%</strong></div>
+                                <div className="detail-stat"><span>Newborn Vaccines</span><strong>{station.newbornVaccCoverage}%</strong></div>
+                                <div className="detail-stat"><span>Supplement Coverage</span><strong>{station.suppCoverage}%</strong></div>
                             </div>
                             <div className="detail-section">
                                 <h4>Coverage Breakdown</h4>
                                 {[
-                                    { label: 'Overall Vaccination', value: brgy.vaccCoverage },
-                                    { label: 'Maternal Vaccines', value: brgy.maternalVaccCoverage },
-                                    { label: 'Newborn Vaccines', value: brgy.newbornVaccCoverage },
-                                    { label: 'Supplement Coverage', value: brgy.suppCoverage },
+                                    { label: 'Overall Vaccination', value: station.vaccCoverage },
+                                    { label: 'Maternal Vaccines', value: station.maternalVaccCoverage },
+                                    { label: 'Newborn Vaccines', value: station.newbornVaccCoverage },
+                                    { label: 'Supplement Coverage', value: station.suppCoverage },
                                 ].map(item => (
                                     <div key={item.label} className="cov-bar-row">
                                         <label>{item.label}</label>
@@ -271,28 +271,28 @@ const DetailModal = ({ brgy, onClose, navigate }) => {
                     {tab === 'newborns' && (
                         <div>
                             <div className="detail-stats-grid">
-                                <div className="detail-stat detail-stat--blue"><span>Newborns Tracked</span><strong>{brgy.newborns}</strong></div>
-                                <div className="detail-stat detail-stat--orange"><span>Low Birth Weight</span><strong>{brgy.lbwBabies}</strong></div>
-                                <div className="detail-stat detail-stat--rose"><span>NICU Admissions</span><strong>{brgy.nicuBabies}</strong></div>
-                                <div className="detail-stat detail-stat--green"><span>Healthy Newborns</span><strong>{brgy.newborns - brgy.lbwBabies - brgy.nicuBabies}</strong></div>
+                                <div className="detail-stat detail-stat--blue"><span>Newborns Tracked</span><strong>{station.newborns}</strong></div>
+                                <div className="detail-stat detail-stat--orange"><span>Low Birth Weight</span><strong>{station.lbwBabies}</strong></div>
+                                <div className="detail-stat detail-stat--rose"><span>NICU Admissions</span><strong>{station.nicuBabies}</strong></div>
+                                <div className="detail-stat detail-stat--green"><span>Healthy Newborns</span><strong>{station.newborns - station.lbwBabies - station.nicuBabies}</strong></div>
                             </div>
                             <div className="detail-section">
                                 <h4>Newborn Condition Distribution</h4>
                                 <div className="nb-status-bars">
                                     {[
-                                        { label: 'Healthy', count: brgy.newborns - brgy.lbwBabies - brgy.nicuBabies, total: brgy.newborns, color: '#a0c282' },
-                                        { label: 'Low Birth Weight', count: brgy.lbwBabies, total: brgy.newborns, color: '#edbd9a' },
-                                        { label: 'NICU', count: brgy.nicuBabies, total: brgy.newborns, color: '#b68191' },
+                                        { label: 'Healthy', count: station.newborns - station.lbwBabies - station.nicuBabies, total: station.newborns, color: '#a0c282' },
+                                        { label: 'Low Birth Weight', count: station.lbwBabies, total: station.newborns, color: '#edbd9a' },
+                                        { label: 'NICU', count: station.nicuBabies, total: station.newborns, color: '#b68191' },
                                     ].map(item => (
                                         <div key={item.label} className="nb-status-bar-row">
                                             <label>{item.label} ({item.count})</label>
                                             <div className="nb-bar-track">
                                                 <div className="nb-bar-fill" style={{
-                                                    width: brgy.newborns > 0 ? `${Math.round((item.count / brgy.newborns) * 100)}%` : '0%',
+                                                    width: station.newborns > 0 ? `${Math.round((item.count / station.newborns) * 100)}%` : '0%',
                                                     background: item.color
                                                 }} />
                                             </div>
-                                            <span>{brgy.newborns > 0 ? Math.round((item.count / brgy.newborns) * 100) : 0}%</span>
+                                            <span>{station.newborns > 0 ? Math.round((item.count / station.newborns) * 100) : 0}%</span>
                                         </div>
                                     ))}
                                 </div>
@@ -306,19 +306,19 @@ const DetailModal = ({ brgy, onClose, navigate }) => {
                     {/* TAB: Alerts */}
                     {tab === 'alerts' && (
                         <div>
-                            {brgy.alerts.length > 0 ? (
-                                <div className="br-alerts-list">
-                                    {brgy.alerts.map((a, i) => (
-                                        <div key={i} className="br-alert-item">
+                            {station.alerts.length > 0 ? (
+                                <div className="st-alerts-list">
+                                    {station.alerts.map((a, i) => (
+                                        <div key={i} className="st-alert-item">
                                             <AlertCircle size={15} />
                                             <span>{a}</span>
                                         </div>
                                     ))}
                                 </div>
                             ) : (
-                                <div className="br-empty br-empty--ok">
+                                <div className="st-empty st-empty--ok">
                                     <CheckCircle2 size={28} />
-                                    <p>No alerts — this barangay is performing well across all indicators.</p>
+                                    <p>No alerts — this station is performing well across all indicators.</p>
                                 </div>
                             )}
                         </div>
@@ -338,18 +338,18 @@ const DetailModal = ({ brgy, onClose, navigate }) => {
 /* ════════════════════════════
    CHARTS SECTION
 ════════════════════════════ */
-const ChartsSection = ({ barangays }) => {
+const ChartsSection = ({ stations }) => {
     const coverageColor = (v) => v >= 90 ? '#a0c282' : v >= 80 ? '#edbd9a' : '#b68191';
-    const maxPatients = Math.max(...barangays.map(b => b.totalPatients));
-    const maxHighRisk = Math.max(...barangays.map(b => b.highRisk));
+    const maxPatients = Math.max(...stations.map(b => b.totalPatients));
+    const maxHighRisk = Math.max(...stations.map(b => b.highRisk));
 
     return (
         <div className="charts-grid">
-            {/* Chart 1: Vaccination Coverage by Barangay */}
+            {/* Chart 1: Vaccination Coverage by Station */}
             <div className="chart-card">
-                <h3 className="chart-title"><Syringe size={15} /> Vaccination Coverage by Barangay</h3>
+                <h3 className="chart-title"><Syringe size={15} /> Vaccination Coverage by Station</h3>
                 <div className="bar-chart-v">
-                    {barangays.map(b => (
+                    {stations.map(b => (
                         <div key={b.id} className="bar-chart-col">
                             <div className="bar-chart-bar-wrap">
                                 <div
@@ -373,11 +373,11 @@ const ChartsSection = ({ barangays }) => {
                 </div>
             </div>
 
-            {/* Chart 2: High-Risk Cases by Barangay */}
+            {/* Chart 2: High-Risk Cases by Station */}
             <div className="chart-card">
-                <h3 className="chart-title"><AlertTriangle size={15} /> High-Risk Cases by Barangay</h3>
+                <h3 className="chart-title"><AlertTriangle size={15} /> High-Risk Cases by Station</h3>
                 <div className="horiz-bar-chart">
-                    {barangays.map(b => (
+                    {stations.map(b => (
                         <div key={b.id} className="horiz-bar-row">
                             <span className="horiz-label">{b.name.split('–')[0].trim()}</span>
                             <div className="horiz-track">
@@ -395,11 +395,11 @@ const ChartsSection = ({ barangays }) => {
                 </div>
             </div>
 
-            {/* Chart 3: Total Patients by Barangay */}
+            {/* Chart 3: Total Patients by Station */}
             <div className="chart-card">
-                <h3 className="chart-title"><Users size={15} /> Total Patients by Barangay</h3>
+                <h3 className="chart-title"><Users size={15} /> Total Patients by Station</h3>
                 <div className="horiz-bar-chart">
-                    {barangays.map(b => (
+                    {stations.map(b => (
                         <div key={b.id} className="horiz-bar-row">
                             <span className="horiz-label">{b.name.split('–')[0].trim()}</span>
                             <div className="horiz-track">
@@ -419,9 +419,9 @@ const ChartsSection = ({ barangays }) => {
 
             {/* Chart 4: Supplement Coverage */}
             <div className="chart-card">
-                <h3 className="chart-title"><Pill size={15} /> Supplement Coverage by Barangay</h3>
+                <h3 className="chart-title"><Pill size={15} /> Supplement Coverage by Station</h3>
                 <div className="bar-chart-v">
-                    {barangays.map(b => (
+                    {stations.map(b => (
                         <div key={b.id} className="bar-chart-col">
                             <div className="bar-chart-bar-wrap">
                                 <div
@@ -446,17 +446,17 @@ const ChartsSection = ({ barangays }) => {
 /* ════════════════════════════
    MAIN COMPONENT
 ════════════════════════════ */
-const BarangayReports = () => {
+const StationReports = () => {
     const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState({ risk: 'All', vacc: 'All' });
-    const [selectedBrgy, setSelectedBrgy] = useState(null);
+    const [selectedStation, setSelectedStation] = useState(null);
     const [expandedRow, setExpandedRow] = useState(null);
     const [showCharts, setShowCharts] = useState(true);
 
     const handleFilter = (k, v) => setFilters(prev => ({ ...prev, [k]: v }));
 
-    const filtered = BARANGAYS.filter(b => {
+    const filtered = stationS.filter(b => {
         const s = searchTerm.toLowerCase();
         const matchSearch = b.name.toLowerCase().includes(s);
         const matchRisk = filters.risk === 'All' || b.riskStatus === filters.risk;
@@ -467,9 +467,9 @@ const BarangayReports = () => {
     });
 
     const getRiskClass = (r) => {
-        if (r === 'Critical') return 'br-row--critical';
-        if (r === 'Monitor') return 'br-row--monitor';
-        return 'br-row--normal';
+        if (r === 'Critical') return 'st-row--critical';
+        if (r === 'Monitor') return 'st-row--monitor';
+        return 'st-row--normal';
     };
 
     const getRiskBadge = (r) => {
@@ -482,12 +482,12 @@ const BarangayReports = () => {
     const coverageBg = (v) => v >= 90 ? 'rgba(160,194,130,0.12)' : v >= 80 ? 'rgba(237,189,154,0.12)' : 'rgba(182,129,145,0.12)';
 
     return (
-        <div className="br-page">
+        <div className="st-page">
 
             {/* ── Page Header ── */}
             <div className="page-header">
                 <div>
-                    <h1 className="page-title"><MapPin size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Barangay Reports</h1>
+                    <h1 className="page-title"><MapPin size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Station Reports</h1>
                     <p className="page-subtitle">Community-level health monitoring — patient coverage, risk distribution, and vaccination rates</p>
                 </div>
                 <div className="header-actions">
@@ -500,7 +500,7 @@ const BarangayReports = () => {
             </div>
 
             {/* ── Summary Cards ── */}
-            <div className="br-stats-grid">
+            <div className="st-stats-grid">
                 {SUMMARY_STATS.map(s => {
                     const Icon = s.icon;
                     return (
@@ -518,21 +518,21 @@ const BarangayReports = () => {
             </div>
 
             {/* ── Chartsection ── */}
-            {showCharts && <ChartsSection barangays={BARANGAYS} />}
+            {showCharts && <ChartsSection stations={stationS} />}
 
             {/* ── Search & Filters ── */}
-            <div className="br-controls">
-                <div className="br-search-wrap">
-                    <Search size={16} className="br-search-icon" />
+            <div className="st-controls">
+                <div className="st-search-wrap">
+                    <Search size={16} className="st-search-icon" />
                     <input
                         type="text"
-                        className="br-search-input"
-                        placeholder="Search barangay name..."
+                        className="st-search-input"
+                        placeholder="Search station name..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <div className="br-filters-row">
+                <div className="st-filters-row">
                     <span className="filters-label"><Filter size={13} /> Filters:</span>
                     <select value={filters.risk} onChange={e => handleFilter('risk', e.target.value)}>
                         <option value="All">All Risk Levels</option>
@@ -548,23 +548,23 @@ const BarangayReports = () => {
                 </div>
             </div>
 
-            {/* ── Barangay Table ── */}
-            <div className="br-card">
-                <div className="br-card-head">
-                    <h2><MapPin size={17} /> Barangay Overview</h2>
-                    <div className="br-legend">
+            {/* ── Station Table ── */}
+            <div className="st-card">
+                <div className="st-card-head">
+                    <h2><MapPin size={17} /> Station Overview</h2>
+                    <div className="st-legend">
                         <span className="legend-chip chip-normal"><CheckCircle2 size={11} /> Normal</span>
                         <span className="legend-chip chip-monitor"><AlertTriangle size={11} /> Monitor</span>
                         <span className="legend-chip chip-critical"><AlertCircle size={11} /> Critical</span>
                     </div>
-                    <span className="br-count">{filtered.length} barangays</span>
+                    <span className="st-count">{filtered.length} stations</span>
                 </div>
 
                 <div className="table-responsive">
-                    <table className="br-table">
+                    <table className="st-table">
                         <thead>
                             <tr>
-                                <th>Barangay</th>
+                                <th>Station</th>
                                 <th>Total Patients</th>
                                 <th>High-Risk</th>
                                 <th>Deliveries</th>
@@ -579,32 +579,32 @@ const BarangayReports = () => {
                         <tbody>
                             {filtered.map(b => (
                                 <React.Fragment key={b.id}>
-                                    <tr className={`br-row ${getRiskClass(b.riskStatus)}`}>
+                                    <tr className={`st-row ${getRiskClass(b.riskStatus)}`}>
                                         <td>
                                             <button className="expand-btn" onClick={() => setExpandedRow(expandedRow === b.id ? null : b.id)}>
                                                 {expandedRow === b.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                                             </button>
-                                            <div className="br-name-cell">
-                                                <div className="br-brgy-icon"><MapPin size={13} /></div>
+                                            <div className="st-name-cell">
+                                                <div className="st-station-icon"><MapPin size={13} /></div>
                                                 <div>
-                                                    <span className="br-brgy-name">{b.name}</span>
+                                                    <span className="st-station-name">{b.name}</span>
                                                     {b.alerts.length > 0 && (
-                                                        <span className="br-alert-count">{b.alerts.length} alert{b.alerts.length > 1 ? 's' : ''}</span>
+                                                        <span className="st-alert-count">{b.alerts.length} alert{b.alerts.length > 1 ? 's' : ''}</span>
                                                     )}
                                                 </div>
                                             </div>
                                         </td>
                                         <td>
-                                            <span className="br-num">{b.totalPatients}</span>
+                                            <span className="st-num">{b.totalPatients}</span>
                                         </td>
                                         <td>
                                             <span className={`hr-num ${b.highRisk >= 10 ? 'hr-high' : b.highRisk >= 6 ? 'hr-mid' : 'hr-low'}`}>{b.highRisk}</span>
                                         </td>
-                                        <td className="br-num">{b.recentDeliveries}</td>
+                                        <td className="st-num">{b.recentDeliveries}</td>
                                         <td>
                                             <MiniBar value={b.vaccCoverage} color={b.vaccCoverage >= 90 ? '#6db8a0' : b.vaccCoverage >= 80 ? '#e8b84b' : '#e05c73'} />
                                         </td>
-                                        <td className="br-num">{b.newborns}</td>
+                                        <td className="st-num">{b.newborns}</td>
                                         <td>
                                             <MiniBar value={b.suppCoverage} color={b.suppCoverage >= 90 ? '#6db8a0' : b.suppCoverage >= 80 ? '#e8b84b' : '#e05c73'} />
                                         </td>
@@ -616,7 +616,7 @@ const BarangayReports = () => {
                                         </td>
                                         <td>
                                             <div className="row-actions">
-                                                <button className="action-btn view-btn" title="View Detail" onClick={() => setSelectedBrgy(b)}><Eye size={13} /></button>
+                                                <button className="action-btn view-btn" title="View Detail" onClick={() => setSelectedStation(b)}><Eye size={13} /></button>
                                                 <button className="action-btn export-btn" title="Export Report"><Download size={13} /></button>
                                             </div>
                                         </td>
@@ -624,7 +624,7 @@ const BarangayReports = () => {
 
                                     {/* Expanded inline view */}
                                     {expandedRow === b.id && (
-                                        <tr className="br-expanded-row">
+                                        <tr className="st-expanded-row">
                                             <td colSpan="10">
                                                 <div className="expand-detail">
                                                     <div className="expand-col">
@@ -649,7 +649,7 @@ const BarangayReports = () => {
                                                         <h4>⚠ Alerts</h4>
                                                         {b.alerts.length > 0 ? b.alerts.map((a, i) => <p key={i} className="expand-alert">{a}</p>) : <p>No alerts.</p>}
                                                         <div className="expand-actions">
-                                                            <button className="btn btn-outline" onClick={() => setSelectedBrgy(b)}>Full Report →</button>
+                                                            <button className="btn btn-outline" onClick={() => setSelectedStation(b)}>Full Report →</button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -661,9 +661,9 @@ const BarangayReports = () => {
 
                             {filtered.length === 0 && (
                                 <tr>
-                                    <td colSpan="10" className="br-empty">
+                                    <td colSpan="10" className="st-empty">
                                         <MapPin size={30} />
-                                        <p>No barangays match your filters.</p>
+                                        <p>No stations match your filters.</p>
                                     </td>
                                 </tr>
                             )}
@@ -673,9 +673,9 @@ const BarangayReports = () => {
             </div>
 
             {/* ── Detail Modal ── */}
-            {selectedBrgy && <DetailModal brgy={selectedBrgy} onClose={() => setSelectedBrgy(null)} navigate={navigate} />}
+            {selectedStation && <DetailModal station={selectedStation} onClose={() => setSelectedStation(null)} navigate={navigate} />}
         </div>
     );
 };
 
-export default BarangayReports;
+export default StationReports;

@@ -38,7 +38,7 @@ const NAV_ITEMS = [
     {
         section: 'Reports',
         items: [
-            { label: 'Barangay Reports', icon: MapPin, path: '/dashboard/barangay' },
+            { label: 'Station Reports', icon: MapPin, path: '/dashboard/stations' },
             { label: 'Analytics', icon: BarChart3, path: '/dashboard/analytics' },
         ],
     },
@@ -215,7 +215,7 @@ const DashboardLayout = () => {
                             <Search size={15} className="search-icon" aria-hidden="true" />
                             <input
                                 type="search"
-                                placeholder="Search patient, barangay, ID…"
+                                placeholder="Search patient, station, ID…"
                                 className="search-input"
                                 aria-label="Search"
                             />
@@ -261,7 +261,7 @@ const DashboardLayout = () => {
                                             { type: 'warning', text: 'TT Vaccine stock below threshold', time: '1 hr ago' },
                                             { type: 'info', text: '3 prenatal visits scheduled today', time: '2 hrs ago' },
                                             { type: 'warning', text: 'Ana Cruz missed her 32-week visit', time: 'Yesterday' },
-                                            { type: 'info', text: 'New newborn registered – Brgy. 5', time: 'Yesterday' },
+                                            { type: 'info', text: 'New newborn registered – Station 5', time: 'Yesterday' },
                                         ].filter(n => notifFilter === 'all' || n.type === notifFilter).map((n, i) => (
                                             <li key={i} className={`notif-item notif-item--${n.type}`}>
                                                 <span className="notif-dot" aria-hidden="true" />

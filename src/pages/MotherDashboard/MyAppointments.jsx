@@ -14,11 +14,11 @@ const MyAppointments = () => {
     const [selectedDate, setSelectedDate] = useState(null);
 
     const APPOINTMENTS = [
-        { id: 1, date: '2026-03-10', time: '08:00 AM', type: 'Prenatal', location: 'Barangay 3 Health Center', status: 'Upcoming', notes: 'Routine 2nd trimester checkup', color: 'green' },
+        { id: 1, date: '2026-03-10', time: '08:00 AM', type: 'Prenatal', location: 'Station 3 Health Center', status: 'Upcoming', notes: 'Routine 2nd trimester checkup', color: 'green' },
         { id: 2, date: '2026-03-15', time: '09:30 AM', type: 'Vaccination', location: 'City Health Office', status: 'Completed', notes: 'TT Vaccine (Tetanus Toxoid)', color: 'yellow' },
-        { id: 3, date: '2026-03-22', time: '10:00 AM', type: 'Postpartum', location: 'Barangay 3 Health Center', status: 'Upcoming', notes: 'Post-delivery follow-up', color: 'blue' },
-        { id: 4, date: '2026-02-15', time: '08:30 AM', type: 'Prenatal', location: 'Barangay 3 Health Center', status: 'Completed', notes: 'Initial prenatal visit', color: 'green' },
-        { id: 5, date: '2026-03-28', time: '01:00 PM', type: 'Prenatal', location: 'Barangay 3 Health Center', status: 'Upcoming', notes: 'Follow-up ultrasound review', color: 'green' },
+        { id: 3, date: '2026-03-22', time: '10:00 AM', type: 'Postpartum', location: 'Station 3 Health Center', status: 'Upcoming', notes: 'Post-delivery follow-up', color: 'blue' },
+        { id: 4, date: '2026-02-15', time: '08:30 AM', type: 'Prenatal', location: 'Station 3 Health Center', status: 'Completed', notes: 'Initial prenatal visit', color: 'green' },
+        { id: 5, date: '2026-03-28', time: '01:00 PM', type: 'Prenatal', location: 'Station 3 Health Center', status: 'Upcoming', notes: 'Follow-up ultrasound review', color: 'green' },
     ];
 
     const getDaysInMonth = (date) => {

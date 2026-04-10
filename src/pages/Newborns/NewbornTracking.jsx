@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Search, Filter, Plus, X, Baby, Heart, AlertTriangle,
@@ -6,22 +6,8 @@ import {
     Edit2, Syringe, Pill, Activity, Calendar, Download,
     TrendingUp, Scale, ChevronDown, ChevronUp, Ruler
 } from 'lucide-react';
+import NewbornService from '../../services/newbornservice';
 import '../../styles/pages/NewbornTracking.css';
-
-/* ════════════════════════════
-   MOCK DATA
-════════════════════════════ */
-const SUMMARY_STATS = [
-    { label: 'Total Newborns This Month', value: 35, color: 'lilac', icon: Baby },
-    { label: 'Low Birth Weight (<2.5kg)', value: 4, color: 'pink', icon: Scale },
-    { label: 'High-Risk Newborns', value: 3, color: 'rose', icon: AlertCircle },
-    { label: 'Vaccinations Due', value: 12, color: 'sage', icon: Syringe },
-    { label: 'Missed Follow-ups', value: 2, color: 'orange', icon: XCircle },
-];
-
-const NEWBORNS = [];
-
-const ALERTS = [];
 
 /* ════════════════════════════
    DETAIL MODAL
@@ -35,7 +21,7 @@ const DetailModal = ({ baby, onClose }) => {
         { id: 'vacc',    label: 'Vaccinations',       icon: Syringe },
         { id: 'supp',    label: 'Supplements',        icon: Pill },
         { id: 'checkup', label: 'Checkups',           icon: Activity },
-        { id: 'alerts',  label: `Alerts (${baby.alerts.length})`, icon: AlertTriangle },
+        { id: 'alerts',  label: `Alerts (${baby.alerts?.length || 0})`, icon: AlertTriangle },
     ];
 
     const vaccStatusClass = (s) => {
@@ -57,7 +43,7 @@ const DetailModal = ({ baby, onClose }) => {
                 <div className="modal-header">
                     <div>
                         <h2>{baby.babyName}</h2>
-                        <p>Mother: {baby.motherName} · {baby.motherId} · {baby.barangay}</p>
+                        <p>Mother: {baby.motherName} · {baby.motherId} · {baby.station}</p>
                     </div>
                     <button className="modal-close" onClick={onClose}><X size={20} /></button>
                 </div>
@@ -106,7 +92,7 @@ const DetailModal = ({ baby, onClose }) => {
                                     <tr><th>Date</th><th>Weight (kg)</th><th>Length (cm)</th><th>Head Circ. (cm)</th></tr>
                                 </thead>
                                 <tbody>
-                                    {baby.growthLog.map((g, i) => (
+                                    {baby.growthLog?.map((g, i) => (
                                         <tr key={i}>
                                             <td className="col-date">{g.date}</td>
                                             <td className="col-val">{g.weight}</td>
@@ -118,7 +104,7 @@ const DetailModal = ({ baby, onClose }) => {
                             </table>
                             {/* Visual growth indicator */}
                             <div className="growth-bars">
-                                {baby.growthLog.map((g, i) => (
+                                {baby.growthLog?.map((g, i) => (
                                     <div key={i} className="growth-bar-group">
                                         <div className="growth-bar-label">{g.date}</div>
                                         <div className="growth-bar-track">
@@ -140,7 +126,7 @@ const DetailModal = ({ baby, onClose }) => {
                                     <tr><th>Vaccine</th><th>Dose</th><th>Date Given</th><th>Next Due</th><th>Status</th></tr>
                                 </thead>
                                 <tbody>
-                                    {baby.vaccLog.map((v, i) => (
+                                    {baby.vaccLog?.map((v, i) => (
                                         <tr key={i}>
                                             <td className="col-name">{v.vaccine}</td>
                                             <td>{v.dose}</td>
@@ -166,7 +152,7 @@ const DetailModal = ({ baby, onClose }) => {
                                     <tr><th>Supplement</th><th>Dose</th><th>Start Date</th><th>End Date</th><th>Status</th></tr>
                                 </thead>
                                 <tbody>
-                                    {baby.suppLog.map((s, i) => (
+                                    {baby.suppLog?.map((s, i) => (
                                         <tr key={i}>
                                             <td className="col-name">{s.supp}</td>
                                             <td>{s.dose}</td>
@@ -187,7 +173,7 @@ const DetailModal = ({ baby, onClose }) => {
                     {tab === 'checkup' && (
                         <div>
                             <p className="tab-hint">All recorded neonatal checkups and visits.</p>
-                            {baby.checkupLog.length > 0 ? (
+                            {baby.checkupLog?.length > 0 ? (
                                 <div className="checkup-list">
                                     {baby.checkupLog.map((c, i) => (
                                         <div key={i} className="checkup-card">
@@ -213,7 +199,7 @@ const DetailModal = ({ baby, onClose }) => {
                     {/* TAB 6: Alerts */}
                     {tab === 'alerts' && (
                         <div>
-                            {baby.alerts.length > 0 ? (
+                            {baby.alerts?.length > 0 ? (
                                 <div className="nb-alerts-list">
                                     {baby.alerts.map((a, i) => (
                                         <div key={i} className="nb-alert-item">
@@ -247,24 +233,73 @@ const DetailModal = ({ baby, onClose }) => {
 ════════════════════════════ */
 const NewbornTracking = () => {
     const navigate = useNavigate();
+    const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filters, setFilters] = useState({ risk: 'All', vacc: 'All', weight: 'All', barangay: 'All' });
+    const [filters, setFilters] = useState({ risk: 'All', vacc: 'All', weight: 'All', station: 'All' });
     const [selectedBaby, setSelectedBaby] = useState(null);
     const [expandedRow, setExpandedRow] = useState(null);
 
+    // Live data state
+    const [stats, setStats] = useState({
+        totalNewborns: 0,
+        lowBirthWeight: 0,
+        highRisk: 0,
+        vaccinationsDue: 0,
+        missedFollowups: 0
+    });
+    const [newborns, setNewborns] = useState([]);
+    const [alerts, setAlerts] = useState([]);
+    const [quickStats, setQuickStats] = useState({ female: 0, male: 0, nsd: 0, cs: 0, lbw: 0, nicu: 0 });
+
+    const loadNewbornData = useCallback(async () => {
+        try {
+            const service = new NewbornService();
+            const [statsData, newbornsData, alertsData, quickStatsData] = await Promise.all([
+                service.getNewbornStats(),
+                service.getAllNewborns(),
+                service.getNewbornAlerts(),
+                service.getQuickStats()
+            ]);
+            
+            setStats(statsData);
+            setNewborns(newbornsData);
+            setAlerts(alertsData);
+            setQuickStats(quickStatsData);
+        } catch (err) {
+            console.error('Error loading newborn data:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        loadNewbornData();
+
+        const service = new NewbornService();
+        const subscription = service.subscribeToNewbornChanges(() => {
+            console.log('🔄 Newborn changes detected, re-fetching data...');
+            loadNewbornData();
+        });
+
+        return () => {
+            console.log('🔌 Unsubscribing from newborn changes');
+            subscription.unsubscribe();
+        };
+    }, [loadNewbornData]);
+
     const handleFilter = (k, v) => setFilters(prev => ({ ...prev, [k]: v }));
 
-    const filtered = NEWBORNS.filter(b => {
+    const filtered = newborns.filter(b => {
         const s = searchTerm.toLowerCase();
-        const matchSearch = b.babyName.toLowerCase().includes(s) || b.motherName.toLowerCase().includes(s) || b.id.toLowerCase().includes(s) || b.barangay.toLowerCase().includes(s);
+        const matchSearch = b.babyName.toLowerCase().includes(s) || b.motherName.toLowerCase().includes(s) || b.id.toLowerCase().includes(s) || b.station.toLowerCase().includes(s);
         const matchRisk = filters.risk === 'All' || b.riskLevel === filters.risk;
         const matchVacc = filters.vacc === 'All' || b.vaccStatus === filters.vacc;
         const matchWeight = filters.weight === 'All' ||
             (filters.weight === 'Low' && b.birthWeight < 2.5) ||
             (filters.weight === 'Normal' && b.birthWeight >= 2.5 && b.birthWeight < 4) ||
             (filters.weight === 'High' && b.birthWeight >= 4);
-        const matchBrgy = filters.barangay === 'All' || b.barangay === filters.barangay;
-        return matchSearch && matchRisk && matchVacc && matchWeight && matchBrgy;
+        const matchStation = filters.station === 'All' || b.station === filters.station;
+        return matchSearch && matchRisk && matchVacc && matchWeight && matchStation;
     });
 
     const getRowClass = (b) => {
@@ -291,6 +326,24 @@ const NewbornTracking = () => {
         return 'status-completed';
     };
 
+    const SUMMARY_CARDS = [
+        { label: 'Total Newborns', value: stats.totalNewborns, color: 'lilac', icon: Baby },
+        { label: 'Low Birth Weight (<2.5kg)', value: stats.lowBirthWeight, color: 'pink', icon: Scale },
+        { label: 'High-Risk Newborns', value: stats.highRisk, color: 'rose', icon: AlertCircle },
+        { label: 'Vaccinations Due', value: stats.vaccinationsDue, color: 'sage', icon: Syringe },
+        { label: 'Missed Follow-ups', value: stats.missedFollowups, color: 'orange', icon: XCircle },
+    ];
+
+    if (loading) return (
+        <div className="nb-page">
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px', gap: '16px' }}>
+                <div className="spinner" style={{ width: '40px', height: '40px', border: '3px solid #f0f2f5', borderTopColor: 'var(--color-rose)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
+                <p style={{ fontSize: '14px', color: 'var(--color-text-muted)', fontWeight: 600 }}>Loading newborn tracker...</p>
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            </div>
+        </div>
+    );
+
     return (
         <div className="nb-page">
 
@@ -301,14 +354,16 @@ const NewbornTracking = () => {
                     <p className="page-subtitle">Monitor newborn health, growth, vaccinations, and follow-up schedules</p>
                 </div>
                 <div className="header-actions">
-                    <button className="btn btn-outline"><Download size={16} /> Export Report</button>
-                    <button className="btn btn-primary"><Plus size={16} /> Add Newborn Record</button>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '6px 16px', borderRadius: '99px', fontSize: '11px', fontWeight: 700, letterSpacing: '0.8px', background: 'rgba(109, 184, 160, 0.12)', color: '#3d8870', border: '1px solid rgba(109, 184, 160, 0.2)' }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3d8870', animation: 'live-pulse 1.5s ease-in-out infinite' }}></span>
+                        LIVE UPDATES
+                    </div>
                 </div>
             </div>
 
             {/* ── Summary Cards ── */}
             <div className="nb-stats-grid">
-                {SUMMARY_STATS.map(s => {
+                {SUMMARY_CARDS.map(s => {
                     const Icon = s.icon;
                     return (
                         <div key={s.label} className={`stat-card stat-card--${s.color}`}>
@@ -331,7 +386,7 @@ const NewbornTracking = () => {
                     <input
                         type="text"
                         className="nb-search-input"
-                        placeholder="Search by baby name, mother name, ID, or barangay..."
+                        placeholder="Search by baby name, mother name, ID, or station..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                     />
@@ -356,9 +411,9 @@ const NewbornTracking = () => {
                         <option value="Pending">Pending</option>
                         <option value="Overdue">Overdue</option>
                     </select>
-                    <select value={filters.barangay} onChange={e => handleFilter('barangay', e.target.value)}>
-                        <option value="All">All Barangays</option>
-                        {[1,2,3,4,5,6,7].map(n => <option key={n} value={`Brgy. ${n}`}>Brgy. {n}</option>)}
+                    <select value={filters.station} onChange={e => handleFilter('station', e.target.value)}>
+                        <option value="All">All Stations</option>
+                        {[1,2,3,4,5,6,7].map(n => <option key={n} value={`Station ${n}`}>Station {n}</option>)}
                     </select>
                 </div>
             </div>
@@ -406,17 +461,17 @@ const NewbornTracking = () => {
                                                     </button>
                                                     <div className="nb-baby-cell">
                                                         <div className={`nb-avatar nb-avatar--${b.gender.toLowerCase()}`}>
-                                                            {b.gender === 'Female' ? '♀' : '♂'}
+                                                            {b.gender === 'Female' ? '♀' : b.gender === 'Male' ? '♂' : '?'}
                                                         </div>
                                                         <div>
                                                             <span className="nb-baby-name">{b.babyName}</span>
-                                                            <span className="nb-baby-id">{b.id}</span>
+                                                            <span className="nb-baby-id" title={b.id}>{b.id.substring(0, 8)}...</span>
                                                         </div>
                                                     </div>
                                                 </td>
                                                 <td onClick={() => navigate(`/dashboard/patients/${b.motherId}`)} style={{ cursor: 'pointer' }}>
                                                     <span className="nb-mother-name patient-name-link">{b.motherName}</span>
-                                                    <span className="nb-mother-id">{b.motherId} · {b.barangay}</span>
+                                                    <span className="nb-mother-id">{b.station}</span>
                                                 </td>
                                                 <td className="nb-date">{b.birthDate}</td>
                                                 <td>
@@ -424,7 +479,7 @@ const NewbornTracking = () => {
                                                 </td>
                                                 <td>
                                                     <span className={`weight-val ${b.birthWeight < 2.5 ? 'weight-low' : ''}`}>{b.birthWeight} kg</span>
-                                                    {b.birthWeight < 2.5 && <span className="lbw-flag">LBW</span>}
+                                                    {b.birthWeight < 2.5 ? <span className="lbw-flag">LBW</span> : null}
                                                 </td>
                                                 <td className="nb-ga">{b.gestationalAge}</td>
                                                 <td>
@@ -461,19 +516,19 @@ const NewbornTracking = () => {
                                                             </div>
                                                             <div className="expand-col">
                                                                 <h4>💉 Vaccines</h4>
-                                                                {b.vaccLog.map((v, i) => (
+                                                                {b.vaccLog?.length ? b.vaccLog.map((v, i) => (
                                                                     <p key={i}><strong>{v.vaccine}:</strong> {v.status}</p>
-                                                                ))}
+                                                                )) : <p>No vaccine records yet.</p>}
                                                             </div>
                                                             <div className="expand-col">
                                                                 <h4>💊 Supplements</h4>
-                                                                {b.suppLog.map((s, i) => (
+                                                                {b.suppLog?.length ? b.suppLog.map((s, i) => (
                                                                     <p key={i}><strong>{s.supp}:</strong> {s.status}</p>
-                                                                ))}
+                                                                )) : <p>No supplement records yet.</p>}
                                                             </div>
                                                             <div className="expand-col">
                                                                 <h4>⚠ Alerts</h4>
-                                                                {b.alerts.length > 0 ? b.alerts.map((a, i) => (
+                                                                {b.alerts?.length > 0 ? b.alerts.map((a, i) => (
                                                                     <p key={i} className="expand-alert">{a}</p>
                                                                 )) : <p>No alerts.</p>}
                                                                 <div className="expand-actions">
@@ -491,7 +546,7 @@ const NewbornTracking = () => {
                                         <tr>
                                             <td colSpan="11" className="nb-empty">
                                                 <Baby size={28} />
-                                                <p>No newborn records match your filters.</p>
+                                                <p>No newborn records match your criteria.</p>
                                             </td>
                                         </tr>
                                     )}
@@ -508,7 +563,7 @@ const NewbornTracking = () => {
                             <h2><AlertTriangle size={16} /> Alerts</h2>
                         </div>
                         <div className="alerts-list">
-                            {ALERTS.map((a, i) => (
+                            {alerts.map((a, i) => (
                                 <div key={i} className={`alert-item alert-${a.type}`}>
                                     <div className="alert-dot"></div>
                                     <div className="alert-body">
@@ -517,6 +572,7 @@ const NewbornTracking = () => {
                                     </div>
                                 </div>
                             ))}
+                            {alerts.length === 0 && <p style={{ textAlign: 'center', padding: '20px', fontSize: '12px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No alerts at this time.</p>}
                         </div>
                     </div>
 
@@ -524,12 +580,12 @@ const NewbornTracking = () => {
                     <div className="nb-card">
                         <div className="nb-card-head"><h2><TrendingUp size={16} /> Quick Stats</h2></div>
                         <div className="quick-stats-list">
-                            <div className="qs-row"><span>Female Newborns</span><strong className="qs-female">{NEWBORNS.filter(b => b.gender === 'Female').length}</strong></div>
-                            <div className="qs-row"><span>Male Newborns</span><strong className="qs-male">{NEWBORNS.filter(b => b.gender === 'Male').length}</strong></div>
-                            <div className="qs-row"><span>NSD Deliveries</span><strong className="qs-nsd">{NEWBORNS.filter(b => b.deliveryType === 'NSD').length}</strong></div>
-                            <div className="qs-row"><span>CS Deliveries</span><strong className="qs-cs">{NEWBORNS.filter(b => b.deliveryType === 'CS').length}</strong></div>
-                            <div className="qs-row"><span>Low Birth Weight</span><strong className="qs-lbw">{NEWBORNS.filter(b => b.birthWeight < 2.5).length}</strong></div>
-                            <div className="qs-row"><span>In NICU</span><strong className="qs-nicu">{NEWBORNS.filter(b => b.condition === 'NICU').length}</strong></div>
+                            <div className="qs-row"><span>Female Newborns</span><strong className="qs-female">{quickStats.female}</strong></div>
+                            <div className="qs-row"><span>Male Newborns</span><strong className="qs-male">{quickStats.male}</strong></div>
+                            <div className="qs-row"><span>NSD Deliveries</span><strong className="qs-nsd">{quickStats.nsd}</strong></div>
+                            <div className="qs-row"><span>CS Deliveries</span><strong className="qs-cs">{quickStats.cs}</strong></div>
+                            <div className="qs-row"><span>Low Birth Weight</span><strong className="qs-lbw">{quickStats.lbw}</strong></div>
+                            <div className="qs-row"><span>In NICU / Spl Care</span><strong className="qs-nicu">{quickStats.nicu}</strong></div>
                         </div>
                     </div>
                 </div>
