@@ -37,6 +37,9 @@ const AddPatient = () => {
     const [availableStations, setAvailableStations] = useState([]);
     const [midwifeList, setMidwifeList] = useState([]);
     const [doctorList, setDoctorList] = useState([]);
+        // Add these 2 lines with your other useState hooks (around line 40):
+    const [schedulePreview, setSchedulePreview] = useState([]);
+    const [loadingSchedule, setLoadingSchedule] = useState(false);
 
     const currentStaff = {
         id: user?.id || null,
@@ -201,9 +204,9 @@ const AddPatient = () => {
         }*/
 
         setIsSaving(true);
-
+/*
         try {
-            const newPatient = await patientService.addPatient(formData, user.id);
+            const newPatient = await patientService.addPatient(formData);
             
             console.log('🎉 Patient created:', newPatient.id, newPatient.name);
             
@@ -214,10 +217,41 @@ const AddPatient = () => {
                 📅 12 visits auto-scheduled
                 🏘️ ${formData.station}` 
             });
+           // REPLACE this block in handleSave():
+            console.log('🎉 Patient created:', newPatient.id, newPatient.name);
+            navigate(`/dashboard/patients/${newPatient.patientId}`);
 
+            // WITH:
+            console.log('🎉 Patient created:', newPatient.id, `${newPatient.first_name} ${newPatient.last_name}`);
             navigate(`/dashboard/patients/${newPatient.id}`);
+            setTimeout(() => {
+                setToast({ 
+                    type: 'success', 
+                    message: `✅ Patient saved successfully!
+                    👤 ${newPatient.first_name} ${newPatient.last_name}
+                    📅 Semester visits auto-scheduled
+                    🏘️ ${newPatient.barangay || formData.station}` 
+                });
+            }, 100);
             
-        } 
+        } */
+       // REPLACE your entire handleSave try block:
+try {
+    const newPatient = await patientService.addPatient(formData);
+    
+    console.log('🎉 Patient created:', newPatient.id, `${newPatient.first_name || formData.firstName} ${newPatient.last_name || formData.lastName}`);
+    
+    setToast({ 
+        type: 'success', 
+        message: `✅ Patient saved successfully!
+        👤 ${newPatient.first_name || formData.firstName} ${newPatient.last_name || formData.lastName}
+        📅 Semester visits auto-scheduled
+        🏘️ ${newPatient.barangay || formData.station}` 
+    });
+    
+    navigate(`/dashboard/patients/${newPatient.id}`);  // ✅ Uses newPatient.id
+    
+} 
         catch (err) {
             console.error('💥 Save failed:', err);
             setToast({ type: 'error', message: `Save failed: ${err.message}` });
@@ -562,13 +596,21 @@ const AddPatient = () => {
 
                             <div className="form-grid-2">
                                 <div className="form-group">
-                                    <label>Date of First Prenatal Visit</label>
-                                    <input 
-                                        type="date" 
-                                        name="firstVisitDate" 
-                                        value={formData.firstVisitDate} 
-                                        onChange={handleChange} 
-                                    />
+                                    <label>Auto-Scheduled Visits Calendar</label>
+                                    {formData.lmp && !loadingSchedule ? (
+                                        <div className="visit-calendar">
+                                        {schedulePreview.map((visit, i) => (
+                                            <div key={i} className={`calendar-day trimester-${visit.trimester}`}>
+                                            <div className="day-number">{new Date(visit.date).getDate()}</div>
+                                            <div className="week-label">{visit.week}w</div>
+                                            </div>
+                                        ))}
+                                        </div>
+                                    ) : formData.lmp ? (
+                                        <div>Loading calendar...</div>
+                                    ) : (
+                                        <div className="no-lmp">Enter LMP to see 9-visit calendar</div>
+                                    )}
                                 </div>
                                 <div className="form-group">
                                     <label>BHW Assigned</label>

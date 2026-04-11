@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
     Search, Filter, AlertTriangle, Eye, 
@@ -29,43 +29,74 @@ const HighRiskCases = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStation, setFilterStation] = useState('All');
 
+    const service = useMemo(() => new PatientService(), []);
+
+    // ✅ FIXED: Transform raw Supabase data to match JSX expectations
     const loadHighRiskData = useCallback(async () => {
         try {
-            const service = new PatientService();
+            setLoading(true);
             const [statsData, patientsData] = await Promise.all([
                 service.getHighRiskStats(),
                 service.getHighRiskPatients()
             ]);
-            setStats(statsData);
-            setPatients(patientsData);
+
+            // ✅ TRANSFORM raw data to match your JSX structure
+            const formattedPatients = (patientsData || []).map(p => ({
+                id: p.id,
+                name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unnamed Patient',
+                first_name: p.first_name,
+                last_name: p.last_name,
+                station: p.barangay || p.municipality || 'Unassigned',
+                riskLevel: p.pregnancy_info?.calculated_risk || 'High Risk',
+                condition: p.pregnancy_info?.risk_factors || 'High Risk Pregnancy',
+                gravida: p.pregnancy_info?.gravida || 0,
+                lmd: p.pregnancy_info?.lmd || '',
+                nextVisit: 'Initial Visit'
+            }));
+
+            setStats({
+                ...statsData,
+                totalHighRisk: statsData.highRiskCount || 0,
+                criticalToday: 0, // Add logic later
+                missedFollowups: 0,
+                needsImmediate: 0
+            });
+            setPatients(formattedPatients);
+            console.log('✅ Loaded high-risk:', formattedPatients.length, 'patients');
+
         } catch (err) {
             console.error('Error loading high risk data:', err);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [service]);
 
     useEffect(() => {
+        let timeout;
         loadHighRiskData();
 
-        // --- Real-time Subscription ---
-        const service = new PatientService();
         const subscription = service.subscribeToHighRiskChanges(() => {
-            console.log('🔄 High risk changes detected, re-fetching data...');
-            loadHighRiskData();
+            console.log('🔄 High risk changes detected, re-fetching...');
+            clearTimeout(timeout);
+            timeout = setTimeout(() => {
+                console.log('⏳ Debounced reload...');
+                loadHighRiskData();
+            }, 500);
         });
 
-        // Cleanup subscription on unmount
         return () => {
-            console.log('🔌 Unsubscribing from high risk changes');
+            if (timeout) clearTimeout(timeout);
             subscription.unsubscribe();
         };
     }, [loadHighRiskData]);
 
     const filteredPatients = patients.filter(p => {
-        const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                             p.id.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesStation = filterStation === 'All' || p.station === filterStation;
+        const search = searchTerm.toLowerCase();
+        const matchesSearch =
+            (p.name || '').toLowerCase().includes(search) ||
+            (p.id || '').toLowerCase().includes(search);
+        const matchesStation =
+            filterStation === 'All' || p.station === filterStation;
         return matchesSearch && matchesStation;
     });
 
@@ -104,7 +135,6 @@ const HighRiskCases = () => {
 
     return (
         <div className="high-risk-page animate-fade">
-
             {/* ── Page Header ── */}
             <div className="page-header">
                 <div>
@@ -166,7 +196,6 @@ const HighRiskCases = () => {
 
             {/* ── Main Layout ── */}
             <div className="hr-main-grid">
-
                 {/* ── Left Column: Table ── */}
                 <div className="hr-table-col">
                     <div className="hr-card">
@@ -201,26 +230,26 @@ const HighRiskCases = () => {
                                             <td>
                                                 <div className="patient-cell" onClick={() => navigate(`/dashboard/patients/${p.id}`)} style={{ cursor: 'pointer' }}>
                                                     <div className="patient-avatar">
-                                                        {p.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                                                        {(p.name || '').split(' ').map(n => n[0]).slice(0, 2).join('') || 'ID'}
                                                     </div>
                                                     <div>
                                                         <p className="patient-name patient-name-link">{p.name}</p>
-                                                        <span className={`risk-pill risk-pill-${p.riskLevel?.toLowerCase().split(' ')[0]}`}>{p.riskLevel}</span>
+                                                        <span className={`risk-pill risk-pill-${(p.riskLevel || '').toLowerCase().split(' ')[0]}`}>{p.riskLevel}</span>
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td><TrimesterBadge weeks={p.weeks} /></td>
+                                            <td><TrimesterBadge weeks={0} /></td>
                                             <td>
                                                 <div className="condition-wrap">
                                                     <span className="condition-main">{p.condition}</span>
                                                     <span className="condition-meta">{p.station}</span>
                                                 </div>
                                             </td>
-                                            <td><span className="due-date-val">{p.edd}</span></td>
-                                            <td><span className={p.riskLevel === 'High Risk' ? 'text-critical font-bold' : ''}>{p.bp}</span></td>
+                                            <td><span className="due-date-val">N/A</span></td>
+                                            <td><span className={p.riskLevel === 'High Risk' ? 'text-critical font-bold' : ''}>N/A</span></td>
                                             <td>
-                                                <span className={`status-tag status-${p.status?.toLowerCase().replace(' ', '-')}`}>
-                                                    {p.nextVisit}
+                                                <span className={`status-tag status-scheduled`}>
+                                                    {p.nextVisit || 'Initial'}
                                                 </span>
                                             </td>
                                             <td>
@@ -250,7 +279,6 @@ const HighRiskCases = () => {
 
                 {/* ── Right Column: Panels ── */}
                 <div className="hr-side-col">
-                    
                     {/* Alerts Panel */}
                     <div className="hr-card">
                         <div className="hr-card-head">
@@ -259,20 +287,20 @@ const HighRiskCases = () => {
                             </h2>
                         </div>
                         <div className="alerts-list">
-                            {filteredPatients.filter(p => p.riskLevel?.toLowerCase().includes('high')).slice(0, 8).map(p => (
+                            {filteredPatients.filter(p => (p.riskLevel || '').toLowerCase().includes('high')).slice(0, 8).map(p => (
                                 <div key={p.id} className="alert-item alert-critical" onClick={() => navigate(`/dashboard/patients/${p.id}`)} style={{ cursor: 'pointer' }}>
                                     <div className="alert-dot"></div>
                                     <div className="alert-body">
                                         <p><strong>{p.name}</strong></p>
                                         <p className="alert-reason">{p.condition}</p>
                                         <div className="alert-footer">
-                                            <span>EDD: {p.edd}</span>
+                                            <span>Station: {p.station}</span>
                                             <ArrowUpRight size={12} />
                                         </div>
                                     </div>
                                 </div>
                             ))}
-                            {filteredPatients.filter(p => p.riskLevel?.toLowerCase().includes('high')).length === 0 && (
+                            {filteredPatients.filter(p => (p.riskLevel || '').toLowerCase().includes('high')).length === 0 && (
                                 <p className="empty-alerts">No urgent alerts at this time.</p>
                             )}
                         </div>
@@ -291,7 +319,7 @@ const HighRiskCases = () => {
                                     <span>{b.name}</span>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         <div className="station-bar-wrap">
-                                            <div className="station-bar-fill" style={{ width: `${(b.count / patients.length) * 100}%` }}></div>
+                                            <div className="station-bar-fill" style={{ width: `${(b.count / Math.max(patients.length, 1)) * 100}%` }}></div>
                                         </div>
                                         <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-rose)', minWidth: '20px', textAlign: 'right' }}>{b.count}</span>
                                     </div>

@@ -550,3 +550,53 @@
         grid-template-columns: 1fr;
     }
 }
+/*calendar*/
+.visit-calendar {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 12px;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-radius: 12px;
+  border: 2px solid #0ea5e9;
+  min-height: 120px;
+}
+
+.calendar-day {
+  background: white;
+  border-radius: 8px;
+  padding: 8px 4px;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: transform 0.2s;
+}
+
+.calendar-day:hover {
+  transform: scale(1.05);
+}
+
+.day-number {
+  font-weight: 700;
+  font-size: 16px;
+  color: #0ea5e9;
+  margin-bottom: 2px;
+}
+
+.week-label {
+  font-size: 11px;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.trimester-1 { border-left: 4px solid #10b981; }
+.trimester-2 { border-left: 4px solid #f59e0b; }
+.trimester-3 { border-left: 4px solid #ef4444; }
+
+.no-lmp {
+  color: #64748b;
+  font-style: italic;
+  text-align: center;
+  padding: 20px;
+}
+
+.full-width { grid-column: 1 / -1; }

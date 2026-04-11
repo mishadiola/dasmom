@@ -16,14 +16,11 @@ const TIME_SLOTS = [
     '10:30 AM', '11:00 AM', '11:30 AM', '01:00 PM', '01:30 PM',
     '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM', '04:00 PM'
 ];
-
-const MOCK_APPOINTMENTS = [];
-
-const MOCK_VISITS_TABLE = [];
-
-const MOCK_PATIENTS = [];
-
-const STAFF_LIST = ['Midwife Elena P.', 'Midwife Ana M.', 'Dr. Reyes (OB)'];
+/*
+const [appointments, setAppointments] = useState([]);
+const [visitsTable, setVisitsTable] = useState([]);
+const [patients, setPatients] = useState([]);
+const [staffList, setStaffList] = useState([]);*/
 
 // ── Searchable Dropdown Component ──
 const SearchableDropdown = ({ patients, value, onChange }) => {
@@ -110,6 +107,9 @@ const PrenatalVisits = () => {
     const [toast, setToast] = useState(null);
     const [calendarView, setCalendarView] = useState('week'); // 'day' | 'week' | 'month'
     const [selectedVisit, setSelectedVisit] = useState(null);
+    const [appointments, setAppointments] = useState([]);
+    const [visitsTable, setVisitsTable] = useState([]);
+    const [staffList, setStaffList] = useState([]);
 
     // Booking States
     const [selectedSlot, setSelectedSlot] = useState({ date: null, time: null });
@@ -123,22 +123,47 @@ const PrenatalVisits = () => {
     const [conflictWarning, setConflictWarning] = useState(null);
     const [livePatients, setLivePatients] = useState([]);
 
-    useEffect(() => {
-        const fetchPatients = async () => {
-            try {
-                const data = await PatientService.getAllPatients();
-                const mapped = data.map(p => ({
-                    id: p.id,
-                    name: p.name,
-                    risk: p.risk || 'Normal'
-                }));
-                setLivePatients(mapped);
-            } catch (err) {
-                console.error("Failed to load patients for search:", err);
+    // Replace your useEffect (around line 120) with this:
+useEffect(() => {
+    const fetchData = async () => {
+        try {
+            const [patientsData, visitsData, staffData] = await Promise.all([
+                PatientService.getAllPatients(),
+                PatientService.getPrenatalVisits(),
+                PatientService.getStaffList()
+            ]);
+
+            setLivePatients(patientsData || []);
+            setVisitsTable(visitsData || []);
+            setStaffList(staffData || []);
+            
+            // Load appointments for current view
+            if (calendarView === 'week' || calendarView === 'day') {
+                const days = calendarView === 'week' ? getWeekDays(currentDate) : getDayView(currentDate);
+                const startDate = days[0].date;
+                const endDate = days[days.length - 1].date;
+                const appts = await PatientService.getAppointments(startDate, endDate);
+                setAppointments(appts || []);
             }
-        };
-        fetchPatients();
-    }, []);
+        } catch (error) {
+            console.error('Failed to load data:', error);
+            setToast('Failed to load data. Using demo mode.');
+        }
+    };
+
+    fetchData();
+}, [currentDate, calendarView]); 
+const getSlotStatus = useCallback((date, time) => {
+    const appts = appointments.filter(a => a.date === date && a.time === time);
+    if (appts.length >= 2) return 'Full';
+    if (appts.length === 1) return appts[0];
+    return 'Available';
+}, [appointments]);
+
+
+const getApptCountForDay = (date) => {
+  return appointments.filter(a => a.date === date).length;
+};
 
     // ── Date Logic ──
     const getWeekDays = (date) => {
@@ -251,30 +276,18 @@ const PrenatalVisits = () => {
         return currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     };
 
-    // ── Slot Logic ──
-    const getSlotStatus = (date, time) => {
-        const appts = MOCK_APPOINTMENTS.filter(a => a.date === date && a.time === time);
-        if (appts.length >= 2) return 'Full';
-        if (appts.length === 1) return appts[0];
-        return 'Available';
-    };
-
-    const getApptCountForDay = (date) => {
-        return MOCK_APPOINTMENTS.filter(a => a.date === date).length;
-    };
 
     const handleSlotClick = (date, time, status) => {
         if (status === 'Full') return;
         if (status !== 'Available') {
-            // Find patient data if available
-            const patient = MOCK_PATIENTS.find(p => p.name === status.patient);
             setSelectedVisit({
                 ...status,
-                patientId: patient ? patient.id : 'PT-2026-N1',
+                patientId: status.patientId || 'PT-2026-N1',
                 visitDate: date,
                 time: time,
                 risk: status.risk || 'Normal',
-                visitType: status.type || 'Prenatal'
+                visitType: status.type || 'Prenatal',
+                patientName: status.patient // Add patientName
             });
             return;
         }
@@ -308,8 +321,9 @@ const PrenatalVisits = () => {
     };
 
     // ── Table Logic ──
-    const filteredVisits = MOCK_VISITS_TABLE.filter(v =>
-        (v.patientName.toLowerCase().includes(searchTerm.toLowerCase()) || v.patientId.toLowerCase().includes(searchTerm.toLowerCase())) &&
+    const filteredVisits = visitsTable.filter(v =>
+        (v.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        v.patientId?.toLowerCase().includes(searchTerm.toLowerCase())) &&
         (filterStatus === 'All' || v.status === filterStatus)
     );
 
@@ -426,7 +440,7 @@ const PrenatalVisits = () => {
                                     <tr key={time}>
                                         <td className="td-time">{time}</td>
                                         {visibleDays.map(day => {
-                                            const status = getSlotStatus(day.date, time);
+                                            const status =getSlotStatus(day.date, time);
                                             const isHigh = status !== 'Available' && status !== 'Full' && status.risk === 'High';
                                             return (
                                                 <td
@@ -558,7 +572,8 @@ const PrenatalVisits = () => {
                             <div className="form-group mt-3">
                                 <label>Assigned Midwife/Staff</label>
                                 <select value={bookingData.staff} onChange={e => setBookingData({ ...bookingData, staff: e.target.value })}>
-                                    {STAFF_LIST.map(s => <option key={s}>{s}</option>)}
+                                    {staffList.length > 0 ? staffList.map(s => <option key={s}>{s}</option>) : 
+                                    <option>Midwife Elena P.</option>}
                                 </select>
                             </div>
                             {conflictWarning && (
