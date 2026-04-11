@@ -603,4 +603,19 @@ async getAllPatients() {
       return [];
     }
   }
+
+  //scheduling
+  // 🔥 ADD THIS METHOD (if not already there)
+async getStaffList() {
+  try {
+    const { data } = await this.supabase
+      .from('staff_profiles')
+      .select('full_name, role')
+      .or('role.ilike.%midwife%,role.ilike.%doctor%');
+    return data || [];
+  } catch (error) {
+    console.error('Staff fetch error:', error);
+    return [];
+  }
+}
 }
