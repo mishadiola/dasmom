@@ -433,24 +433,28 @@ const PatientsList = () => {
 
                                         <td>
                                             <div className="actions-group">
-                                                <button className="action-btn view-btn" data-tooltip="View Profile" onClick={() => navigate(`/dashboard/patients/${p.id.replace('PT-','')}`)}>
-                                                    <Eye size={16} />
+                                                <button className="action-btn view-btn" data-tooltip="View Profile" onClick={() => navigate(`/dashboard/patients/${p.id}`)}>
+                                                <Eye size={16} />
                                                 </button>
-
-                                                <button className="action-btn edit-btn" data-tooltip="Edit Patient" onClick={() => navigate(`/dashboard/patients/${p.id.replace('PT-','')}/edit`)}>
-                                                    <Edit size={16} />
+                                                
+                                                {/* 🔥 ADD THIS ONE LINE */}
+                                                <button className="action-btn vitals-btn" data-tooltip="Record Vitals" onClick={() => setVitalModalPatient(p)}>
+                                                <Activity size={16} />
                                                 </button>
-
+                                                
+                                                <button className="action-btn edit-btn" data-tooltip="Edit Patient" onClick={() => navigate(`/dashboard/patients/${p.id}/edit`)}>
+                                                <Edit size={16} />
+                                                </button>
+                                                
                                                 <button className="action-btn delete-btn" data-tooltip="Delete Patient" onClick={() => {
-                                                    if(window.confirm('Are you sure you want to delete this patient?')) {
-                                                        // Fallback implementation, integration ready
-                                                        console.log('Delete logic triggered');
-                                                    }
+                                                if(window.confirm('Are you sure you want to delete this patient?')) {
+                                                    console.log('Delete logic triggered');
+                                                }
                                                 }}>
-                                                    <Trash size={16} />
+                                                <Trash size={16} />
                                                 </button>
                                             </div>
-                                        </td>
+                                            </td>
                                     </tr>
                                 ))
                             ) : (
