@@ -238,6 +238,46 @@ class BabyService {
       ];
     }
   }
+
+  // Add this method to BabyService class
+async getStations() 
+{
+    try {
+        const { data, error } = await supabase
+            .from('staff_profiles')
+            .select('barangay_assignment')
+            .not('barangay_assignment', 'is', null)
+            .order('barangay_assignment');
+        
+        if (error) throw error;
+        
+        return ['All Stations', ...new Set(data?.map(s => s.barangay_assignment).filter(Boolean))];
+    } catch (error) {
+        console.error('Error loading stations:', error);
+        return ['Main Clinic'];
+    }
+}
+
+
+async getStaffForStation(station) {
+    try {
+        const { data, error } = await supabase
+            .from('staff_profiles')
+            .select('id, full_name, role, barangay_assignment')
+            .in('role', ['Midwife', 'Doctor'])
+            .or(`role.eq.Midwife,role.ilike.%OB%`)
+            .or(
+                `barangay_assignment.ilike.%${station.split(',')[0]}%,
+                 barangay_assignment.eq.${station.split(',')[0]}`
+            )
+            .order('full_name');
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error('Error getting staff for station:', error);
+        return [];
+    }
+}
 }
 
 export default new BabyService();
