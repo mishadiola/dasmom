@@ -10,7 +10,6 @@ import '../../styles/pages/AddPatient.css';
 import PatientService from "../../services/patientservice";
 
 const patientService = new PatientService();
-
 const TABS = [
     { id: 'personal', label: 'Personal', icon: User },
     { id: 'pregnancy', label: 'Pregnancy', icon: HeartPulse },
@@ -18,26 +17,21 @@ const TABS = [
     { id: 'prenatal', label: 'Prenatal', icon: Calendar },
     { id: 'documents', label: 'Documents', icon: FileText },
 ];
-
 const MEDICAL_CONDITIONS = [
     'Hypertension', 'Diabetes', 'Heart Disease', 'Asthma',
     'Anemia', 'Previous C-section'
 ];
-
 const AddPatient = () => {
     const navigate = useNavigate();
-    const { user } = useContext(AuthContext);
-    
+    const { user } = useContext(AuthContext);  
     const [activeTab, setActiveTab] = useState('personal');
     const [toast, setToast] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
     const [missingFields, setMissingFields] = useState([]);
     const [loadingStations, setLoadingStations] = useState(true);
-
     const [availableStations, setAvailableStations] = useState([]);
     const [midwifeList, setMidwifeList] = useState([]);
     const [doctorList, setDoctorList] = useState([]);
-        // Add these 2 lines with your other useState hooks (around line 40):
     const [schedulePreview, setSchedulePreview] = useState([]);
     const [loadingSchedule, setLoadingSchedule] = useState(false);
 
@@ -196,47 +190,11 @@ const AddPatient = () => {
         checkFields(requiredEmergency);
         checkFields(requiredPregnancy);
         checkFields(requiredVitals);
-/*
-        if (missing.length > 0) {
-            setMissingFields(missing);
-            setToast({ type: 'error', message: 'Please fill all required fields (*)' });
-            return;
-        }*/
 
         setIsSaving(true);
-/*
-        try {
-            const newPatient = await patientService.addPatient(formData);
-            
-            console.log('🎉 Patient created:', newPatient.id, newPatient.name);
-            
-            setToast({ 
-                type: 'success', 
-                message: `✅ Patient saved successfully!
-                👤 ${newPatient.name || formData.firstName + ' ' + formData.lastName}
-                📅 12 visits auto-scheduled
-                🏘️ ${formData.station}` 
-            });
-           // REPLACE this block in handleSave():
-            console.log('🎉 Patient created:', newPatient.id, newPatient.name);
-            navigate(`/dashboard/patients/${newPatient.patientId}`);
 
-            // WITH:
-            console.log('🎉 Patient created:', newPatient.id, `${newPatient.first_name} ${newPatient.last_name}`);
-            navigate(`/dashboard/patients/${newPatient.id}`);
-            setTimeout(() => {
-                setToast({ 
-                    type: 'success', 
-                    message: `✅ Patient saved successfully!
-                    👤 ${newPatient.first_name} ${newPatient.last_name}
-                    📅 Semester visits auto-scheduled
-                    🏘️ ${newPatient.barangay || formData.station}` 
-                });
-            }, 100);
-            
-        } */
-       // REPLACE your entire handleSave try block:
 try {
+    console.log('📤 Passing to PatientService.addPatient:', formData);
     const newPatient = await patientService.addPatient(formData);
     
     console.log('🎉 Patient created:', newPatient.id, `${newPatient.first_name || formData.firstName} ${newPatient.last_name || formData.lastName}`);
@@ -249,8 +207,7 @@ try {
         🏘️ ${newPatient.barangay || formData.station}` 
     });
     
-    navigate(`/dashboard/patients/${newPatient.id}`);  // ✅ Uses newPatient.id
-    
+    navigate(`/dashboard/patients/${newPatient.id}`);  
 } 
         catch (err) {
             console.error('💥 Save failed:', err);
@@ -549,8 +506,7 @@ try {
                             </div>
                         </div>
                     )}
-
-                    {/* MEDICAL TAB - OLD FIELDS */}
+                    {}
                     {activeTab === 'medical' && (
                         <div className="ap-section animate-fade">
                             <h2 className="section-title">Medical Risk Assessment</h2>
@@ -588,8 +544,7 @@ try {
                             </div>
                         </div>
                     )}
-
-                    {/* PRENATAL TAB - NEW DROPDOWNS + OLD FIELDS */}
+                    {}
                     {activeTab === 'prenatal' && (
                         <div className="ap-section animate-fade">
                             <h2 className="section-title">Prenatal Care & Initial Vitals</h2>
@@ -618,7 +573,7 @@ try {
                                 </div>
                             </div>
 
-                            {/* NEW: BARANGAY-SPECIFIC STAFF DROPDOWNS */}
+                            {}
                             <div className="form-grid-2">
                                 <div className="form-group">
                                     <label>Assigned Midwife ({formData.station})</label>
@@ -639,7 +594,6 @@ try {
                                     </select>
                                 </div>
                             </div>
-
                             <hr className="divider" />
                             <h3 className="section-subtitle">Initial Vital Signs <span className="req">*</span></h3>
                             <div className="form-grid-3">
@@ -756,8 +710,7 @@ try {
                             </div>
                         </div>
                     )}
-
-                    {/* DOCUMENTS TAB */}
+                    {}
                     {activeTab === 'documents' && (
                         <div className="ap-section animate-fade">
                             <h2 className="section-title">Documents Upload</h2>

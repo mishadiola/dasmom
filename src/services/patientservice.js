@@ -153,6 +153,7 @@ async getAllPatients() {
   // =========================
   // ADD PATIENT (UNCHANGED - ALREADY PERFECT)
   // =========================
+  
   async addPatient(patientData) {
     console.log('🚀 Starting addPatient with:', {
       firstName: patientData.firstName,
@@ -265,31 +266,96 @@ async getAllPatients() {
     }
     console.log('✅ PREGNANCY INFO inserted');
 
-    // 4. FIRST VISIT (with BP parsing safety + risk_factors)
-    console.log('🏥 Inserting FIRST VISIT...');
-    if (patientData.bp && patientData.weight) {
-      try {
-        const [sys, dia] = patientData.bp.split('/');
-        await this.supabase.from('prenatal_visits').insert({
-          patient_id: patientId,
-          visit_date: new Date().toISOString().split('T')[0],
-          visit_number: 1,
-          trimester: this.calculateTrimester(patientData.lmp),
-          gestational_age: `${this.calculateWeeks(patientData.lmp)} weeks`,
-          bp_systolic: parseInt(sys),
-          bp_diastolic: parseInt(dia),
-          weight_kg: parseFloat(patientData.weight),
-          fhr_bpm: patientData.fhr ? parseInt(patientData.fhr) : null,
-          risk_factors: patientData.conditions || [],  
-          created_by: createdBy,
-          next_appt_type: 'Initial Visit',
-          next_appt_date: this.calculateNextSemesterVisit(patientData.lmp)
-        });
-        console.log('✅ FIRST VISIT inserted');
-      } catch (e) {
-        console.warn('First visit BP format error:', e);
-      }
+// 4. FIRST VISIT (with BP parsing safety + ALL fields)
+// 4. FIRST VISIT (with BP parsing safety + ALL fields)
+console.log('🏥 Inserting FIRST VISIT...');
+if (patientData.bp && patientData.weight) {
+  try {
+    const bpText = (patientData.bp ?? '').trim();
+    const bpMatch = bpText.match(/^(\d+)[/\\s](\d+)$/);
+    if (!bpMatch) {
+      throw new Error(`Invalid BP format: "${bpText}"`);
     }
+    const sys = parseInt(bpMatch[1], 10);
+    const dia = parseInt(bpMatch[2], 10);
+    if (isNaN(sys) || isNaN(dia)) {
+      throw new Error(`Invalid BP numbers: ${sys} / ${dia}`);
+    }
+
+    const weight = parseFloat(patientData.weight);
+    if (isNaN(weight)) {
+      throw new Error(`Invalid weight: "${patientData.weight}"`);
+    }
+
+    const visitDate = new Date().toISOString().split('T')[0];
+    const trimester = this.calculateTrimester(patientData.lmp);
+    const gaWeeks = this.calculateWeeks(patientData.lmp);
+    const gaLabel = gaWeeks > 0 ? `${gaWeeks} weeks` : '1st visit';
+    const nextApptDate = this.calculateNextSemesterVisit(patientData.lmp);
+
+    console.log('💉 Validated prenatal_visit data:', {
+      patient_id: patientId,
+      visit_date: visitDate,
+      bp_systolic: sys,
+      bp_diastolic: dia,
+      weight_kg: weight,
+      fhr_bpm: patientData.fhr ? parseInt(patientData.fhr, 10) : null,
+      created_by: createdBy
+    });
+
+    const { data, error } = await this.supabase
+  .from('prenatal_visits')
+  .insert({
+    patient_id: patientId,
+    visit_date: visitDate,
+    visit_number: 1,
+    trimester,
+    gestational_age: gaLabel,
+    bp_systolic: sys,
+    bp_diastolic: dia,
+    weight_kg: weight,
+    // optional columns
+    temp_c: null,
+    pulse_bpm: null,
+    resp_rate_cpm: null,
+    fundal_height_cm: null,
+    fhr_bpm: patientData.fhr ? parseInt(patientData.fhr, 10) : null,
+    fetal_movement: null,
+    presentation: null,
+    tests_done: [],               // text[] or similar
+    supplements_given: [],        // text[] or similar
+    clinical_notes: null,
+    advice_given: null,
+    is_referred: false,
+    referred_to: null,
+    referral_reason: null,
+    next_appt_type: 'Initial Visit',
+    next_appt_date: nextApptDate,
+    created_by: createdBy,
+    assigned_doctor: patientData.assignedDoctor || null,
+    assigned_midwife: patientData.assignedMidwife || null,
+    bhw_assigned: null
+    // risk_level removed – stored in pregnancy_info only
+  })
+  .select(); // required to see the actual inserted row
+
+    if (error) {
+      console.error('❌ Prenatal visit insert error:', error);
+      console.dir(error, { depth: 5 });
+      throw error;
+    }
+
+    console.log('✅ Prenatal visit inserted:', data);
+  } catch (e) {
+    console.error('🚨 First visit failed:', e);
+    throw new Error(`Failed to record first prenatal visit: ${e.message}`);
+  }
+} else {
+  console.warn('⚠️ Skipping first visit (missing bp or weight):', {
+    bp: patientData.bp,
+    weight: patientData.weight
+  });
+}
 
     // 5. SMART SEMESTER SCHEDULING
     console.log('📅 Scheduling semester visits...');
@@ -306,8 +372,7 @@ async getAllPatients() {
     console.log('🎉 FULL PATIENT CREATED:', patient);
     
     return patient;
-  }
-
+}
   // NEW: Get full patient profile
   async getPatientById(patientId) {
     const { data } = await this.supabase
