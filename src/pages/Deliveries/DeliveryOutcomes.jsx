@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import DeliveryService from '../../services/deliveryservice';
 import {
     Search, Filter, Plus, X, Baby, Heart, AlertTriangle,
     CheckCircle2, Clock, AlertCircle, FileText, Download,
@@ -8,58 +7,58 @@ import {
     Stethoscope, MapPin, ChevronDown, ChevronUp, TrendingUp
 } from 'lucide-react';
 import '../../styles/pages/DeliveryOutcomes.css';
-
-/* ════════════════════════════
-   MOCK DATA
-════════════════════════════ */
-const SUMMARY_STATS = [
-    { label: 'Total Deliveries (This Month)', value: 42, color: 'lilac', icon: Baby },
-    { label: 'Normal Spontaneous Delivery', value: 28, color: 'sage', icon: CheckCircle2 },
-    { label: 'Cesarean Section', value: 14, color: 'pink', icon: Activity },
-    { label: 'Complications During Delivery', value: 5, color: 'orange', icon: AlertTriangle },
-    { label: 'High-Risk Deliveries', value: 6, color: 'rose', icon: AlertCircle },
-];
-
-const DELIVERIES = [];
-
-const ALERTS = [];
+import babyservices from '../../services/babyservices';
 
 const COMPLICATION_OPTIONS = ['None', 'Hemorrhage', 'Infection', 'Preeclampsia', 'Placenta Previa', 'Preterm'];
 const STAFF_LIST = ['Midwife Elena P.', 'Midwife Ana M.', 'Dr. Reyes (OB)', 'Nurse Bea'];
 const FACILITIES = ['Main Clinic', 'BHS 1', 'BHS 2', 'BHS 3', 'BHS 4', 'BHS 5', 'BHS 6', 'BHS 7'];
 
-/* ════════════════════════════
-   ADD DELIVERY MODAL
-════════════════════════════ */
 const AddDeliveryModal = ({ onClose, onSuccess }) => {
     const [section, setSection] = useState('patient');
     const [loading, setLoading] = useState(false);
     const [searchResults, setSearchResults] = useState([]);
     const [showResults, setShowResults] = useState(false);
-    
-    const [form, setForm] = useState({
-        patientId: '', patientName: '', age: '', station: '', gestationalAge: '', riskLevel: 'Normal',
-        deliveryDate: new Date().toISOString().split('T')[0], deliveryTime: '', deliveryType: 'NSD', deliveryMode: '',
-        staff: STAFF_LIST[0], facility: FACILITIES[0],
-        complications: ['None'],
-        babyGender: 'Female', babyWeight: '', apgar1: '', apgar5: '', babyCondition: 'Healthy',
-        postpartumDate: '', notes: ''
-    });
 
-    const deliveryService = new DeliveryService();
+    const [form, setForm] = useState({
+        patientId: '',
+        patientName: '',
+        age: '',
+        station: '',
+        gestationalAge: '',
+        riskLevel: 'Normal',
+        deliveryDate: new Date().toISOString().split('T')[0],
+        deliveryTime: '',
+        deliveryType: 'NSD',
+        deliveryMode: '',
+        staff: STAFF_LIST[0],
+        facility: FACILITIES[0],
+        complications: ['None'],
+        babyGender: 'Female',
+        babyWeight: '',
+        babyLength: '',
+        headCircumference: '',
+        apgar1: '',
+        apgar5: '',
+        babyCondition: 'Healthy',
+        postpartumDate: '',
+        notes: ''
+    });
 
     const update = (k, v) => {
         setForm(prev => ({ ...prev, [k]: v }));
-        if (k === 'patientName' && v.length > 2) {
-            handleSearch(v);
-        }
+        if (k === 'patientName' && v.length > 2) handleSearch(v);
+        if (k === 'patientName' && v.length <= 2) setShowResults(false);
     };
 
     const handleSearch = async (q) => {
-        const results = await deliveryService.searchPregnantMothers(q);
-        setSearchResults(results);
-        setShowResults(true);
-    };
+        try {
+            const results = await babyservices.searchPregnantMothers(q);
+            setSearchResults(results); // remove setShowResults entirely
+        } catch (err) {
+            console.error('Search failed:', err);
+            setSearchResults([]);
+        }
+        };
 
     const selectPatient = (p) => {
         setForm(prev => ({
@@ -77,21 +76,52 @@ const AddDeliveryModal = ({ onClose, onSuccess }) => {
             const current = [...prev.complications];
             if (c === 'None') return { ...prev, complications: ['None'] };
             const without = current.filter(x => x !== 'None');
-            return { ...prev, complications: without.includes(c) ? without.filter(x => x !== c) : [...without, c] };
+            return {
+                ...prev,
+                complications: without.includes(c) ? without.filter(x => x !== c) : [...without, c]
+            };
         });
     };
 
     const handleSave = async () => {
         if (!form.patientId || !form.deliveryDate) {
-            alert("Please select a patient and delivery date.");
+            alert('Please select a patient and delivery date.');
             return;
         }
+
         setLoading(true);
         try {
-            await deliveryService.addDeliveryOutcome(form);
+            await babyservices.recordDelivery(
+                {
+                    mother_id: form.patientId,
+                    delivery_date: form.deliveryDate,
+                    delivery_time: form.deliveryTime || '00:00',
+                    delivery_type: form.deliveryType,
+                    delivery_mode: form.deliveryMode || null,
+                    gestational_age: form.gestationalAge || null,
+                    risk_level: form.riskLevel || 'Normal',
+                    complications: form.complications,
+                    attending_staff: null,
+                    facility: form.facility || null,
+                    postpartum_visit_date: form.postpartumDate || null,
+                    notes: form.notes || null
+                },
+                {
+                    baby_name: null,
+                    gender: form.babyGender,
+                    birth_weight: form.babyWeight ? Number(form.babyWeight) : null,
+                    birth_length: form.babyLength ? Number(form.babyLength) : null,
+                    head_circumference: form.headCircumference ? Number(form.headCircumference) : null,
+                    apgar_1min: form.apgar1 ? Number(form.apgar1) : null,
+                    apgar_5min: form.apgar5 ? Number(form.apgar5) : null,
+                    condition_at_birth: form.babyCondition,
+                    risk_level: form.riskLevel || 'Normal'
+                }
+            );
             onSuccess();
         } catch (err) {
-            alert("Failed to save delivery record. Please check the logs.");
+            console.error('Failed to save delivery record:', err);
+            alert('Failed to save delivery record. Please check the logs.');
         } finally {
             setLoading(false);
         }
@@ -102,7 +132,7 @@ const AddDeliveryModal = ({ onClose, onSuccess }) => {
         { id: 'delivery', label: 'Delivery Details', icon: Stethoscope },
         { id: 'complications', label: 'Complications', icon: AlertTriangle },
         { id: 'baby', label: 'Baby Info', icon: Baby },
-        { id: 'plan', label: 'Postpartum Plan', icon: Calendar },
+        { id: 'plan', label: 'Postpartum Plan', icon: Calendar }
     ];
 
     return (
@@ -132,29 +162,28 @@ const AddDeliveryModal = ({ onClose, onSuccess }) => {
                 </div>
 
                 <div className="modal-body">
-                    {/* A. Patient Info */}
                     {section === 'patient' && (
                         <div className="modal-section-body">
                             <div className="form-grid-2">
                                 <div className="form-group" style={{ position: 'relative' }}>
                                     <label>Search Patient Name <span className="req">*</span></label>
                                     <div className="search-input-wrap">
-                                        <input 
-                                            type="text" 
-                                            placeholder="Type mother's name..." 
-                                            value={form.patientName} 
+                                        <input
+                                            type="text"
+                                            placeholder="Type mother's name..."
+                                            value={form.patientName}
                                             onChange={e => update('patientName', e.target.value)}
                                             autoComplete="off"
                                         />
-                                        {showResults && searchResults.length > 0 && (
-                                            <div className="search-results-dropdown">
-                                                {searchResults.map(p => (
-                                                    <div key={p.id} className="search-result-item" onClick={() => selectPatient(p)}>
-                                                        <div className="res-name">{p.name}</div>
-                                                        <div className="res-meta">{p.id} · {p.station} · {p.isPregnant ? 'Pregnant' : 'Status: ' + p.riskLevel}</div>
-                                                    </div>
-                                                ))}
+                                        {searchResults.length > 0 && (
+                                        <div className="search-results-dropdown">
+                                            {searchResults.map(p => (
+                                            <div key={p.id} className="search-result-item" onClick={() => selectPatient(p)}>
+                                                <div className="res-name">{p.name}</div>
+                                                <div className="res-meta">{p.id} · {p.station} · {p.isPregnant ? 'Pregnant' : 'Status: ' + p.riskLevel}</div>
                                             </div>
+                                            ))}
+                                        </div>
                                         )}
                                     </div>
                                 </div>
@@ -178,12 +207,17 @@ const AddDeliveryModal = ({ onClose, onSuccess }) => {
                         </div>
                     )}
 
-                    {/* B. Delivery Details */}
                     {section === 'delivery' && (
                         <div className="modal-section-body">
                             <div className="form-grid-2">
-                                <div className="form-group"><label>Date <span className="req">*</span></label><input type="date" value={form.deliveryDate} onChange={e => update('deliveryDate', e.target.value)} /></div>
-                                <div className="form-group"><label>Time</label><input type="time" value={form.deliveryTime} onChange={e => update('deliveryTime', e.target.value)} /></div>
+                                <div className="form-group">
+                                    <label>Date <span className="req">*</span></label>
+                                    <input type="date" value={form.deliveryDate} onChange={e => update('deliveryDate', e.target.value)} />
+                                </div>
+                                <div className="form-group">
+                                    <label>Time</label>
+                                    <input type="time" value={form.deliveryTime} onChange={e => update('deliveryTime', e.target.value)} />
+                                </div>
                                 <div className="form-group">
                                     <label>Type <span className="req">*</span></label>
                                     <select value={form.deliveryType} onChange={e => update('deliveryType', e.target.value)}>
@@ -193,15 +227,30 @@ const AddDeliveryModal = ({ onClose, onSuccess }) => {
                                     </select>
                                 </div>
                                 <div className="form-group">
-                                    <label>Staff</label>
-                                    <select value={form.staff} onChange={e => update('staff', e.target.value)}>{STAFF_LIST.map(s => <option key={s}>{s}</option>)}</select>
+                                    <label>Delivery Mode</label>
+                                    <select value={form.deliveryMode} onChange={e => update('deliveryMode', e.target.value)}>
+                                        <option value="">Select mode</option>
+                                        <option value="Normal Spontaneous Delivery">Normal Spontaneous Delivery</option>
+                                        <option value="Cesarean Section">Cesarean Section</option>
+                                        <option value="Assisted Delivery">Assisted Delivery</option>
+                                    </select>
                                 </div>
-                                <div className="form-group"><label>Facility</label><select value={form.facility} onChange={e => update('facility', e.target.value)}>{FACILITIES.map(f => <option key={f}>{f}</option>)}</select></div>
+                                <div className="form-group">
+                                    <label>Staff</label>
+                                    <select value={form.staff} onChange={e => update('staff', e.target.value)}>
+                                        {STAFF_LIST.map(s => <option key={s}>{s}</option>)}
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label>Facility</label>
+                                    <select value={form.facility} onChange={e => update('facility', e.target.value)}>
+                                        {FACILITIES.map(f => <option key={f}>{f}</option>)}
+                                    </select>
+                                </div>
                             </div>
                         </div>
                     )}
 
-                    {/* C. Complications */}
                     {section === 'complications' && (
                         <div className="modal-section-body">
                             <div className="complication-grid">
@@ -215,26 +264,61 @@ const AddDeliveryModal = ({ onClose, onSuccess }) => {
                         </div>
                     )}
 
-                    {/* D. Baby Info */}
                     {section === 'baby' && (
                         <div className="modal-section-body">
                             <div className="form-grid-2">
-                                <div className="form-group"><label>Birth Weight (kg)</label><input type="number" step="0.1" value={form.babyWeight} onChange={e => update('babyWeight', e.target.value)} /></div>
-                                <div className="form-group"><label>Gender</label><select value={form.babyGender} onChange={e => update('babyGender', e.target.value)}><option>Male</option><option>Female</option></select></div>
-                                <div className="form-group"><label>APGAR score (1 min)</label><input type="number" value={form.apgar1} onChange={e => update('apgar1', e.target.value)} /></div>
-                                <div className="form-group"><label>APGAR score (5 min)</label><input type="number" value={form.apgar5} onChange={e => update('apgar5', e.target.value)} /></div>
-                                <div className="form-group"><label>Baby Condition</label><select value={form.babyCondition} onChange={e => update('babyCondition', e.target.value)}><option>Healthy</option><option>NICU</option><option>Special Care</option><option>Stillbirth</option></select></div>
+                                <div className="form-group">
+                                    <label>Birth Weight (kg)</label>
+                                    <input type="number" step="0.1" value={form.babyWeight} onChange={e => update('babyWeight', e.target.value)} />
+                                </div>
+                                <div className="form-group">
+                                    <label>Birth Length (cm)</label>
+                                    <input type="number" step="0.1" value={form.babyLength} onChange={e => update('babyLength', e.target.value)} />
+                                </div>
+                                <div className="form-group">
+                                    <label>Head Circumference (cm)</label>
+                                    <input type="number" step="0.1" value={form.headCircumference} onChange={e => update('headCircumference', e.target.value)} />
+                                </div>
+                                <div className="form-group">
+                                    <label>Gender</label>
+                                    <select value={form.babyGender} onChange={e => update('babyGender', e.target.value)}>
+                                        <option>Male</option>
+                                        <option>Female</option>
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label>APGAR score (1 min)</label>
+                                    <input type="number" value={form.apgar1} onChange={e => update('apgar1', e.target.value)} />
+                                </div>
+                                <div className="form-group">
+                                    <label>APGAR score (5 min)</label>
+                                    <input type="number" value={form.apgar5} onChange={e => update('apgar5', e.target.value)} />
+                                </div>
+                                <div className="form-group">
+                                    <label>Baby Condition</label>
+                                    <select value={form.babyCondition} onChange={e => update('babyCondition', e.target.value)}>
+                                        <option>Healthy</option>
+                                        <option>NICU</option>
+                                        <option>Special Care</option>
+                                        <option>Stillbirth</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
                     )}
 
-                    {/* E. Postpartum Plan */}
                     {section === 'plan' && (
                         <div className="modal-section-body">
-                            <div className="form-group"><label>Scheduled Postpartum Visit</label><input type="date" value={form.postpartumDate} onChange={e => update('postpartumDate', e.target.value)} /></div>
-                            <div className="form-group"><label>Notes</label><textarea value={form.notes} onChange={e => update('notes', e.target.value)} rows="3"></textarea></div>
+                            <div className="form-group">
+                                <label>Scheduled Postpartum Visit</label>
+                                <input type="date" value={form.postpartumDate} onChange={e => update('postpartumDate', e.target.value)} />
+                            </div>
+                            <div className="form-group">
+                                <label>Notes</label>
+                                <textarea value={form.notes} onChange={e => update('notes', e.target.value)} rows="3"></textarea>
+                            </div>
                             <div className="auto-links-box">
-                                <h4><CheckCircle2 size={14}/> Automatic System Actions:</h4>
+                                <h4><CheckCircle2 size={14} /> Automatic System Actions:</h4>
                                 <ul>
                                     <li>Registers baby in Newborn Tracking</li>
                                     <li>Updates mother's status to Postpartum</li>
@@ -263,56 +347,49 @@ const AddDeliveryModal = ({ onClose, onSuccess }) => {
     );
 };
 
-/* ════════════════════════════
-   MAIN COMPONENT
-   ════════════════════════════ */
 const DeliveryOutcomes = () => {
     const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
-    const [filters, setFilters] = useState({ 
-        type: 'All', 
-        risk: 'All', 
-        complication: 'All', 
+    const [filters, setFilters] = useState({
+        type: 'All',
+        risk: 'All',
+        complication: 'All',
         station: 'All',
-        view: 'outcomes' // 'outcomes' | 'upcoming'
+        view: 'outcomes'
     });
     const [showModal, setShowModal] = useState(false);
-    const [expandedRow, setExpandedRow] = useState(null);
     const [sortField, setSortField] = useState('deliveryDate');
     const [sortAsc, setSortAsc] = useState(false);
-
-    // Live Data States
     const [deliveries, setDeliveries] = useState([]);
     const [upcoming, setUpcoming] = useState([]);
     const [stats, setStats] = useState([
         { label: 'Total Deliveries', value: 0, color: 'lilac', icon: Baby },
         { label: 'Normal vs CS', value: '0 / 0', color: 'sage', icon: CheckCircle2 },
         { label: 'Complications', value: 0, color: 'orange', icon: AlertTriangle },
-        { label: 'High-Risk Deliveries', value: 0, color: 'rose', icon: AlertCircle },
+        { label: 'High-Risk Deliveries', value: 0, color: 'rose', icon: AlertCircle }
     ]);
     const [loading, setLoading] = useState(true);
-
-    const deliveryService = new DeliveryService();
 
     const loadData = async () => {
         setLoading(true);
         try {
-            const [allDeliv, allUp, allStats] = await Promise.all([
-                deliveryService.getAllDeliveries(),
-                deliveryService.getUpcomingDeliveries(),
-                deliveryService.getDeliveryStats()
+            const [allDeliv, allStats] = await Promise.all([
+                babyservices.getAllDeliveries(),
+                babyservices.getDeliveryStats()
             ]);
-            setDeliveries(allDeliv);
-            setUpcoming(allUp);
-            
-            const icons = [Baby, CheckCircle2, AlertTriangle, AlertCircle];
-            const enrichedStats = allStats.map((s, i) => ({
-                ...s,
-                icon: icons[i] || Activity
-            }));
-            setStats(enrichedStats);
+            setDeliveries(allDeliv || []);
+            setUpcoming([]);
+            setStats(allStats || []);
         } catch (err) {
-            console.error("Error loading delivery outcomes:", err);
+            console.error('Error loading delivery outcomes:', err);
+            setDeliveries([]);
+            setUpcoming([]);
+            setStats([
+                { label: 'Total Deliveries', value: 0, color: 'lilac', icon: Baby },
+                { label: 'Normal vs CS', value: '0 / 0', color: 'sage', icon: CheckCircle2 },
+                { label: 'Complications', value: 0, color: 'orange', icon: AlertTriangle },
+                { label: 'High-Risk Deliveries', value: 0, color: 'rose', icon: AlertCircle }
+            ]);
         } finally {
             setLoading(false);
         }
@@ -326,37 +403,41 @@ const DeliveryOutcomes = () => {
 
     const handleSort = (field) => {
         if (sortField === field) setSortAsc(prev => !prev);
-        else { setSortField(field); setSortAsc(false); }
+        else {
+            setSortField(field);
+            setSortAsc(false);
+        }
     };
 
     const currentData = filters.view === 'outcomes' ? deliveries : upcoming;
 
-    const filtered = currentData
-        .filter(d => {
-            const s = searchTerm.toLowerCase();
-            const patientName = d.patientName || '';
-            const patientId = d.patientId || '';
-            const station = d.station || '';
-            
-            const matchSearch = patientName.toLowerCase().includes(s) || 
-                               patientId.toLowerCase().includes(s) || 
-                               station.toLowerCase().includes(s);
-                               
-            const matchType = filters.type === 'All' || d.deliveryType === filters.type;
-            const matchRisk = filters.risk === 'All' || d.riskLevel === filters.risk;
-            const matchComp = filters.complication === 'All' || (filters.complication === 'None' ? d.complications === 'None' : d.complications !== 'None');
-            const matchStation = filters.station === 'All' || d.station === filters.station;
-            
-            return matchSearch && matchType && matchRisk && matchComp && matchStation;
-        })
-        .sort((a, b) => {
-            const currentSortField = sortField || (filters.view === 'outcomes' ? 'deliveryDate' : 'edd');
-            const va = a[currentSortField] ?? ''; 
-            const vb = b[currentSortField] ?? '';
-            
-            // Numeric check if needed (not for dates/strings)
-            return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
-        });
+    const filtered = useMemo(() => {
+        return currentData
+            .filter(d => {
+                const s = searchTerm.toLowerCase();
+                const patientName = d.patientName || '';
+                const patientId = d.patientId || '';
+                const station = d.station || '';
+
+                const matchSearch =
+                    patientName.toLowerCase().includes(s) ||
+                    patientId.toString().toLowerCase().includes(s) ||
+                    station.toLowerCase().includes(s);
+
+                const matchType = filters.type === 'All' || d.deliveryType === filters.type;
+                const matchRisk = filters.risk === 'All' || d.riskLevel === filters.risk;
+                const matchComp = filters.complication === 'All' || (filters.complication === 'None' ? d.complications === 'None' : d.complications !== 'None');
+                const matchStation = filters.station === 'All' || d.station === filters.station;
+
+                return matchSearch && matchType && matchRisk && matchComp && matchStation;
+            })
+            .sort((a, b) => {
+                const field = sortField || (filters.view === 'outcomes' ? 'deliveryDate' : 'edd');
+                const va = a[field] ?? '';
+                const vb = b[field] ?? '';
+                return sortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+            });
+    }, [currentData, searchTerm, filters, sortField, sortAsc]);
 
     const getRowClass = (d) => {
         if (d.riskLevel === 'High' || (d.complications && d.complications !== 'None')) return 'do-row--complication';
@@ -388,10 +469,13 @@ const DeliveryOutcomes = () => {
     const nsdPct = total > 0 ? Math.round((nsdCount / total) * 100) : 0;
     const csPct = total > 0 ? Math.round((csCount / total) * 100) : 0;
 
+    const resolveIcon = (icon) => {
+        const Icon = icon;
+        return typeof Icon === 'function' ? Icon : Baby;
+    };
+
     return (
         <div className="do-page">
-
-            {/* ── Page Header ── */}
             <div className="page-header">
                 <div>
                     <h1 className="page-title"><Stethoscope size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Delivery Outcomes</h1>
@@ -403,10 +487,9 @@ const DeliveryOutcomes = () => {
                 </div>
             </div>
 
-            {/* ── Summary Cards ── */}
             <div className="do-stats-grid">
                 {stats.map(s => {
-                    const Icon = s.icon;
+                    const Icon = resolveIcon(s.icon);
                     return (
                         <div key={s.label} className={`stat-card stat-card--${s.color}`}>
                             <div className="stat-top">
@@ -421,7 +504,6 @@ const DeliveryOutcomes = () => {
                 })}
             </div>
 
-            {/* ── NSD vs CS Mini Chart ── */}
             <div className="do-chart-bar-wrap">
                 <div className="do-chart-bar">
                     <div className="chart-label-row">
@@ -436,7 +518,6 @@ const DeliveryOutcomes = () => {
                 </div>
             </div>
 
-            {/* ── Search & Filters ── */}
             <div className="do-controls">
                 <div className="do-search-wrap">
                     <Search size={16} className="do-search-icon" />
@@ -474,22 +555,16 @@ const DeliveryOutcomes = () => {
                     </select>
                     <select value={filters.station} onChange={e => handleFilter('station', e.target.value)}>
                         <option value="All">All Stations</option>
-                        {[1,2,3,4,5,6,7].map(n => <option key={n} value={`Station ${n}`}>Station {n}</option>)}
+                        {[1, 2, 3, 4, 5, 6, 7].map(n => <option key={n} value={`Station ${n}`}>Station {n}</option>)}
                     </select>
                 </div>
             </div>
 
-            {/* ── Main Layout ── */}
             <div className="do-main-layout">
-
-                {/* ── Deliveries Table ── */}
                 <div className="do-table-col">
                     <div className="do-card">
                         <div className="do-card-head">
-                            <h2>
-                                {filters.view === 'outcomes' ? <Baby size={17} /> : <Clock size={17} />} 
-                                {filters.view === 'outcomes' ? 'Birth Records' : 'Expected Deliveries'}
-                            </h2>
+                            <h2>{filters.view === 'outcomes' ? <Baby size={17} /> : <Clock size={17} />}{filters.view === 'outcomes' ? 'Birth Records' : 'Expected Deliveries'}</h2>
                             <div className="do-legend">
                                 <span className="legend-chip chip-normal"><CheckCircle2 size={11} /> Normal</span>
                                 <span className="legend-chip chip-monitor"><AlertTriangle size={11} /> Minor/Monitor</span>
@@ -502,10 +577,16 @@ const DeliveryOutcomes = () => {
                             <table className="do-table">
                                 <thead>
                                     <tr>
-                                        <th><span className="sortable-head" onClick={() => handleSort('patientName')}>Patient <SortBtn field="patientName" /></span></th>
-                                        <th><span className="sortable-head" onClick={() => handleSort(filters.view === 'outcomes' ? 'deliveryDate' : 'edd')}>
-                                            {filters.view === 'outcomes' ? 'Birth Date' : 'Expected Due Date'} <SortBtn field={filters.view === 'outcomes' ? 'deliveryDate' : 'edd'} />
-                                        </span></th>
+                                        <th>
+                                            <span className="sortable-head" onClick={() => handleSort('patientName')}>
+                                                Patient <SortBtn field="patientName" />
+                                            </span>
+                                        </th>
+                                        <th>
+                                            <span className="sortable-head" onClick={() => handleSort(filters.view === 'outcomes' ? 'deliveryDate' : 'edd')}>
+                                                {filters.view === 'outcomes' ? 'Birth Date' : 'Expected Due Date'} <SortBtn field={filters.view === 'outcomes' ? 'deliveryDate' : 'edd'} />
+                                            </span>
+                                        </th>
                                         {filters.view === 'outcomes' ? (
                                             <>
                                                 <th>Type</th>
@@ -529,49 +610,47 @@ const DeliveryOutcomes = () => {
                                     {loading ? (
                                         <tr><td colSpan="10" className="do-loading">Loading records...</td></tr>
                                     ) : filtered.map(d => (
-                                        <React.Fragment key={d.id}>
-                                            <tr className={`do-row ${getRowClass(d)}`}>
-                                                <td>
-                                                    <div className="do-patient" onClick={() => navigate(`/dashboard/patients/${d.patientId}`)} style={{ cursor: 'pointer' }}>
-                                                        <div className="do-avatar">{d.patientName?.split(' ').map(n=>n[0]).slice(0,2).join('')}</div>
-                                                        <div>
-                                                            <span className="do-name">{d.patientName}</span>
-                                                            <span className="do-pid">{d.patientId} · {d.station}</span>
-                                                        </div>
+                                        <tr key={d.id} className={`do-row ${getRowClass(d)}`}>
+                                            <td>
+                                                <div className="do-patient" onClick={() => navigate(`/dashboard/patients/${d.patientId}`)} style={{ cursor: 'pointer' }}>
+                                                    <div className="do-avatar">{d.patientName?.split(' ').map(n => n[0]).slice(0, 2).join('')}</div>
+                                                    <div>
+                                                        <span className="do-name">{d.patientName}</span>
+                                                        <span className="do-pid">{d.patientId} · {d.station}</span>
                                                     </div>
-                                                </td>
-                                                <td>
-                                                    <span className="do-date">{filters.view === 'outcomes' ? d.deliveryDate : d.edd}</span>
-                                                    {filters.view === 'outcomes' && <span className="do-time">{d.deliveryTime}</span>}
-                                                </td>
-                                                {filters.view === 'outcomes' ? (
-                                                    <>
-                                                        <td><span className={`dt-badge dt-${d.deliveryType?.toLowerCase()}`}>{d.deliveryType}</span></td>
-                                                        <td><span className={`risk-badge ${getRiskBadge(d.riskLevel)}`}>{d.riskLevel}</span></td>
-                                                        <td>
-                                                            <span className={`comp-text ${d.complications !== 'None' ? 'has-comp' : ''}`}>
-                                                                {d.complications !== 'None' && <AlertCircle size={12} />} {d.complications}
-                                                            </span>
-                                                        </td>
-                                                        <td><span className={`baby-badge ${getBabyBadge(d.babyOutcome)}`}>{d.babyOutcome}</span></td>
-                                                        <td className="do-staff">{d.staff}</td>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <td><span className={`risk-badge ${getRiskBadge(d.riskLevel)}`}>{d.riskLevel}</span></td>
-                                                        <td>{d.station}</td>
-                                                        <td>-</td>
-                                                        <td><span className="status-pill pill-upcoming">Upcoming</span></td>
-                                                    </>
-                                                )}
-                                                <td>
-                                                    <div className="row-actions">
-                                                        <button className="action-btn view-btn" title="View Details"><Eye size={13} /></button>
-                                                        <button className="action-btn edit-btn" title="Edit"><Edit2 size={13} /></button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        </React.Fragment>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span className="do-date">{filters.view === 'outcomes' ? d.deliveryDate : d.edd}</span>
+                                                {filters.view === 'outcomes' && <span className="do-time">{d.deliveryTime}</span>}
+                                            </td>
+                                            {filters.view === 'outcomes' ? (
+                                                <>
+                                                    <td><span className={`dt-badge dt-${String(d.deliveryType || '').toLowerCase()}`}>{d.deliveryType}</span></td>
+                                                    <td><span className={`risk-badge ${getRiskBadge(d.riskLevel)}`}>{d.riskLevel}</span></td>
+                                                    <td>
+                                                        <span className={`comp-text ${d.complications !== 'None' ? 'has-comp' : ''}`}>
+                                                            {d.complications !== 'None' && <AlertCircle size={12} />} {d.complications}
+                                                        </span>
+                                                    </td>
+                                                    <td><span className={`baby-badge ${getBabyBadge(d.babyOutcome)}`}>{d.babyOutcome}</span></td>
+                                                    <td className="do-staff">{d.staff}</td>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <td><span className={`risk-badge ${getRiskBadge(d.riskLevel)}`}>{d.riskLevel}</span></td>
+                                                    <td>{d.station}</td>
+                                                    <td>-</td>
+                                                    <td><span className="status-pill pill-upcoming">Upcoming</span></td>
+                                                </>
+                                            )}
+                                            <td>
+                                                <div className="row-actions">
+                                                    <button className="action-btn view-btn" title="View Details"><Eye size={13} /></button>
+                                                    <button className="action-btn edit-btn" title="Edit"><Edit2 size={13} /></button>
+                                                </div>
+                                            </td>
+                                        </tr>
                                     ))}
                                     {!loading && filtered.length === 0 && (
                                         <tr>
@@ -587,7 +666,6 @@ const DeliveryOutcomes = () => {
                     </div>
                 </div>
 
-                {/* ── RIGHT: Alerts ── */}
                 <div className="do-side-col">
                     <div className="do-card">
                         <div className="do-card-head">
@@ -595,7 +673,7 @@ const DeliveryOutcomes = () => {
                         </div>
                         <div className="alerts-list">
                             {deliveries.filter(d => d.babyOutcome === 'NICU' || d.complications !== 'None').slice(0, 5).map((a, i) => (
-                                <div key={i} className={`alert-item alert-rose`}>
+                                <div key={i} className="alert-item alert-rose">
                                     <div className="alert-dot"></div>
                                     <div className="alert-body">
                                         <p><strong>{a.patientName}</strong>: {a.complications !== 'None' ? a.complications : `Baby in ${a.babyOutcome}`}</p>
@@ -609,7 +687,6 @@ const DeliveryOutcomes = () => {
                         </div>
                     </div>
 
-                    {/* Quick Stats sidebar */}
                     <div className="do-card">
                         <div className="do-card-head"><h2><TrendingUp size={16} /> System Summary</h2></div>
                         <div className="quick-stats-list">
@@ -622,14 +699,13 @@ const DeliveryOutcomes = () => {
                 </div>
             </div>
 
-            {/* ── Add Delivery Modal ── */}
             {showModal && (
-                <AddDeliveryModal 
-                    onClose={() => setShowModal(false)} 
+                <AddDeliveryModal
+                    onClose={() => setShowModal(false)}
                     onSuccess={() => {
                         setShowModal(false);
-                        loadData(); 
-                    }} 
+                        loadData();
+                    }}
                 />
             )}
         </div>
