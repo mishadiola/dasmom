@@ -123,8 +123,8 @@ export default class PatientService {
     return data.map(appointment => ({
       id: appointment.id,
       date: appointment.visit_date,
-      time: this.generateTimeSlot(appointment.visit_date + 'T09:00:00'),
-      patient: `${appointment.patient_basic_info?.first_name || ''} ${appointment.patient_basic_info?.last_name || ''}`,
+      time: this.generateTimeSlot(appointment.patient_id, appointment.visit_date),
+      patient: `${appointment.patient_basic_info?.first_name || ''} ${appointment.patient_basic_info?.last_name || ''}`.trim() || 'Unknown',
       patientId: appointment.patient_id,
       type: 'Prenatal Checkup',
       risk: 'Normal', // 🔥 Default
@@ -137,10 +137,17 @@ export default class PatientService {
 }
 
 
-  generateTimeSlot(dateTime) {
-    const hour = new Date(dateTime).getHours();
-    const timeSlots = ['08:00 AM','08:30 AM','09:00 AM','09:30 AM','10:00 AM','10:30 AM','11:00 AM','11:30 AM','01:00 PM','01:30 PM'];
-    return timeSlots[Math.floor(hour / 2) % timeSlots.length] || '08:00 AM';
+  generateTimeSlot(patientId, visitDate) {
+    const timeSlots = ['08:00 AM','08:30 AM','09:00 AM','09:30 AM','10:00 AM','10:30 AM','11:00 AM','11:30 AM','01:00 PM','01:30 PM','02:00 PM','02:30 PM','03:00 PM','03:30 PM','04:00 PM'];
+    if (!patientId || !visitDate) return timeSlots[0];
+    
+    // Deterministic hash to spread patients evenly across time slots visually
+    let hash = 0;
+    const str = patientId + visitDate;
+    for (let i = 0; i < str.length; i++) {
+        hash = Math.imul(31, hash) + str.charCodeAt(i) | 0;
+    }
+    return timeSlots[Math.abs(hash) % timeSlots.length];
   }
 
   // 🔥 FIXED: addPatient() - next_appt_date as TIMESTAMP + 30/day limit
@@ -308,6 +315,61 @@ async getSlotCount(dateStr, timeSlot) {
   return count || 0;
 }
 
+  async getHighRiskStats() {
+    try {
+      const { count } = await this.supabase
+        .from('pregnancy_info')
+        .select('*', { count: 'exact', head: true })
+        .neq('calculated_risk', 'Normal')
+        .not('calculated_risk', 'is', null);
+        
+      return {
+        highRiskCount: count || 0
+      };
+    } catch (err) {
+      console.error('Error fetching high risk stats:', err);
+      return { highRiskCount: 0 };
+    }
+  }
+
+  async getHighRiskPatients() {
+    try {
+      const { data, error } = await this.supabase
+        .from('patient_basic_info')
+        .select(`
+          id, first_name, last_name, barangay, municipality,
+          pregnancy_info!inner(calculated_risk, risk_factors, gravida, lmd)
+        `)
+        .neq('pregnancy_info.calculated_risk', 'Normal')
+        .not('pregnancy_info.calculated_risk', 'is', null);
+
+      if (error) throw error;
+      
+      // Ensure pregnancy_info is an object, not an array
+      return (data || []).map(p => ({
+        ...p,
+        pregnancy_info: Array.isArray(p.pregnancy_info) ? p.pregnancy_info[0] : p.pregnancy_info
+      }));
+    } catch (err) {
+      console.error('Error fetching high risk patients:', err);
+      return [];
+    }
+  }
+
+  subscribeToHighRiskChanges(callback) {
+    return this.supabase
+      .channel('high-risk-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'pregnancy_info' },
+        (payload) => {
+          console.log('🔔 Real-time change in pregnancy_info:', payload);
+          callback(payload);
+        }
+      )
+      .subscribe();
+  }
+
   // Utility methods (unchanged but fixed)
   addWeeksToDate(date, weeks) {
     const d = new Date(date);
@@ -344,11 +406,49 @@ async getSlotCount(dateStr, timeSlot) {
       .select(`
         *,
         pregnancy_info(*),
-        prenatal_visits!inner(*)
+        prenatal_visits(*)
       `)
       .eq('id', patientId)
       .single();
-    return data || null;
+
+    if (!data) return null;
+
+    const preg = Array.isArray(data.pregnancy_info) ? data.pregnancy_info[0] : data.pregnancy_info || {};
+
+    return {
+      ...data,
+      name: `${data.first_name || ''} ${data.last_name || ''}`.trim(),
+      age: this.calculateAge(data.date_of_birth),
+      station: data.barangay,
+      phone: data.contact_no || 'N/A',
+      address: data.house_no,
+      dob: data.date_of_birth,
+      civilStatus: data.civil_status,
+      philhealth: data.philhealthnumber,
+      bloodType: data.blood_type || 'Unknown',
+      emergencyContact: data.emergency_contact || {},
+
+      // Pregnancy fields mapped for PatientProfile
+      pregnancyStatus: preg.pregn_postp || 'Pregnant',
+      lmp: preg.lmd || 'N/A',
+      edd: preg.edd || 'N/A',
+      pregnancyType: preg.pregnancy_type || 'Singleton',
+      plannedDeliveryPlace: preg.place_of_delivery || 'N/A',
+      risk: preg.calculated_risk || 'Normal',
+      gravida: preg.gravida || 1,
+      para: preg.para || 0,
+      medicalConditions: preg.risk_factors ? preg.risk_factors.split(',').map(s=>s.trim()).filter(Boolean) : [],
+      
+      // Calculate active trimester and weeks using LMP
+      trimester: this.calculateTrimester(preg.lmd),
+      weeks: this.calculateWeeks(preg.lmd),
+
+      // Lists defaulting to empty arrays to prevent `.length` crashes
+      visits: data.prenatal_visits || [],
+      vaccines: data.vaccines || [],
+      supplements: data.supplements || [],
+      newborns: data.newborns || []
+    };
   }
 
   // Keep other methods as-is (addPatient complexity preserved)

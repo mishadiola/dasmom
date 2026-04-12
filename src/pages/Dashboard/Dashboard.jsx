@@ -79,18 +79,29 @@ const Dashboard = () => {
     const [liveStats, setLiveStats] = useState({ totalPatients: 0, highRisk: 0, newborns: 0, apptToday: 0 });
     const [vaccineStock, setVaccineStock] = useState([]);
     const [loadingStock, setLoadingStock] = useState(true);
+    const [todayAppts, setTodayAppts] = useState([]);
 
     useEffect(() => {
     const fetchStats = async () => {
         try {
-            // ✅ Define todayStr FIRST
-            const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+            // ✅ Defend against timezone shifting when converting 'today' to ISO YYYY-MM-DD
+            const now = new Date();
+            const todayStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
             
-            const [{ count: totalPatients }, { count: highRisk }, { count: newborns }, { count: apptToday }] = await Promise.all([
+            const [{ count: totalPatients }, { count: highRisk }, { count: newborns }, { count: apptToday }, { data: apptData }] = await Promise.all([
                 supabase.from('patient_basic_info').select('id', { count: 'exact', head: true }),
-                supabase.from('pregnancy_info').select('id', { count: 'exact', head: true }).eq('risk_level', 'High Risk'),
+                supabase.from('pregnancy_info').select('id', { count: 'exact', head: true }).neq('calculated_risk', 'Normal').not('calculated_risk', 'is', null),
                 supabase.from('newborns').select('id', { count: 'exact', head: true }),
                 supabase.from('prenatal_visits').select('id', { count: 'exact', head: true }).eq('visit_date', todayStr),
+                
+                // 🔥 NEW: Fetch full rich relational data for Today's Appointments table dynamic rendering
+                supabase.from('prenatal_visits').select(`
+                    id, visit_date, patient_id, created_at,
+                    patient_basic_info!inner ( 
+                        first_name, last_name, barangay, date_of_birth,
+                        pregnancy_info ( calculated_risk, lmd ) 
+                    )
+                `).eq('visit_date', todayStr).order('created_at', { ascending: true })
             ]);
 
             setLiveStats({
@@ -99,6 +110,51 @@ const Dashboard = () => {
                 newborns: newborns ?? 0,
                 apptToday: apptToday ?? 0,
             });
+
+            // Dynamically map schedule data instead of relying on empty mock arrays
+            if (apptData) {
+                const mappedAppts = apptData.map(v => {
+                    const info = v.patient_basic_info || {};
+                    const pregInfo = Array.isArray(info.pregnancy_info) ? info.pregnancy_info[0] : info.pregnancy_info || {};
+                    
+                    let age = '?';
+                    if (info.date_of_birth) {
+                        const bd = new Date(info.date_of_birth);
+                        age = now.getFullYear() - bd.getFullYear();
+                        if (now.getMonth() < bd.getMonth() || (now.getMonth() === bd.getMonth() && now.getDate() < bd.getDate())) age--;
+                    }
+
+                    let weeks = 0;
+                    if (pregInfo.lmd) {
+                        weeks = Math.floor((now - new Date(pregInfo.lmd)) / (1000 * 60 * 60 * 24 * 7));
+                    }
+
+                    return {
+                        id: v.id,
+                        name: `${info.first_name || ''} ${info.last_name || ''}`.trim() || 'Unknown',
+                        station: info.barangay || 'N/A',
+                        age: age,
+                        weeks: Math.max(0, weeks),
+                        type: 'Checkup',
+                        time: patientService.generateTimeSlot(v.patient_id, v.visit_date),
+                        risk: pregInfo.calculated_risk || 'Normal'
+                    };
+                });
+                
+                // Sort chronologically using internal patientService algorithm rules
+                mappedAppts.sort((a, b) => {
+                   const parseTime = (t) => {
+                       const [val, ampm] = t.split(' ');
+                       let [hr, min] = val.split(':').map(Number);
+                       if (ampm === 'PM' && hr !== 12) hr += 12;
+                       if (ampm === 'AM' && hr === 12) hr = 0;
+                       return hr * 60 + min;
+                   };
+                   return parseTime(a.time) - parseTime(b.time);
+                });
+
+                setTodayAppts(mappedAppts);
+            }
 
             // Fetch Vaccine Stock
             setLoadingStock(true);
@@ -246,7 +302,7 @@ const Dashboard = () => {
                             <h2 className="card-title">
                                 <CalendarCheck size={16} />
                                 Today's Appointments
-                                <span className="card-badge card-badge--blue">18</span>
+                                <span className="card-badge card-badge--blue">{liveStats.apptToday}</span>
                             </h2>
                             <button className="card-link" onClick={() => navigate('/dashboard/prenatal')}>View all <ChevronRight size={13} /></button>
                         </div>
@@ -263,29 +319,37 @@ const Dashboard = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {UPCOMING_APPTS.map((a) => (
-                                        <tr key={a.id} className="table-row">
-                                            <td>
-                                                <div className="patient-cell">
-                                                    <div className="patient-avatar">
-                                                        {a.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
-                                                    </div>
-                                                    <div>
-                                                        <p className="patient-name">{a.name}</p>
-                                                        <p className="patient-meta">{a.station} · {a.age} yrs</p>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td><TrimesterBadge weeks={a.weeks} /></td>
-                                            <td><span className="type-tag">{a.type}</span></td>
-                                            <td><span className="time-tag">{a.time}</span></td>
-                                            <td>
-                                                <span className={`risk-badge risk-badge--${a.risk}`}>
-                                                    {a.risk}
-                                                </span>
+                                    {todayAppts.length === 0 ? (
+                                        <tr>
+                                            <td colSpan="5" style={{textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)'}}>
+                                                No appointments scheduled for today.
                                             </td>
                                         </tr>
-                                    ))}
+                                    ) : (
+                                        todayAppts.map((a) => (
+                                            <tr key={a.id} className="table-row">
+                                                <td>
+                                                    <div className="patient-cell">
+                                                        <div className="patient-avatar">
+                                                            {a.name.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                                                        </div>
+                                                        <div>
+                                                            <p className="patient-name">{a.name}</p>
+                                                            <p className="patient-meta">{a.station} · {a.age} yrs</p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td><TrimesterBadge weeks={a.weeks} /></td>
+                                                <td><span className="type-tag">{a.type}</span></td>
+                                                <td><span className="time-tag">{a.time}</span></td>
+                                                <td>
+                                                    <span className={`risk-badge risk-badge--${a.risk.replace(' ', '-').toLowerCase()}`}>
+                                                        {a.risk}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
                                 </tbody>
                             </table>
                         </div>

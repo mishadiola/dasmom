@@ -354,10 +354,6 @@ const NewbornTracking = () => {
                     <p className="page-subtitle">Monitor newborn health, growth, vaccinations, and follow-up schedules</p>
                 </div>
                 <div className="header-actions">
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '6px 16px', borderRadius: '99px', fontSize: '11px', fontWeight: 700, letterSpacing: '0.8px', background: 'rgba(109, 184, 160, 0.12)', color: '#3d8870', border: '1px solid rgba(109, 184, 160, 0.2)' }}>
-                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3d8870', animation: 'live-pulse 1.5s ease-in-out infinite' }}></span>
-                        LIVE UPDATES
-                    </div>
                 </div>
             </div>
 

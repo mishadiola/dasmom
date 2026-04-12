@@ -145,10 +145,6 @@ const HighRiskCases = () => {
                     <p className="page-subtitle">Dynamic monitoring of critical pregnancies and priority follow-ups</p>
                 </div>
                 <div className="header-actions">
-                    <div className="live-pill">
-                        <span className="live-dot"></span>
-                        LIVE UPDATES
-                    </div>
                 </div>
             </div>
 

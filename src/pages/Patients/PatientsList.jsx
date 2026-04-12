@@ -433,20 +433,21 @@ const PatientsList = () => {
 
                                         <td>
                                             <div className="actions-group">
-                                                <button className="action-btn view-btn" data-tooltip="View Profile" onClick={() => navigate(`/dashboard/patients/${p.id}`)}>
+                                                <button type="button" className="action-btn view-btn" data-tooltip="View Profile" onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/${p.id}`); }}>
                                                 <Eye size={16} />
                                                 </button>
                                                 
                                                 {/* 🔥 ADD THIS ONE LINE */}
-                                                <button className="action-btn vitals-btn" data-tooltip="Record Vitals" onClick={() => setVitalModalPatient(p)}>
+                                                <button type="button" className="action-btn vitals-btn" data-tooltip="Record Vitals" onClick={(e) => { e.stopPropagation(); setVitalModalPatient(p); }}>
                                                 <Activity size={16} />
                                                 </button>
                                                 
-                                                <button className="action-btn edit-btn" data-tooltip="Edit Patient" onClick={() => navigate(`/dashboard/patients/${p.id}/edit`)}>
+                                                <button type="button" className="action-btn edit-btn" data-tooltip="Edit Patient" onClick={(e) => { e.stopPropagation(); alert('Edit functionality is currently under development.'); }}>
                                                 <Edit size={16} />
                                                 </button>
                                                 
-                                                <button className="action-btn delete-btn" data-tooltip="Delete Patient" onClick={() => {
+                                                <button type="button" className="action-btn delete-btn" data-tooltip="Delete Patient" onClick={(e) => {
+                                                e.stopPropagation();
                                                 if(window.confirm('Are you sure you want to delete this patient?')) {
                                                     console.log('Delete logic triggered');
                                                 }

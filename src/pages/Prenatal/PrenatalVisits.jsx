@@ -114,30 +114,73 @@ const PrenatalVisits = () => {
     });
     const [conflictWarning, setConflictWarning] = useState(null);
 
-    // 🔥 FIXED: Dynamic date range + calendarView
+    // Helper to get local date string YYYY-MM-DD reliably
+    const toLocalDateStr = (d) => {
+        const offset = d.getTimezoneOffset() * 60000;
+        return new Date(d.getTime() - offset).toISOString().split('T')[0];
+    };
+
+    const getVisibleDays = (date, view) => {
+        const d = new Date(date);
+        if (view === 'day') {
+            return [{
+                date: toLocalDateStr(d),
+                label: d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+            }];
+        }
+        
+        if (view === 'week') {
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            const start = new Date(d);
+            start.setDate(diff);
+            const days = [];
+            for (let i = 0; i < 7; i++) {
+                const curr = new Date(start);
+                curr.setDate(start.getDate() + i);
+                days.push({
+                    date: toLocalDateStr(curr),
+                    label: curr.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })
+                });
+            }
+            return days;
+        }
+
+        if (view === 'month') {
+            const end = new Date(d.getFullYear(), d.getMonth() + 1, 0); // Last day
+            const days = [];
+            for (let i = 1; i <= end.getDate(); i++) {
+                const curr = new Date(d.getFullYear(), d.getMonth(), i);
+                days.push({
+                    date: toLocalDateStr(curr),
+                    label: i.toString()
+                });
+            }
+            return days;
+        }
+        return [];
+    };
+
+    const visibleDays = getVisibleDays(currentDate, calendarView);
+
+    // 🔥 FIXED: Dynamic date range + automatic real-time sync
     useEffect(() => {
+        const patientService = new PatientService();
+
         const fetchData = async () => {
             try {
-                const patientService = new PatientService();
-
-                // Calculate date range based on view
-                const startDate = calendarView === 'day' 
-                    ? new Date().toISOString().split('T')[0]
-                    : calendarView === 'week'
-                    ? new Date(currentDate.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-                    : new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString().split('T')[0];
+                const vDays = getVisibleDays(currentDate, calendarView);
+                if (vDays.length === 0) return;
                 
-                const endDate = calendarView === 'day'
-                    ? new Date().toISOString().split('T')[0]
-                    : calendarView === 'week'
-                    ? new Date(currentDate.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-                    : new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toISOString().split('T')[0];
+                // Fetch perfectly aligned with the visual grid columns
+                const startDate = vDays[0].date;
+                const endDate = vDays[vDays.length - 1].date;
 
                 const [patientsData, visitsData, staffData, apptsData] = await Promise.all([
                     patientService.getAllPatients(),
                     patientService.getPrenatalVisits(),
                     patientService.getAllMidwives(),
-                    patientService.getAppointments(startDate, endDate, calendarView) // 🔥 Pass view
+                    patientService.getAppointments(startDate, endDate, calendarView)
                 ]);
 
                 setLivePatients(patientsData || []);
@@ -151,30 +194,29 @@ const PrenatalVisits = () => {
         };
 
         fetchData();
+
+        // Real-time auto-refresh when new patients are added under prenatal_visits
+        const subscription = patientService.supabase
+            .channel('prenatal_calendar_sync')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'prenatal_visits' },
+                () => {
+                    console.log('🔄 Detected new visits/appointments! Auto-refreshing calendar...');
+                    fetchData();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            patientService.supabase.removeChannel(subscription);
+        };
     }, [calendarView, currentDate]); // 🔥 Re-fetch on view/date change
-
-    const getWeekDays = (date) => {
-        const start = new Date(date);
-        const day = start.getDay();
-        const diff = start.getDate() - day + (day === 0 ? -6 : 1);
-        start.setDate(diff);
-        const days = [];
-        for (let i = 0; i < 7; i++) { // Full week
-            const d = new Date(start);
-            d.setDate(start.getDate() + i);
-            days.push({
-                date: d.toISOString().split('T')[0],
-                label: d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })
-            });
-        }
-        return days;
-    };
-
-    const visibleDays = getWeekDays(currentDate);
 
     const handlePrev = () => {
         setCurrentDate(prev => {
             const d = new Date(prev);
+            if (calendarView === 'day') d.setDate(d.getDate() - 1);
             if (calendarView === 'week') d.setDate(d.getDate() - 7);
             if (calendarView === 'month') d.setMonth(d.getMonth() - 1);
             return d;
@@ -184,6 +226,7 @@ const PrenatalVisits = () => {
     const handleNext = () => {
         setCurrentDate(prev => {
             const d = new Date(prev);
+            if (calendarView === 'day') d.setDate(d.getDate() + 1);
             if (calendarView === 'week') d.setDate(d.getDate() + 7);
             if (calendarView === 'month') d.setMonth(d.getMonth() + 1);
             return d;
@@ -191,10 +234,10 @@ const PrenatalVisits = () => {
     };
 
     const formatNavLabel = () => {
-        if (calendarView === 'day') return new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
-        const days = getWeekDays(currentDate);
-        const start = new Date(days[0].date);
-        const end = new Date(days[days.length - 1].date);
+        if (calendarView === 'day') return currentDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
+        if (!visibleDays || visibleDays.length === 0) return '';
+        const start = new Date(visibleDays[0].date);
+        const end = new Date(visibleDays[visibleDays.length - 1].date);
         return calendarView === 'week' 
             ? `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
             : start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -204,8 +247,8 @@ const PrenatalVisits = () => {
     const getSlotStatus = useCallback((date, time) => {
         // Filter appointments for this exact date/time (30 max/day visual)
         const dayAppts = appointments.filter(a => {
-            const apptDate = new Date(a.date).toISOString().split('T')[0];
-            return apptDate === date;
+            // Secure direct comparison, preventing timezone shifting from new Date() conversion
+            return a.date === date;
         });
         
         const timeAppts = dayAppts.filter(a => a.time === time);

@@ -515,3 +515,549 @@
         width: 100%;
     }
 }
+
+/* ══════════════════════════════════════════
+   PREGNANCY TRACKING DASHBOARD ENHANCEMENTS
+══════════════════════════════════════════ */
+.tracking-container {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.tracking-hero-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+}
+
+.tracking-hero-card {
+    background: #fff;
+    border: 1px solid #eef0f4;
+    border-radius: 16px;
+    padding: 24px;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tracking-hero-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.05);
+}
+
+.track-icon-wrap {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(234, 126, 147, 0.1), rgba(220, 88, 115, 0.1));
+    color: var(--color-rose);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.track-hero-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.track-hero-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-text-light);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.track-hero-val {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--color-text);
+    line-height: 1.1;
+}
+
+.track-hero-sub {
+    font-size: 13px;
+    color: var(--color-text-muted);
+}
+
+.risk-card-high {
+    border-color: rgba(220, 88, 115, 0.3);
+    background: radial-gradient(circle at top right, rgba(220, 88, 115, 0.05), transparent);
+}
+
+.risk-card-high .track-icon-wrap {
+    background: rgba(220, 88, 115, 0.1);
+    color: #dc5873;
+}
+
+.risk-card-high .track-hero-val {
+    color: #dc5873;
+}
+
+/* Tracking Progress */
+.tracking-progress-section {
+    background: #fff;
+    border-radius: 16px;
+    padding: 32px 32px 40px;
+    border: 1px solid #eef0f4;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+}
+
+.tracking-section-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin: 0 0 50px;
+}
+
+.progress-infographic {
+    padding: 0 10px;
+    margin-bottom: 20px;
+}
+
+.progress-bar-bg {
+    position: relative;
+    height: 14px;
+    background: #eef0f4;
+    border-radius: 99px;
+    width: 100%;
+}
+
+.progress-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: linear-gradient(90deg, var(--color-pink), var(--color-rose));
+    border-radius: 99px;
+    transition: width 1.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+    box-shadow: 0 2px 12px rgba(220, 88, 115, 0.4);
+}
+
+.progress-glow {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 40px;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+    border-radius: 99px;
+    animation: progressGlow 2.5s infinite ease-in-out;
+}
+
+@keyframes progressGlow {
+    0% { opacity: 0; transform: translateX(-20px); }
+    50% { opacity: 1; transform: translateX(0); }
+    100% { opacity: 0; transform: translateX(20px); }
+}
+
+.progress-marker {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%) translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    z-index: 2;
+}
+
+.marker-dot {
+    width: 20px;
+    height: 20px;
+    background: #fff;
+    border: 4px solid #d1d6e0;
+    border-radius: 50%;
+    transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.progress-marker.reached .marker-dot {
+    border-color: var(--color-rose);
+    box-shadow: 0 0 0 6px rgba(220, 88, 115, 0.15);
+}
+
+.progress-marker:hover .marker-dot {
+    transform: scale(1.3);
+}
+
+.marker-label {
+    position: absolute;
+    top: 28px;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    transition: color 0.3s ease;
+}
+
+.progress-marker.reached .marker-label {
+    color: var(--color-rose);
+}
+
+.progress-note {
+    font-size: 14.5px;
+    color: var(--color-text);
+    text-align: center;
+    margin: 40px 0 0;
+    padding: 16px;
+    background: #f8f9fb;
+    border-radius: 12px;
+    border-left: 4px solid var(--color-rose);
+}
+
+.tracking-details-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+}
+
+.tracking-detail-box {
+    background: #fdfdfe;
+    border: 1px dashed #d1d6e0;
+    padding: 20px;
+    border-radius: 16px;
+    text-align: center;
+    transition: all 0.2s ease;
+}
+
+.tracking-detail-box:hover {
+    border-color: var(--color-rose-light);
+    background: #fff;
+}
+
+.tracking-detail-box h5 {
+    font-size: 12.5px;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    margin: 0 0 8px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.tracking-detail-box p {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--color-text);
+    margin: 0;
+}
+
+@media (max-width: 900px) {
+    .tracking-hero-grid, .tracking-details-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ══════════════════════════════════════════
+   MODERN BASIC INFO & MEDICAL HISTORY
+══════════════════════════════════════════ */
+.modern-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 24px;
+}
+
+.modern-card {
+    background: #fff;
+    border: 1px solid #eef0f4;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+    display: flex;
+    flex-direction: column;
+}
+
+.modern-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px dashed #eef0f4;
+}
+
+.modern-card-sub-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.modern-card-header h3 {
+    margin: 0;
+    font-size: 16.5px;
+    font-weight: 700;
+    color: var(--color-text);
+}
+
+.modern-card-sub-header h4 {
+    margin: 0;
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--color-text);
+}
+
+.mc-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mc-icon.pink-gradient { background: linear-gradient(135deg, rgba(234, 126, 147, 0.15), rgba(220, 88, 115, 0.05)); color: var(--color-rose); }
+.mc-icon.blue-gradient { background: linear-gradient(135deg, rgba(99, 179, 237, 0.15), rgba(49, 130, 206, 0.05)); color: #3182ce; }
+.mc-icon.purple-gradient-sm { width: 28px; height: 28px; background: linear-gradient(135deg, rgba(159, 122, 234, 0.15), rgba(107, 70, 193, 0.05)); color: #6b46c1; border-radius: 8px; }
+.mc-icon.rose-gradient { background: linear-gradient(135deg, rgba(220, 88, 115, 0.15), rgba(185, 129, 138, 0.05)); color: var(--color-rose); }
+.mc-icon.orange-gradient { background: linear-gradient(135deg, rgba(237, 137, 54, 0.15), rgba(221, 107, 32, 0.05)); color: #dd6b20; }
+
+.mc-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.grid-2-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px 16px;
+}
+
+.mc-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mc-field.full-col {
+    grid-column: 1 / -1;
+}
+
+.mc-field label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.mc-field span {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.mc-field span em {
+    color: var(--color-text-muted);
+    font-style: normal;
+    font-weight: 500;
+    font-size: 13.5px;
+}
+
+.badge-civil, .badge-blood {
+    display: inline-block;
+    width: fit-content;
+    padding: 2px 10px;
+    border-radius: 6px;
+    font-size: 13px !important;
+}
+
+.badge-civil { background: #f1f3f6; color: var(--color-text); }
+.badge-blood { background: rgba(220, 88, 115, 0.1); color: var(--color-rose); }
+
+.copyable-box {
+    background: #f8f9fb;
+    border: 1px solid #eef0f4;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 14.5px;
+    color: var(--color-text);
+    font-weight: 600;
+}
+
+.mc-field-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: #fdfdfe;
+    border: 1px solid #eef0f4;
+    padding: 16px;
+    border-radius: 12px;
+}
+
+.mc-field-row div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.mc-field-row label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+}
+
+.mc-field-row span {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--color-text);
+}
+
+.alert-bg-light {
+    background: linear-gradient(to right, rgba(159, 122, 234, 0.05), transparent);
+    padding: 16px;
+    border-radius: 12px;
+    border-left: 3px solid #9f7aea;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.highlight-text {
+    color: #6b46c1 !important;
+}
+
+/* GPA Grid */
+.section-instruction {
+    font-size: 14px;
+    color: var(--color-text-muted);
+    margin: 0;
+}
+
+.gpa-score-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.gpa-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: #f8f9fb;
+    border: 1px solid #eef0f4;
+    padding: 20px 10px;
+    border-radius: 16px;
+    transition: all 0.2s;
+}
+
+.gpa-box:hover {
+    background: #fff;
+    border-color: #d1d6e0;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+}
+
+.gpa-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+}
+
+.gpa-value {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--color-text);
+    margin: 8px 0 4px;
+    line-height: 1;
+}
+
+.gpa-value.str {
+    font-size: 20px;
+    margin: 16px 0 8px;
+}
+
+.gpa-sub {
+    font-size: 12px;
+    color: var(--color-text-light);
+}
+
+.box-risk-high {
+    background: rgba(220, 88, 115, 0.03);
+    border-color: rgba(220, 88, 115, 0.2);
+}
+
+.box-risk-high .gpa-value {
+    color: #dc5873;
+}
+
+/* Modern Condition Tags */
+.modern-condition-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.modern-tag-pill {
+    background: #fdfdfe;
+    border: 1px solid #eef0f4;
+    padding: 8px 16px;
+    border-radius: 99px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+
+.tag-dot {
+    width: 6px;
+    height: 6px;
+    background: #dd6b20;
+    border-radius: 50%;
+}
+
+.empty-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 30px 20px;
+    background: #f8f9fb;
+    border-radius: 12px;
+    border: 1px dashed #d1d6e0;
+    text-align: center;
+}
+
+.empty-box p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--color-text-muted);
+}
+
+.text-success { color: #38a169; }
+
+.medical-notes-panel {
+    background: #fff;
+    border: 1px solid rgba(220, 88, 115, 0.2);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.notes-header {
+    background: rgba(220, 88, 115, 0.05);
+    padding: 12px 16px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #b73a52;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid rgba(220, 88, 115, 0.1);
+}
+
+.notes-content {
+    padding: 16px;
+    font-size: 14px;
+    color: var(--color-text);
+    line-height: 1.6;
+    background: #fdfdfe;
+}

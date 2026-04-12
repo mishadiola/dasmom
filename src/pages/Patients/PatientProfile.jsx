@@ -130,58 +130,76 @@ const PatientProfile = () => {
 
                 {/* --- BASIC INFO --- */}
                 {activeTab === 'info' && (
-                    <div className="info-grid animate-fade">
-                        <div className="info-card">
-                            <h3 className="info-card-title"><User size={16} /> Demographics</h3>
-                            <div className="info-list">
-                                <div className="info-item">
-                                    <span className="info-label">Current Status</span>
-                                    <span className="info-val pregnancy-status-badge">{p.pregnancyStatus}</span>
+                    <div className="profile-section-fade animate-fade">
+                        <div className="modern-info-grid">
+                            {/* Card: Demographics */}
+                            <div className="modern-card">
+                                <div className="modern-card-header">
+                                    <div className="mc-icon pink-gradient"><User size={18} /></div>
+                                    <h3>Demographics & Identity</h3>
                                 </div>
-                                <div className="info-item">
-                                    <span className="info-label">Civil Status</span>
-                                    <span className="info-val">{p.civilStatus || 'N/A'}</span>
-                                </div>
-                                <div className="info-item">
-                                    <span className="info-label">Date of Birth</span>
-                                    <span className="info-val">{p.dob}</span>
-                                </div>
-                                <div className="info-item">
-                                    <span className="info-label">Blood Type</span>
-                                    <span className="info-val blood-type">{p.bloodType}</span>
-                                </div>
-                                <div className="info-item">
-                                    <span className="info-label">PhilHealth No.</span>
-                                    <span className="info-val">{p.philhealth || 'Not Provided'}</span>
+                                <div className="mc-body grid-2-col">
+                                    <div className="mc-field">
+                                        <label>Patient ID</label>
+                                        <span>{p.id.split('-')[0].toUpperCase()}</span>
+                                    </div>
+                                    <div className="mc-field">
+                                        <label>Date of Birth</label>
+                                        <span>{p.dob} <em>({p.age} y/o)</em></span>
+                                    </div>
+                                    <div className="mc-field">
+                                        <label>Civil Status</label>
+                                        <span className="badge-civil">{p.civilStatus || 'N/A'}</span>
+                                    </div>
+                                    <div className="mc-field">
+                                        <label>Blood Type</label>
+                                        <span className="badge-blood">{p.bloodType}</span>
+                                    </div>
+                                    <div className="mc-field full-col mt-2">
+                                        <label>PhilHealth Number</label>
+                                        <div className="copyable-box">
+                                            {p.philhealth || 'Not Provided'}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <div className="info-card">
-                            <h3 className="info-card-title"><Home size={16} /> Contact & Address</h3>
-                            <div className="info-list">
-                                <div className="info-item">
-                                    <span className="info-label">Phone Number</span>
-                                    <span className="info-val">{p.phone}</span>
+                            {/* Card: Contact Info */}
+                            <div className="modern-card">
+                                <div className="modern-card-header">
+                                    <div className="mc-icon blue-gradient"><Phone size={18} /></div>
+                                    <h3>Contact Information</h3>
                                 </div>
-                                <div className="info-item">
-                                    <span className="info-label">Full Address</span>
-                                    <span className="info-val">{p.address}, {p.station}, {p.municipality}</span>
+                                <div className="mc-body">
+                                    <div className="mc-field-row">
+                                        <Phone size={16} className="text-muted" />
+                                        <div>
+                                            <label>Primary Phone</label>
+                                            <span>{p.phone}</span>
+                                        </div>
+                                    </div>
+                                    <div className="mc-field-row">
+                                        <MapPin size={16} className="text-muted" />
+                                        <div>
+                                            <label>Residential Address</label>
+                                            <span>{p.address}, {p.station}, {p.municipality}</span>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                            <h3 className="info-card-title mt-4"><Shield size={16} /> Emergency Contact</h3>
-                            <div className="info-list">
-                                <div className="info-item">
-                                    <span className="info-label">Name</span>
-                                    <span className="info-val">{p.emergencyContact?.name || 'N/A'}</span>
+                                
+                                <div className="modern-card-sub-header mt-4">
+                                    <div className="mc-icon purple-gradient-sm"><Shield size={14} /></div>
+                                    <h4>Emergency Contact</h4>
                                 </div>
-                                <div className="info-item">
-                                    <span className="info-label">Relationship</span>
-                                    <span className="info-val">{p.emergencyContact?.relationship || 'N/A'}</span>
-                                </div>
-                                <div className="info-item">
-                                    <span className="info-label">Contact Phone</span>
-                                    <span className="info-val">{p.emergencyContact?.phone || 'N/A'}</span>
+                                <div className="mc-body alert-bg-light">
+                                    <div className="mc-field">
+                                        <label>{p.emergencyContact?.relationship || 'Contact Person'}</label>
+                                        <span className="highlight-text">{p.emergencyContact?.name || 'N/A'}</span>
+                                    </div>
+                                    <div className="mc-field">
+                                        <label>Phone Number</label>
+                                        <span>{p.emergencyContact?.phone || 'N/A'}</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -190,42 +208,73 @@ const PatientProfile = () => {
 
                 {/* --- MEDICAL HISTORY --- */}
                 {activeTab === 'history' && (
-                    <div className="info-grid animate-fade">
-                        <div className="info-card">
-                            <h3 className="info-card-title"><History size={16} /> Obstetric History</h3>
-                            <div className="info-list">
-                                <div className="info-item">
-                                    <span className="info-label">Gravida (Total Pregnancies)</span>
-                                    <span className="info-val highlight">{p.gravida || 0}</span>
+                    <div className="profile-section-fade animate-fade">
+                        <div className="modern-info-grid">
+                            
+                            {/* Card: Obstetric */}
+                            <div className="modern-card">
+                                <div className="modern-card-header">
+                                    <div className="mc-icon rose-gradient"><History size={18} /></div>
+                                    <h3>Obstetric History (GPA)</h3>
                                 </div>
-                                <div className="info-item">
-                                    <span className="info-label">Para (Total Births)</span>
-                                    <span className="info-val highlight">{p.para || 0}</span>
-                                </div>
-                                <div className="info-item">
-                                    <span className="info-label">Current Risk Level</span>
-                                    <span className={`info-val risk-text-${p.risk?.toLowerCase().split(' ')[0]}`}>{p.risk}</span>
+                                <div className="mc-body">
+                                    <p className="section-instruction">Previous pregnancy outcomes and current clinical risk evaluation.</p>
+                                    
+                                    <div className="gpa-score-grid mt-3">
+                                        <div className="gpa-box">
+                                            <span className="gpa-label">Gravida</span>
+                                            <span className="gpa-value">{p.gravida || 0}</span>
+                                            <span className="gpa-sub">Total</span>
+                                        </div>
+                                        <div className="gpa-box">
+                                            <span className="gpa-label">Para</span>
+                                            <span className="gpa-value">{p.para || 0}</span>
+                                            <span className="gpa-sub">Births</span>
+                                        </div>
+                                        <div className={`gpa-box box-risk-${(p.risk || 'normal').toLowerCase().split(' ')[0]}`}>
+                                            <span className="gpa-label">Risk Level</span>
+                                            <span className="gpa-value str">{p.risk || 'Normal'}</span>
+                                            <span className="gpa-sub">Calculated</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        <div className="info-card">
-                            <h3 className="info-card-title"><AlertTriangle size={16} /> Pre-existing Conditions</h3>
-                            {p.medicalConditions?.length > 0 ? (
-                                <div className="condition-tags">
-                                    {p.medicalConditions.map(c => (
-                                        <span key={c} className="condition-tag">{c}</span>
-                                    ))}
+
+                            {/* Card: Conditions */}
+                            <div className="modern-card">
+                                <div className="modern-card-header">
+                                    <div className="mc-icon orange-gradient"><AlertTriangle size={18} /></div>
+                                    <h3>Pre-existing Conditions</h3>
                                 </div>
-                            ) : (
-                                <p className="empty-text">No pre-existing conditions recorded.</p>
-                            )}
-                            
-                            {p.otherMedicalNotes && (
-                                <div className="notes-box mt-4">
-                                    <h4 className="notes-title">Additional Notes</h4>
-                                    <p>{p.otherMedicalNotes}</p>
+                                <div className="mc-body">
+                                    {p.medicalConditions?.length > 0 ? (
+                                        <div className="modern-condition-tags">
+                                            {p.medicalConditions.map(c => (
+                                                <div key={c} className="modern-tag-pill">
+                                                    <span className="tag-dot"></span>
+                                                    {c}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="empty-box">
+                                            <CheckCircle2 size={24} className="text-success mb-2" />
+                                            <p>No high-risk pre-existing conditions recorded.</p>
+                                        </div>
+                                    )}
+                                    
+                                    {p.otherMedicalNotes && (
+                                        <div className="medical-notes-panel mt-4">
+                                            <div className="notes-header">
+                                                <FileText size={14} /> Additional Clinical Notes
+                                            </div>
+                                            <div className="notes-content">
+                                                {p.otherMedicalNotes}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                            )}
+                            </div>
                         </div>
                     </div>
                 )}
@@ -233,35 +282,80 @@ const PatientProfile = () => {
                 {/* --- PREGNANCY TRACKING --- */}
                 {activeTab === 'tracking' && (
                     <div className="tracking-container animate-fade">
-                        <div className="tracking-summary-grid">
-                            <div className="tracking-stat-card">
-                                <span className="track-label">LMP Date</span>
-                                <span className="track-val">{p.lmp || 'N/A'}</span>
+                        {/* Hero Stats */}
+                        <div className="tracking-hero-grid">
+                            <div className="tracking-hero-card">
+                                <span className="track-icon-wrap"><CalendarCheck size={24} /></span>
+                                <div className="track-hero-content">
+                                    <span className="track-hero-label">Estimated Due Date</span>
+                                    <span className="track-hero-val">{p.edd || 'TBD'}</span>
+                                    <span className="track-hero-sub">Based on LMP: {p.lmp || 'N/A'}</span>
+                                </div>
                             </div>
-                            <div className="tracking-stat-card">
-                                <span className="track-label">Expected Due Date</span>
-                                <span className="track-val">{p.edd || 'TBD'}</span>
+                            <div className="tracking-hero-card">
+                                <span className="track-icon-wrap"><HeartPulse size={24} /></span>
+                                <div className="track-hero-content">
+                                    <span className="track-hero-label">Current Trimester</span>
+                                    <span className="track-hero-val text-rose">Trimester {p.trimester}</span>
+                                    <span className="track-hero-sub">Week {p.weeks} of Pregnancy</span>
+                                </div>
                             </div>
-                            <div className="tracking-stat-card">
-                                <span className="track-label">Pregnancy Type</span>
-                                <span className="track-val">{p.pregnancyType || 'Singleton'}</span>
-                            </div>
-                            <div className="tracking-stat-card">
-                                <span className="track-label">Planned Delivery Place</span>
-                                <span className="track-val">{p.plannedDeliveryPlace || 'TBD'}</span>
+                            <div className={`tracking-hero-card risk-card-${(p.risk || 'normal').toLowerCase().split(' ')[0]}`}>
+                                <span className="track-icon-wrap"><AlertTriangle size={24} /></span>
+                                <div className="track-hero-content">
+                                    <span className="track-hero-label">Assessed Risk Level</span>
+                                    <span className="track-hero-val">{p.risk || 'Normal'}</span>
+                                    <span className="track-hero-sub">{p.medicalConditions?.length || 0} Risk Factors Detected</span>
+                                </div>
                             </div>
                         </div>
 
-                        <div className="progress-infographic">
-                            <div className="progress-bar-container">
-                                <div className="progress-fill" style={{ width: `${Math.min(100, (p.weeks / 40) * 100)}%` }}></div>
-                                <div className="progress-marker marker-1" style={{ left: '0%' }}><span>T1</span></div>
-                                <div className="progress-marker marker-2" style={{ left: '32.5%' }}><span>T2</span></div>
-                                <div className="progress-marker marker-3" style={{ left: '67.5%' }}><span>T3</span></div>
+                        {/* Interactive Progress Bar */}
+                        <div className="tracking-progress-section">
+                            <h3 className="tracking-section-title">Gestation Progress Tracking</h3>
+                            <div className="progress-infographic">
+                                <div className="progress-bar-bg">
+                                    <div className="progress-fill" style={{ width: `${Math.min(100, (p.weeks / 40) * 100)}%` }}>
+                                        <div className="progress-glow"></div>
+                                    </div>
+                                    
+                                    {/* Markers */}
+                                    <div className={`progress-marker ${p.weeks >= 0 ? 'reached' : ''}`} style={{ left: '0%' }}>
+                                        <div className="marker-dot"></div>
+                                        <span className="marker-label">T1 (Start)</span>
+                                    </div>
+                                    <div className={`progress-marker ${p.weeks >= 14 ? 'reached' : ''}`} style={{ left: '35%' }}>
+                                        <div className="marker-dot"></div>
+                                        <span className="marker-label">T2 (Week 14)</span>
+                                    </div>
+                                    <div className={`progress-marker ${p.weeks >= 28 ? 'reached' : ''}`} style={{ left: '70%' }}>
+                                        <div className="marker-dot"></div>
+                                        <span className="marker-label">T3 (Week 28)</span>
+                                    </div>
+                                    <div className={`progress-marker ${p.weeks >= 40 ? 'reached' : ''}`} style={{ left: '100%' }}>
+                                        <div className="marker-dot"></div>
+                                        <span className="marker-label">Term (Week 40)</span>
+                                    </div>
+                                </div>
                             </div>
-                            <div className="progress-labels">
-                                <span>Weeks: {p.weeks} / 40</span>
-                                <span>Current: {p.trimester === 1 ? '1st' : p.trimester === 2 ? '2nd' : '3rd'} Trimester</span>
+                            <p className="progress-note">
+                                Patient is currently at <strong>{p.weeks} weeks</strong>. Ensure all scheduled prenatal visits for Trimester {p.trimester} are completed on time.
+                            </p>
+                        </div>
+
+                        {/* Additional Details */}
+                        <div className="tracking-details-grid">
+                            <div className="tracking-detail-box">
+                                <h5>Pregnancy Type</h5>
+                                <p>{p.pregnancyType || 'Singleton'}</p>
+                            </div>
+                            <div className="tracking-detail-box">
+                                <h5>Planned Delivery Place</h5>
+                                <p>{p.plannedDeliveryPlace || 'TBD'}</p>
+                            </div>
+                            <div className="tracking-detail-box">
+                                <h5>Gravida / Para</h5>
+                                <p>G{p.gravida || 1} P{p.para || 0}</p>
                             </div>
                         </div>
                     </div>
