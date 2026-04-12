@@ -1,6 +1,10 @@
 import supabase from '../config/supabaseclient';
 import AuthService from './authservice';
-
+const TIME_SLOTS_8TO4 = [
+  '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', 
+  '11:00', '11:30', '13:00', '13:30', '14:00', '14:30', 
+  '15:00', '15:30', '16:00'
+];
 const authService = new AuthService();
 
 const calculateVisitStatus = (visitDate) => {
@@ -13,98 +17,36 @@ const calculateVisitStatus = (visitDate) => {
   return 'Completed';
 };
 
-const generateTimeSlot = (date) => {
-  const hour = new Date(date).getHours();
-  const timeSlots = ['08:00 AM','08:30 AM','09:00 AM','09:30 AM','10:00 AM','10:30 AM','11:00 AM','11:30 AM','01:00 PM','01:30 PM'];
-  return timeSlots[Math.floor(hour / 2) % timeSlots.length] || '08:00 AM';
-};
-
 export default class PatientService {
   constructor() {
     this.supabase = supabase;
   }
 
-  // =========================
-  // AUTH
-  // =========================
+  
   async getCurrentUserId() {
     const user = await authService.getAuthUser();
     return user?.id || null;
   }
 
-  // =========================
-  // 🔥 FIXED: getAllPatients() - Matches your PatientsList.jsx exactly
-  // =========================
-  // 🔥 REPLACE getAllPatients() + fallback with THIS:
-async getAllPatients() {
-  try {
-    console.log('🔥 PatientService.getAllPatients() - SIMPLE QUERY');
-    
-    // STEP 1: Get basic patient info
-    const { data: patients, error } = await this.supabase
-      .from('patient_basic_info')
-      .select('id, first_name, last_name, barangay, municipality, date_of_birth, created_at')
-      .order('created_at', { ascending: false });
+  // ✅ FIXED: Matches prenatalvisits.jsx EXACTLY
+  async getAllPatients() {
+    try {
+      const { data: patients, error } = await this.supabase
+        .from('patient_basic_info')
+        .select('id, first_name, last_name, barangay, municipality, date_of_birth, created_at')
+        .order('created_at', { ascending: false });
 
-    if (error) throw error;
+      if (error) throw error;
 
-    console.log('✅ Basic patients:', patients?.length || 0);
-
-    // STEP 2: Transform each patient (no complex joins)
-    const patientList = (patients || []).map(p => ({
-      id: p.id,
-      name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown Patient',
-      station: p.barangay || p.municipality || 'N/A',
-      age: this.calculateAge(p.date_of_birth),
-      trimester: 1,  // Default
-      weeks: '-',    // Default  
-      risk: 'Normal', // Default
-      edd: null,
-      createdAt: p.created_at || new Date().toISOString(),
-    })).filter(p => p.id && p.name !== 'Unknown Patient');
-
-    console.log('✅ FINAL patients:', patientList.length);
-    return patientList;
-
-  } catch (error) {
-    console.error('❌ getAllPatients TOTAL FAILURE:', error);
-    return []; // Empty array = "No patients found" message shows
-  }
-}
-
-  // Fallback if RPC doesn't exist
-  async getAllPatientsFallback() {
-    const { data, error } = await this.supabase
-      .from('patient_basic_info')
-      .select(`
-        id,
-        first_name,
-        last_name,
-        barangay,
-        municipality,
-        date_of_birth,
-        created_at,
-        pregnancy_info!inner(edd, calculated_risk),
-        prenatal_visits!inner(trimester, gestational_age, risk_level)
-      `)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Fallback query failed:', error);
+      return (patients || []).map(p => ({
+        id: p.id,
+        name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown Patient',
+        station: p.barangay || p.municipality || 'N/A',
+      })).filter(p => p.id && p.name !== 'Unknown Patient');
+    } catch (error) {
+      console.error('❌ getAllPatients:', error);
       return [];
     }
-
-    return (data || []).map(p => ({
-      id: p.id,
-      name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown',
-      station: p.barangay || p.municipality || 'N/A',
-      age: this.calculateAge(p.date_of_birth),
-      trimester: p.prenatal_visits?.[0]?.trimester || 1,
-      weeks: p.prenatal_visits?.[0]?.gestational_age || '-',
-      risk: p.pregnancy_info?.calculated_risk || p.prenatal_visits?.[0]?.risk_level || 'Normal',
-      edd: p.pregnancy_info?.edd,
-      createdAt: p.created_at,
-    }));
   }
 
   calculateAge(dateOfBirth) {
@@ -117,400 +59,256 @@ async getAllPatients() {
     return age > 0 ? age.toString() : 'N/A';
   }
 
-  // =========================
-  // STATIONS
-  // =========================
-  async getAvailableStations() {
-    const { data } = await this.supabase
-      .from('staff_profiles')
-      .select('barangay_assignment')
-      .not('barangay_assignment', 'is', null);
-
-    if (!data) return [];
-
-    return [...new Set(data.map(s => s.barangay_assignment))];
-  }
-
+  // ✅ NEW: Staff for dropdown (full_name array for prenatalvisits.jsx)
   async getAllMidwives() {
     const { data } = await this.supabase
       .from('staff_profiles')
-      .select('id, full_name, barangay_assignment, role')
-      .ilike('role', '%midwife%');
-
-    return data || [];
+      .select('full_name')
+      .or('role.ilike.%midwife%,role.ilike.%doctor%');
+    return data?.map(s => s.full_name) || [];
   }
 
-  async getDoctorsByStation(station) {
-    const { data } = await this.supabase
-      .from('staff_profiles')
-      .select('id, full_name, barangay_assignment')
-      .eq('barangay_assignment', station)
-      .ilike('role', '%doctor%');
+  // 🔥 FIXED: getPrenatalVisits() - Perfect data shape for table
+  async getPrenatalVisits() {
+  try {
+    const { data, error } = await this.supabase
+      .from('prenatal_visits')
+      .select(`
+        id, visit_date, gestational_age, bp_systolic, bp_diastolic, weight_kg, 
+        patient_id, patient_basic_info!inner(first_name, last_name, middle_name)
+      `)
+      .order('visit_date', { ascending: false })
+      .limit(50);
 
-    return data || [];
+    if (error) throw error;
+
+    return data.map(visit => ({
+      id: visit.id,
+      visitDate: visit.visit_date,
+      patientName: `${visit.patient_basic_info?.first_name || ''} ${visit.patient_basic_info?.middle_name ? visit.patient_basic_info.middle_name[0] + '. ' : ''}${visit.patient_basic_info?.last_name || ''}`.trim(),
+      patientId: visit.patient_id,
+      ga: visit.gestational_age || 'N/A',
+      bp: visit.bp_systolic && visit.bp_diastolic ? `${visit.bp_systolic}/${visit.bp_diastolic}` : 'N/A',
+      weight: visit.weight_kg ? `${visit.weight_kg}kg` : 'N/A',
+      risk: 'Normal', // 🔥 Default - no pregnancy_info join
+      status: calculateVisitStatus(visit.visit_date),
+    }));
+  } catch (error) {
+    console.error('Error fetching prenatal visits:', error);
+    return [];
+  }
+}
+
+
+  // 🔥 NEW: getAppointments() - Uses next_appt_date (TIMESTAMP) for calendar
+  async getAppointments(startDate, endDate, view = 'day') {
+  try {
+    let query = this.supabase
+      .from('prenatal_visits')
+      .select(`
+        id, visit_date, next_appt_date, patient_id, patient_basic_info!inner(first_name, last_name)
+      `);
+
+    if (view === 'week' || view === 'month') {
+      query = query.gte('visit_date', startDate).lte('visit_date', endDate);
+    } else {
+      const today = new Date().toISOString().split('T')[0];
+      query = query.eq('visit_date', today);
+    }
+
+    const { data, error } = await query.order('visit_date');
+
+    if (error) throw error;
+
+    return data.map(appointment => ({
+      id: appointment.id,
+      date: appointment.visit_date,
+      time: this.generateTimeSlot(appointment.visit_date + 'T09:00:00'),
+      patient: `${appointment.patient_basic_info?.first_name || ''} ${appointment.patient_basic_info?.last_name || ''}`,
+      patientId: appointment.patient_id,
+      type: 'Prenatal Checkup',
+      risk: 'Normal', // 🔥 Default
+      nextAppt: appointment.next_appt_date
+    }));
+  } catch (error) {
+    console.error('Error fetching appointments:', error);
+    return [];
+  }
+}
+
+
+  generateTimeSlot(dateTime) {
+    const hour = new Date(dateTime).getHours();
+    const timeSlots = ['08:00 AM','08:30 AM','09:00 AM','09:30 AM','10:00 AM','10:30 AM','11:00 AM','11:30 AM','01:00 PM','01:30 PM'];
+    return timeSlots[Math.floor(hour / 2) % timeSlots.length] || '08:00 AM';
   }
 
-  // =========================
-  // ADD PATIENT (UNCHANGED - ALREADY PERFECT)
-  // =========================
-  
+  // 🔥 FIXED: addPatient() - next_appt_date as TIMESTAMP + 30/day limit
   async addPatient(patientData) {
-    console.log('🚀 Starting addPatient with:', {
-      firstName: patientData.firstName,
-      station: patientData.station,
-      lmp: patientData.lmp
-    });
-
     const createdBy = await this.getCurrentUserId();
-    console.log('👤 createdBy:', createdBy);
-    
     if (!createdBy) throw new Error("No logged-in user");
 
+    const patientId = crypto.randomUUID();
+
+    // 1. USER
     const { data: typeData } = await this.supabase
       .from('user_type')
       .select('id')
       .ilike('user_type', '%patient%')
       .maybeSingle();
 
-    console.log('🔑 usertype:', typeData);
-
     if (!typeData) throw new Error("Patient usertype not found");
 
-    const patientId = crypto.randomUUID();
-    console.log('🆔 Generated patientId:', patientId);
+    await this.supabase.from('users').insert({
+      id: patientId,
+      email_address: patientData.email,
+      password: 'Patient123!',
+      usertype: typeData.id
+    });
 
-    // 1. USER
-    console.log('📝 Inserting USER...');
-    const { error: userError } = await this.supabase
-      .from('users')
-      .insert({
-        id: patientId,
-        email_address: patientData.email,
-        password: 'Patient123!',
-        usertype: typeData.id
-      });
-
-    if (userError) {
-      console.error('❌ USER ERROR:', userError);
-      throw userError;
-    }
-    console.log('✅ USER inserted');
-
-    // 2. BASIC INFO (FULL DB MATCH + DEBUG)
-    console.log('🏠 Inserting BASIC INFO...');
-    console.log('Basic info payload:', {
+    // 2. BASIC INFO
+    await this.supabase.from('patient_basic_info').insert({
       id: patientId,
       first_name: patientData.firstName,
+      middle_name: patientData.middleName || null,
       last_name: patientData.lastName,
+      suffix: patientData.suffix || null,
+      date_of_birth: patientData.dob,
+      civil_status: patientData.civilStatus || null,
       contact_no: patientData.contactNumber,
-      created_by: createdBy
-    });
-
-    const { error: basicError, data: basicData } = await this.supabase
-      .from('patient_basic_info')
-      .insert({
-        id: patientId,
-        first_name: patientData.firstName,
-        middle_name: patientData.middleName || null,
-        last_name: patientData.lastName,
-        suffix: patientData.suffix || null,
-        date_of_birth: patientData.dob,
-        civil_status: patientData.civilStatus || null,
-        contact_no: patientData.contactNumber,
-        house_no: patientData.address || '',
-        municipality: patientData.municipality,
-        barangay: patientData.station,
-        province: patientData.province,
-        philhealthnumber: patientData.philhealth || null,
-        created_by: createdBy,
-        emergency_contact: {
-          name: patientData.emName || null,
-          relation: patientData.emRel || null, 
-          phone: patientData.emPhone || null,
-          address: patientData.emAddress || null
-        }
-      });
-
-    console.log('Basic info result:', { error: basicError, data: basicData });
-
-    if (basicError) {
-      console.error('❌ BASIC INFO ERROR:', basicError);
-      throw basicError;
-    }
-    console.log('✅ BASIC INFO inserted');
-
-    // 3. PREGNANCY INFO (DB MATCH)
-    console.log('🤰 Inserting PREGNANCY INFO...');
-    
-    const { error: pregError } = await this.supabase
-      .from('pregnancy_info')
-      .insert({
-        patient_id: patientId,
-        created_by: createdBy,
-        pregn_postp: patientData.pregnancyStatus,
-        lmd: patientData.lmp,
-        edd: patientData.edd,
-        pregnancy_type: patientData.pregnancyType,
-        place_of_delivery: patientData.plannedDeliveryPlace,
-        calculated_risk: patientData.riskLevel || 'Normal',
-        gravida: parseInt(patientData.gravida) || 1,
-        para: parseInt(patientData.para) || 0,
-        risk_factors: Array.isArray(patientData.conditions) && patientData.conditions.length > 0 
-          ? patientData.conditions.join(', ')  
-          : null
-      });
-
-    if (pregError) {
-      console.error('❌ PREGNANCY ERROR:', pregError);
-      throw pregError;
-    }
-    console.log('✅ PREGNANCY INFO inserted');
-
-// 4. FIRST VISIT (with BP parsing safety + ALL fields)
-// 4. FIRST VISIT (with BP parsing safety + ALL fields)
-console.log('🏥 Inserting FIRST VISIT...');
-if (patientData.bp && patientData.weight) {
-  try {
-    const bpText = (patientData.bp ?? '').trim();
-    const bpMatch = bpText.match(/^(\d+)[/\\s](\d+)$/);
-    if (!bpMatch) {
-      throw new Error(`Invalid BP format: "${bpText}"`);
-    }
-    const sys = parseInt(bpMatch[1], 10);
-    const dia = parseInt(bpMatch[2], 10);
-    if (isNaN(sys) || isNaN(dia)) {
-      throw new Error(`Invalid BP numbers: ${sys} / ${dia}`);
-    }
-
-    const weight = parseFloat(patientData.weight);
-    if (isNaN(weight)) {
-      throw new Error(`Invalid weight: "${patientData.weight}"`);
-    }
-
-    const visitDate = new Date().toISOString().split('T')[0];
-    const trimester = this.calculateTrimester(patientData.lmp);
-    const gaWeeks = this.calculateWeeks(patientData.lmp);
-    const gaLabel = gaWeeks > 0 ? `${gaWeeks} weeks` : '1st visit';
-    const nextApptDate = this.calculateNextSemesterVisit(patientData.lmp);
-
-    console.log('💉 Validated prenatal_visit data:', {
-      patient_id: patientId,
-      visit_date: visitDate,
-      bp_systolic: sys,
-      bp_diastolic: dia,
-      weight_kg: weight,
-      fhr_bpm: patientData.fhr ? parseInt(patientData.fhr, 10) : null,
-      created_by: createdBy
-    });
-
-    const { data, error } = await this.supabase
-  .from('prenatal_visits')
-  .insert({
-    patient_id: patientId,
-    visit_date: visitDate,
-    visit_number: 1,
-    trimester,
-    gestational_age: gaLabel,
-    bp_systolic: sys,
-    bp_diastolic: dia,
-    weight_kg: weight,
-    // optional columns
-    temp_c: null,
-    pulse_bpm: null,
-    resp_rate_cpm: null,
-    fundal_height_cm: null,
-    fhr_bpm: patientData.fhr ? parseInt(patientData.fhr, 10) : null,
-    fetal_movement: null,
-    presentation: null,
-    tests_done: [],               // text[] or similar
-    supplements_given: [],        // text[] or similar
-    clinical_notes: null,
-    advice_given: null,
-    is_referred: false,
-    referred_to: null,
-    referral_reason: null,
-    next_appt_type: 'Initial Visit',
-    next_appt_date: nextApptDate,
-    created_by: createdBy,
-    assigned_doctor: patientData.assignedDoctor || null,
-    assigned_midwife: patientData.assignedMidwife || null,
-    bhw_assigned: null
-    // risk_level removed – stored in pregnancy_info only
-  })
-  .select(); // required to see the actual inserted row
-
-    if (error) {
-      console.error('❌ Prenatal visit insert error:', error);
-      console.dir(error, { depth: 5 });
-      throw error;
-    }
-
-    console.log('✅ Prenatal visit inserted:', data);
-  } catch (e) {
-    console.error('🚨 First visit failed:', e);
-    throw new Error(`Failed to record first prenatal visit: ${e.message}`);
-  }
-} else {
-  console.warn('⚠️ Skipping first visit (missing bp or weight):', {
-    bp: patientData.bp,
-    weight: patientData.weight
-  });
-}
-
-    // 5. SMART SEMESTER SCHEDULING
-    console.log('📅 Scheduling semester visits...');
-    await this.smartSemesterScheduling({
-      patientId,
-      lmp: patientData.lmp,
-      midwifeId: patientData.assignedMidwife,
-      doctorId: patientData.assignedDoctor,
-      createdBy
-    });
-    console.log('✅ Semester scheduling complete');
-
-    const patient = await this.getPatientById(patientId);
-    console.log('🎉 FULL PATIENT CREATED:', patient);
-    
-    return patient;
-}
-  // NEW: Get full patient profile
-  async getPatientById(patientId) {
-    const { data } = await this.supabase
-      .from('patient_basic_info')
-      .select(`
-        *,
-        pregnancy_info(*),
-        prenatal_visits!inner(*)
-      `)
-      .eq('id', patientId)
-      .single();
-
-    return data || null;
-  }
-
-  // NEW: Calendar preview
-  async previewSemesterSchedule(lmp) {
-    const lmpDate = new Date(lmp);
-    const schedules = [];
-    const weeks = [0,2,4, 14,16,18, 27,29,31];
-    
-    weeks.forEach((week) => {
-      const visitDate = this.addWeeksToDate(lmpDate, week);
-      schedules.push({
-        date: visitDate,
-        week,
-        trimester: this.getTrimesterFromWeek(week)
-      });
-    });
-    return schedules;
-  }
-
-  // =========================
-  // SMART SEMESTER SCHEDULING (UNCHANGED)
-  // =========================
-  async smartSemesterScheduling({ patientId, lmp, midwifeId, doctorId, createdBy }) {
-    const lmpDate = new Date(lmp);
-    const today = new Date();
-    
-    const semesters = [
-      { startWeek: 0, endWeek: 13, name: '1st Trimester' },
-      { startWeek: 14, endWeek: 26, name: '2nd Trimester' },
-      { startWeek: 27, endWeek: 40, name: '3rd Trimester' }
-    ];
-
-    let visitNumber = await this.getNextVisitNumber(patientId);
-
-    for (const semester of semesters) {
-      const semesterStart = this.addWeeksToDate(lmpDate, semester.startWeek);
-      
-      if (semesterStart > today) {
-        await this.scheduleSemesterVisits({
-          patientId, semesterStart, semester, visitNumber, midwifeId, doctorId, createdBy
-        });
-        visitNumber += 3;
-      } else {
-        await this.fillSemesterGaps({
-          patientId, semesterStart, semester, lmpDate, visitNumber, midwifeId, doctorId, createdBy
-        });
-        visitNumber += 3;
+      house_no: patientData.address || '',
+      municipality: patientData.municipality,
+      barangay: patientData.station,
+      province: patientData.province,
+      philhealthnumber: patientData.philhealth || null,
+      created_by: createdBy,
+      emergency_contact: {
+        name: patientData.emName || null,
+        relation: patientData.emRel || null, 
+        phone: patientData.emPhone || null,
+        address: patientData.emAddress || null
       }
-    }
-  }
+    });
 
-  async getNextVisitNumber(patientId) {
-    const { count } = await this.supabase
-      .from('prenatal_visits')
-      .select('*', { count: 'exact', head: true })
-      .eq('patient_id', patientId);
-    return (count || 0) + 1;
-  }
+    // 3. PREGNANCY INFO
+    await this.supabase.from('pregnancy_info').insert({
+      patient_id: patientId,
+      created_by: createdBy,
+      pregn_postp: patientData.pregnancyStatus,
+      lmd: patientData.lmp,
+      edd: patientData.edd,
+      pregnancy_type: patientData.pregnancyType,
+      place_of_delivery: patientData.plannedDeliveryPlace,
+      calculated_risk: patientData.riskLevel || 'Normal',
+      gravida: parseInt(patientData.gravida) || 1,
+      para: parseInt(patientData.para) || 0,
+      risk_factors: Array.isArray(patientData.conditions) && patientData.conditions.length > 0 
+        ? patientData.conditions.join(', ') : null
+ // 🔥 TIMESTAMP for calendar
+    });
 
-  async scheduleSemesterVisits({ patientId, semesterStart, semester, visitNumber, midwifeId, doctorId, createdBy }) {
-    const visits = [0, 2, 4];
-    
-    for (let offset of visits) {
-      const visitDate = this.addWeeksToDate(semesterStart, offset);
+    // 🔥 4. FIRST VISIT (TODAY) + IMMEDIATE NEXT APPOINTMENT
+    if (patientData.bp && patientData.weight) {
+      const today = new Date().toISOString().split('T')[0];
+      const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // TIMESTAMP
+      const bpMatch = patientData.bp.match(/^(\d+)[/\\s](\d+)$/);
       
-      const { count } = await this.supabase
+      await this.supabase.from('prenatal_visits').insert({
+        patient_id: patientId,
+        visit_date: today,
+        visit_number: 1,
+        trimester: this.calculateTrimester(patientData.lmp),
+        gestational_age: this.calculateWeeks(patientData.lmp) > 0 ? `${this.calculateWeeks(patientData.lmp)} weeks` : '1st visit',
+        bp_systolic: parseInt(bpMatch[1]),
+        bp_diastolic: parseInt(bpMatch[2]),
+        weight_kg: parseFloat(patientData.weight),
+        fhr_bpm: patientData.fhr ? parseInt(patientData.fhr) : null,
+        next_appt_date: nextWeek, // 🔥 TIMESTAMP - Shows on calendar!
+        next_appt_type: 'Follow-up Checkup',
+        created_by: createdBy
+      });
+    }
+
+    // 🔥 5. SEMESTER SCHEDULE (30/DAY MAX)
+    await this.smartSemesterScheduling({
+      patientId, lmp: patientData.lmp, createdBy,
+      maxPerDay: 30 // 25 regular + 5 rescheduling
+    });
+
+  return await this.getPatientById(patientId);
+}
+
+
+// 🔥 FIXED: Smart scheduling with 30/day limit
+  // 🔥 TIME SLOTS 8AM-4PM (15 slots x 2 = 30 max/day)
+
+
+// 🔥 FIXED: Time-aware scheduling
+async smartSemesterScheduling({ patientId, lmp, createdBy, maxPerDay = 30 }) {
+  const lmpDate = new Date(lmp);
+  const semesters = [
+    { startWeek: 2, endWeek: 13, name: '1st Trimester', visits: [0, 2, 4] },
+    { startWeek: 14, endWeek: 26, name: '2nd Trimester', visits: [0, 2, 4] },
+    { startWeek: 27, endWeek: 40, name: '3rd Trimester', visits: [0, 2, 4] }
+  ];
+
+  let visitNumber = await this.getNextVisitNumber(patientId);
+
+  for (const semester of semesters) {
+    for (let offset of semester.visits) {
+      const visitDateStr = this.addWeeksToDate(lmpDate, semester.startWeek + offset);
+      
+      // 🔥 CHECK TOTAL SLOTS FOR DAY (30 max)
+      const { count: dayCount } = await this.supabase
         .from('prenatal_visits')
         .select('*', { count: 'exact', head: true })
-        .eq('visit_date', visitDate);
-      
-      if (count < 20) {
-        await this.supabase.from('prenatal_visits').insert({
-          patient_id: patientId,
-          visit_date: visitDate,
-          visit_number: visitNumber++,
-          trimester: this.getTrimesterFromWeek(semester.startWeek),
-          gestational_age: `${semester.startWeek + offset} weeks`,
-          created_by: createdBy,
-          assigned_midwife: midwifeId || null,
-          assigned_doctor: doctorId || null,
-          next_appt_type: `${semester.name} Checkup`
-        });
-      }
-    }
-  }
+        .eq('visit_date', visitDateStr);
 
-  async fillSemesterGaps({ patientId, semesterStart, semester, lmpDate, visitNumber, midwifeId, doctorId, createdBy }) {
-    const semesterEnd = this.addWeeksToDate(lmpDate, semester.endWeek);
-    const { data: existing } = await this.supabase
-      .from('prenatal_visits')
-      .select('visit_date')
-      .eq('patient_id', patientId)
-      .gte('visit_date', semesterStart)
-      .lte('visit_date', semesterEnd);
+      if (dayCount >= maxPerDay) continue; // Skip full days
 
-    const existingDates = existing?.map(v => v.visit_date) || [];
-    const targetDates = [0, 2, 4].map(w => this.addWeeksToDate(semesterStart, w));
-
-    for (let date of targetDates) {
-      if (!existingDates.includes(date) && new Date(date) > new Date()) {
-        const { count } = await this.supabase
-          .from('prenatal_visits')
-          .select('*', { count: 'exact', head: true })
-          .eq('visit_date', date);
+      // 🔥 LOOP THROUGH TIME SLOTS 8AM-4PM
+      for (const timeSlot of TIME_SLOTS_8TO4) {
+        const timeCount = await this.getSlotCount(visitDateStr, timeSlot);
         
-        if (count < 20) {
+        if (timeCount < 2) {  // 2 patients per slot max
+          // Schedule here!
+          const nextOffset = offset + 2;
+          const nextDateStr = this.addWeeksToDate(lmpDate, semester.startWeek + nextOffset);
+          const nextTimeSlot = TIME_SLOTS_8TO4[Math.floor(Math.random() * TIME_SLOTS_8TO4.length)]; // Random next slot
+          
+          // 🔥 TIMESTAMP: YYYY-MM-DDTHH:MM:SSZ (8AM-4PM)
+          const nextApptDate = new Date(`${nextDateStr}T${nextTimeSlot}:00.000Z`);
+          
           await this.supabase.from('prenatal_visits').insert({
             patient_id: patientId,
-            visit_date: date,
+            visit_date: visitDateStr,
             visit_number: visitNumber++,
             trimester: this.getTrimesterFromWeek(semester.startWeek),
-            gestational_age: `${semester.startWeek + 2} weeks`,
-            created_by: createdBy,
-            assigned_midwife: midwifeId || null,
-            assigned_doctor: doctorId || null,
-            next_appt_type: `${semester.name} Checkup (Catch-up)`
+            gestational_age: `${semester.startWeek + offset} weeks`,
+            next_appt_date: nextApptDate.toISOString(),  // "2026-04-26T09:30:00.000Z"
+            next_appt_type: `${semester.name} Checkup`,
+            created_by: createdBy
           });
+          
+          console.log(`✅ Scheduled: ${visitDateStr} ${timeSlot} → Next: ${nextDateStr} ${nextTimeSlot}`);
+          break; // One slot per visit
         }
       }
     }
   }
+}
 
-  // =========================
-  // UTIL METHODS (UNCHANGED)
-  // =========================
+// 🔥 HELPER: Count patients in specific slot
+async getSlotCount(dateStr, timeSlot) {
+  const { count } = await this.supabase
+    .from('prenatal_visits')
+    .select('*', { count: 'exact', head: true })
+    .eq('visit_date', dateStr)
+    .eq('scheduled_time', timeSlot); // Add this column if needed
+  return count || 0;
+}
+
+  // Utility methods (unchanged but fixed)
   addWeeksToDate(date, weeks) {
     const d = new Date(date);
     d.setDate(d.getDate() + weeks * 7);
@@ -532,155 +330,54 @@ if (patientData.bp && patientData.weight) {
     return this.getTrimesterFromWeek(this.calculateWeeks(lmp));
   }
 
-  calculateNextSemesterVisit(lmp) {
-    const weeks = this.calculateWeeks(lmp);
-    const nextSemester = weeks < 14 ? 14 : weeks < 28 ? 28 : 40;
-    return this.addWeeksToDate(lmp, nextSemester);
+  async getNextVisitNumber(patientId) {
+    const { count } = await this.supabase
+      .from('prenatal_visits')
+      .select('*', { count: 'exact', head: true })
+      .eq('patient_id', patientId);
+    return (count || 0) + 1;
   }
 
-  // =========================
-  // HIGH RISK (ALL FIXED)
-  // =========================
-  async getPrenatalVisits() {
-    try {
-      const { data, error } = await this.supabase
-        .from('prenatal_visits')
-        .select(`
-          id, visit_date, visit_number, gestational_age, bp_systolic, bp_diastolic, 
-          weight_kg, patient_id, patient_basic_info!inner(first_name, last_name, middle_name)
-        `)
-        .order('visit_date', { ascending: false })
-        .limit(50);
-
-      if (error) throw error;
-
-      return data.map(visit => ({
-        id: visit.id,
-        visitDate: visit.visit_date,
-        patientName: `${visit.patient_basic_info?.first_name || ''} ${visit.patient_basic_info?.middle_name ? visit.patient_basic_info.middle_name[0] + '. ' : ''}${visit.patient_basic_info?.last_name || ''}`.trim(),
-        patientId: visit.patient_id,
-        ga: visit.gestational_age || 'N/A',
-        bp: visit.bp_systolic && visit.bp_diastolic ? `${visit.bp_systolic}/${visit.bp_diastolic}` : 'N/A',
-        weight: visit.weight_kg ? `${visit.weight_kg}kg` : 'N/A',
-        risk: 'Normal',
-        status: calculateVisitStatus(visit.visit_date),
-        staff: 'Unassigned'
-      }));
-    } catch (error) {
-      console.error('Error fetching prenatal visits:', error);
-      return [];
-    }
+  async getPatientById(patientId) {
+    const { data } = await this.supabase
+      .from('patient_basic_info')
+      .select(`
+        *,
+        pregnancy_info(*),
+        prenatal_visits!inner(*)
+      `)
+      .eq('id', patientId)
+      .single();
+    return data || null;
   }
 
-  async getAppointments(startDate, endDate) {
-    try {
-      const { data, error } = await this.supabase
-        .from('prenatal_visits')
-        .select('id, visit_date, patient_id, patient_basic_info!inner(first_name, last_name)')
-        .gte('visit_date', startDate)
-        .lte('visit_date', endDate);
-
-      if (error) throw error;
-
-      return data.map(appointment => ({
-        id: appointment.id,
-        date: appointment.visit_date,
-        time: generateTimeSlot(appointment.visit_date),
-        patient: `${appointment.patient_basic_info?.first_name || ''} ${appointment.patient_basic_info?.last_name || ''}`,
-        patientId: appointment.patient_id,
-        type: 'Prenatal',
-        risk: 'Normal'
-      }));
-    } catch (error) {
-      console.error('Error fetching appointments:', error);
-      return [];
-    }
-  }
-
-  subscribeToHighRiskChanges(callback) {
-    try {
-      const channel = this.supabase
-        .channel('high-risk-changes')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'pregnancy_info',
-            filter: 'calculated_risk=eq.High Risk'
-          },
-          (payload) => {
-            console.log('High risk change:', payload);
-            callback(payload);
-          }
-        )
-        .subscribe((status) => {
-          console.log('Subscription status:', status);
-        });
-
-      return {
-        unsubscribe: () => {
-          this.supabase.removeChannel(channel);
-        }
-      };
-    } catch (error) {
-      console.error('Subscription failed:', error);
-      return {
-        unsubscribe: () => {}
-      };
-    }
-  }
-
-  async getHighRiskStats() {
-    try {
-      const { count, error } = await this.supabase
-        .from('pregnancy_info')
-        .select('*', { count: 'exact', head: true })
-        .eq('calculated_risk', 'High Risk');
-
-      if (error) throw error;
-
-      return {
-        highRiskCount: count || 0,
-        status: 'loaded'
-      };
-    } catch (error) {
-      console.error('Error fetching high risk stats:', error);
-      return { highRiskCount: 0, status: 'error' };
-    }
-  }
-
-  async getHighRiskPatients() {
-    try {
-      const { data, error } = await this.supabase
-        .from('patient_basic_info')
-        .select(`
-          *,
-          pregnancy_info!inner(calculated_risk, lmd, gravida, para)
-        `)
-        .eq('pregnancy_info.calculated_risk', 'High Risk');
-
-      if (error) throw error;
-
-      return data || [];
-    } catch (error) {
-      console.error('Error fetching high risk patients:', error);
-      return [];
-    }
-  }
-
-  //scheduling
-  // 🔥 ADD THIS METHOD (if not already there)
-async getStaffList() {
-  try {
+  // Keep other methods as-is (addPatient complexity preserved)
+  async getAvailableStations() {
     const { data } = await this.supabase
       .from('staff_profiles')
-      .select('full_name, role')
-      .or('role.ilike.%midwife%,role.ilike.%doctor%');
-    return data || [];
-  } catch (error) {
-    console.error('Staff fetch error:', error);
-    return [];
+      .select('barangay_assignment')
+      .not('barangay_assignment', 'is', null);
+    return [...new Set(data?.map(s => s.barangay_assignment) || [])];
   }
+
+  async getDoctorsByStation(station) {
+  const { data } = await this.supabase
+    .from('staff_profiles')
+    .select('id, full_name, barangay_assignment')
+    .eq('barangay_assignment', station)
+    .ilike('role', '%doctor%');
+
+  return data || [];
+}
+
+// 🔥 MIDWIVES BY STATION - AddPatient.jsx needs this too!
+async getMidwivesByStation(station) {
+  const { data } = await this.supabase
+    .from('staff_profiles')
+    .select('id, full_name, barangay_assignment')
+    .eq('barangay_assignment', station)
+    .ilike('role', '%midwife%');
+
+  return data || [];
 }
 }

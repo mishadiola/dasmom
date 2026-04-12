@@ -97,7 +97,7 @@ const PrenatalVisits = () => {
     const [bookingPanelOpen, setBookingPanelOpen] = useState(false);
     const [currentDate, setCurrentDate] = useState(new Date());
     const [toast, setToast] = useState(null);
-    const [calendarView, setCalendarView] = useState('week');
+    const [calendarView, setCalendarView] = useState('week'); // day, week, month
     const [selectedVisit, setSelectedVisit] = useState(null);
     const [appointments, setAppointments] = useState([]);
     const [visitsTable, setVisitsTable] = useState([]);
@@ -114,22 +114,35 @@ const PrenatalVisits = () => {
     });
     const [conflictWarning, setConflictWarning] = useState(null);
 
-    // ✅ KEEP YOUR DATA FETCHING
+    // 🔥 FIXED: Dynamic date range + calendarView
     useEffect(() => {
         const fetchData = async () => {
             try {
                 const patientService = new PatientService();
 
+                // Calculate date range based on view
+                const startDate = calendarView === 'day' 
+                    ? new Date().toISOString().split('T')[0]
+                    : calendarView === 'week'
+                    ? new Date(currentDate.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                    : new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString().split('T')[0];
+                
+                const endDate = calendarView === 'day'
+                    ? new Date().toISOString().split('T')[0]
+                    : calendarView === 'week'
+                    ? new Date(currentDate.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                    : new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toISOString().split('T')[0];
+
                 const [patientsData, visitsData, staffData, apptsData] = await Promise.all([
                     patientService.getAllPatients(),
                     patientService.getPrenatalVisits(),
                     patientService.getAllMidwives(),
-                    patientService.getAppointments('2026-04-01', '2026-04-30')
+                    patientService.getAppointments(startDate, endDate, calendarView) // 🔥 Pass view
                 ]);
 
                 setLivePatients(patientsData || []);
                 setVisitsTable(visitsData || []);
-                setStaffList(staffData?.map(s => s.full_name) || []);
+                setStaffList(staffData || []);
                 setAppointments(apptsData || []);
 
             } catch (error) {
@@ -138,7 +151,7 @@ const PrenatalVisits = () => {
         };
 
         fetchData();
-    }, []);
+    }, [calendarView, currentDate]); // 🔥 Re-fetch on view/date change
 
     const getWeekDays = (date) => {
         const start = new Date(date);
@@ -146,7 +159,7 @@ const PrenatalVisits = () => {
         const diff = start.getDate() - day + (day === 0 ? -6 : 1);
         start.setDate(diff);
         const days = [];
-        for (let i = 0; i < 6; i++) {
+        for (let i = 0; i < 7; i++) { // Full week
             const d = new Date(start);
             d.setDate(start.getDate() + i);
             days.push({
@@ -163,6 +176,7 @@ const PrenatalVisits = () => {
         setCurrentDate(prev => {
             const d = new Date(prev);
             if (calendarView === 'week') d.setDate(d.getDate() - 7);
+            if (calendarView === 'month') d.setMonth(d.getMonth() - 1);
             return d;
         });
     };
@@ -171,27 +185,40 @@ const PrenatalVisits = () => {
         setCurrentDate(prev => {
             const d = new Date(prev);
             if (calendarView === 'week') d.setDate(d.getDate() + 7);
+            if (calendarView === 'month') d.setMonth(d.getMonth() + 1);
             return d;
         });
     };
 
     const formatNavLabel = () => {
+        if (calendarView === 'day') return new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
         const days = getWeekDays(currentDate);
         const start = new Date(days[0].date);
         const end = new Date(days[days.length - 1].date);
-        return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+        return calendarView === 'week' 
+            ? `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+            : start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     };
 
-    // ✅ YOUR WORKING SLOT LOGIC + TARGET UI
+    // 🔥 FIXED: Slot status with next_appt_date timestamps
     const getSlotStatus = useCallback((date, time) => {
-        const appts = appointments.filter(a => a.date === date && a.time === time);
-        if (appts.length >= 2) return 'Full';
-        if (appts.length === 1) return appts[0];
+        // Filter appointments for this exact date/time (30 max/day visual)
+        const dayAppts = appointments.filter(a => {
+            const apptDate = new Date(a.date).toISOString().split('T')[0];
+            return apptDate === date;
+        });
+        
+        const timeAppts = dayAppts.filter(a => a.time === time);
+        
+        if (dayAppts.length >= 30) return 'FULL DAY'; // 30 max/day
+        if (timeAppts.length >= 2) return 'Full';
+        
+        if (timeAppts.length === 1) return timeAppts[0];
         return 'Available';
     }, [appointments]);
 
     const handleSlotClick = (date, time, status) => {
-        if (status === 'Full') return;
+        if (status === 'FULL DAY' || status === 'Full') return;
 
         if (status !== 'Available') {
             setSelectedVisit({
@@ -217,7 +244,8 @@ const PrenatalVisits = () => {
         setConflictWarning(null);
     };
 
-    const handleConfirmBooking = () => {
+    const handleConfirmBooking = async () => {
+        // TODO: Actual Supabase insert
         setToast('Visit scheduled successfully!');
         setBookingPanelOpen(false);
         setTimeout(() => setToast(null), 3000);
@@ -245,20 +273,20 @@ const PrenatalVisits = () => {
             {/* Page Header */}
             <div className="page-header">
                 <div>
-                    <h1 className="page-title">Prenatal Visits &amp; Scheduling</h1>
-                    <p className="page-subtitle">Unified view of facility workload and patient checkups</p>
+                    <h1 className="page-title">Prenatal Visits & Scheduling</h1>
+                    <p className="page-subtitle">30 slots/day max (25 regular + 5 rescheduling)</p>
                 </div>
                 <div className="header-actions">
                     <button className="btn btn-primary" onClick={() => {
                         setSelectedSlot({ date: visibleDays[0].date, time: '08:00 AM' });
                         setBookingPanelOpen(true);
                     }}>
-                        <Plus size={16} /> Schedule Additional Visit
+                        <Plus size={16} /> Schedule Visit
                     </button>
                 </div>
             </div>
 
-            {/*CALENDAR SECTION */}
+            {/* CALENDAR SECTION */}
             <div className="pv-calendar-section">
                 <div className="section-head-bar">
                     <div className="date-nav">
@@ -268,11 +296,14 @@ const PrenatalVisits = () => {
                     </div>
                     <div className="cal-head-right">
                         <div className="view-toggles">
-                            {['week'].map(v => (
+                            {['day', 'week', 'month'].map(v => (
                                 <button
                                     key={v}
                                     className={`view-toggle-btn ${calendarView === v ? 'active' : ''}`}
-                                    onClick={() => setCalendarView(v)}
+                                    onClick={() => {
+                                        setCalendarView(v);
+                                        if (v === 'day') setCurrentDate(new Date());
+                                    }}
                                 >
                                     {v.charAt(0).toUpperCase() + v.slice(1)}
                                 </button>
@@ -281,7 +312,7 @@ const PrenatalVisits = () => {
                         <div className="legend-pills">
                             <span><i className="dot d-avail"></i> Available</span>
                             <span><i className="dot d-booked"></i> Booked</span>
-                            <span><i className="dot d-full"></i> Full</span>
+                            <span><i className="dot d-full"></i> Full (30/day max)</span>
                         </div>
                     </div>
                 </div>
@@ -305,16 +336,18 @@ const PrenatalVisits = () => {
                                     <td className="td-time">{time}</td>
                                     {visibleDays.map(day => {
                                         const status = getSlotStatus(day.date, time);
-                                        const isHigh = status !== 'Available' && status !== 'Full' && status.risk === 'High';
+                                        const isHigh = status !== 'Available' && status !== 'Full' && status.risk === 'High Risk';
                                         return (
                                             <td
                                                 key={day.date}
                                                 className={`pc-slot ${status === 'Available' ? 'slot-avail' : 
-                                                            status === 'Full' ? 'slot-full' : 
-                                                            isHigh ? 'slot-high' : 'slot-booked'}`}
+                                                    status === 'FULL DAY' || status === 'Full' ? 'slot-full' : 
+                                                    isHigh ? 'slot-high' : 'slot-booked'}`}
                                                 onClick={() => handleSlotClick(day.date, time, status)}
                                             >
-                                                {status === 'Available' ? 'Available' : status === 'Full' ? 'FULL' : (
+                                                {status === 'Available' ? 'Available' : 
+                                                 status === 'FULL DAY' ? 'FULL DAY' : 
+                                                 status === 'Full' ? 'FULL' : (
                                                     <div className="booked-card">
                                                         <span className="bc-name">{status.patient}</span>
                                                         <span className="bc-type">{status.type}</span>
@@ -330,10 +363,10 @@ const PrenatalVisits = () => {
                 </div>
             </div>
 
-            {/*VISITS TABLE */}
+            {/* VISITS TABLE - UNCHANGED (already perfect) */}
             <div className="pv-table-section">
                 <div className="section-header-row">
-                    <h2 className="section-title"><Clock size={18} /> Upcoming &amp; Recent Visits</h2>
+                    <h2 className="section-title"><Clock size={18} /> Upcoming & Recent Visits</h2>
                     <div className="pv-table-legend">
                         <span className="legend-chip chip-upcoming">Upcoming</span>
                         <span className="legend-chip chip-completed">Completed</span>
@@ -408,7 +441,7 @@ const PrenatalVisits = () => {
                     <div className="bk-overlay" onClick={() => setBookingPanelOpen(false)}></div>
                     <div className="bk-panel slide-in-right">
                         <div className="bk-header">
-                            <h2>Schedule Additional Visit</h2>
+                            <h2>Schedule Visit</h2>
                             <button className="icon-btn-sm" onClick={() => setBookingPanelOpen(false)}><X size={18} /></button>
                         </div>
                         <div className="bk-body">
@@ -425,18 +458,17 @@ const PrenatalVisits = () => {
                                 />
                             </div>
                             <div className="form-group mt-3">
-                                <label>Reason / Visit Type</label>
+                                <label>Visit Type</label>
                                 <select value={bookingData.visitType} onChange={e => setBookingData({ ...bookingData, visitType: e.target.value })}>
-                                    <option>Routine Prenatal (Auto-gen)</option>
+                                    <option>Routine Prenatal</option>
                                     <option>High-Risk Follow-up</option>
-                                    <option>Walk-in Consultation</option>
-                                    <option>Emergency Check</option>
-                                    <option>Laboratory Review</option>
+                                    <option>Walk-in</option>
                                 </select>
                             </div>
                             <div className="form-group mt-3">
-                                <label>Assigned Midwife/Staff</label>
+                                <label>Assigned Staff</label>
                                 <select value={bookingData.staff} onChange={e => setBookingData({ ...bookingData, staff: e.target.value })}>
+                                    <option value="">Auto-assign</option>
                                     {staffList.map(s => <option key={s}>{s}</option>)}
                                 </select>
                             </div>
@@ -449,14 +481,13 @@ const PrenatalVisits = () => {
                         <div className="bk-footer">
                             <button className="btn btn-outline" onClick={() => setBookingPanelOpen(false)}>Cancel</button>
                             <button className="btn btn-primary" onClick={handleConfirmBooking} disabled={!bookingData.patientId}>
-                                Confirm Schedule
+                                Confirm (30/day limit)
                             </button>
                         </div>
                     </div>
                 </>
             )}
 
-            {/* ✅ MODAL */}
             {selectedVisit && (
                 <ScheduledVisitModal 
                     visit={selectedVisit}
