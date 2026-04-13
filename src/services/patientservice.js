@@ -28,26 +28,68 @@ export default class PatientService {
     return user?.id || null;
   }
 
-  // ✅ FIXED: Matches prenatalvisits.jsx EXACTLY
   async getAllPatients() {
-    try {
-      const { data: patients, error } = await this.supabase
-        .from('patient_basic_info')
-        .select('id, first_name, last_name, barangay, municipality, date_of_birth, created_at')
-        .order('created_at', { ascending: false });
+  try {
+    // 1. Get all patients
+    const { data: patients, error: err1 } = await this.supabase
+      .from('patient_basic_info')
+      .select('id, first_name, last_name, barangay, municipality, date_of_birth, created_at')
+      .order('created_at', { ascending: false });
 
-      if (error) throw error;
+    if (err1) throw err1;
 
-      return (patients || []).map(p => ({
-        id: p.id,
-        name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown Patient',
-        station: p.barangay || p.municipality || 'N/A',
-      })).filter(p => p.id && p.name !== 'Unknown Patient');
-    } catch (error) {
-      console.error('❌ getAllPatients:', error);
-      return [];
-    }
+    // 2. Get all pregnancies (or add filters later, e.g. active = true)
+    const { data: pregnancies, error: err2 } = await this.supabase
+      .from('pregnancy_info')
+      .select('patient_id, lmd, edd, calculated_risk, risk_factors');
+    if (err2) throw err2;
+
+    // 3. Build a map: patient_id → pregnancy
+    const pgiMap = new Map();
+    (pregnancies || []).forEach(pgi => {
+      if (pgi.patient_id) pgiMap.set(pgi.patient_id, pgi);
+    });
+
+    // 4. Map patients + their pregnancy
+   const mapPatient = (p) => {
+  const pgi = pgiMap.get(p.id) || {};
+
+  // Use lmd from pregnancy_info to compute trimester and weeks
+  const lmp = pgi.lmd;
+  const weeks = lmp ? this.calculateWeeks(lmp) : 0;
+  const trimester = lmp ? this.getTrimesterFromWeek(weeks) : 1;
+
+  // Map calculated_risk → 'High' / 'Monitor' / 'Normal'
+  const risk = (() => {
+    const r = (pgi.calculated_risk || '').toLowerCase();
+    if (r.includes('high')) return 'High';
+    if (r.includes('monitor')) return 'Monitor';
+    return 'Normal';
+  })();
+
+  return {
+    id: p.id,
+    name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown Patient',
+    station: p.barangay || p.municipality || 'N/A',
+    age: p.date_of_birth
+      ? Math.floor((new Date() - new Date(p.date_of_birth)) / (365.25 * 24 * 60 * 60 * 1000))
+      : null,
+    trimester,
+    weeks,
+    risk,
+    edd: pgi.edd || null,
+    createdAt: p.created_at
+  };
+};
+
+    return patients
+      .map(mapPatient)
+      .filter(p => p.id && p.name !== 'Unknown Patient');
+  } catch (error) {
+    console.error('❌ getAllPatients:', error);
+    return [];
   }
+}
 
   calculateAge(dateOfBirth) {
     if (!dateOfBirth) return 'N/A';
@@ -59,7 +101,6 @@ export default class PatientService {
     return age > 0 ? age.toString() : 'N/A';
   }
 
-  // ✅ NEW: Staff for dropdown (full_name array for prenatalvisits.jsx)
   async getAllMidwives() {
     const { data } = await this.supabase
       .from('staff_profiles')
@@ -68,7 +109,6 @@ export default class PatientService {
     return data?.map(s => s.full_name) || [];
   }
 
-  // 🔥 FIXED: getPrenatalVisits() - Perfect data shape for table
   async getPrenatalVisits() {
   try {
     const { data, error } = await this.supabase
@@ -90,7 +130,7 @@ export default class PatientService {
       ga: visit.gestational_age || 'N/A',
       bp: visit.bp_systolic && visit.bp_diastolic ? `${visit.bp_systolic}/${visit.bp_diastolic}` : 'N/A',
       weight: visit.weight_kg ? `${visit.weight_kg}kg` : 'N/A',
-      risk: 'Normal', // 🔥 Default - no pregnancy_info join
+      risk: 'Normal', 
       status: calculateVisitStatus(visit.visit_date),
     }));
   } catch (error) {
@@ -99,8 +139,6 @@ export default class PatientService {
   }
 }
 
-
-  // 🔥 NEW: getAppointments() - Uses next_appt_date (TIMESTAMP) for calendar
   async getAppointments(startDate, endDate, view = 'day') {
   try {
     let query = this.supabase
@@ -127,7 +165,7 @@ export default class PatientService {
       patient: `${appointment.patient_basic_info?.first_name || ''} ${appointment.patient_basic_info?.last_name || ''}`.trim() || 'Unknown',
       patientId: appointment.patient_id,
       type: 'Prenatal Checkup',
-      risk: 'Normal', // 🔥 Default
+      risk: 'Normal', 
       nextAppt: appointment.next_appt_date
     }));
   } catch (error) {
@@ -141,7 +179,6 @@ export default class PatientService {
     const timeSlots = ['08:00 AM','08:30 AM','09:00 AM','09:30 AM','10:00 AM','10:30 AM','11:00 AM','11:30 AM','01:00 PM','01:30 PM','02:00 PM','02:30 PM','03:00 PM','03:30 PM','04:00 PM'];
     if (!patientId || !visitDate) return timeSlots[0];
     
-    // Deterministic hash to spread patients evenly across time slots visually
     let hash = 0;
     const str = patientId + visitDate;
     for (let i = 0; i < str.length; i++) {
@@ -150,14 +187,12 @@ export default class PatientService {
     return timeSlots[Math.abs(hash) % timeSlots.length];
   }
 
-  // 🔥 FIXED: addPatient() - next_appt_date as TIMESTAMP + 30/day limit
   async addPatient(patientData) {
     const createdBy = await this.getCurrentUserId();
     if (!createdBy) throw new Error("No logged-in user");
 
     const patientId = crypto.randomUUID();
 
-    // 1. USER
     const { data: typeData } = await this.supabase
       .from('user_type')
       .select('id')
@@ -173,7 +208,6 @@ export default class PatientService {
       usertype: typeData.id
     });
 
-    // 2. BASIC INFO
     await this.supabase.from('patient_basic_info').insert({
       id: patientId,
       first_name: patientData.firstName,
@@ -197,7 +231,6 @@ export default class PatientService {
       }
     });
 
-    // 3. PREGNANCY INFO
     await this.supabase.from('pregnancy_info').insert({
       patient_id: patientId,
       created_by: createdBy,
@@ -211,13 +244,11 @@ export default class PatientService {
       para: parseInt(patientData.para) || 0,
       risk_factors: Array.isArray(patientData.conditions) && patientData.conditions.length > 0 
         ? patientData.conditions.join(', ') : null
- // 🔥 TIMESTAMP for calendar
     });
 
-    // 🔥 4. FIRST VISIT (TODAY) + IMMEDIATE NEXT APPOINTMENT
     if (patientData.bp && patientData.weight) {
       const today = new Date().toISOString().split('T')[0];
-      const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // TIMESTAMP
+      const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
       const bpMatch = patientData.bp.match(/^(\d+)[/\\s](\d+)$/);
       
       await this.supabase.from('prenatal_visits').insert({
@@ -230,27 +261,20 @@ export default class PatientService {
         bp_diastolic: parseInt(bpMatch[2]),
         weight_kg: parseFloat(patientData.weight),
         fhr_bpm: patientData.fhr ? parseInt(patientData.fhr) : null,
-        next_appt_date: nextWeek, // 🔥 TIMESTAMP - Shows on calendar!
+        next_appt_date: nextWeek, 
         next_appt_type: 'Follow-up Checkup',
         created_by: createdBy
       });
     }
 
-    // 🔥 5. SEMESTER SCHEDULE (30/DAY MAX)
     await this.smartSemesterScheduling({
       patientId, lmp: patientData.lmp, createdBy,
-      maxPerDay: 30 // 25 regular + 5 rescheduling
+      maxPerDay: 30 
     });
 
   return await this.getPatientById(patientId);
 }
 
-
-// 🔥 FIXED: Smart scheduling with 30/day limit
-  // 🔥 TIME SLOTS 8AM-4PM (15 slots x 2 = 30 max/day)
-
-
-// 🔥 FIXED: Time-aware scheduling
 async smartSemesterScheduling({ patientId, lmp, createdBy, maxPerDay = 30 }) {
   const lmpDate = new Date(lmp);
   const semesters = [
@@ -265,25 +289,21 @@ async smartSemesterScheduling({ patientId, lmp, createdBy, maxPerDay = 30 }) {
     for (let offset of semester.visits) {
       const visitDateStr = this.addWeeksToDate(lmpDate, semester.startWeek + offset);
       
-      // 🔥 CHECK TOTAL SLOTS FOR DAY (30 max)
       const { count: dayCount } = await this.supabase
         .from('prenatal_visits')
         .select('*', { count: 'exact', head: true })
         .eq('visit_date', visitDateStr);
 
-      if (dayCount >= maxPerDay) continue; // Skip full days
+      if (dayCount >= maxPerDay) continue; 
 
-      // 🔥 LOOP THROUGH TIME SLOTS 8AM-4PM
       for (const timeSlot of TIME_SLOTS_8TO4) {
         const timeCount = await this.getSlotCount(visitDateStr, timeSlot);
         
-        if (timeCount < 2) {  // 2 patients per slot max
-          // Schedule here!
+        if (timeCount < 2) {  
           const nextOffset = offset + 2;
           const nextDateStr = this.addWeeksToDate(lmpDate, semester.startWeek + nextOffset);
-          const nextTimeSlot = TIME_SLOTS_8TO4[Math.floor(Math.random() * TIME_SLOTS_8TO4.length)]; // Random next slot
+          const nextTimeSlot = TIME_SLOTS_8TO4[Math.floor(Math.random() * TIME_SLOTS_8TO4.length)]; 
           
-          // 🔥 TIMESTAMP: YYYY-MM-DDTHH:MM:SSZ (8AM-4PM)
           const nextApptDate = new Date(`${nextDateStr}T${nextTimeSlot}:00.000Z`);
           
           await this.supabase.from('prenatal_visits').insert({
@@ -292,26 +312,25 @@ async smartSemesterScheduling({ patientId, lmp, createdBy, maxPerDay = 30 }) {
             visit_number: visitNumber++,
             trimester: this.getTrimesterFromWeek(semester.startWeek),
             gestational_age: `${semester.startWeek + offset} weeks`,
-            next_appt_date: nextApptDate.toISOString(),  // "2026-04-26T09:30:00.000Z"
+            next_appt_date: nextApptDate.toISOString(),  
             next_appt_type: `${semester.name} Checkup`,
             created_by: createdBy
           });
           
           console.log(`✅ Scheduled: ${visitDateStr} ${timeSlot} → Next: ${nextDateStr} ${nextTimeSlot}`);
-          break; // One slot per visit
+          break;
         }
       }
     }
   }
 }
 
-// 🔥 HELPER: Count patients in specific slot
 async getSlotCount(dateStr, timeSlot) {
   const { count } = await this.supabase
     .from('prenatal_visits')
     .select('*', { count: 'exact', head: true })
     .eq('visit_date', dateStr)
-    .eq('scheduled_time', timeSlot); // Add this column if needed
+    .eq('scheduled_time', timeSlot);
   return count || 0;
 }
 
@@ -345,7 +364,6 @@ async getSlotCount(dateStr, timeSlot) {
 
       if (error) throw error;
       
-      // Ensure pregnancy_info is an object, not an array
       return (data || []).map(p => ({
         ...p,
         pregnancy_info: Array.isArray(p.pregnancy_info) ? p.pregnancy_info[0] : p.pregnancy_info
@@ -370,7 +388,6 @@ async getSlotCount(dateStr, timeSlot) {
       .subscribe();
   }
 
-  // Utility methods (unchanged but fixed)
   addWeeksToDate(date, weeks) {
     const d = new Date(date);
     d.setDate(d.getDate() + weeks * 7);
@@ -428,7 +445,6 @@ async getSlotCount(dateStr, timeSlot) {
       bloodType: data.blood_type || 'Unknown',
       emergencyContact: data.emergency_contact || {},
 
-      // Pregnancy fields mapped for PatientProfile
       pregnancyStatus: preg.pregn_postp || 'Pregnant',
       lmp: preg.lmd || 'N/A',
       edd: preg.edd || 'N/A',
@@ -439,11 +455,9 @@ async getSlotCount(dateStr, timeSlot) {
       para: preg.para || 0,
       medicalConditions: preg.risk_factors ? preg.risk_factors.split(',').map(s=>s.trim()).filter(Boolean) : [],
       
-      // Calculate active trimester and weeks using LMP
       trimester: this.calculateTrimester(preg.lmd),
       weeks: this.calculateWeeks(preg.lmd),
 
-      // Lists defaulting to empty arrays to prevent `.length` crashes
       visits: data.prenatal_visits || [],
       vaccines: data.vaccines || [],
       supplements: data.supplements || [],
@@ -451,7 +465,6 @@ async getSlotCount(dateStr, timeSlot) {
     };
   }
 
-  // Keep other methods as-is (addPatient complexity preserved)
   async getAvailableStations() {
     const { data } = await this.supabase
       .from('staff_profiles')
@@ -470,7 +483,6 @@ async getSlotCount(dateStr, timeSlot) {
   return data || [];
 }
 
-// 🔥 MIDWIVES BY STATION - AddPatient.jsx needs this too!
 async getMidwivesByStation(station) {
   const { data } = await this.supabase
     .from('staff_profiles')

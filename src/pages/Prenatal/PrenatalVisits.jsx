@@ -114,7 +114,6 @@ const PrenatalVisits = () => {
     });
     const [conflictWarning, setConflictWarning] = useState(null);
 
-    // Helper to get local date string YYYY-MM-DD reliably
     const toLocalDateStr = (d) => {
         const offset = d.getTimezoneOffset() * 60000;
         return new Date(d.getTime() - offset).toISOString().split('T')[0];
@@ -163,7 +162,6 @@ const PrenatalVisits = () => {
 
     const visibleDays = getVisibleDays(currentDate, calendarView);
 
-    // 🔥 FIXED: Dynamic date range + automatic real-time sync
     useEffect(() => {
         const patientService = new PatientService();
 
@@ -195,7 +193,6 @@ const PrenatalVisits = () => {
 
         fetchData();
 
-        // Real-time auto-refresh when new patients are added under prenatal_visits
         const subscription = patientService.supabase
             .channel('prenatal_calendar_sync')
             .on(
@@ -211,7 +208,7 @@ const PrenatalVisits = () => {
         return () => {
             patientService.supabase.removeChannel(subscription);
         };
-    }, [calendarView, currentDate]); // 🔥 Re-fetch on view/date change
+    }, [calendarView, currentDate]);
 
     const handlePrev = () => {
         setCurrentDate(prev => {
@@ -243,17 +240,14 @@ const PrenatalVisits = () => {
             : start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     };
 
-    // 🔥 FIXED: Slot status with next_appt_date timestamps
     const getSlotStatus = useCallback((date, time) => {
-        // Filter appointments for this exact date/time (30 max/day visual)
         const dayAppts = appointments.filter(a => {
-            // Secure direct comparison, preventing timezone shifting from new Date() conversion
             return a.date === date;
         });
         
         const timeAppts = dayAppts.filter(a => a.time === time);
         
-        if (dayAppts.length >= 30) return 'FULL DAY'; // 30 max/day
+        if (dayAppts.length >= 30) return 'FULL DAY'; 
         if (timeAppts.length >= 2) return 'Full';
         
         if (timeAppts.length === 1) return timeAppts[0];
@@ -288,7 +282,6 @@ const PrenatalVisits = () => {
     };
 
     const handleConfirmBooking = async () => {
-        // TODO: Actual Supabase insert
         setToast('Visit scheduled successfully!');
         setBookingPanelOpen(false);
         setTimeout(() => setToast(null), 3000);

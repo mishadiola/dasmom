@@ -32,7 +32,6 @@ const DeliveryOutcomes = () => {
     const [stations, setStations] = useState(['All Stations']);
     const [staffList, setStaffList] = useState([]);
 
-    // Load initial data
     const loadData = async () => {
         setLoading(true);
         try {
@@ -51,13 +50,11 @@ const DeliveryOutcomes = () => {
         }
     };
 
-    // Load stations and staff
     const loadConfigData = async () => {
         try {
             const stationsData = await babyservices.getStations();
             setStations(stationsData);
             
-            // Load ALL staff (filtering happens in modal)
             const { data: allStaff } = await supabase
                 .from('staff_profiles')
                 .select('id, full_name, role, barangay_assignment')
@@ -186,7 +183,7 @@ const DeliveryOutcomes = () => {
                 staffList={staffList}
             />
             
-            {/* Rest of your existing table/filter code - it's perfect */}
+            {}
             <div className="do-controls">
                 <div className="do-search-wrap">
                     <Search size={16} className="do-search-icon" />
@@ -229,7 +226,7 @@ const DeliveryOutcomes = () => {
                 </div>
             </div>
 
-            {/* Table - your existing table code works perfectly with the data structure */}
+            {}
             <div className="do-main-layout">
                 <div className="do-table-col">
                     <div className="do-card">
@@ -315,7 +312,6 @@ const DeliveryOutcomes = () => {
     );
 };
 
-// FIXED AddDeliveryModal Component
 const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => {
     const [section, setSection] = useState('patient');
     const [loading, setLoading] = useState(false);
@@ -365,7 +361,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
                 setLocalStaff([
                     { id: 'demo1', full_name: 'Midwife Elena P.', role: 'Midwife', barangay_assignment: 'Brgy Poblacion' },
                     { id: 'demo2', full_name: 'Dr. Reyes (OB)', role: 'Doctor', barangay_assignment: 'Main Clinic' }
-                ]); // Fallback demo data
+                ]); 
             } finally {
                 setStaffLoading(false);
             }
@@ -375,15 +371,13 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
             loadStaff();
         }
     }, [show]);
-    // 👇 DYNAMIC STAFF FILTERING BY MOTHER'S BARANGAY
     const filteredStaffList = useMemo(() => {
         if (!form.station || !staffList.length) return [];
         
         return staffList.filter(staff => {
-            // Match staff's barangay_assignment to mother's station
             return staff.barangay_assignment?.includes(form.station.split(',')[0]) || 
                 staff.barangay_assignment === form.station.split(',')[0] ||
-                staff.role === 'Mobile'; // Allow mobile staff
+                staff.role === 'Mobile'; 
         });
     }, [form.station, staffList]);
     const updateForm = (key, value) => {
@@ -395,10 +389,8 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
             setSearchResults([]);
         }
     };
-    // Load staff when modal opens
     useEffect(() => {
         if (show && staffList.length === 0) {
-            // Staff will be passed from parent or load here
             console.log('Staff list:', staffList);
         }
     }, [show, staffList]);
@@ -437,7 +429,6 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
         });
     };
 
-    // ✅ FIXED SAVE FUNCTION
     const handleSave = async () => {
         if (!form.patientId || !form.deliveryDate) {
             alert('Please select a patient and delivery date.');
@@ -446,7 +437,6 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
 
         setLoading(true);
         try {
-            // Prepare clean data
             const deliveryData = {
                 mother_id: form.patientId,
                 delivery_date: form.deliveryDate,
@@ -474,7 +464,6 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
                 risk_level: form.riskLevel || 'Normal'
             };
 
-            // Call service with CORRECT parameters
             await babyservices.recordDelivery(deliveryData, newbornData);
             
             onSuccess();

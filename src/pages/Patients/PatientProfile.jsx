@@ -517,7 +517,6 @@ const PatientProfile = () => {
     );
 };
 
-// Simple Scale icon since Lucide might not have it in all versions
 const Scale = ({ size, ...props }) => (
     <svg 
         xmlns="http://www.w3.org/2000/svg" 

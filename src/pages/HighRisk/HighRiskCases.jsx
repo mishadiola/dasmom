@@ -31,7 +31,6 @@ const HighRiskCases = () => {
 
     const service = useMemo(() => new PatientService(), []);
 
-    // ✅ FIXED: Transform raw Supabase data to match JSX expectations
     const loadHighRiskData = useCallback(async () => {
         try {
             setLoading(true);
@@ -40,7 +39,6 @@ const HighRiskCases = () => {
                 service.getHighRiskPatients()
             ]);
 
-            // ✅ TRANSFORM raw data to match your JSX structure
             const formattedPatients = (patientsData || []).map(p => ({
                 id: p.id,
                 name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unnamed Patient',
@@ -57,7 +55,7 @@ const HighRiskCases = () => {
             setStats({
                 ...statsData,
                 totalHighRisk: statsData.highRiskCount || 0,
-                criticalToday: 0, // Add logic later
+                criticalToday: 0, 
                 missedFollowups: 0,
                 needsImmediate: 0
             });

@@ -228,7 +228,8 @@ class BabyService {
           color: 'rose'
         }
       ];
-    } catch (error) {
+    }
+    catch (error) {
       console.error('Error in getDeliveryStats:', error);
       return [
         { label: 'Total Deliveries', value: 0, color: 'lilac' },
@@ -239,7 +240,6 @@ class BabyService {
     }
   }
 
-  // Add this method to BabyService class
 async getStations() 
 {
     try {

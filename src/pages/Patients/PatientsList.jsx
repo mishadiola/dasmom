@@ -100,11 +100,9 @@ const PatientsList = () => {
         sortBy: 'newest'
     });
     
-    // UI state for custom popovers
     const [activePopover, setActivePopover] = useState(null);
     const [stationSearch, setStationSearch] = useState('');
     
-    // Added scroll listener for sticky header
     useEffect(() => {
         const handleScroll = () => {
             const controls = document.querySelector('.controls-card');
@@ -127,8 +125,8 @@ const PatientsList = () => {
     useEffect(() => {
     const fetchPatients = async () => {
         try {
-            const patientService = new PatientService();  // 🔥 ADD THIS
-            const data = await patientService.getAllPatients();  // 🔥 CHANGE THIS
+            const patientService = new PatientService();  
+            const data = await patientService.getAllPatients(); 
             setPatients(data);
         } catch (err) {
             console.error(err);
@@ -178,7 +176,6 @@ const PatientsList = () => {
         return 0;
     });
 
-    // Dynamic Station List from patient data
     const availableStations = [...new Set(patients.map(p => p.station).filter(Boolean))].sort();
 
     const totalPages = Math.ceil(sortedPatients.length / itemsPerPage);
@@ -437,7 +434,7 @@ const PatientsList = () => {
                                                 <Eye size={16} />
                                                 </button>
                                                 
-                                                {/* 🔥 ADD THIS ONE LINE */}
+                                                {}
                                                 <button type="button" className="action-btn vitals-btn" data-tooltip="Record Vitals" onClick={(e) => { e.stopPropagation(); setVitalModalPatient(p); }}>
                                                 <Activity size={16} />
                                                 </button>

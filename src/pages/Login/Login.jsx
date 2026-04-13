@@ -47,12 +47,10 @@ export default function Login() {
   const [isLocked, setIsLocked] = useState(false);
   const [lockTimer, setLockTimer] = useState(0);
 
-  // Forgot password modal state
   const [showForgot, setShowForgot] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
 
-  // Lock timer effect
   useEffect(() => {
     if (!isLocked) return;
     const interval = setInterval(() => {
@@ -70,7 +68,6 @@ export default function Login() {
     return () => clearInterval(interval);
   }, [isLocked]);
 
-  // ----------------- VALIDATION -----------------
   const validate = () => {
     const newErrors = { email: '', password: '', form: '', general: '' };
     const trimmedEmail = email.trim();
@@ -84,7 +81,6 @@ export default function Login() {
     return !newErrors.email && !newErrors.password;
   };
 
-  // ----------------- LOGIN SUBMIT -----------------
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isLocked || !validate()) return;
@@ -121,7 +117,8 @@ export default function Login() {
               time: new Date().toISOString(),
               device: getDeviceString()
           }));
-      } catch (storageErr) {
+      } 
+      catch (storageErr) {
           console.warn('Failed to save last login stat:', storageErr);
       }
 
@@ -132,7 +129,8 @@ export default function Login() {
 
       console.log('Redirecting to:', redirect);
       navigate(redirect);
-    } catch (err) {
+    } 
+    catch (err) {
       console.error(err);
       setErrors(prev => ({ ...prev, general: err.message || 'Login failed' }));
       setAttempts(prev => {
@@ -143,7 +141,8 @@ export default function Login() {
         }
         return next;
       });
-    } finally {
+    } 
+    finally {
       setIsLoading(false);
     }
   };

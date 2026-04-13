@@ -18,7 +18,6 @@ export default class AuthService {
     const { data: { user: authUser } } = await this.supabase.auth.getUser();
     if (!authUser) throw new Error('Session not established');
 
-    // 1. Fetch user role and info from internal 'users' table
     const { data: userData, error: userError } = await this.supabase
       .from('users')
       .select('id, email_address, usertype')
@@ -28,7 +27,6 @@ export default class AuthService {
     if (userError) throw userError;
     if (!userData) throw new Error('User record not found in database');
 
-    // 2. Resolve Role
     let role = 'user';
     if (userData.usertype) {
       const { data: typeData, error: typeError } = await this.supabase
@@ -41,7 +39,6 @@ export default class AuthService {
       if (typeData && typeData.user_type) role = typeData.user_type.toLowerCase();
     }
 
-    // 3. Fetch Full Name based on role
     const profile = await this.fetchProfileName(userData.id, role);
 
     this._currentUser = {
@@ -87,7 +84,6 @@ export default class AuthService {
       console.error('Error fetching profile name:', err);
     }
 
-    // Fallback if no profile found
     if (!fullName) {
       const email = this._currentUser?.email || 'User';
       displayName = email.split('@')[0];
@@ -99,12 +95,8 @@ export default class AuthService {
 
   async getAuthUser() {
     if (this._currentUser) return this._currentUser;
-
-    // Try to re-hydrate from active Supabase session
     const { data: { session } } = await this.supabase.auth.getSession();
     if (!session?.user) return null;
-
-    // Re-login logic without password (using session)
     const authUser = session.user;
     
     const { data: userData } = await this.supabase
@@ -168,7 +160,6 @@ export default class AuthService {
     return config ? config.redirect : '/';
   }
 
-  // ─── Profile & Security ───
 
   async getFullStaffProfile(userId) {
     const { data, error } = await this.supabase
