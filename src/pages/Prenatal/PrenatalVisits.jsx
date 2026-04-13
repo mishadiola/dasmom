@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import PatientService from '../../services/patientservice';
 import {
     Search, Plus, Eye, Edit2, Trash2, CalendarCheck,
     AlertTriangle, HeartPulse, Filter, Clock, ChevronLeft,
@@ -7,8 +7,13 @@ import {
     CheckCircle2
 } from 'lucide-react';
 import ScheduledVisitModal from '../../components/Prenatal/ScheduledVisitModal';
+import { useNavigate, useLocation } from 'react-router-dom';
 import '../../styles/pages/PrenatalVisits.css';
-import PatientService from '../../services/patientservice';
+
+const toLocalDateStr = (d) => {
+    const offset = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - offset).toISOString().split('T')[0];
+};
 
 const TIME_SLOTS = [
     '08:00 AM', '08:30 AM', '09:00 AM', '09:30 AM', '10:00 AM',
@@ -103,7 +108,6 @@ const PrenatalVisits = () => {
     const [visitsTable, setVisitsTable] = useState([]);
     const [staffList, setStaffList] = useState([]);
     const [livePatients, setLivePatients] = useState([]);
-
     const [selectedSlot, setSelectedSlot] = useState({ date: null, time: null });
     const [bookingData, setBookingData] = useState({
         patientId: '',
@@ -114,9 +118,32 @@ const PrenatalVisits = () => {
     });
     const [conflictWarning, setConflictWarning] = useState(null);
 
-    const toLocalDateStr = (d) => {
-        const offset = d.getTimezoneOffset() * 60000;
-        return new Date(d.getTime() - offset).toISOString().split('T')[0];
+    const patientService = new PatientService();
+
+    const fetchData = async () => {
+        try {
+            const vDays = getVisibleDays(currentDate, calendarView);
+            if (vDays.length === 0) return;
+            
+            // Fetch perfectly aligned with the visual grid columns
+            const startDate = vDays[0].date;
+            const endDate = vDays[vDays.length - 1].date;
+
+            const [patientsData, visitsData, staffData, apptsData] = await Promise.all([
+                patientService.getAllPatients(),
+                patientService.getPrenatalVisits(),
+                patientService.getAllMidwives(),
+                patientService.getAppointments(startDate, endDate, calendarView)
+            ]);
+
+            setLivePatients(patientsData || []);
+            setVisitsTable(visitsData || []);
+            setStaffList(staffData || []);
+            setAppointments(apptsData || []);
+
+        } catch (error) {
+            console.error(error);
+        }
     };
 
     const getVisibleDays = (date, view) => {
@@ -160,37 +187,26 @@ const PrenatalVisits = () => {
         return [];
     };
 
-    const visibleDays = getVisibleDays(currentDate, calendarView);
+    const handleUpdateVisitStatus = async (visitId, updates) => {
+        try {
+            await patientService.updatePrenatalVisitStatus(visitId, updates);
+            await fetchData();
+            setToast('Visit status updated successfully!');
+            setTimeout(() => setToast(null), 3000);
+        } catch (error) {
+            console.error('Error updating visit:', error);
+            setToast('Failed to update visit status.');
+            setTimeout(() => setToast(null), 3000);
+        }
+    };
 
+    // Top-level debug log (safe)
     useEffect(() => {
-        const patientService = new PatientService();
+        console.log('handleUpdateVisitStatus is a function:', typeof handleUpdateVisitStatus);
+    }, []);
 
-        const fetchData = async () => {
-            try {
-                const vDays = getVisibleDays(currentDate, calendarView);
-                if (vDays.length === 0) return;
-                
-                // Fetch perfectly aligned with the visual grid columns
-                const startDate = vDays[0].date;
-                const endDate = vDays[vDays.length - 1].date;
-
-                const [patientsData, visitsData, staffData, apptsData] = await Promise.all([
-                    patientService.getAllPatients(),
-                    patientService.getPrenatalVisits(),
-                    patientService.getAllMidwives(),
-                    patientService.getAppointments(startDate, endDate, calendarView)
-                ]);
-
-                setLivePatients(patientsData || []);
-                setVisitsTable(visitsData || []);
-                setStaffList(staffData || []);
-                setAppointments(apptsData || []);
-
-            } catch (error) {
-                console.error(error);
-            }
-        };
-
+    // Now useEffect for channel
+    useEffect(() => {
         fetchData();
 
         const subscription = patientService.supabase
@@ -232,6 +248,7 @@ const PrenatalVisits = () => {
 
     const formatNavLabel = () => {
         if (calendarView === 'day') return currentDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
+        const visibleDays = getVisibleDays(currentDate, calendarView);
         if (!visibleDays || visibleDays.length === 0) return '';
         const start = new Date(visibleDays[0].date);
         const end = new Date(visibleDays[visibleDays.length - 1].date);
@@ -287,6 +304,7 @@ const PrenatalVisits = () => {
         setTimeout(() => setToast(null), 3000);
     };
 
+    const visibleDays = getVisibleDays(currentDate, calendarView);
     const filteredVisits = visitsTable.filter(v =>
         (v.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
          v.patientId?.toLowerCase().includes(searchTerm.toLowerCase())) &&
@@ -314,7 +332,7 @@ const PrenatalVisits = () => {
                 </div>
                 <div className="header-actions">
                     <button className="btn btn-primary" onClick={() => {
-                        setSelectedSlot({ date: visibleDays[0].date, time: '08:00 AM' });
+                        setSelectedSlot({ date: visibleDays[0]?.date, time: '08:00 AM' });
                         setBookingPanelOpen(true);
                     }}>
                         <Plus size={16} /> Schedule Visit
@@ -528,6 +546,7 @@ const PrenatalVisits = () => {
                 <ScheduledVisitModal 
                     visit={selectedVisit}
                     onClose={() => setSelectedVisit(null)}
+                    onUpdateStatus={handleUpdateVisitStatus}
                 />
             )}
         </div>

@@ -6,10 +6,12 @@ import {
     ExternalLink, ChevronRight
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import PatientService from '../../services/patientservice';
 import '../../styles/components/ScheduledVisitModal.css';
 
-const ScheduledVisitModal = ({ visit, onClose, onUpdateStatus }) => {
+const ScheduledVisitModal = ({ visit, onClose }) => {
     const navigate = useNavigate();
+    const patientService = new PatientService();
     const [status, setStatus] = useState(visit.status || 'Upcoming');
     const [notes, setNotes] = useState('');
     const [isSaving, setIsSaving] = useState(false);
@@ -20,20 +22,45 @@ const ScheduledVisitModal = ({ visit, onClose, onUpdateStatus }) => {
         setStatus(newStatus);
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
+        const updates = {
+            status,
+            clinical_notes: notes.trim() || null,  // Your fix
+            attended_date: status === 'Attended' ? new Date().toISOString() : visit.attended_date,
+            missed_reason: status === 'Missed' ? notes || null : null
+        };
+
+        // 🆕 ADD THIS LOG - see exact payload before Supabase call
+        console.log('🔄 Sending updates to Supabase:', {
+            visitId: visit.id,
+            updates,
+            notesRaw: notes  // Raw textarea value
+        });
+
         setIsSaving(true);
-        // Simulate API call
-        setTimeout(() => {
-            onUpdateStatus(visit.id, { status, notes });
-            setIsSaving(false);
-            onClose();
-        }, 800);
+        try {
+            const result = await patientService.updatePrenatalVisitStatus(visit.id, updates);
+            
+            // 🆕 ADD THIS LOG - see Supabase response
+            console.log('✅ Update SUCCESS:', result);
+        } catch (error) {
+            // 🆕 ENHANCED ERROR LOG
+            console.error('❌ Supabase ERROR:', {
+                message: error.message,
+                code: error.code,
+                details: error.details,
+                hint: error.hint,
+                fullError: error
+            });
+        }
+        setIsSaving(false);
+        onClose();
     };
 
     const getStatusClass = (s) => {
         switch (s.toLowerCase()) {
-            case 'completed':
-            case 'attended': return 'completed';
+            case 'attended':
+            case 'completed': return 'completed';
             case 'missed': return 'missed';
             case 'rescheduled': return 'rescheduled';
             case 'cancelled': return 'cancelled';
@@ -114,9 +141,8 @@ const ScheduledVisitModal = ({ visit, onClose, onUpdateStatus }) => {
                         <h3 className="sv-section-title">Visit Status & Outcome</h3>
                         <div className="sv-status-options">
                             {[
-                                { label: 'Attended / Completed', icon: CheckCircle2, value: 'Completed', class: 'completed' },
+                                { label: 'Attended', icon: CheckCircle2, value: 'Attended', class: 'completed' },
                                 { label: 'Missed', icon: AlertCircle, value: 'Missed', class: 'missed' },
-                                { label: 'Rescheduled', icon: RefreshCcw, value: 'Rescheduled', class: 'rescheduled' },
                                 { label: 'Cancelled', icon: SidebarClose, value: 'Cancelled', class: 'cancelled' }
                             ].map(opt => (
                                 <button 
