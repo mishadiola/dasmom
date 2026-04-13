@@ -218,6 +218,11 @@ const UserAccount = () => {
 
     return (
         <div className="user-account-container">
+            {/* ── Page Title ── */}
+            <div className="page-header" style={{ marginBottom: '16px' }}>
+                <h1 className="page-title">User Account</h1>
+            </div>
+
             {/* ── Profile Header ── */}
             <header className="account-header-card">
                 <div className="account-avatar-section">

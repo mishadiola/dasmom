@@ -798,8 +798,83 @@
 .btn-outline {
     background: white;
     border: 1.5px solid #eef0f4;
-    padding: 10px 20px;
-    border-radius: 10px;
+    padding: 10px 16px;
+    border-radius: 8px;
     font-weight: 600;
     cursor: pointer;
+}
+
+/* ════════════════════════════
+   PAGINATION
+════════════════════════════ */
+.pagination-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-top: 1px solid #eef0f4;
+    background: #fcfcfd;
+    flex-wrap: wrap;
+    gap: 16px;
+    border-radius: 0 0 16px 16px;
+}
+
+.pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.page-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1.5px solid #eef0f4;
+    background: #fff;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.page-btn:hover:not(:disabled) {
+    border-color: var(--color-rose);
+    color: var(--color-rose);
+}
+
+.page-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #f8f9fb;
+}
+
+.page-numbers {
+    display: flex;
+    gap: 4px;
+}
+
+.page-num {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1.5px solid transparent;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.page-num:hover {
+    background: #f4f6f9;
+}
+
+.page-num.active {
+    background: var(--color-rose);
+    color: #fff;
+    box-shadow: 0 4px 10px rgba(185, 129, 138, 0.3);
 }

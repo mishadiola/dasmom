@@ -72,7 +72,7 @@ const PregnancyResources = () => {
             {/* ── Header ── */}
             <div className="pr-header">
                 <div className="pr-header-title">
-                    <h1>Pregnancy Tips &amp; Resources Management</h1>
+                    <h1>Pregnancy Resources</h1>
                     <p>Manage educational content for mothers using the DasMom+ app.</p>
                 </div>
                 <div className="pr-actions">

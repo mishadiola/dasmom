@@ -15,10 +15,58 @@
 /* ════════════════════════════
    SUMMARY STAT CARDS
 ════════════════════════════ */
-.hr-stats-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
+.high-risk-page .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+}
+
+.header-kpi-card {
+    display: flex;
+    align-items: center;
     gap: 16px;
+    background: white;
+    padding: 12px 24px;
+    border-radius: 16px;
+    border: 1px solid rgba(224, 92, 115, 0.2);
+    box-shadow: 0 4px 15px rgba(224, 92, 115, 0.08);
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.header-kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(224, 92, 115, 0.12);
+}
+
+.kpi-icon-wrap {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(224, 92, 115, 0.1);
+    color: var(--color-rose);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.kpi-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+}
+
+.kpi-value {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--color-rose);
+    line-height: 1;
 }
 
 /* ════════════════════════════
@@ -605,6 +653,80 @@
 
 @keyframes spin {
     to { transform: rotate(360deg); }
+}
+
+/* ════════════════════════════
+   PAGINATION
+════════════════════════════ */
+.pagination-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-top: 1px solid #eef0f4;
+    background: #fcfcfd;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.page-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1.5px solid #eef0f4;
+    background: #fff;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.page-btn:hover:not(:disabled) {
+    border-color: var(--color-rose);
+    color: var(--color-rose);
+}
+
+.page-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #f8f9fb;
+}
+
+.page-numbers {
+    display: flex;
+    gap: 4px;
+}
+
+.page-num {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1.5px solid transparent;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.page-num:hover {
+    background: #f4f6f9;
+}
+
+.page-num.active {
+    background: var(--color-rose);
+    color: #fff;
+    box-shadow: 0 4px 10px rgba(185, 129, 138, 0.3);
 }
 
 /* ════════════════════════════

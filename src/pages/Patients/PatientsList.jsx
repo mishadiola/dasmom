@@ -424,7 +424,11 @@ const PatientsList = () => {
                                         <td>
                                             <div className="cell-appt">
                                                 <Clock size={13} className="appt-icon" />
-                                                <span className="appt-date">-</span>
+                                                {p.nextAppt ? (
+                                                    <span className="appt-date">{p.nextAppt}</span>
+                                                ) : (
+                                                    <span className="appt-date appt-none">No upcoming appt</span>
+                                                )}
                                             </div>
                                         </td>
 

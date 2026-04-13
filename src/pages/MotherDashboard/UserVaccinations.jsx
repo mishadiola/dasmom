@@ -123,7 +123,7 @@ const UserVaccinations = () => {
         <div className="user-vaccinations-page">
             <div className="uv-header">
                 <div className="uv-title-area">
-                    <h1>Vaccinations & Immunizations</h1>
+                    <h1>Vaccinations</h1>
                     <p>Keep track of your and your baby’s vaccinations to ensure safety and healthy development.</p>
                 </div>
                 <div className="uv-actions">

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
     Search, Filter, AlertTriangle, Eye, 
     FileText, MapPin, Calendar, HeartPulse,
-    ChevronRight, ArrowUpRight, AlertCircle, Activity
+    ChevronRight, ChevronLeft, ArrowUpRight, AlertCircle, Activity
 } from 'lucide-react';
 import PatientService from '../../services/patientservice';
 import '../../styles/pages/HighRiskCases.css';
@@ -28,6 +28,8 @@ const HighRiskCases = () => {
     const [patients, setPatients] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStation, setFilterStation] = useState('All');
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 20;
 
     const service = useMemo(() => new PatientService(), []);
 
@@ -98,6 +100,10 @@ const HighRiskCases = () => {
         return matchesSearch && matchesStation;
     });
 
+    const totalPages = Math.ceil(filteredPatients.length / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const paginatedPatients = filteredPatients.slice(startIndex, startIndex + itemsPerPage);
+
     const getStationDistribution = () => {
         const counts = {};
         patients.forEach(p => {
@@ -115,13 +121,6 @@ const HighRiskCases = () => {
         return 'row-monitor';
     };
 
-    const STAT_CARDS = [
-        { label: 'Total High-Risk', value: stats.totalHighRisk, color: 'rose', icon: AlertTriangle },
-        { label: 'Critical Today', value: stats.criticalToday, color: 'orange', icon: HeartPulse },
-        { label: 'Missed Follow-ups', value: stats.missedFollowups, color: 'pink', icon: Calendar },
-        { label: 'Needs Referral', value: stats.needsImmediate, color: 'lilac', icon: ChevronRight },
-    ];
-
     if (loading) return (
         <div className="high-risk-page">
             <div className="loading-state">
@@ -138,30 +137,21 @@ const HighRiskCases = () => {
                 <div>
                     <h1 className="page-title">
                         <AlertTriangle size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} />
-                        High-Risk Case Management
+                        High Risk Cases
                     </h1>
                     <p className="page-subtitle">Dynamic monitoring of critical pregnancies and priority follow-ups</p>
                 </div>
-                <div className="header-actions">
+                
+                {/* ── Header KPI ── */}
+                <div className="header-kpi-card">
+                    <div className="kpi-icon-wrap">
+                        <AlertTriangle size={20} />
+                    </div>
+                    <div>
+                        <span className="kpi-label">Total High-Risk Cases</span>
+                        <div className="kpi-value">{stats.totalHighRisk}</div>
+                    </div>
                 </div>
-            </div>
-
-            {/* ── Summary Stats ── */}
-            <div className="hr-stats-grid">
-                {STAT_CARDS.map(s => {
-                    const Icon = s.icon;
-                    return (
-                        <div key={s.label} className={`stat-card stat-card--${s.color}`}>
-                            <div className="stat-top">
-                                <div className={`stat-icon stat-icon--${s.color}`}>
-                                    <Icon size={20} />
-                                </div>
-                            </div>
-                            <div className="stat-value">{s.value}</div>
-                            <div className="stat-label">{s.label}</div>
-                        </div>
-                    );
-                })}
             </div>
 
             {/* ── Search & Filters ── */}
@@ -173,14 +163,14 @@ const HighRiskCases = () => {
                         className="hr-search-input"
                         placeholder="Search by name or patient ID..." 
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                     />
                 </div>
                 <div className="hr-filters-row">
                     <span className="filters-label"><Filter size={13} /> Filters:</span>
                     <select 
                         value={filterStation}
-                        onChange={(e) => setFilterStation(e.target.value)}
+                        onChange={(e) => { setFilterStation(e.target.value); setCurrentPage(1); }}
                     >
                         <option value="All">All Stations</option>
                         {stationDistribution.map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
@@ -219,7 +209,7 @@ const HighRiskCases = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredPatients.length > 0 ? filteredPatients.map((p) => (
+                                    {paginatedPatients.length > 0 ? paginatedPatients.map((p) => (
                                         <tr key={p.id} className={getRowClass(p)}>
                                             <td>
                                                 <div className="patient-cell" onClick={() => navigate(`/dashboard/patients/${p.id}`)} style={{ cursor: 'pointer' }}>
@@ -268,6 +258,36 @@ const HighRiskCases = () => {
                                 </tbody>
                             </table>
                         </div>
+
+                        {totalPages > 1 && (
+                            <div className="pagination-wrap">
+                                <span>
+                                    Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredPatients.length)} of {filteredPatients.length}
+                                </span>
+
+                                <div className="pagination-controls">
+                                    <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="page-btn">
+                                        <ChevronLeft size={16} />
+                                    </button>
+
+                                    <div className="page-numbers">
+                                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(num => (
+                                            <button 
+                                                key={num}
+                                                className={`page-num ${currentPage === num ? 'active' : ''}`}
+                                                onClick={() => setCurrentPage(num)}
+                                            >
+                                                {num}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="page-btn">
+                                        <ChevronRight size={16} />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 

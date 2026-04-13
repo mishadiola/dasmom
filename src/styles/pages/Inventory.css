@@ -16,47 +16,30 @@
 /* ── STATS CARDS ── */
 .inv-stats-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 20px;
 }
 
-.stat-card {
-    background: white;
-    border-radius: 16px;
-    padding: 24px;
-    border: 1px solid #eef0f4;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+.inv-main-layout {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 20px;
+    align-items: start;
+}
+
+.inv-table-col {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 24px;
 }
 
-.stat-header {
+.inv-side-col {
     display: flex;
-    align-items: center;
-    gap: 10px;
+    flex-direction: column;
+    gap: 20px;
 }
 
-.stat-icon {
-    padding: 8px;
-    border-radius: 10px;
-}
 
-.stat-card--total .stat-icon { background: rgba(185, 129, 138, 0.1); color: var(--color-rose); }
-.stat-card--low   .stat-icon { background: rgba(232, 184, 75, 0.1);  color: #a87c12; }
-.stat-card--out   .stat-icon { background: rgba(224, 92, 115, 0.1);  color: #b73a52; }
-
-.stat-label {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--color-text-muted);
-}
-
-.stat-value {
-    font-size: 28px;
-    font-weight: 800;
-    color: var(--color-text);
-}
 
 /* ── CONTROLS ── */
 .inv-controls {
@@ -316,8 +299,13 @@
 .empty-icon { opacity: 0.2; margin-bottom: 12px; }
 
 /* Responsive */
+@media (max-width: 1200px) {
+    .inv-stats-grid { grid-template-columns: repeat(3, 1fr); }
+    .inv-main-layout { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 900px) {
-    .inv-stats-grid { grid-template-columns: 1fr 1fr; }
+    .inv-stats-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 600px) {

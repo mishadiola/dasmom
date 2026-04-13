@@ -99,6 +99,8 @@ const PrenatalVisits = () => {
 
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('All');
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 20;
     const [bookingPanelOpen, setBookingPanelOpen] = useState(false);
     const [currentDate, setCurrentDate] = useState(new Date());
     const [toast, setToast] = useState(null);
@@ -311,6 +313,10 @@ const PrenatalVisits = () => {
         (filterStatus === 'All' || v.status === filterStatus)
     );
 
+    const totalPages = Math.ceil(filteredVisits.length / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const paginatedVisits = filteredVisits.slice(startIndex, startIndex + itemsPerPage);
+
     const getRowClass = (status) => {
         if (status === 'Upcoming') return 'tr-upcoming';
         if (status === 'Completed') return 'tr-completed';
@@ -327,7 +333,7 @@ const PrenatalVisits = () => {
             {/* Page Header */}
             <div className="page-header">
                 <div>
-                    <h1 className="page-title">Prenatal Visits & Scheduling</h1>
+                    <h1 className="page-title">Visits & Scheduling</h1>
                     <p className="page-subtitle">30 slots/day max (25 regular + 5 rescheduling)</p>
                 </div>
                 <div className="header-actions">
@@ -427,16 +433,21 @@ const PrenatalVisits = () => {
                         <span className="legend-chip chip-waiting">Waiting</span>
                     </div>
                     <div className="table-filters">
-                        <div className="search-box">
-                            <Search size={14} />
-                            <input
-                                type="text"
-                                placeholder="Search patient..."
+                        <div className="header-search">
+                            <Search size={14} className="hs-icon" />
+                            <input 
+                                type="text" 
+                                placeholder="Search patient..." 
                                 value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
+                                onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                                className="hs-input"
                             />
                         </div>
-                        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                        <select 
+                            className="header-filter-select"
+                            value={filterStatus}
+                            onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}
+                        >
                             <option value="All">All Statuses</option>
                             <option value="Completed">Completed</option>
                             <option value="Waiting">Waiting</option>
@@ -459,7 +470,7 @@ const PrenatalVisits = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredVisits.map(visit => (
+                            {paginatedVisits.map(visit => (
                                 <tr key={visit.id} className={getRowClass(visit.status)}>
                                     <td className="cell-date"><CalendarCheck size={14} /> {visit.visitDate}</td>
                                     <td>
@@ -487,6 +498,36 @@ const PrenatalVisits = () => {
                         </tbody>
                     </table>
                 </div>
+
+                {totalPages > 1 && (
+                    <div className="pagination-wrap">
+                        <span>
+                            Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredVisits.length)} of {filteredVisits.length}
+                        </span>
+
+                        <div className="pagination-controls">
+                            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="page-btn">
+                                <ChevronLeft size={16} />
+                            </button>
+
+                            <div className="page-numbers">
+                                {Array.from({ length: totalPages }, (_, i) => i + 1).map(num => (
+                                    <button 
+                                        key={num}
+                                        className={`page-num ${currentPage === num ? 'active' : ''}`}
+                                        onClick={() => setCurrentPage(num)}
+                                    >
+                                        {num}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="page-btn">
+                                <ChevronRight size={16} />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* BOOKING PANEL */}

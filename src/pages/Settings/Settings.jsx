@@ -747,7 +747,7 @@ const Settings = () => {
             {/* ── Page Header ── */}
             <div className="page-header">
                 <div>
-                    <h1 className="page-title"><SettingsIcon size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Settings &amp; Account Management</h1>
+                    <h1 className="page-title"><SettingsIcon size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Settings</h1>
                     <p className="page-subtitle">Manage users, roles, system preferences, and audit logs</p>
                 </div>
             </div>

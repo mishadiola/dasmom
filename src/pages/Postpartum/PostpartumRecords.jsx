@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Search, Filter, Baby, Heart, AlertTriangle, Clock,
@@ -6,55 +6,24 @@ import {
     AlertCircle, FileText, MapPin, Activity, Thermometer,
     Brain, Milk, Calendar, TrendingUp, Download, X
 } from 'lucide-react';
+import babyService from '../../services/babyservices';
 import '../../styles/pages/PostpartumRecords.css';
 
 /* ════════════════════════════
-   MOCK DATA
-════════════════════════════ */
-const SUMMARY_STATS = [
-    { label: 'Recent Deliveries (42 days)', value: 58, color: 'lilac', icon: Baby },
-    { label: 'Due for Postpartum Visit', value: 21, color: 'pink', icon: Calendar },
-    { label: 'Missed Follow-ups', value: 6, color: 'orange', icon: XCircle },
-    { label: 'With Complications', value: 4, color: 'rose', icon: AlertTriangle },
-    { label: 'Recovered Mothers', value: 27, color: 'sage', icon: CheckCircle2 },
-];
-
-const MOCK_MOTHERS = [];
-
-const SYSTEM_ALERTS = [];
-
-const BARANGAY_RECOVERY = [
-    { name: 'Station 1', total: 12, recovered: 9 },
-    { name: 'Station 2', total: 8, recovered: 5 },
-    { name: 'Station 3', total: 14, recovered: 10 },
-    { name: 'Station 4', total: 10, recovered: 8 },
-    { name: 'Station 5', total: 7, recovered: 3 },
-    { name: 'Station 7', total: 7, recovered: 6 },
-];
-
-/* ════════════════════════════
    POSTPARTUM DETAIL MODAL
-════════════════════════════ */
-const FOLLOW_UP_SCHEDULE = [
-    { label: '24–48 Hours', key: 'd1' },
-    { label: '7 Days', key: 'd7' },
-    { label: '14 Days', key: 'd14' },
-    { label: '6 Weeks', key: 'w6' },
-];
-
-const MOCK_DETAIL = {};
-
+   ════════════════════════════ */
 const DetailModal = ({ mother, onClose }) => {
-    const detail = MOCK_DETAIL[mother.id] || {
+    // Basic assessment details - these could eventually be fetched from a specific assessment table
+    const detail = {
         deliveryFacility: 'Dasmariñas CHO',
         attendingStaff: 'Midwife Elena P.',
-        deliveryComplications: 'None',
+        deliveryComplications: mother.complications || 'None',
         birthWeight: '3.2 kg',
         breastfeeding: 'Exclusive',
         mhStatus: 'Normal',
         woundCondition: mother.deliveryType === 'CS' ? 'Healing Well' : 'N/A (NSD)',
         followUps: { d1: 'Completed', d7: 'Completed', d14: 'Upcoming', w6: 'Upcoming' },
-        vitals: [{ date: 'Feb 25', bp: mother.bp, temp: mother.temp, weight: mother.weight }]
+        vitals: [{ date: 'Latest', bp: '120/80', temp: '36.6', weight: '65kg' }]
     };
 
     const followUpStatusClass = (s) => {
@@ -90,7 +59,6 @@ const DetailModal = ({ mother, onClose }) => {
                             <div className="detail-item"><span>Delivery Type</span><strong>{mother.deliveryType}</strong></div>
                             <div className="detail-item"><span>Attending Staff</span><strong>{detail.attendingStaff}</strong></div>
                             <div className="detail-item"><span>Complications During Delivery</span><strong>{detail.deliveryComplications}</strong></div>
-                            <div className="detail-item"><span>Baby Birth Weight</span><strong>{detail.birthWeight}</strong></div>
                             <div className="detail-item"><span>Baby Outcome</span><strong>{mother.babyOutcome}</strong></div>
                         </div>
                     </section>
@@ -107,8 +75,8 @@ const DetailModal = ({ mother, onClose }) => {
                                     {detail.vitals.map((v, i) => (
                                         <tr key={i}>
                                             <td className="vt-date">{v.date}</td>
-                                            <td className={parseFloat(v.bp) > 130 ? 'vt-high' : ''}>{v.bp}</td>
-                                            <td className={parseFloat(v.temp) > 37.5 ? 'vt-high' : ''}>{v.temp}</td>
+                                            <td>{v.bp}</td>
+                                            <td>{v.temp}</td>
                                             <td>{v.weight}</td>
                                         </tr>
                                     ))}
@@ -122,7 +90,7 @@ const DetailModal = ({ mother, onClose }) => {
                         <h3 className="modal-section-title"><FileText size={15} /> Wound / Physical Assessment</h3>
                         <div className="detail-grid">
                             <div className="detail-item"><span>Incision / Wound Condition</span><strong>{detail.woundCondition}</strong></div>
-                            <div className="detail-item"><span>Current Complications</span><strong>{mother.complications === 'None' ? 'None' : mother.complications}</strong></div>
+                            <div className="detail-item"><span>Current Complications</span><strong>{mother.complications}</strong></div>
                             <div className="detail-item"><span>Recovery Progress</span>
                                 <div className="progress-wrap">
                                     <div className="progress-bar">
@@ -143,38 +111,6 @@ const DetailModal = ({ mother, onClose }) => {
                                 : <><AlertTriangle size={16} /> Counseling recommended — depression signs observed</>
                             }
                         </div>
-                        <div className="mh-checklist">
-                            {['Mood Changes', 'Sleep Difficulty', 'Anxiety', 'Postpartum Depression Signs'].map(item => (
-                                <label key={item} className="mh-check-item">
-                                    <input type="checkbox" defaultChecked={detail.mhStatus !== 'Normal'} readOnly />
-                                    <span>{item}</span>
-                                </label>
-                            ))}
-                        </div>
-                    </section>
-
-                    {/* E. Breastfeeding */}
-                    <section className="modal-section">
-                        <h3 className="modal-section-title"><Milk size={15} /> Breastfeeding Status</h3>
-                        <div className="bf-options">
-                            {['Exclusive', 'Mixed Feeding', 'Difficulty', 'Counseling Provided'].map(opt => (
-                                <span key={opt} className={`bf-chip ${detail.breastfeeding === opt ? 'bf-chip--active' : ''}`}>{opt}</span>
-                            ))}
-                        </div>
-                    </section>
-
-                    {/* F. Follow-up Schedule */}
-                    <section className="modal-section">
-                        <h3 className="modal-section-title"><Calendar size={15} /> Postpartum Follow-up Schedule</h3>
-                        <div className="followup-schedule">
-                            {FOLLOW_UP_SCHEDULE.map(fu => (
-                                <div key={fu.key} className={`fu-item ${followUpStatusClass(detail.followUps[fu.key])}`}>
-                                    {followUpIcon(detail.followUps[fu.key])}
-                                    <span className="fu-label">{fu.label}</span>
-                                    <span className="fu-status">{detail.followUps[fu.key]}</span>
-                                </div>
-                            ))}
-                        </div>
                     </section>
                 </div>
 
@@ -190,18 +126,50 @@ const DetailModal = ({ mother, onClose }) => {
 
 /* ════════════════════════════
    MAIN COMPONENT
-════════════════════════════ */
+   ════════════════════════════ */
 const PostpartumRecords = () => {
     const navigate = useNavigate();
+    const [stats, setStats] = useState([]);
+    const [stationStats, setStationStats] = useState([]);
+    const [mothers, setMothers] = useState([]);
+    const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState({
-        deliveryType: 'All', stage: 'All', recovery: 'All', station: 'All', followUp: 'All'
+        deliveryType: 'All', recovery: 'All', station: 'All', followUp: 'All'
     });
     const [selectedMother, setSelectedMother] = useState(null);
 
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                setLoading(true);
+                const [statData, newRecords] = await Promise.all([
+                    babyService.getPostpartumStats(),
+                    babyService.getPostpartumRecords()
+                ]);
+                setStats(statData.summary || []);
+                setStationStats(statData.stationRecovery || []);
+                setMothers(newRecords || []);
+            } catch (error) {
+                console.error('Error fetching postpartum data:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, []);
+
+    const iconMap = {
+        Baby,
+        Calendar,
+        XCircle,
+        AlertTriangle,
+        CheckCircle2
+    };
+
     const handleFilter = (key, val) => setFilters(prev => ({ ...prev, [key]: val }));
 
-    const filtered = MOCK_MOTHERS.filter(m => {
+    const filtered = mothers.filter(m => {
         const s = searchTerm.toLowerCase();
         const matchSearch = m.name.toLowerCase().includes(s) || m.patientId.toLowerCase().includes(s) || m.station.toLowerCase().includes(s);
         const matchDT = filters.deliveryType === 'All' || m.deliveryType === filters.deliveryType;
@@ -229,8 +197,6 @@ const PostpartumRecords = () => {
         return 'fu-badge-upcoming';
     };
 
-    const maxStation = Math.max(...BARANGAY_RECOVERY.map(b => b.total));
-
     return (
         <div className="pp-page">
 
@@ -248,8 +214,9 @@ const PostpartumRecords = () => {
 
             {/* ── Summary Cards ── */}
             <div className="pp-stats-grid">
-                {SUMMARY_STATS.map((s) => {
-                    const Icon = s.icon;
+                {(loading ? [1, 2, 3, 4, 5] : stats).map((s, idx) => {
+                    if (loading) return <div key={idx} className="stat-card skeleton-loading" style={{ height: '120px' }} />;
+                    const Icon = iconMap[s.icon] || Baby;
                     return (
                         <div key={s.label} className={`stat-card stat-card--${s.color}`}>
                             <div className="stat-top">
@@ -297,7 +264,7 @@ const PostpartumRecords = () => {
                     </select>
                     <select value={filters.station} onChange={e => handleFilter('station', e.target.value)}>
                         <option value="All">All Stations</option>
-                        {[1, 2, 3, 4, 5, 7].map(n => <option key={n} value={`Station ${n}`}>Station {n}</option>)}
+                        {[...new Set(mothers.map(m => m.station))].map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                 </div>
             </div>
@@ -400,15 +367,27 @@ const PostpartumRecords = () => {
                             <h2><AlertTriangle size={17} /> System Alerts</h2>
                         </div>
                         <div className="alerts-list">
-                            {SYSTEM_ALERTS.map(a => (
-                                <div key={a.id} className={`alert-item alert-${a.type}`}>
+                            {filtered.filter(m => m.recoveryStatus === 'Complication').map(m => (
+                                <div key={m.id} className="alert-item alert-critical">
                                     <div className="alert-dot"></div>
                                     <div className="alert-body">
-                                        <p>{a.text}</p>
-                                        <span>{a.time}</span>
+                                        <p>{m.name} has complications: {m.complications}</p>
+                                        <span>Patient ID: {m.patientId}</span>
                                     </div>
                                 </div>
                             ))}
+                            {filtered.filter(m => m.followUpStatus === 'Missed').map(m => (
+                                <div key={m.id} className="alert-item alert-warning">
+                                    <div className="alert-dot"></div>
+                                    <div className="alert-body">
+                                        <p>{m.name} missed follow-up on {m.nextFollowUp}</p>
+                                        <span>Station: {m.station}</span>
+                                    </div>
+                                </div>
+                            ))}
+                            {filtered.filter(m => m.recoveryStatus === 'Complication' || m.followUpStatus === 'Missed').length === 0 && (
+                                <p className="pp-empty-side">No urgent alerts found.</p>
+                            )}
                         </div>
                     </div>
 
@@ -418,8 +397,8 @@ const PostpartumRecords = () => {
                             <h2><MapPin size={17} /> Station Recovery</h2>
                         </div>
                         <div className="station-list">
-                            {BARANGAY_RECOVERY.map(b => {
-                                const pct = Math.round((b.recovered / b.total) * 100);
+                            {stationStats.map(b => {
+                                const pct = Math.round((b.recovered / b.total) * 100) || 0;
                                 return (
                                     <div key={b.name} className="station-row">
                                         <div className="station-name-row">
@@ -432,6 +411,7 @@ const PostpartumRecords = () => {
                                     </div>
                                 );
                             })}
+                            {stationStats.length === 0 && <p className="pp-empty-side">No station data available.</p>}
                         </div>
                     </div>
 

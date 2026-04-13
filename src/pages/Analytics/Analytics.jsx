@@ -150,7 +150,7 @@ const Analytics = () => {
             {/* ── Page Header ── */}
             <header className="analytics-header">
                 <div>
-                    <h1 className="page-title">Maternal Health Intelligence</h1>
+                    <h1 className="page-title">Analytics</h1>
                     <p className="page-subtitle">Proactive risk monitoring and population health insights</p>
                 </div>
                 <div className="header-actions">

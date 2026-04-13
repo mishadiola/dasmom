@@ -99,7 +99,7 @@ const MyVitals = () => {
                         <ArrowLeft size={18} />
                     </button>
                     <div>
-                        <h1>My Vitals</h1>
+                        <h1>Record Vitals</h1>
                         <p>Track your pregnancy health safely and conveniently</p>
                     </div>
                 </div>

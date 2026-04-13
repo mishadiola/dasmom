@@ -43,7 +43,7 @@ const UserSettings = () => {
     return (
         <div className="user-settings-container">
             <header className="settings-header">
-                <h1>Account Settings</h1>
+                <h1>Settings</h1>
                 <p>Manage your personal information and security</p>
             </header>
 

@@ -191,7 +191,7 @@ const PregnancyDeliveryInfo = () => {
             {/* ── Page Header ── */}
             <div className="pdi-header">
                 <div className="pdi-header-text">
-                    <h1><Baby size={26} /> Pregnancy &amp; Delivery Info</h1>
+                    <h1><Baby size={26} /> Delivery Info</h1>
                     <p>Your past pregnancy history and delivery preferences — all in one place.</p>
                 </div>
                 <div className="pdi-header-actions">

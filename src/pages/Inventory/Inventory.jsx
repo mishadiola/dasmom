@@ -12,9 +12,11 @@ import {
   Pill,
 } from 'lucide-react';
 import InventoryService from '../../services/inventoryservice';
+import PatientService from '../../services/patientservice';
 import '../../styles/pages/Inventory.css';
 
 const inventoryService = new InventoryService();
+const patientService = new PatientService();
 
 const Inventory = () => {
   const [activeTab, setActiveTab] = useState('vaccines');
@@ -23,6 +25,7 @@ const Inventory = () => {
   const [supplements, setSupplements] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [vaccStats, setVaccStats] = useState({ mothersPending: 0, newbornsPending: 0 });
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(null);
@@ -32,10 +35,13 @@ const Inventory = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [vaxData, suppData] = await Promise.all([
+      const [vaxData, suppData, statsData] = await Promise.all([
         inventoryService.getVaccineInventory(),
         inventoryService.getSupplementInventory(),
+        patientService.getVaccinationStats()
       ]);
+
+      setVaccStats(statsData || { mothersPending: 0, newbornsPending: 0 });
 
       const mappedVaccines = (vaxData || []).map(row => ({
         id: row?.id || '',
@@ -161,28 +167,55 @@ const Inventory = () => {
       </div>
 
       <div className="inv-stats-grid">
-        <div className="stat-card stat-card--total">
-          <div className="stat-header">
-            <Package size={20} className="stat-icon" />
-            <span className="stat-label">Total Items</span>
+        <div className="stat-card stat-card--lilac">
+          <div className="stat-top">
+            <div className="stat-icon stat-icon--lilac">
+              <Package size={20} />
+            </div>
           </div>
           <div className="stat-value">{totalItems}</div>
+          <div className="stat-label">Total Items</div>
         </div>
-        <div className="stat-card stat-card--low">
-          <div className="stat-header">
-            <AlertTriangle size={20} className="stat-icon" />
-            <span className="stat-label">Low Stock</span>
+        <div className="stat-card stat-card--orange">
+          <div className="stat-top">
+            <div className="stat-icon stat-icon--orange">
+              <AlertTriangle size={20} />
+            </div>
           </div>
           <div className="stat-value">{lowStockCount}</div>
+          <div className="stat-label">Low Stock</div>
         </div>
-        <div className="stat-card stat-card--out">
-          <div className="stat-header">
-            <Package size={20} className="stat-icon" />
-            <span className="stat-label">Out of Stock</span>
+        <div className="stat-card stat-card--rose">
+          <div className="stat-top">
+            <div className="stat-icon stat-icon--rose">
+              <Package size={20} />
+            </div>
           </div>
           <div className="stat-value">{outOfStockCount}</div>
+          <div className="stat-label">Out of Stock</div>
+        </div>
+        <div className="stat-card stat-card--pink">
+          <div className="stat-top">
+            <div className="stat-icon stat-icon--pink">
+              <AlertTriangle size={20} />
+            </div>
+          </div>
+          <div className="stat-value">{vaccStats.mothersPending}</div>
+          <div className="stat-label">Mothers Pending Vaccines</div>
+        </div>
+        <div className="stat-card stat-card--sage">
+          <div className="stat-top">
+            <div className="stat-icon stat-icon--sage">
+              <AlertTriangle size={20} />
+            </div>
+          </div>
+          <div className="stat-value">{vaccStats.newbornsPending}</div>
+          <div className="stat-label">Newborns Pending Vaccines</div>
         </div>
       </div>
+
+      <div className="inv-main-layout">
+        <div className="inv-table-col">
 
       <div className="inv-controls">
         <div className="search-wrap">
@@ -314,6 +347,53 @@ const Inventory = () => {
           </table>
         </div>
       </div>
+    </div>
+
+    {/* ── ALERTS PANEL ── */}
+    <div className="inv-side-col">
+        <div className="inv-card">
+            <div className="inv-card-head" style={{ padding: '16px 20px', borderBottom: '1px solid #f0f2f5' }}>
+                <h2 style={{ fontSize: '15px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <AlertTriangle size={16} /> Notifications & Alerts
+                </h2>
+            </div>
+            <div className="alerts-list" style={{ padding: '8px 16px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {lowStockCount > 0 && (
+                    <div className="alert-item alert-warning" style={{ background: 'rgba(232,184,75,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px' }}>
+                        <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', marginTop: '4px', flexShrink: 0, background: '#e8b84b' }}></div>
+                        <div className="alert-body">
+                            <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Low Stock Warning</p>
+                            <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{lowStockCount} items are running low on stock.</span>
+                        </div>
+                    </div>
+                )}
+                {outOfStockCount > 0 && (
+                    <div className="alert-item alert-critical" style={{ background: 'rgba(224,92,115,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px' }}>
+                        <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', marginTop: '4px', flexShrink: 0, background: '#e05c73' }}></div>
+                        <div className="alert-body">
+                            <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Out of Stock</p>
+                            <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{outOfStockCount} items are currently out of stock!</span>
+                        </div>
+                    </div>
+                )}
+                {vaccStats.mothersPending > 0 && (
+                    <div className="alert-item alert-info" style={{ background: 'rgba(91,174,208,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px' }}>
+                        <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', marginTop: '4px', flexShrink: 0, background: '#5baed0' }}></div>
+                        <div className="alert-body">
+                            <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Patient Action Required</p>
+                            <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{vaccStats.mothersPending} mothers pending vaccines.</span>
+                        </div>
+                    </div>
+                )}
+                {lowStockCount === 0 && outOfStockCount === 0 && vaccStats.mothersPending === 0 && (
+                    <div style={{ textAlign: 'center', padding: '20px', fontSize: '12px', fontStyle: 'italic', color: 'var(--color-text-muted)' }}>
+                        No urgent alerts.
+                    </div>
+                )}
+            </div>
+        </div>
+    </div>
+  </div>
 
       {showAddModal && (
         <div

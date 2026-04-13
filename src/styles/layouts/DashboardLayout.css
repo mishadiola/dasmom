@@ -764,40 +764,31 @@
 .stat-card {
     border-radius: 16px;
     padding: 20px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
     position: relative;
     overflow: hidden;
 }
 
-/* Per-card themed backgrounds */
+/* Original Solid Backgrounds */
 .stat-card--rose {
-    background: linear-gradient(135deg, #c08e9a 0%, #b68191 100%);
-    border: 1px solid rgba(255,255,255,0.25);
-    box-shadow: 0 4px 14px rgba(182, 129, 145, 0.35);
+    background: #bb8896;
 }
 
 .stat-card--orange {
-    background: linear-gradient(135deg, #f2c9a8 0%, #edbd9a 100%);
-    border: 1px solid rgba(255,255,255,0.3);
-    box-shadow: 0 4px 14px rgba(237, 189, 154, 0.4);
+    background: #efc3a1;
 }
 
 .stat-card--pink {
-    background: linear-gradient(135deg, #ffebb6 0%, #ffe3a4 100%);
-    border: 1px solid rgba(255,255,255,0.3);
-    box-shadow: 0 4px 14px rgba(255, 227, 164, 0.5);
+    background: #ffe5a8;
 }
 
 .stat-card--sage {
-    background: linear-gradient(135deg, #b0ce92 0%, #a0c282 100%);
-    border: 1px solid rgba(255,255,255,0.25);
-    box-shadow: 0 4px 14px rgba(160, 194, 130, 0.4);
+    background: #a6c789;
 }
 
 .stat-card--lilac {
-    background: linear-gradient(135deg, #bcabca 0%, #ac97b4 100%);
-    border: 1px solid rgba(255,255,255,0.25);
-    box-shadow: 0 4px 14px rgba(172, 151, 180, 0.35);
+    background: #bcabca;
 }
 
 .stat-card:hover {
@@ -823,27 +814,27 @@
 
 .stat-icon--rose {
     background: rgba(255, 255, 255, 0.25);
-    color: #fff;
+    color: #1a1510;
 }
 
 .stat-icon--orange {
     background: rgba(255, 255, 255, 0.3);
-    color: #7a4a20;
+    color: #4a2d10;
 }
 
 .stat-icon--pink {
     background: rgba(255, 255, 255, 0.35);
-    color: #7a5a10;
+    color: #4a3a10;
 }
 
 .stat-icon--sage {
     background: rgba(255, 255, 255, 0.28);
-    color: #2e5c38;
+    color: #1a3a20;
 }
 
 .stat-icon--lilac {
     background: rgba(255, 255, 255, 0.25);
-    color: #4b3554;
+    color: #3b2544;
 }
 
 .stat-trend {

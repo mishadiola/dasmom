@@ -278,6 +278,128 @@ async getStaffForStation(station) {
         return [];
     }
 }
+
+/**
+ * Get detailed postpartum records for mothers
+ */
+async getPostpartumRecords() {
+    try {
+        const { data: deliveries, error } = await supabase
+            .from('deliveries')
+            .select(`
+                id, 
+                mother_id, 
+                delivery_date, 
+                delivery_type, 
+                complications, 
+                postpartum_visit_date,
+                notes,
+                patient_basic_info!deliveries_mother_id_fkey (
+                    id, first_name, last_name, barangay
+                ),
+                newborns (
+                    id, condition_at_birth, risk_level
+                )
+            `)
+            .order('delivery_date', { ascending: false });
+
+        if (error) throw error;
+
+        // Also check high-risk status from pregnancy_info
+        const motherIds = [...new Set(deliveries.map(d => d.mother_id))];
+        const { data: pregInfo } = await supabase
+            .from('pregnancy_info')
+            .select('patient_id, pregn_postp, calculated_risk')
+            .in('patient_id', motherIds);
+
+        const pregMap = new Map(pregInfo?.map(p => [p.patient_id, p]) || []);
+        const today = new Date();
+
+        return (deliveries || []).map(d => {
+            const mother = d.patient_basic_info;
+            const newborns = Array.isArray(d.newborns) ? d.newborns : [d.newborns].filter(Boolean);
+            const preg = pregMap.get(d.mother_id) || {};
+            
+            const deliveryDate = new Date(d.delivery_date);
+            const diffTime = Math.abs(today - deliveryDate);
+            const daysPP = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            // Determine recovery status
+            const hasComplications = (d.complications && d.complications.length > 0) || 
+                                   newborns.some(b => b.condition_at_birth === 'NICU');
+            
+            let recoveryStatus = 'Normal';
+            if (hasComplications) recoveryStatus = 'Complication';
+            else if (preg.calculated_risk === 'High Risk' || preg.calculated_risk === 'High') recoveryStatus = 'Monitoring';
+
+            // Determine follow-up status
+            let followUpStatus = 'Upcoming';
+            if (d.postpartum_visit_date) {
+                const fuDate = new Date(d.postpartum_visit_date);
+                if (fuDate < today) followUpStatus = 'Missed';
+            }
+
+            return {
+                id: d.id,
+                patientId: mother?.id || '',
+                name: `${mother?.first_name || ''} ${mother?.last_name || ''}`.trim(),
+                station: mother?.barangay || 'N/A',
+                deliveryDate: d.delivery_date,
+                deliveryType: d.delivery_type || 'NSD',
+                daysPostpartum: daysPP,
+                babyOutcome: newborns?.[0]?.condition_at_birth || 'Healthy',
+                recoveryStatus,
+                progress: Math.min(100, Math.round((daysPP / 42) * 100)),
+                lastCheckup: 'N/A', // Potentially join with visits table
+                nextFollowUp: d.postpartum_visit_date || 'TBD',
+                followUpStatus,
+                complications: d.complications && d.complications.length > 0 ? d.complications.join(', ') : 'None'
+            };
+        });
+    } catch (error) {
+        console.error('Error in getPostpartumRecords:', error);
+        return [];
+    }
+}
+
+/**
+ * Get summary stats for postpartum dashboard
+ */
+async getPostpartumStats() {
+    try {
+        const records = await this.getPostpartumRecords();
+        const today = new Date();
+        
+        const recent = records.filter(r => r.daysPostpartum <= 42).length;
+        const due = records.filter(r => r.followUpStatus === 'Upcoming' && r.nextFollowUp !== 'TBD').length;
+        const missed = records.filter(r => r.followUpStatus === 'Missed').length;
+        const complications = records.filter(r => r.recoveryStatus === 'Complication').length;
+        const recovered = records.filter(r => r.daysPostpartum > 42 && r.recoveryStatus === 'Normal').length;
+
+        // Calculate station distribution
+        const stationMap = {};
+        records.forEach(r => {
+            const stationName = r.station || 'Unknown';
+            if (!stationMap[stationName]) stationMap[stationName] = { name: stationName, total: 0, recovered: 0 };
+            stationMap[stationName].total++;
+            if (r.daysPostpartum > 42 && r.recoveryStatus === 'Normal') stationMap[stationName].recovered++;
+        });
+
+        return {
+            summary: [
+                { label: 'Recent Deliveries (42 days)', value: recent, color: 'lilac', icon: 'Baby' },
+                { label: 'Due for Postpartum Visit', value: due, color: 'pink', icon: 'Calendar' },
+                { label: 'Missed Follow-ups', value: missed, color: 'orange', icon: 'XCircle' },
+                { label: 'With Complications', value: complications, color: 'rose', icon: 'AlertTriangle' },
+                { label: 'Recovered Mothers', value: recovered, color: 'sage', icon: 'CheckCircle2' },
+            ],
+            stationRecovery: Object.values(stationMap).sort((a, b) => b.total - a.total)
+        };
+    } catch (error) {
+        console.error('Error in getPostpartumStats:', error);
+        return { summary: [], stationRecovery: [] };
+    }
+}
 }
 
 export default new BabyService();

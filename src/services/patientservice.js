@@ -41,49 +41,76 @@ export default class PatientService {
 
     if (err1) throw err1;
 
-    // 2. Get all pregnancies (or add filters later, e.g. active = true)
+    // 2. Get all pregnancies
     const { data: pregnancies, error: err2 } = await this.supabase
       .from('pregnancy_info')
       .select('patient_id, lmd, edd, calculated_risk, risk_factors');
     if (err2) throw err2;
 
-    // 3. Build a map: patient_id → pregnancy
+    // 3. Get all upcoming next_appt_date entries from prenatal_visits
+    const today = new Date().toISOString().split('T')[0];
+    const { data: visits, error: err3 } = await this.supabase
+      .from('prenatal_visits')
+      .select('patient_id, next_appt_date')
+      .not('next_appt_date', 'is', null)
+      .gte('next_appt_date', today)
+      .order('next_appt_date', { ascending: true });
+    if (err3) throw err3;
+
+    // 4. Build map: patient_id → earliest upcoming next_appt_date
+    const nextApptMap = new Map();
+    (visits || []).forEach(v => {
+      if (v.patient_id && v.next_appt_date) {
+        // Since ordered ascending, first occurrence = nearest upcoming date
+        if (!nextApptMap.has(v.patient_id)) {
+          nextApptMap.set(v.patient_id, v.next_appt_date);
+        }
+      }
+    });
+
+    // 5. Build a map: patient_id → pregnancy
     const pgiMap = new Map();
     (pregnancies || []).forEach(pgi => {
       if (pgi.patient_id) pgiMap.set(pgi.patient_id, pgi);
     });
 
-    // 4. Map patients + their pregnancy
-   const mapPatient = (p) => {
-  const pgi = pgiMap.get(p.id) || {};
+    // 6. Map patients + their pregnancy + next appointment
+    const mapPatient = (p) => {
+      const pgi = pgiMap.get(p.id) || {};
+      const lmp = pgi.lmd;
+      const weeks = lmp ? this.calculateWeeks(lmp) : 0;
+      const trimester = lmp ? this.getTrimesterFromWeek(weeks) : 1;
 
-  // Use lmd from pregnancy_info to compute trimester and weeks
-  const lmp = pgi.lmd;
-  const weeks = lmp ? this.calculateWeeks(lmp) : 0;
-  const trimester = lmp ? this.getTrimesterFromWeek(weeks) : 1;
+      const risk = (() => {
+        const r = (pgi.calculated_risk || '').toLowerCase();
+        if (r.includes('high')) return 'High';
+        if (r.includes('monitor')) return 'Monitor';
+        return 'Normal';
+      })();
 
-  // Map calculated_risk → 'High' / 'Monitor' / 'Normal'
-  const risk = (() => {
-    const r = (pgi.calculated_risk || '').toLowerCase();
-    if (r.includes('high')) return 'High';
-    if (r.includes('monitor')) return 'Monitor';
-    return 'Normal';
-  })();
+      // Format next appointment date
+      const rawNextAppt = nextApptMap.get(p.id) || null;
+      let nextAppt = null;
+      if (rawNextAppt) {
+        const d = new Date(rawNextAppt);
+        nextAppt = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
 
-  return {
-    id: p.id,
-    name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown Patient',
-    station: p.barangay || p.municipality || 'N/A',
-    age: p.date_of_birth
-      ? Math.floor((new Date() - new Date(p.date_of_birth)) / (365.25 * 24 * 60 * 60 * 1000))
-      : null,
-    trimester,
-    weeks,
-    risk,
-    edd: pgi.edd || null,
-    createdAt: p.created_at
-  };
-};
+      return {
+        id: p.id,
+        name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown Patient',
+        station: p.barangay || p.municipality || 'N/A',
+        age: p.date_of_birth
+          ? Math.floor((new Date() - new Date(p.date_of_birth)) / (365.25 * 24 * 60 * 60 * 1000))
+          : null,
+        trimester,
+        weeks,
+        risk,
+        edd: pgi.edd || null,
+        createdAt: p.created_at,
+        nextAppt,
+      };
+    };
 
     return patients
       .map(mapPatient)

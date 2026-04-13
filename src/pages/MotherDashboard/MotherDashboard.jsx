@@ -39,7 +39,8 @@ const MotherDashboard = () => {
             {/* ── Welcome Banner ── */}
             <div className="mother-welcome-banner">
                 <div className="welcome-text">
-                    <h1>Hello, Mommy! 👋</h1>
+                    <h1>Dashboard</h1>
+                    <p className="welcome-greeting">Hello, Mommy! 👋</p>
                     <p className="welcome-sub">Welcome to your personal maternal health portal. Here's your update for today.</p>
                     <p className="current-date">{today}</p>
                 </div>

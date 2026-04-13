@@ -562,7 +562,7 @@ const PregnancyTips = () => {
             {/* ── Header ── */}
             <div className="pt-header">
                 <div className="pt-header-text">
-                    <h1>Pregnancy Tips &amp; Resources</h1>
+                    <h1>Pregnancy Tips</h1>
                     <p>Expert guidance and care for every stage of your journey. 🌸</p>
                 </div>
                 <div className="pt-progress-pill">

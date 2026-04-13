@@ -205,10 +205,7 @@ const Vaccinations = () => {
     // Derived Stats for UI mapping
     const dynamicSummaryStats = [
         { label: 'Total Vaccinations Administered', value: stats.totalAdministered, color: 'lilac', icon: Syringe },
-        { label: 'Mothers Pending Vaccines', value: stats.mothersPending, color: 'pink', icon: AlertCircle },
-        { label: 'Newborns Pending Vaccines', value: stats.newbornsPending, color: 'orange', icon: AlertCircle },
         { label: 'Supplements Distributed', value: stats.supplementsDistributed, unit: 'units', color: 'sage', icon: Pill },
-        { label: 'Low Stock Items', value: stats.lowStockAlerts, color: 'rose', icon: Package },
     ];
 
     const handleFilter = (k, v) => setFilters(prev => ({ ...prev, [k]: v }));
@@ -281,8 +278,8 @@ const Vaccinations = () => {
             {/* ── Page Header ── */}
             <div className="page-header">
                 <div>
-                    <h1 className="page-title"><Syringe size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Vaccinations &amp; Supplements</h1>
-                    <p className="page-subtitle">Track vaccine doses, supplements, and facility stock levels for mothers and newborns</p>
+                    <h1 className="page-title"><Syringe size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Vaccines & Supplements</h1>
+                    <p className="page-subtitle">This page is used to record and track vaccines and supplements that have been administered to patients.</p>
                 </div>
                 <div className="header-actions">
                     <button className="btn btn-outline"><Download size={16} /> Export Report</button>
@@ -502,57 +499,9 @@ const Vaccinations = () => {
                         )}
                     </div>
                 </div>
-
-                {/* ── RIGHT SIDE PANELS ── */}
-                <div className="vacc-side-col">
-
-                    {/* Stock Monitoring Panel */}
-                    <div className="vacc-card">
-                        <div className="vacc-card-head">
-                            <h2><Package size={16} /> Stock Monitoring</h2>
-                            <button className="icon-btn-sm" title="Refresh"><RefreshCw size={13} /></button>
-                        </div>
-                        <div className="stock-list">
-                            {inventory.length > 0 ? inventory.map(s => (
-                                <div key={s.name} className={`stock-row stock-row--${s.status.toLowerCase()}`}>
-                                    <div className="stock-info">
-                                        <span className="stock-name">{s.name}</span>
-                                        <span className="stock-qty">{s.stock} {s.unit}</span>
-                                    </div>
-                                    <div className="stock-bar-bg">
-                                        <div
-                                            className="stock-bar-fill"
-                                            style={{ width: `${(s.stock / (s.min * 2)) * 100}%`, background: s.status === 'ok' ? '#6db8a0' : s.status === 'low' ? '#e8b84b' : '#e05c73' }}
-                                        ></div>
-                                    </div>
-                                    <span className={`stock-badge stock-badge--${s.status.toLowerCase()}`}>{s.status}</span>
-                                </div>
-                            )) : (
-                                <div className="stock-empty">No inventory data available.</div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Alerts Panel */}
-                    <div className="vacc-card">
-                        <div className="vacc-card-head">
-                            <h2><AlertTriangle size={16} /> Alerts</h2>
-                        </div>
-                        <div className="alerts-list">
-                            {STOCK_ALERTS.map((a, i) => (
-                                <div key={i} className={`alert-item alert-${a.type}`}>
-                                    <div className="alert-dot"></div>
-                                    <div className="alert-body">
-                                        <p>{a.text}</p>
-                                        <span>{a.time}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                </div>
             </div>
+
+
 
             {/* ── Record Modal ── */}
             {recordModal && <RecordModal mode={recordModal} onClose={() => setRecordModal(null)} />}
