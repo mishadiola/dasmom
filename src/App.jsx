@@ -34,6 +34,7 @@ import NewbornTracking from './pages/Newborns/NewbornTracking';
 import StationReports from './pages/Station/StationReports';
 import Settings from './pages/Settings/Settings';
 import PregnancyResources from './pages/Resources/PregnancyResources';
+import Inventory from './pages/Inventory/Inventory';
 
 import './App.css';
 
@@ -63,6 +64,7 @@ function App() {
             <Route path="prenatal/add" element={<AddPrenatalVisit />} />
             <Route path="postpartum" element={<PostpartumRecords />} />
             <Route path="vaccinations" element={<Vaccinations />} />
+            <Route path="inventory" element={<Inventory />} />
             <Route path="deliveries" element={<DeliveryOutcomes />} />
             <Route path="newborns" element={<NewbornTracking />} />
             <Route path="stations" element={<StationReports />} />

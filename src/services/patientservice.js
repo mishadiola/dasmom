@@ -1,5 +1,8 @@
 import supabase from '../config/supabaseclient';
 import AuthService from './authservice';
+import InventoryService from './inventoryservice';
+
+const inventoryService = new InventoryService();
 const TIME_SLOTS_8TO4 = [
   '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', 
   '11:00', '11:30', '13:00', '13:30', '14:00', '14:30', 
@@ -483,13 +486,62 @@ async getSlotCount(dateStr, timeSlot) {
   return data || [];
 }
 
-async getMidwivesByStation(station) {
-  const { data } = await this.supabase
-    .from('staff_profiles')
-    .select('id, full_name, barangay_assignment')
-    .eq('barangay_assignment', station)
-    .ilike('role', '%midwife%');
+  async getMidwivesByStation(station) {
+    const { data } = await this.supabase
+      .from('staff_profiles')
+      .select('id, full_name, barangay_assignment')
+      .eq('barangay_assignment', station)
+      .ilike('role', '%midwife%');
 
-  return data || [];
-}
+    return data || [];
+  }
+
+  /**
+   * BRIDGE METHODS FOR INVENTORY & STATS
+   */
+  async getVaccineInventory() {
+    // Bridges to new InventoryService but returns mapped format expected by Dashboard/Vaccinations
+    const data = await inventoryService.getVaccineInventory();
+    return data.map(item => ({
+      name: item.item_name,
+      stock: item.quantity,
+      unit: item.unit,
+      min: item.min_stock,
+      status: item.quantity <= 0 ? 'critical' : item.quantity < item.min_stock ? 'low' : 'ok'
+    }));
+  }
+
+  async getVaccinationStats() {
+    try {
+      // Aggregate stats for the Vaccinations dashboard
+      const { count: totalVaccinated } = await this.supabase
+        .from('prenatal_visits')
+        .select('*', { count: 'exact', head: true });
+
+      // Count low stock items from both tables
+      const [vax, supp] = await Promise.all([
+        inventoryService.getVaccineInventory(),
+        inventoryService.getSupplementInventory()
+      ]);
+
+      const lowStock = [...vax, ...supp].filter(i => i.quantity < i.min_stock).length;
+
+      return {
+        totalAdministered: totalVaccinated || 0,
+        mothersPending: 0,
+        newbornsPending: 0,
+        supplementsDistributed: 0,
+        lowStockAlerts: lowStock
+      };
+    } catch (err) {
+      console.error('Error fetching vaccination stats:', err);
+      return {
+        totalAdministered: 0,
+        mothersPending: 0,
+        newbornsPending: 0,
+        supplementsDistributed: 0,
+        lowStockAlerts: 0
+      };
+    }
+  }
 }

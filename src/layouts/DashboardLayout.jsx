@@ -4,7 +4,7 @@ import {
     LayoutDashboard, Users, Baby, AlertTriangle, CalendarCheck,
     HeartPulse, Syringe, Truck, Activity, BarChart3, Settings,
     Bell, LogOut, Menu, X, ChevronLeft, Search, Shield,
-    MapPin, FileText, Stethoscope, RefreshCw, ClipboardList
+    MapPin, FileText, Stethoscope, RefreshCw, ClipboardList, Package
 } from 'lucide-react';
 import '../styles/layouts/DashboardLayout.css';
 import logo from '../assets/images/dasmom_logo.png';
@@ -30,6 +30,7 @@ const NAV_ITEMS = [
         section: 'Health Programs',
         items: [
             { label: 'Vaccines & Supplements', icon: Syringe, path: '/dashboard/vaccinations' },
+            { label: 'Inventory Management', icon: Package, path: '/dashboard/inventory' },
             { label: 'Delivery Outcomes', icon: Stethoscope, path: '/dashboard/deliveries' },
             { label: 'Newborn Tracking', icon: Baby, path: '/dashboard/newborns' },
             { label: 'Pregnancy Resources', icon: HeartPulse, path: '/dashboard/resources' },
