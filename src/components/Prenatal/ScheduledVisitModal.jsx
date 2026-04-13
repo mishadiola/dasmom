@@ -8,10 +8,11 @@ import {
 import { useNavigate } from 'react-router-dom';
 import PatientService from '../../services/patientservice';
 import '../../styles/components/ScheduledVisitModal.css';
-
+import supabase from '../../config/supabaseclient'; 
 const ScheduledVisitModal = ({ visit, onClose }) => {
     const navigate = useNavigate();
     const patientService = new PatientService();
+    console.log('patientservice instance:', patientService);  // Log the instance to verify it's created
     const [status, setStatus] = useState(visit.status || 'Upcoming');
     const [notes, setNotes] = useState('');
     const [isSaving, setIsSaving] = useState(false);
@@ -23,39 +24,25 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
     };
 
     const handleSave = async () => {
-        const updates = {
-            status,
-            clinical_notes: notes.trim() || null,  // Your fix
-            attended_date: status === 'Attended' ? new Date().toISOString() : visit.attended_date,
-            missed_reason: status === 'Missed' ? notes || null : null
-        };
-
-        // 🆕 ADD THIS LOG - see exact payload before Supabase call
-        console.log('🔄 Sending updates to Supabase:', {
-            visitId: visit.id,
-            updates,
-            notesRaw: notes  // Raw textarea value
-        });
-
-        setIsSaving(true);
-        try {
-            const result = await patientService.updatePrenatalVisitStatus(visit.id, updates);
+    const updates = { status, clinical_notes: notes.trim() || null, attended_date: status === 'Attended' ? new Date().toISOString() : visit.attended_date };
+    
+    setIsSaving(true);
+    try {
+        // 🔥 DIRECT SUPABASE - skips service cache issue
+        const { data, error } = await supabase
+            .from('prenatal_visits')
+            .update(updates)
+            .eq('id', visit.id)
+            .select();
             
-            // 🆕 ADD THIS LOG - see Supabase response
-            console.log('✅ Update SUCCESS:', result);
-        } catch (error) {
-            // 🆕 ENHANCED ERROR LOG
-            console.error('❌ Supabase ERROR:', {
-                message: error.message,
-                code: error.code,
-                details: error.details,
-                hint: error.hint,
-                fullError: error
-            });
-        }
-        setIsSaving(false);
-        onClose();
-    };
+        if (error) throw error;
+        console.log('✅ DIRECT UPDATE SUCCESS:', data);
+    } catch (error) {
+        console.error('❌ Supabase ERROR:', error);
+    }
+    setIsSaving(false);
+    onClose();
+};
 
     const getStatusClass = (s) => {
         switch (s.toLowerCase()) {
