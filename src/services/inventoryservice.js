@@ -1,137 +1,135 @@
 import supabase from '../config/supabaseclient';
-import AuthService from './authservice';
+import AuthService from './authservice'; // ← now you have real AuthService
 
-const authService = new AuthService();
+class InventoryService {
+  constructor() {
+    this.auth = new AuthService();
+    this.subscribers = {
+      vaccine_inventory: [],
+      supplement_inventory: [],
+    };
+  }
 
-export default class InventoryService {
-    constructor() {
-        this.supabase = supabase;
+  async _ensureAdmin() {
+    const user = await this.auth.getAuthUser();
+    if (!user) throw new Error('No user session');
+    if (user.role !== 'admin') throw new Error('Only admins can modify inventory');
+  }
+
+  async getVaccineInventory() {
+    const { data, error } = await supabase
+      .from('vaccine_inventory')
+      .select('id, vaccine_name, quantity, created_by, created_at');
+
+    if (error) throw error;
+
+    return data.map(row => ({
+      id: row.id,
+      item_name: row.vaccine_name,
+      quantity: row.quantity,
+    }));
+  }
+
+  async getSupplementInventory() {
+    const { data, error } = await supabase
+      .from('supplement_inventory')
+      .select('id, supplement_name, quantity, created_by, created_at');
+
+    if (error) throw error;
+
+    return data.map(row => ({
+      id: row.id,
+      item_name: row.supplement_name,
+      quantity: row.quantity,
+    }));
+  }
+
+  async addInventoryItem(table, { item_name, quantity }) {
+    await this._ensureAdmin(); // only admins
+
+    const currentUser = await this.auth.getAuthUser();
+    if (!currentUser) throw new Error('No logged‑in user');
+
+    const payload = {
+      quantity: Number(quantity),
+      created_by: currentUser.id, // ← this is likely the missing field
+    };
+
+    if (table === 'vaccine_inventory') {
+      payload.vaccine_name = item_name;
+    } else if (table === 'supplement_inventory') {
+      payload.supplement_name = item_name;
+    } else {
+      throw new Error('Unsupported table: ' + table);
     }
 
-    async getCurrentUserId() {
-        const user = await authService.getAuthUser();
-        return user?.id || null;
+    const { data, error } = await supabase
+      .from(table)
+      .insert([payload])
+      .select();
+
+    if (error) {
+      console.error('addInventoryItem error:', error);
+      throw error;
     }
 
-    /**
-     * Fetch all items from vaccine_inventory
-     */
-    async getVaccineInventory() {
-        try {
-            const { data, error } = await this.supabase
-                .from('vaccine_inventory')
-                .select('*')
-                .order('item_name', { ascending: true });
+    return data;
+  }
 
-            if (error) throw error;
-            return data || [];
-        } catch (error) {
-            console.error('Error fetching vaccine inventory:', error);
-            return [];
-        }
-    }
+  async updateInventoryQuantity(table, id, newQuantity) {
+    await this._ensureAdmin(); // only admins
 
-    /**
-     * Fetch all items from supplement_inventory
-     */
-    async getSupplementInventory() {
-        try {
-            const { data, error } = await this.supabase
-                .from('supplement_inventory')
-                .select('*')
-                .order('item_name', { ascending: true });
+    const { data, error } = await supabase
+      .from(table)
+      .update({ quantity: Number(newQuantity) })
+      .eq('id', id)
+      .select();
 
-            if (error) throw error;
-            return data || [];
-        } catch (error) {
-            console.error('Error fetching supplement inventory:', error);
-            return [];
-        }
-    }
+    if (error) throw error;
 
-    /**
-     * Add a new item to either table
-     * @param {string} table - 'vaccine_inventory' or 'supplement_inventory'
-     * @param {object} item - { item_name, quantity, unit, min_stock }
-     */
-    async addInventoryItem(table, item) {
-        try {
-            const createdBy = await this.getCurrentUserId();
-            const { data, error } = await this.supabase
-                .from(table)
-                .insert([{
-                    item_name: item.item_name,
-                    quantity: parseInt(item.quantity) || 0,
-                    unit: item.unit,
-                    min_stock: parseInt(item.min_stock) || 10,
-                    created_by: createdBy
-                }])
-                .select()
-                .single();
+    return data[0];
+  }
 
-            if (error) throw error;
-            return data;
-        } catch (error) {
-            console.error(`Error adding item to ${table}:`, error);
-            throw error;
-        }
-    }
+  async deleteInventoryItem(table, id) {
+    await this._ensureAdmin(); // only admins
 
-    /**
-     * Update stock quantity for an item
-     * @param {string} table - 'vaccine_inventory' or 'supplement_inventory'
-     * @param {string} id - Item ID
-     * @param {number} newQuantity - The total new quantity
-     */
-    async updateInventoryQuantity(table, id, newQuantity) {
-        try {
-            const { data, error } = await this.supabase
-                .from(table)
-                .update({ quantity: parseInt(newQuantity) })
-                .eq('id', id)
-                .select()
-                .single();
+    const { data, error } = await supabase
+      .from(table)
+      .delete()
+      .eq('id', id)
+      .select();
 
-            if (error) throw error;
-            return data;
-        } catch (error) {
-            console.error(`Error updating quantity in ${table}:`, error);
-            throw error;
-        }
-    }
+    if (error) throw error;
 
-    /**
-     * Delete an inventory item
-     */
-    async deleteInventoryItem(table, id) {
-        try {
-            const { error } = await this.supabase
-                .from(table)
-                .delete()
-                .eq('id', id);
+    return data;
+  }
 
-            if (error) throw error;
-            return true;
-        } catch (error) {
-            console.error(`Error deleting item from ${table}:`, error);
-            throw error;
-        }
-    }
+  subscribeToInventory(table, callback) {
+    const channel = supabase
+      .channel(`realtime:${table}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table },
+        () => callback()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table },
+        () => callback()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table },
+        () => callback()
+      )
+      .subscribe();
 
-    /**
-     * Subscribe to real-time changes
-     */
-    subscribeToInventory(table, callback) {
-        return this.supabase
-            .channel(`${table}-changes`)
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: table },
-                (payload) => {
-                    console.log(`🔔 Real-time change in ${table}:`, payload);
-                    callback(payload);
-                }
-            )
-            .subscribe();
-    }
+    return {
+      unsubscribe: () => {
+        supabase.removeChannel(channel);
+      },
+    };
+  }
 }
+
+export default InventoryService;
