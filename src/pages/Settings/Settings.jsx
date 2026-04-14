@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import AuthService from '../../services/authservice';
+import StaffService from '../../services/staffservice';
 import {
     Users, Shield, Settings as SettingsIcon, FileText, User,
     Plus, Search, Filter, Edit2, Trash2, RotateCcw, X, Eye, EyeOff,
@@ -93,15 +94,70 @@ const MODULE_LABELS = {
 /* ════════════════════════════
    ADD USER MODAL
 ════════════════════════════ */
-const AddUserModal = ({ onClose }) => {
+const AddUserModal = ({ onClose, onSuccess }) => {
+    const staffService = new StaffService();
     const [showPwd, setShowPwd] = useState(false);
-    const [form, setForm] = useState({ name: '', email: '', password: '', role: 'Staff', station: '', status: 'Active' });
+    const [form, setForm] = useState({ name: '', email: '', password: '', role: 'Staff', station: '' });
+    const [stations, setStations] = useState([]);
+    const [showStationDropdown, setShowStationDropdown] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState('');
     const update = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+    useEffect(() => {
+        const fetchStations = async () => {
+            setLoading(true);
+            try {
+                const stationList = await staffService.getAllStations();
+                setStations(stationList);
+            } catch (err) {
+                console.error('Failed to fetch stations:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchStations();
+    }, []);
 
     const genPassword = () => {
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$';
         const pwd = Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
         update('password', pwd);
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+
+        if (!form.name.trim() || !form.email.trim() || !form.password.trim() || !form.role.trim()) {
+            setError('Please fill in all required fields');
+            return;
+        }
+
+        if (form.password.length < 8) {
+            setError('Password must be at least 8 characters');
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            await staffService.addStaff({
+                fullName: form.name,
+                email: form.email,
+                password: form.password,
+                role: form.role,
+                station: form.station || null,
+            });
+            setError('');
+            onSuccess?.();
+            onClose();
+        } catch (err) {
+            console.error('Failed to create staff account:', err);
+            setError(err.message || 'Failed to create account. Please try again.');
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     return (
@@ -112,6 +168,12 @@ const AddUserModal = ({ onClose }) => {
                     <button className="modal-close" onClick={onClose}><X size={20} /></button>
                 </div>
                 <div className="modal-body">
+                    {error && (
+                        <div className="form-error" style={{ padding: '12px', backgroundColor: '#fee', borderLeft: '4px solid #f66', marginBottom: '16px', borderRadius: '4px', color: '#c33' }}>
+                            <AlertCircle size={14} style={{ display: 'inline', marginRight: '6px' }} />
+                            {error}
+                        </div>
+                    )}
                     <div className="form-grid-2">
                         <div className="form-group form-group--full">
                             <label>Full Name <span className="req">*</span></label>
@@ -126,21 +188,85 @@ const AddUserModal = ({ onClose }) => {
                             <select value={form.role} onChange={e => update('role', e.target.value)}>
                                 <option value="Staff">Staff</option>
                                 <option value="Admin">Admin</option>
+                                <option value="Midwife">Midwife</option>
+                                <option value="Doctor">Doctor</option>
                             </select>
                         </div>
                         <div className="form-group">
-                            <label>Assign Station</label>
-                            <select value={form.station} onChange={e => update('station', e.target.value)}>
-                                <option value="">All Stations</option>
-                                {[1,2,3,4,5,6,7].map(n => <option key={n} value={`Station ${n}`}>Station {n}</option>)}
-                            </select>
-                        </div>
-                        <div className="form-group">
-                            <label>Initial Status</label>
-                            <select value={form.status} onChange={e => update('status', e.target.value)}>
-                                <option>Active</option>
-                                <option>Inactive</option>
-                            </select>
+                            <label>Assign Station / Barangay</label>
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    type="text"
+                                    placeholder="Select or type barangay..."
+                                    value={form.station}
+                                    onChange={e => {
+                                        update('station', e.target.value);
+                                        setShowStationDropdown(true);
+                                    }}
+                                    onFocus={() => setShowStationDropdown(true)}
+                                    style={{ paddingRight: '32px' }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowStationDropdown(!showStationDropdown)}
+                                    style={{
+                                        position: 'absolute',
+                                        right: '8px',
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        padding: '4px',
+                                    }}
+                                >
+                                    <ChevronDown size={16} />
+                                </button>
+                                {showStationDropdown && (
+                                    <div
+                                        style={{
+                                            position: 'absolute',
+                                            top: '100%',
+                                            left: 0,
+                                            right: 0,
+                                            backgroundColor: 'white',
+                                            border: '1px solid #ddd',
+                                            borderRadius: '6px',
+                                            marginTop: '4px',
+                                            zIndex: 100,
+                                            maxHeight: '200px',
+                                            overflowY: 'auto',
+                                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                        }}
+                                    >
+                                        {stations.length > 0 ? (
+                                            stations.map(s => (
+                                                <div
+                                                    key={s}
+                                                    onClick={() => {
+                                                        update('station', s);
+                                                        setShowStationDropdown(false);
+                                                    }}
+                                                    style={{
+                                                        padding: '10px 12px',
+                                                        cursor: 'pointer',
+                                                        borderBottom: '1px solid #f0f0f0',
+                                                        backgroundColor: form.station === s ? '#f0f0f0' : 'white',
+                                                        ':hover': { backgroundColor: '#f5f5f5' },
+                                                    }}
+                                                >
+                                                    {s}
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div style={{ padding: '10px 12px', color: '#999' }}>
+                                                No stations available. Type to create new.
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            <span className="form-hint">Select existing station or type to create a new one</span>
                         </div>
                         <div className="form-group form-group--full">
                             <label>Password <span className="req">*</span></label>
@@ -156,8 +282,10 @@ const AddUserModal = ({ onClose }) => {
                     </div>
                 </div>
                 <div className="modal-footer">
-                    <button className="btn btn-outline" onClick={onClose}>Cancel</button>
-                    <button className="btn btn-primary" onClick={onClose}><CheckCircle2 size={15} /> Create Account</button>
+                    <button className="btn btn-outline" onClick={onClose} disabled={submitting}>Cancel</button>
+                    <button className="btn btn-primary" onClick={handleSubmit} disabled={submitting}>
+                        <CheckCircle2 size={15} /> {submitting ? 'Creating...' : 'Create Account'}
+                    </button>
                 </div>
             </div>
         </div>
@@ -168,18 +296,52 @@ const AddUserModal = ({ onClose }) => {
    TAB 1: USER ACCOUNTS
 ════════════════════════════ */
 const UserAccountsTab = () => {
+    const staffService = new StaffService();
     const [search, setSearch] = useState('');
     const [roleFilter, setRoleFilter] = useState('All');
     const [statusFilter, setStatusFilter] = useState('All');
     const [showModal, setShowModal] = useState(false);
+    const [staff, setStaff] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    const filtered = USERS.filter(u => {
+    const fetchStaff = async () => {
+        setLoading(true);
+        try {
+            const staffList = await staffService.getAllStaff();
+            setStaff(staffList);
+        } catch (err) {
+            console.error('Failed to fetch staff:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchStaff();
+    }, []);
+
+    const filtered = staff.filter(u => {
         const s = search.toLowerCase();
         const matchS = u.name.toLowerCase().includes(s) || u.email.toLowerCase().includes(s);
         const matchR = roleFilter === 'All' || u.role === roleFilter;
         const matchSt = statusFilter === 'All' || u.status === statusFilter;
         return matchS && matchR && matchSt;
     });
+
+    const handleModalSuccess = () => {
+        fetchStaff();
+    };
+
+    if (loading) {
+        return (
+            <div className="tab-content">
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px' }}>
+                    <div className="set-spinner"></div>
+                    <p style={{ marginLeft: '16px' }}>Loading staff...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="tab-content">
@@ -192,6 +354,8 @@ const UserAccountsTab = () => {
                     <option value="All">All Roles</option>
                     <option>Super Admin</option>
                     <option>Admin</option>
+                    <option>Midwife</option>
+                    <option>Doctor</option>
                     <option>Staff</option>
                 </select>
                 <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="set-select">
@@ -209,46 +373,54 @@ const UserAccountsTab = () => {
                             <th>User</th>
                             <th>Role</th>
                             <th>Email</th>
+                            <th>Station</th>
                             <th>Status</th>
-                            <th>Last Login</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {filtered.map(u => (
-                            <tr key={u.id} className={u.status === 'Inactive' ? 'row-inactive' : ''}>
-                                <td>
-                                    <div className="user-cell">
-                                        <div className={`user-avatar uav-${u.role.toLowerCase().replace(' ', '')}`}>{u.avatar}</div>
-                                        <span>{u.name}</span>
-                                    </div>
-                                </td>
-                                <td><span className={`role-badge ${u.role === 'Super Admin' ? 'badge-superadmin' : u.role === 'Admin' ? 'badge-admin' : 'badge-staff'}`}>{u.role}</span></td>
-                                <td className="email-cell">{u.email}</td>
-                                <td>
-                                    <span className={`status-dot ${u.status === 'Active' ? 'dot-active' : 'dot-inactive'}`}>
-                                        {u.status === 'Active' ? <CheckCircle2 size={12} /> : <XCircle size={12} />} {u.status}
-                                    </span>
-                                </td>
-                                <td className="last-login">{u.lastLogin}</td>
-                                <td>
-                                    <div className="row-actions">
-                                        <button className="action-btn edit-btn" title="Edit"><Edit2 size={13} /></button>
-                                        <button className="action-btn key-btn" title="Reset Password"><Key size={13} /></button>
-                                        <button className={`action-btn ${u.status === 'Active' ? 'deact-btn' : 'act-btn'}`} title={u.status === 'Active' ? 'Deactivate' : 'Activate'}>
-                                            {u.status === 'Active' ? <ToggleRight size={13} /> : <ToggleLeft size={13} />}
-                                        </button>
-                                        {u.role !== 'Super Admin' && (
-                                            <button className="action-btn del-btn" title="Delete"><Trash2 size={13} /></button>
-                                        )}
-                                    </div>
+                        {filtered.length > 0 ? (
+                            filtered.map(u => (
+                                <tr key={u.id} className={u.status === 'Inactive' ? 'row-inactive' : ''}>
+                                    <td>
+                                        <div className="user-cell">
+                                            <div className={`user-avatar uav-${u.role.toLowerCase().replace(' ', '')}`}>{u.avatar}</div>
+                                            <span>{u.name}</span>
+                                        </div>
+                                    </td>
+                                    <td><span className={`role-badge ${u.role === 'Super Admin' ? 'badge-superadmin' : u.role === 'Admin' ? 'badge-admin' : 'badge-staff'}`}>{u.role}</span></td>
+                                    <td className="email-cell">{u.email}</td>
+                                    <td>{u.station}</td>
+                                    <td>
+                                        <span className={`status-dot ${u.status === 'Active' ? 'dot-active' : 'dot-inactive'}`}>
+                                            {u.status === 'Active' ? <CheckCircle2 size={12} /> : <XCircle size={12} />} {u.status}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div className="row-actions">
+                                            <button className="action-btn edit-btn" title="Edit"><Edit2 size={13} /></button>
+                                            <button className="action-btn key-btn" title="Reset Password"><Key size={13} /></button>
+                                            <button className={`action-btn ${u.status === 'Active' ? 'deact-btn' : 'act-btn'}`} title={u.status === 'Active' ? 'Deactivate' : 'Activate'}>
+                                                {u.status === 'Active' ? <ToggleRight size={13} /> : <ToggleLeft size={13} />}
+                                            </button>
+                                            {u.role !== 'Super Admin' && (
+                                                <button className="action-btn del-btn" title="Delete"><Trash2 size={13} /></button>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))
+                        ) : (
+                            <tr>
+                                <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#999' }}>
+                                    No staff members found
                                 </td>
                             </tr>
-                        ))}
+                        )}
                     </tbody>
                 </table>
             </div>
-            {showModal && <AddUserModal onClose={() => setShowModal(false)} />}
+            {showModal && <AddUserModal onClose={() => setShowModal(false)} onSuccess={handleModalSuccess} />}
         </div>
     );
 };
@@ -500,11 +672,10 @@ const ProfileTab = () => {
     const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
 
     // Profile Form
-    const [profileForm, setProfileForm] = useState({ fullName: '', contactNo: '', title: '' });
+    const [profileForm, setProfileForm] = useState({ fullName: '', contactNo: '', station: '' });
     
     // Password Form
-    const [pwdForm, setPwdForm] = useState({ current: '', new: '', confirm: '' });
-    const [showOld, setShowOld] = useState(false);
+    const [pwdForm, setPwdForm] = useState({ new: '', confirm: '' });
     const [showNew, setShowNew] = useState(false);
     
     const [twoFA, setTwoFA] = useState(false);
@@ -519,7 +690,7 @@ const ProfileTab = () => {
                     setProfileForm({
                         fullName: data.full_name || '',
                         contactNo: data.contact_no || '',
-                        title: data.role || '' // Assuming title/role
+                        station: data.barangay_assignment || ''
                     });
                 }
             } catch (err) {
@@ -543,7 +714,7 @@ const ProfileTab = () => {
             await authService.updateStaffProfile(user.id, {
                 fullName: profileForm.fullName,
                 contactNo: profileForm.contactNo,
-                stationAssignment: fullProfile?.station_assignment
+                barangayAssignment: profileForm.station
             });
             showToast('Profile updated successfully!');
         } catch (err) {
@@ -567,7 +738,7 @@ const ProfileTab = () => {
         try {
             await authService.updatePassword(pwdForm.new);
             showToast('Password updated successfully!');
-            setPwdForm({ current: '', new: '', confirm: '' });
+            setPwdForm({ new: '', confirm: '' });
         } catch (err) {
             console.error(err);
             showToast('Failed to update password.', 'error');
@@ -597,7 +768,7 @@ const ProfileTab = () => {
                     <p className="profile-role">{user?.role?.toUpperCase() || 'Staff'}</p>
                     <p className="profile-email"><Mail size={13} /> {user?.email}</p>
                     <p className="profile-station">
-                        <MapPin size={13} /> {fullProfile?.station_assignment || 'No Assignment'}
+                        <MapPin size={13} /> {fullProfile?.barangay_assignment || 'No Assignment'}
                     </p>
                     <p className="profile-login"><Clock size={13} /> Active Session</p>
                     <button className="btn btn-outline logout-btn" onClick={handleLogout}>
@@ -632,12 +803,11 @@ const ProfileTab = () => {
                                 />
                             </div>
                             <div className="form-group">
-                                <label>Position / Title</label>
+                                <label>Station / Barangay</label>
                                 <input 
                                     type="text" 
-                                    value={profileForm.title} 
-                                    onChange={e => setProfileForm(p => ({ ...p, title: e.target.value }))}
-                                    disabled
+                                    value={profileForm.station} 
+                                    onChange={e => setProfileForm(p => ({ ...p, station: e.target.value }))}
                                 />
                             </div>
                         </div>
@@ -689,7 +859,7 @@ const ProfileTab = () => {
                                 <span className="setting-label">Two-Factor Authentication (2FA)</span>
                                 <span className="setting-desc">Add an extra layer of security to your account</span>
                             </div>
-                            <button className={`toggle-switch ${twoFA ? 'toggle-on' : ''}`} onClick={() => setTwoFA(v => !v)}>
+                            <button className={`toggle-switch ${twoFA ? 'toggle-on' : ''}`} onClick={() => setTwoFA(v => !v)} type="button">
                                 <span className="toggle-thumb" />
                             </button>
                         </div>
@@ -698,7 +868,7 @@ const ProfileTab = () => {
                                 <span className="setting-label">Active Sessions</span>
                                 <span className="setting-desc">View your currently logged in devices</span>
                             </div>
-                            <button className="btn btn-outline btn-sm"><Activity size={13} /> View Log</button>
+                            <button className="btn btn-outline btn-sm" type="button"><Activity size={13} /> View Log</button>
                         </div>
                     </div>
                 </div>
