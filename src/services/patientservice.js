@@ -381,7 +381,7 @@ async getSlotCount(dateStr, timeSlot) {
     }
   }
 
-  async getHighRiskPatients() {
+async getHighRiskPatients() {
   try {
     const { data, error } = await this.supabase
       .from('patient_basic_info')
@@ -397,6 +397,14 @@ async getSlotCount(dateStr, timeSlot) {
           gravida,
           lmd,
           edd
+        ),
+        prenatal_visits (
+          visit_date,
+          status,
+          bp_systolic,
+          bp_diastolic,
+          next_appt_date,
+          next_appt_type
         )
       `)
       .neq('pregnancy_info.calculated_risk', 'Normal')
@@ -404,17 +412,25 @@ async getSlotCount(dateStr, timeSlot) {
 
     if (error) throw error;
 
-    // Map to object with key = patient id, so we deduplicate by id
-    const map = new Map();
-    (data || []).forEach(p => {
+    const result = (data || []).map(p => {
       const preg =
         Array.isArray(p.pregnancy_info)
           ? p.pregnancy_info[0] || {}
           : p.pregnancy_info || {};
 
-      const key = p.id;
+      // Only pick latest ATTENDED visit
+      let latestAttended = null;
+      if (p.prenatal_visits && Array.isArray(p.prenatal_visits)) {
+        const attendedVisits = p.prenatal_visits
+          .filter(v => v.status === 'Attended' && v.visit_date);
 
-      map.set(key, {
+        if (attendedVisits.length > 0) {
+          attendedVisits.sort((a, b) => new Date(b.visit_date) - new Date(a.visit_date));
+          latestAttended = attendedVisits[0];
+        }
+      }
+
+      return {
         id: p.id,
         first_name: p.first_name,
         last_name: p.last_name,
@@ -425,17 +441,23 @@ async getSlotCount(dateStr, timeSlot) {
           risk_factors: preg.risk_factors || null,
           gravida: preg.gravida || 0,
           lmd: preg.lmd || null,
-          edd: preg.edd || null
-        }
-      });
+          edd: preg.edd || null,
+        },
+        // Put latest ATTENDED visit fields on the patient
+        bp_systolic: latestAttended?.bp_systolic || null,
+        bp_diastolic: latestAttended?.bp_diastolic || null,
+        next_appt_date: latestAttended?.next_appt_date || null,
+        next_appt_type: latestAttended?.next_appt_type || null,
+      };
     });
 
-    return Array.from(map.values());
+    return result;
   } catch (err) {
     console.error('Error fetching high risk patients:', err);
     return [];
   }
 }
+
   async getLatestPrenatalVisit(patientId) {
   const { data, error } = await this.supabase
     .from('prenatal_visits')

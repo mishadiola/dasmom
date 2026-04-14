@@ -57,83 +57,41 @@ const HighRiskCases = () => {
         service.getHighRiskPatients(),
       ]);
 
-      const enriched = await Promise.all(
-        (patientsData || []).map(async (p) => {
-          const preg = p.pregnancy_info || {};
-          const lmp = preg.lmd; // or lmp
-          const weeks = service.calculateWeeks(lmp);
+    const enriched = (patientsData || []).map((p) => {
+  const preg = p.pregnancy_info || {};
+  const lmp = preg.lmd;
+  const weeks = service.calculateWeeks(lmp);
 
-          // 1. BP: get LAST ATTENDED visit (current row with BP)
-          const { data: lastAttended } = await service.supabase
-            .from('prenatal_visits')
-            .select('bp_systolic, bp_diastolic, visit_date, status')
-            .eq('patient_id', p.id)
-            .eq('status', 'Attended')
-            .order('visit_date', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+  const bp = p.bp_systolic && p.bp_diastolic
+    ? `${p.bp_systolic}/${p.bp_diastolic}`
+    : null;
 
-          const bp = lastAttended?.bp_systolic && lastAttended?.bp_diastolic
-            ? `${lastAttended.bp_systolic}/${lastAttended.bp_diastolic}`
-            : null;
+  const nextApptDate = p.next_appt_date || null;
+  const nextApptType = p.next_appt_type || 'Follow‑up Checkup';
 
-          // 2. EDD from pregnancy_info
-          const eddFromPregnancy = preg.edd || null;
-
-          // 3. NEXT APPOINTMENT: use next_appt_date / next_appt_type from the same row
-          const today = new Date().toISOString().split('T')[0];
-          const { data: nextVisitRow } = await service.supabase
-            .from('prenatal_visits')
-            .select('next_appt_date, next_appt_type, status, visit_date')
-            .eq('patient_id', p.id)
-            .not('next_appt_date', 'is', null)
-            .gte('next_appt_date', today)
-            .order('next_appt_date', { ascending: true })
-            .limit(1)
-            .maybeSingle();
-
-          const nextApptDate = nextVisitRow?.next_appt_date || null;
-          const nextApptType = nextVisitRow?.next_appt_type || 'Follow‑up Checkup';
-
-          // 🔥 Debug: verify BP comes from last attended, and next_appt is future
-          console.log(
-            '[BP + NEXT DEBUG] Patient:',
-            p.name,
-            '| id:',
-            p.id,
-            '| lastAttended:',
-            lastAttended,
-            '| bp:',
-            bp,
-            '| nextVisitRow:',
-            nextVisitRow
-          );
-
-          return {
-            id: p.id,
-            name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unnamed Patient',
-            first_name: p.first_name,
-            last_name: p.last_name,
-            station: p.barangay || p.municipality || 'Unassigned',
-            riskLevel: preg.calculated_risk || 'High Risk',
-            condition: preg.risk_factors || 'High‑risk pregnancy',
-            gravida: preg.gravida || 0,
-            lmd: lmp || '',
-            edd: eddFromPregnancy,
-            bp, // 👈 from last attended visit (current row with BP)
-            nextVisit: nextApptDate
-              ? new Date(nextApptDate).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })
-              : 'Initial Visit',
-            nextApptType,
-            weeks,
-          };
+  return {
+    id: p.id,
+    name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unnamed Patient',
+    first_name: p.first_name,
+    last_name: p.last_name,
+    station: p.barangay || p.municipality || 'Unassigned',
+    riskLevel: preg.calculated_risk || 'High Risk',
+    condition: preg.risk_factors || 'High‑risk pregnancy',
+    gravida: preg.gravida || 0,
+    lmd: lmp || '',
+    edd: preg.edd || null,
+    bp, // ✅ latest Attended BP only
+    nextVisit: nextApptDate
+      ? new Date(nextApptDate).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
         })
-      );
-
+      : 'Initial Visit',
+    nextApptType,
+    weeks,
+  };
+});
       setStats({
         ...statsData,
         totalHighRisk: statsData.highRiskCount || 0,
