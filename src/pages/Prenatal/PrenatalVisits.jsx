@@ -110,16 +110,7 @@ const PrenatalVisits = () => {
     const [visitsTable, setVisitsTable] = useState([]);
     const [staffList, setStaffList] = useState([]);
     const [livePatients, setLivePatients] = useState([]);
-    const [selectedSlot, setSelectedSlot] = useState({ date: null, time: null });
-    const [bookingData, setBookingData] = useState({
-        patientId: '',
-        patientName: '',
-        visitType: 'Routine Prenatal',
-        staff: '',
-        location: 'Main Clinic - Rm 1'
-    });
-    const [conflictWarning, setConflictWarning] = useState(null);
-
+    
     const patientService = new PatientService();
 
     const fetchData = async () => {
@@ -274,37 +265,15 @@ const PrenatalVisits = () => {
     }, [appointments]);
 
     const handleSlotClick = (date, time, status) => {
-        if (status === 'FULL DAY' || status === 'Full') return;
-
-        if (status !== 'Available') {
+        if (status !== 'Available' && status !== 'Full' && status !== 'FULL DAY') {
             setSelectedVisit({
                 ...status,
                 visitDate: date,
                 time
             });
-            return;
         }
-
-        setSelectedSlot({ date, time });
-        setConflictWarning(null);
-        setBookingPanelOpen(true);
     };
 
-    const handleSelectPatient = (val) => {
-        const p = livePatients.find(pt => pt.id === val);
-        if (p) {
-            setBookingData({ ...bookingData, patientId: p.id, patientName: p.name });
-        } else {
-            setBookingData({ ...bookingData, patientId: '', patientName: '' });
-        }
-        setConflictWarning(null);
-    };
-
-    const handleConfirmBooking = async () => {
-        setToast('Visit scheduled successfully!');
-        setBookingPanelOpen(false);
-        setTimeout(() => setToast(null), 3000);
-    };
 
     const visibleDays = getVisibleDays(currentDate, calendarView);
     const filteredVisits = visitsTable.filter(v =>
@@ -335,14 +304,6 @@ const PrenatalVisits = () => {
                 <div>
                     <h1 className="page-title">Visits & Scheduling</h1>
                     <p className="page-subtitle">30 slots/day max (25 regular + 5 rescheduling)</p>
-                </div>
-                <div className="header-actions">
-                    <button className="btn btn-primary" onClick={() => {
-                        setSelectedSlot({ date: visibleDays[0]?.date, time: '08:00 AM' });
-                        setBookingPanelOpen(true);
-                    }}>
-                        <Plus size={16} /> Schedule Visit
-                    </button>
                 </div>
             </div>
 
@@ -403,6 +364,7 @@ const PrenatalVisits = () => {
                                                 className={`pc-slot ${status === 'Available' ? 'slot-avail' : 
                                                     status === 'FULL DAY' || status === 'Full' ? 'slot-full' : 
                                                     isHigh ? 'slot-high' : 'slot-booked'}`}
+                                                style={{ cursor: (status === 'Available' || status === 'Full' || status === 'FULL DAY') ? 'default' : 'pointer' }}
                                                 onClick={() => handleSlotClick(day.date, time, status)}
                                             >
                                                 {status === 'Available' ? 'Available' : 
@@ -530,58 +492,7 @@ const PrenatalVisits = () => {
                 )}
             </div>
 
-            {/* BOOKING PANEL */}
-            {bookingPanelOpen && (
-                <>
-                    <div className="bk-overlay" onClick={() => setBookingPanelOpen(false)}></div>
-                    <div className="bk-panel slide-in-right">
-                        <div className="bk-header">
-                            <h2>Schedule Visit</h2>
-                            <button className="icon-btn-sm" onClick={() => setBookingPanelOpen(false)}><X size={18} /></button>
-                        </div>
-                        <div className="bk-body">
-                            <div className="bk-slot-info">
-                                <CalendarIcon size={14} /> <span>{selectedSlot.date}</span>
-                                <Clock size={14} className="ml-2" /> <span>{selectedSlot.time}</span>
-                            </div>
-                            <div className="form-group mt-4">
-                                <label>Select Patient</label>
-                                <SearchableDropdown
-                                    patients={livePatients}
-                                    value={bookingData.patientId}
-                                    onChange={handleSelectPatient}
-                                />
-                            </div>
-                            <div className="form-group mt-3">
-                                <label>Visit Type</label>
-                                <select value={bookingData.visitType} onChange={e => setBookingData({ ...bookingData, visitType: e.target.value })}>
-                                    <option>Routine Prenatal</option>
-                                    <option>High-Risk Follow-up</option>
-                                    <option>Walk-in</option>
-                                </select>
-                            </div>
-                            <div className="form-group mt-3">
-                                <label>Assigned Staff</label>
-                                <select value={bookingData.staff} onChange={e => setBookingData({ ...bookingData, staff: e.target.value })}>
-                                    <option value="">Auto-assign</option>
-                                    {staffList.map(s => <option key={s}>{s}</option>)}
-                                </select>
-                            </div>
-                            {conflictWarning && (
-                                <div className="conflict-box mt-3">
-                                    <AlertTriangle size={14} /> {conflictWarning}
-                                </div>
-                            )}
-                        </div>
-                        <div className="bk-footer">
-                            <button className="btn btn-outline" onClick={() => setBookingPanelOpen(false)}>Cancel</button>
-                            <button className="btn btn-primary" onClick={handleConfirmBooking} disabled={!bookingData.patientId}>
-                                Confirm (30/day limit)
-                            </button>
-                        </div>
-                    </div>
-                </>
-            )}
+
 
             {selectedVisit && (
                 <ScheduledVisitModal 

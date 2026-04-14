@@ -609,105 +609,103 @@
     box-shadow: 0 4px 12px rgba(0,0,0,0.02);
 }
 
-.tracking-section-title {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--color-text);
-    margin: 0 0 50px;
-}
-
-.progress-infographic {
-    padding: 0 10px;
-    margin-bottom: 20px;
-}
-
-.progress-bar-bg {
+/* Gestation Step Indicator */
+.gestation-step-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     position: relative;
-    height: 14px;
-    background: #eef0f4;
-    border-radius: 99px;
-    width: 100%;
+    margin-bottom: 40px;
 }
 
-.progress-fill {
+.gestation-step-container::before {
+    content: '';
     position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    background: linear-gradient(90deg, var(--color-pink), var(--color-rose));
-    border-radius: 99px;
-    transition: width 1.5s cubic-bezier(0.2, 0.8, 0.2, 1);
-    box-shadow: 0 2px 12px rgba(220, 88, 115, 0.4);
+    top: 25px;
+    left: 40px;
+    right: 40px;
+    height: 3px;
+    background: var(--color-border);
+    z-index: 1;
 }
 
-.progress-glow {
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 40px;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
-    border-radius: 99px;
-    animation: progressGlow 2.5s infinite ease-in-out;
-}
-
-@keyframes progressGlow {
-    0% { opacity: 0; transform: translateX(-20px); }
-    50% { opacity: 1; transform: translateX(0); }
-    100% { opacity: 0; transform: translateX(20px); }
-}
-
-.progress-marker {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%) translateX(-50%);
+.gestation-step {
     display: flex;
     flex-direction: column;
     align-items: center;
+    gap: 12px;
+    position: relative;
     z-index: 2;
+    flex: 1;
 }
 
-.marker-dot {
-    width: 20px;
-    height: 20px;
-    background: #fff;
-    border: 4px solid #d1d6e0;
+.step-circle {
+    width: 50px;
+    height: 50px;
     border-radius: 50%;
-    transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.progress-marker.reached .marker-dot {
-    border-color: var(--color-rose);
-    box-shadow: 0 0 0 6px rgba(220, 88, 115, 0.15);
-}
-
-.progress-marker:hover .marker-dot {
-    transform: scale(1.3);
-}
-
-.marker-label {
-    position: absolute;
-    top: 28px;
-    white-space: nowrap;
-    font-size: 13px;
+    background: #fff;
+    border: 3px solid #f1f5f9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-weight: 700;
-    color: var(--color-text-muted);
-    transition: color 0.3s ease;
+    font-size: 14px;
+    color: var(--color-text-light);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: var(--font);
 }
 
-.progress-marker.reached .marker-label {
-    color: var(--color-rose);
-}
-
-.progress-note {
-    font-size: 14.5px;
-    color: var(--color-text);
+.step-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-light);
     text-align: center;
-    margin: 40px 0 0;
-    padding: 16px;
-    background: #f8f9fb;
+    font-family: var(--font);
+}
+
+.gestation-step.active .step-circle {
+    background: var(--color-rose);
+    border-color: var(--color-rose);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(185, 129, 138, 0.3);
+    transform: scale(1.1);
+}
+
+.gestation-step.active .step-label {
+    color: var(--color-rose);
+    font-weight: 700;
+}
+
+.progress-info-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    text-align: center;
+}
+
+.progress-status-text {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--color-text);
+    margin: 0;
+    font-family: var(--font);
+}
+
+.progress-reminder-box {
+    background: rgba(185, 129, 138, 0.05); /* Very light rose */
     border-radius: 12px;
-    border-left: 4px solid var(--color-rose);
+    padding: 14px 24px;
+    border: 1px dashed var(--color-border);
+    width: 100%;
+}
+
+.progress-reminder-box p {
+    margin: 0;
+    color: var(--color-rose);
+    font-size: 14.5px;
+    font-weight: 500;
+    font-family: var(--font);
 }
 
 .tracking-details-grid {

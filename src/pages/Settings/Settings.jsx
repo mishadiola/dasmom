@@ -906,9 +906,7 @@ const Settings = () => {
 
     const TABS = [
         { id: 'accounts',  label: 'User Accounts',      icon: Users },
-        { id: 'roles',     label: 'Roles & Permissions', icon: Shield },
         { id: 'system',    label: 'System Settings',    icon: SettingsIcon },
-        { id: 'audit',     label: 'Audit Logs',         icon: FileText },
         { id: 'profile',   label: 'Profile & Security', icon: User },
     ];
 
@@ -918,7 +916,7 @@ const Settings = () => {
             <div className="page-header">
                 <div>
                     <h1 className="page-title"><SettingsIcon size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Settings</h1>
-                    <p className="page-subtitle">Manage users, roles, system preferences, and audit logs</p>
+                    <p className="page-subtitle">Manage users, system preferences, and security settings</p>
                 </div>
             </div>
 
@@ -941,9 +939,7 @@ const Settings = () => {
             {/* ── Tab Content ── */}
             <div className="set-tab-content-wrap">
                 {activeTab === 'accounts' && <UserAccountsTab />}
-                {activeTab === 'roles'    && <RolesTab />}
                 {activeTab === 'system'   && <SystemSettingsTab />}
-                {activeTab === 'audit'    && <AuditLogsTab />}
                 {activeTab === 'profile'  && <ProfileTab />}
             </div>
         </div>

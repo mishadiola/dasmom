@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import '../../styles/pages/PatientsList.css';
 import PatientService from '../../services/patientservice';
+import { utils, writeFile } from 'xlsx';
 
 const EMPTY_VITALS = {
     bp: '',
@@ -218,6 +219,35 @@ const PatientsList = () => {
         setTimeout(() => setVitalToast(false), 3500);
     };
 
+    const handleExportExcel = () => {
+        const exportData = sortedPatients.map(p => ({
+            "Patient ID": p.id || 'N/A',
+            "Name": p.name || 'N/A',
+            "Station": p.station || 'N/A',
+            "Age": p.age || 'N/A',
+            "Gestation": `T${p.trimester || 1} - ${p.weeks || '-'}w`,
+            "Risk Level": p.risk || 'Normal',
+            "Next Appointment": p.nextAppt || 'No upcoming appt'
+        }));
+
+        const worksheet = utils.json_to_sheet(exportData);
+        const workbook = utils.book_new();
+        utils.book_append_sheet(workbook, worksheet, "Patient Profiles");
+
+        const wscols = [
+            { wch: 15 }, // Patient ID
+            { wch: 25 }, // Name
+            { wch: 20 }, // Station
+            { wch: 10 }, // Age
+            { wch: 18 }, // Gestation
+            { wch: 15 }, // Risk Level
+            { wch: 20 }  // Next Appointment
+        ];
+        worksheet['!cols'] = wscols;
+
+        writeFile(workbook, "patient_profiles.xlsx");
+    };
+
     return (
         <>
         <div className="patients-page">
@@ -228,7 +258,7 @@ const PatientsList = () => {
                     <p className="page-subtitle">Manage and monitor all registered pregnant patients</p>
                 </div>
                 <div className="header-actions">
-                    <button className="btn btn-outline">
+                    <button className="btn btn-outline" onClick={handleExportExcel}>
                         <FileText size={16} />
                         Export List
                     </button>
@@ -443,7 +473,7 @@ const PatientsList = () => {
                                                 <Activity size={16} />
                                                 </button>
                                                 
-                                                <button type="button" className="action-btn edit-btn" data-tooltip="Edit Patient" onClick={(e) => { e.stopPropagation(); alert('Edit functionality is currently under development.'); }}>
+                                                <button type="button" className="action-btn edit-btn" data-tooltip="Edit Patient" onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/edit/${p.id}`); }}>
                                                 <Edit size={16} />
                                                 </button>
                                                 

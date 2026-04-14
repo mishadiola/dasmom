@@ -106,12 +106,13 @@
 ══════════════════════════════════════════ */
 .ap-container {
     display: flex;
-    gap: 24px;
+    gap: 0;
     background: #fff;
     border-radius: 16px;
     border: 1px solid #eef0f4;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
-    min-height: 500px;
+    height: calc(100vh - 180px); /* Fixed height to allow inner scrolling */
+    min-height: 600px;
     overflow: hidden;
     position: relative;
 }
@@ -162,13 +163,17 @@
 .ap-content {
     flex: 1;
     padding: 32px 40px;
+    overflow-y: auto; /* Enable vertical scrolling */
     min-width: 0;
+    scrollbar-width: thin;
+    scrollbar-color: #eef0f4 transparent;
 }
 
 .ap-section {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 24px;
+    padding-bottom: 60px; /* Space at the bottom so fields aren't cramped */
 }
 
 .section-title {
@@ -511,6 +516,8 @@
 @media (max-width: 900px) {
     .ap-container {
         flex-direction: column;
+        height: auto;
+        max-height: none;
     }
 
     .ap-sidebar {

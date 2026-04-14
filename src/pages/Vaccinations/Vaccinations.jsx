@@ -202,10 +202,13 @@ const Vaccinations = () => {
         fetchData();
     }, []);
 
-    // Derived Stats for UI mapping
+    // Derived Stats for UI mapping — all values from live DB via getVaccinationStats()
     const dynamicSummaryStats = [
-        { label: 'Total Vaccinations Administered', value: stats.totalAdministered, color: 'lilac', icon: Syringe },
-        { label: 'Supplements Distributed', value: stats.supplementsDistributed, unit: 'units', color: 'sage', icon: Pill },
+        { label: 'Total Vaccinations Administered', value: stats.totalAdministered,      color: 'lilac',  icon: Syringe },
+        { label: 'Mothers Pending Vaccines',         value: stats.mothersPending,         color: 'pink',   icon: AlertCircle },
+        { label: 'Newborns Pending Vaccines',        value: stats.newbornsPending,        color: 'orange', icon: AlertCircle },
+        { label: 'Supplements Distributed',          value: stats.supplementsDistributed, color: 'sage',   icon: Pill, unit: 'units' },
+        { label: 'Low Stock Items',                  value: stats.lowStockAlerts,         color: 'rose',   icon: Package },
     ];
 
     const handleFilter = (k, v) => setFilters(prev => ({ ...prev, [k]: v }));

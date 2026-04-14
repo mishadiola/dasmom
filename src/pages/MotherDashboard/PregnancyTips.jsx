@@ -549,7 +549,7 @@ const PregnancyTips = () => {
         const updatedRead = readIds.includes(id) ? readIds : [...readIds, id];
         setReadIds(updatedRead);
         setLS(LS_READ, updatedRead);
-        navigate(`/dashboard/user-tips/${id}`);
+        navigate(`/mother-home/user-tips/${id}`);
     };
 
     const isActiveFiler = searchTerm !== '' || activeCategory !== 'All' || showBookmarksOnly;
@@ -562,7 +562,7 @@ const PregnancyTips = () => {
             {/* ── Header ── */}
             <div className="pt-header">
                 <div className="pt-header-text">
-                    <h1>Pregnancy Tips</h1>
+                    <h1>Pregnancy Resources</h1>
                     <p>Expert guidance and care for every stage of your journey. 🌸</p>
                 </div>
                 <div className="pt-progress-pill">

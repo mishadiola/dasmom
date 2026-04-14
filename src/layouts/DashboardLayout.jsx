@@ -3,7 +3,7 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
     LayoutDashboard, Users, Baby, AlertTriangle, CalendarCheck,
     HeartPulse, Syringe, Truck, Activity, BarChart3, Settings,
-    Bell, LogOut, Menu, X, ChevronLeft, Search, Shield,
+    Bell, LogOut, X, ChevronLeft, Shield,
     MapPin, FileText, Stethoscope, RefreshCw, ClipboardList, Package
 } from 'lucide-react';
 import '../styles/layouts/DashboardLayout.css';
@@ -33,7 +33,6 @@ const NAV_ITEMS = [
             { label: 'Inventory Management', icon: Package, path: '/dashboard/inventory' },
             { label: 'Delivery Outcomes', icon: Stethoscope, path: '/dashboard/deliveries' },
             { label: 'Newborn Tracking', icon: Baby, path: '/dashboard/newborns' },
-            { label: 'Pregnancy Resources', icon: HeartPulse, path: '/dashboard/resources' },
         ],
     },
     {
@@ -99,7 +98,7 @@ const DashboardLayout = () => {
     const confirmLogout = async () => {
         setShowLogoutModal(false);
         await authLogout();
-        navigate(isUserView ? '/mother-login' : '/');
+        navigate(isUserView ? '/mother-login' : '/', { replace: true });
     };
 
     // Filter nav items based on view
@@ -115,7 +114,7 @@ const DashboardLayout = () => {
         {
             section: 'Health Info',
             items: [
-                { label: 'Pregnancy Tips', icon: HeartPulse, path: '/mother-home/user-tips' },
+                { label: 'Pregnancy Resources', icon: HeartPulse, path: '/mother-home/user-tips' },
                 { label: 'Vaccination Info', icon: Syringe, path: '/mother-home/user-vaccinations' },
                 { label: 'Pregnancy & Delivery Info', icon: ClipboardList, path: '/mother-home/user-delivery-info' },
             ]
@@ -205,22 +204,7 @@ const DashboardLayout = () => {
                 <header className="topbar" role="banner">
                     {/* Left side */}
                     <div className="topbar-left">
-                        <button
-                            className="topbar-menu-btn mobile-only"
-                            onClick={() => setSidebarMobile(true)}
-                            aria-label="Open navigation"
-                        >
-                            <Menu size={20} />
-                        </button>
-                        <div className="topbar-search">
-                            <Search size={15} className="search-icon" aria-hidden="true" />
-                            <input
-                                type="search"
-                                placeholder="Search patient, station, ID…"
-                                className="search-input"
-                                aria-label="Search"
-                            />
-                        </div>
+                        {/* Search and menu buttons removed for cleaner UI */}
                     </div>
 
                     {/* Right side */}

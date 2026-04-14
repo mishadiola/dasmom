@@ -9,6 +9,9 @@ import {
 } from 'lucide-react';
 import '../../styles/pages/PatientProfile.css';
 import PatientService from '../../services/patientservice';
+import { formatDateLong } from '../../utils/pregnancyUtils';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const TABS = [
     { id: 'info', label: 'Basic Info', icon: User },
@@ -43,6 +46,134 @@ const PatientProfile = () => {
 
         fetchPatient();
     }, [id]);
+
+    const handlePrintProfile = () => {
+        if (!p) return;
+        const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        
+        // Header
+        doc.setFontSize(22);
+        doc.setTextColor(185, 129, 138); // Brand Rose
+        doc.text("DasMom+ Patient Profile", 14, 22);
+        
+        doc.setFontSize(10);
+        doc.setTextColor(100, 100, 100);
+        doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 28);
+        doc.line(14, 32, pageWidth - 14, 32);
+
+        // Section: Personal Information
+        doc.setFontSize(14);
+        doc.setTextColor(45, 34, 52); // Brand Text
+        doc.text("Personal Information", 14, 42);
+
+        autoTable(doc, {
+            startY: 46,
+            head: [['Field', 'Details']],
+            body: [
+                ['Full Name', p.name],
+                ['Patient ID', p.id.toUpperCase()],
+                ['Date of Birth', `${p.dob} (${p.age} years old)`],
+                ['Civil Status', p.civilStatus || 'N/A'],
+                ['Blood Type', p.bloodType || 'Unknown'],
+                ['PhilHealth No.', p.philhealth || 'Not Provided'],
+                ['Residential Address', `${p.address}, ${p.station}, ${p.municipality}`],
+                ['Primary Phone', p.phone]
+            ],
+            theme: 'striped',
+            headStyles: { fillColor: [185, 129, 138] },
+            margin: { left: 14, right: 14 }
+        });
+
+        // Section: Emergency Contact
+        const finalY1 = doc.lastAutoTable.finalY + 10;
+        doc.text("Emergency Contact", 14, finalY1);
+        autoTable(doc, {
+            startY: finalY1 + 4,
+            body: [
+                ['Contact Name', p.emergencyContact?.name || 'N/A'],
+                ['Relationship', p.emergencyContact?.relationship || 'N/A'],
+                ['Phone Number', p.emergencyContact?.phone || 'N/A'],
+                ['Address', p.emergencyContact?.address || 'N/A']
+            ],
+            theme: 'plain',
+            margin: { left: 14, right: 14 }
+        });
+
+        // New Page for Pregnancy Info
+        doc.addPage();
+        doc.text("Pregnancy & Obstetric History", 14, 22);
+        
+        autoTable(doc, {
+            startY: 28,
+            head: [['Item', 'Status / Value']],
+            body: [
+                ['Pregnancy Status', p.pregnancyStatus],
+                ['Gravida (Total)', p.gravida],
+                ['Para (Births)', p.para],
+                ['Assessed Risk', p.risk],
+                ['LMP Date', p.lmp],
+                ['Estimated Due Date', p.edd],
+                ['Weeks of Pregnancy', `${p.weeks} weeks`],
+                ['Pregnancy Type', p.pregnancyType],
+                ['Planned Delivery Place', p.plannedDeliveryPlace]
+            ],
+            theme: 'grid',
+            headStyles: { fillColor: [185, 129, 138] },
+            margin: { left: 14, right: 14 }
+        });
+
+        // Risk Factors
+        if (p.medicalConditions && p.medicalConditions.length > 0) {
+            const finalY2 = doc.lastAutoTable.finalY + 10;
+            doc.text("Medical Risk Factors", 14, finalY2);
+            doc.setFontSize(10);
+            p.medicalConditions.forEach((c, index) => {
+                doc.text(`• ${c}`, 20, finalY2 + 8 + (index * 6));
+            });
+        }
+
+        doc.save(`Patient_Profile_${p.name.replace(/\s+/g, '_')}.pdf`);
+    };
+
+    const handlePrintSchedule = () => {
+        if (!p || !p.visits) return;
+        const doc = new jsPDF();
+        
+        doc.setFontSize(22);
+        doc.setTextColor(185, 129, 138);
+        doc.text("Prenatal Visit Schedule", 14, 22);
+        
+        doc.setFontSize(12);
+        doc.setTextColor(45, 34, 52);
+        doc.text(`Patient: ${p.name}`, 14, 32);
+        doc.text(`Patient ID: ${p.id.split('-')[0].toUpperCase()}`, 14, 38);
+        
+        const tableBody = p.visits.map(v => [
+            formatDateLong(new Date(v.visit_date)),
+            v.visit_number,
+            `${v.trimester}${v.trimester === 1 ? 'st' : v.trimester === 2 ? 'nd' : v.trimester === 3 ? 'rd' : 'th'}`,
+            `${v.bp || 'N/A'} / ${v.weight ? v.weight + 'kg' : 'N/A'}`,
+            v.notes || '--'
+        ]);
+
+        autoTable(doc, {
+            startY: 46,
+            head: [['Date', 'Visit #', 'Trimester', 'Vitals (BP/Wt)', 'Notes']],
+            body: tableBody,
+            headStyles: { fillColor: [185, 129, 138] },
+            styles: { fontSize: 9 },
+            columnStyles: {
+                0: { cellWidth: 40 },
+                1: { cellWidth: 20 },
+                2: { cellWidth: 25 },
+                3: { cellWidth: 35 },
+                4: { cellWidth: 'auto' }
+            }
+        });
+
+        doc.save(`Prenatal_Schedule_${p.name.replace(/\s+/g, '_')}.pdf`);
+    };
 
     if (loading) return (
         <div className="profile-page">
@@ -105,8 +236,9 @@ const PatientProfile = () => {
                         </div>
                     </div>
                     <div className="header-actions">
-                        <button className="btn btn-outline" title="Print Record"><Printer size={16} /></button>
-                        <button className="btn btn-primary"><Edit size={16} /> Record Visit</button>
+                        <button className="btn btn-outline" title="Print Record" onClick={handlePrintProfile}><Printer size={16} /></button>
+                        <button className="btn btn-outline" title="Edit Profile" onClick={() => navigate(`/dashboard/patients/edit/${p.id}`)}><Edit size={16} /></button>
+                        <button className="btn btn-primary"><CalendarPlus size={16} /> Record Visit</button>
                     </div>
                 </div>
             </div>
@@ -310,37 +442,41 @@ const PatientProfile = () => {
                             </div>
                         </div>
 
-                        {/* Interactive Progress Bar */}
+                        {/* Gestation Step Indicator */}
                         <div className="tracking-progress-section">
-                            <h3 className="tracking-section-title">Gestation Progress Tracking</h3>
-                            <div className="progress-infographic">
-                                <div className="progress-bar-bg">
-                                    <div className="progress-fill" style={{ width: `${Math.min(100, (p.weeks / 40) * 100)}%` }}>
-                                        <div className="progress-glow"></div>
-                                    </div>
-                                    
-                                    {/* Markers */}
-                                    <div className={`progress-marker ${p.weeks >= 0 ? 'reached' : ''}`} style={{ left: '0%' }}>
-                                        <div className="marker-dot"></div>
-                                        <span className="marker-label">T1 (Start)</span>
-                                    </div>
-                                    <div className={`progress-marker ${p.weeks >= 14 ? 'reached' : ''}`} style={{ left: '35%' }}>
-                                        <div className="marker-dot"></div>
-                                        <span className="marker-label">T2 (Week 14)</span>
-                                    </div>
-                                    <div className={`progress-marker ${p.weeks >= 28 ? 'reached' : ''}`} style={{ left: '70%' }}>
-                                        <div className="marker-dot"></div>
-                                        <span className="marker-label">T3 (Week 28)</span>
-                                    </div>
-                                    <div className={`progress-marker ${p.weeks >= 40 ? 'reached' : ''}`} style={{ left: '100%' }}>
-                                        <div className="marker-dot"></div>
-                                        <span className="marker-label">Term (Week 40)</span>
-                                    </div>
+                            <h3 className="tracking-section-title">Gestation Progress</h3>
+                            
+                            <div className="gestation-step-container">
+                                {[
+                                    { id: 'T1', label: 'T1', sub: '0–13 weeks' },
+                                    { id: 'T2', label: 'T2', sub: '14–27 weeks' },
+                                    { id: 'T3', label: 'T3', sub: '28–40 weeks' },
+                                    { id: 'Term', label: 'Term', sub: 'Term' }
+                                ].map((stage) => {
+                                    const weeks = p.weeks || 0;
+                                    let active = false;
+                                    if (stage.id === 'Term' && weeks >= 40) active = true;
+                                    else if (stage.id === 'T3' && weeks >= 28 && weeks < 40) active = true;
+                                    else if (stage.id === 'T2' && weeks >= 14 && weeks < 28) active = true;
+                                    else if (stage.id === 'T1' && weeks < 14) active = true;
+
+                                    return (
+                                        <div key={stage.id} className={`gestation-step ${active ? 'active' : ''}`}>
+                                            <div className="step-circle">{stage.label}</div>
+                                            <span className="step-label">{stage.sub}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            <div className="progress-info-footer">
+                                <p className="progress-status-text">
+                                    Week {p.weeks} ({p.weeks < 14 ? 'Trimester T1' : (p.weeks < 28 ? 'Trimester T2' : (p.weeks < 40 ? 'Trimester T3' : 'Term'))})
+                                </p>
+                                <div className="progress-reminder-box">
+                                    <p><strong>Reminder:</strong> Ensure all prenatal visits for this trimester are completed.</p>
                                 </div>
                             </div>
-                            <p className="progress-note">
-                                Patient is currently at <strong>{p.weeks} weeks</strong>. Ensure all scheduled prenatal visits for Trimester {p.trimester} are completed on time.
-                            </p>
                         </div>
 
                         {/* Additional Details */}
@@ -366,7 +502,7 @@ const PatientProfile = () => {
                     <div className="timeline-card animate-fade">
                         <div className="timeline-header">
                             <h3 className="info-card-title">Prenatal Visits Timeline</h3>
-                            <button className="btn btn-sm btn-outline"><Printer size={12} /> Print Schedule</button>
+                            <button className="btn btn-sm btn-outline" onClick={handlePrintSchedule}><Printer size={12} /> Print Schedule</button>
                         </div>
                         <div className="timeline-list">
                             {p.visits.length > 0 ? p.visits.map((v, i) => (
@@ -374,10 +510,12 @@ const PatientProfile = () => {
                                     <div className={`timeline-dot ${new Date(v.visit_date) < new Date() ? 'completed' : 'upcoming'}`}></div>
                                     <div className="timeline-content">
                                         <div className="timeline-top">
-                                            <span className="timeline-date">{v.visit_date}</span>
+                                            <span className="timeline-date">{formatDateLong(new Date(v.visit_date))}</span>
                                             <div className="timeline-meta-row">
                                                 <span className="timeline-type">Visit #{v.visit_number}</span>
-                                                <span className="timeline-tag">{v.trimester}th Trim.</span>
+                                                <span className="timeline-tag">
+                                                    {v.trimester === 1 ? '1st' : v.trimester === 2 ? '2nd' : v.trimester === 3 ? '3rd' : `${v.trimester}th`} Trim.
+                                                </span>
                                             </div>
                                         </div>
                                         { v.bp && (
