@@ -382,27 +382,74 @@ async getSlotCount(dateStr, timeSlot) {
   }
 
   async getHighRiskPatients() {
-    try {
-      const { data, error } = await this.supabase
-        .from('patient_basic_info')
-        .select(`
-          id, first_name, last_name, barangay, municipality,
-          pregnancy_info!inner(calculated_risk, risk_factors, gravida, lmd)
-        `)
-        .neq('pregnancy_info.calculated_risk', 'Normal')
-        .not('pregnancy_info.calculated_risk', 'is', null);
+  try {
+    const { data, error } = await this.supabase
+      .from('patient_basic_info')
+      .select(`
+        id,
+        first_name,
+        last_name,
+        barangay,
+        municipality,
+        pregnancy_info (
+          calculated_risk,
+          risk_factors,
+          gravida,
+          lmd,
+          edd
+        )
+      `)
+      .neq('pregnancy_info.calculated_risk', 'Normal')
+      .not('pregnancy_info.calculated_risk', 'is', null);
 
-      if (error) throw error;
-      
-      return (data || []).map(p => ({
-        ...p,
-        pregnancy_info: Array.isArray(p.pregnancy_info) ? p.pregnancy_info[0] : p.pregnancy_info
-      }));
-    } catch (err) {
-      console.error('Error fetching high risk patients:', err);
-      return [];
-    }
+    if (error) throw error;
+
+    // Map to object with key = patient id, so we deduplicate by id
+    const map = new Map();
+    (data || []).forEach(p => {
+      const preg =
+        Array.isArray(p.pregnancy_info)
+          ? p.pregnancy_info[0] || {}
+          : p.pregnancy_info || {};
+
+      const key = p.id;
+
+      map.set(key, {
+        id: p.id,
+        first_name: p.first_name,
+        last_name: p.last_name,
+        barangay: p.barangay,
+        municipality: p.municipality,
+        pregnancy_info: {
+          calculated_risk: preg.calculated_risk || 'Normal',
+          risk_factors: preg.risk_factors || null,
+          gravida: preg.gravida || 0,
+          lmd: preg.lmd || null,
+          edd: preg.edd || null
+        }
+      });
+    });
+
+    return Array.from(map.values());
+  } catch (err) {
+    console.error('Error fetching high risk patients:', err);
+    return [];
   }
+}
+  async getLatestPrenatalVisit(patientId) {
+  const { data, error } = await this.supabase
+    .from('prenatal_visits')
+    .select(`*
+    `)
+    .eq('patient_id', patientId)
+    .order('visit_date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
 
   subscribeToHighRiskChanges(callback) {
     return this.supabase

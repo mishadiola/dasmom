@@ -5,7 +5,7 @@ import {
     Activity, Syringe, Baby, HeartPulse,
     CalendarCheck, User, MapPin, Phone,
     AlertTriangle, CheckCircle2, Clock, History,
-    Shield, Mail, Home, FileText, Pill
+    Shield, Mail, Home, FileText, Pill, Scale
 } from 'lucide-react';
 import '../../styles/pages/PatientProfile.css';
 import PatientService from '../../services/patientservice';
@@ -380,11 +380,11 @@ const PatientProfile = () => {
                                                 <span className="timeline-tag">{v.trimester}th Trim.</span>
                                             </div>
                                         </div>
-                                        {v.bp && (
+                                        { v.bp && (
                                             <div className="timeline-vitals">
-                                                <span title="Blood Pressure"><Shield size={12} /> {v.bp}</span>
-                                                <span title="Weight"><Scale size={12} /> {v.weight}kg</span>
-                                                <span title="Fetal Heart Tone"><Activity size={12} /> {v.fht || 'N/A'} bpm</span>
+                                                <Shield size={12} /> {v.bp}
+                                                <Scale size={12} /> {v.weight}kg  // Now this will work as Scale is imported
+                                                <Activity size={12} /> {v.fht || 'N/A'} bpm
                                             </div>
                                         )}
                                         {v.notes && <p className="timeline-notes">{v.notes}</p>}
@@ -516,7 +516,7 @@ const PatientProfile = () => {
         </div>
     );
 };
-
+/*
 const Scale = ({ size, ...props }) => (
     <svg 
         xmlns="http://www.w3.org/2000/svg" 
@@ -532,6 +532,6 @@ const Scale = ({ size, ...props }) => (
     >
         <path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h18"/>
     </svg>
-);
+);*/
 
 export default PatientProfile;
