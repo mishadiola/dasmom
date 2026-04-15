@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
     ArrowLeft, Save, X, Activity, Baby, HeartPulse,
     Thermometer, ShieldAlert, AlertTriangle, Calculator,
-    Stethoscope, FileText, CheckCircle2, XCircle
+    Stethoscope, FileText, CheckCircle2, XCircle, CalendarCheck
 } from 'lucide-react';
 import '../../styles/pages/AddPrenatalVisit.css';
 

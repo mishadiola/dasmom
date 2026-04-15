@@ -7,6 +7,7 @@ import {
     CheckCircle2
 } from 'lucide-react';
 import ScheduledVisitModal from '../../components/Prenatal/ScheduledVisitModal';
+import PatientModal from '../../components/Prenatal/PatientModal';
 import { useNavigate, useLocation } from 'react-router-dom';
 import '../../styles/pages/PrenatalVisits.css';
 
@@ -144,6 +145,7 @@ const PrenatalVisits = () => {
         location: 'Main Clinic - Rm 1'
     });
     const [conflictWarning, setConflictWarning] = useState(null);
+    const [selectedPatient, setSelectedPatient] = useState(null);
 
     const patientService = new PatientService();
 
@@ -333,9 +335,24 @@ const PrenatalVisits = () => {
         (filterStatus === 'All' || v.status === filterStatus)
     );
 
-    const totalPages = Math.ceil(filteredVisits.length / itemsPerPage);
+    // Group visits by patient
+    const uniquePatients = Array.from(
+        new Map(filteredVisits.map(visit => [visit.patientId, {
+            id: visit.patientId,
+            name: visit.patientName,
+            risk: visit.risk,
+            nextVisit: filteredVisits.filter(v => v.patientId === visit.patientId)
+                .sort((a, b) => new Date(a.visitDate) - new Date(b.visitDate))
+                .find(v => new Date(v.visitDate) >= new Date())?.visitDate || 'No upcoming',
+            lastVisit: filteredVisits.filter(v => v.patientId === visit.patientId)
+                .sort((a, b) => new Date(b.visitDate) - new Date(a.visitDate))[0]?.visitDate || 'N/A',
+            totalVisits: filteredVisits.filter(v => v.patientId === visit.patientId).length
+        }])).values()
+    );
+
+    const totalPages = Math.ceil(uniquePatients.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
-    const paginatedVisits = filteredVisits.slice(startIndex, startIndex + itemsPerPage);
+    const paginatedPatients = uniquePatients.slice(startIndex, startIndex + itemsPerPage);
 
     const getRowClass = (status) => {
         if (status === 'Upcoming') return 'tr-upcoming';
@@ -466,37 +483,35 @@ const PrenatalVisits = () => {
                     <table className="pv-table">
                         <thead>
                             <tr>
-                                <th>Visit Date</th>
                                 <th>Patient Name</th>
-                                <th>Gestational Age</th>
-                                <th>BP / Weight</th>
-                                <th>Risk</th>
-                                <th>Status</th>
+                                <th>Risk Level</th>
+                                <th>Next Visit</th>
+                                <th>Last Visit</th>
+                                <th>Total Visits</th>
                                 <th className="text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {paginatedVisits.map(visit => (
-                                <tr key={visit.id} className={getRowClass(visit.status)}>
-                                    <td className="cell-date"><CalendarCheck size={14} /> {formatReadableDate(visit.visitDate)}</td>
+                            {paginatedPatients.map(patient => (
+                                <tr key={patient.id}>
                                     <td>
                                         <div className="p-info">
-                                            <span className="p-name">{visit.patientName}</span>
-                                            <span className="p-id">{visit.patientId}</span>
+                                            <span className="p-name">{patient.name}</span>
+                                            <span className="p-id">{patient.id}</span>
                                         </div>
                                     </td>
-                                    <td className="font-bold">{visit.ga}</td>
-                                    <td className="vitals-cell">{visit.bp} / {visit.weight}</td>
                                     <td>
-                                        <span className={`risk-tag risk-${visit.risk?.replace(' ', '-').toLowerCase() || 'normal'}`}>
-                                            {visit.risk}
+                                        <span className={`risk-tag risk-${patient.risk?.replace(' ', '-').toLowerCase() || 'normal'}`}>
+                                            {patient.risk}
                                         </span>
                                     </td>
-                                    <td><span className={`status-pill pill-${visit.status?.toLowerCase()}`}>{visit.status}</span></td>
+                                    <td>{patient.nextVisit !== 'No upcoming' ? formatReadableDate(patient.nextVisit) : 'No upcoming'}</td>
+                                    <td>{formatReadableDate(patient.lastVisit)}</td>
+                                    <td>{patient.totalVisits}</td>
                                     <td className="text-right">
                                         <div className="row-actions">
                                             <button className="icon-btn" onClick={() => navigate('/dashboard/prenatal/add')}><Plus size={14} /></button>
-                                            <button className="icon-btn"><Eye size={14} /></button>
+                                            <button className="icon-btn" onClick={() => setSelectedPatient(patient.id)}><Eye size={14} /></button>
                                         </div>
                                     </td>
                                 </tr>
@@ -508,7 +523,7 @@ const PrenatalVisits = () => {
                 {totalPages > 1 && (
                     <div className="pagination-wrap">
                         <span>
-                            Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredVisits.length)} of {filteredVisits.length}
+                            Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, uniquePatients.length)} of {uniquePatients.length}
                         </span>
 
                         <div className="pagination-controls">
@@ -541,6 +556,13 @@ const PrenatalVisits = () => {
                     visit={selectedVisit}
                     onClose={() => setSelectedVisit(null)}
                     onUpdateStatus={handleUpdateVisitStatus}
+                />
+            )}
+
+            {selectedPatient && (
+                <PatientModal 
+                    patientId={selectedPatient}
+                    onClose={() => setSelectedPatient(null)}
                 />
             )}
         </div>

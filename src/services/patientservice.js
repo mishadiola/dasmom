@@ -141,6 +141,39 @@ export default class PatientService {
     return error ? [] : (data || []);
   }
 
+  async searchPatients(query) {
+    const term = (query || '').trim();
+    if (!term || term.length < 2) return [];
+
+    const safeTerm = encodeURIComponent(term.trim().replace(/%/g, '\\%'));
+
+    const { data: patients, error } = await this.supabase
+      .from('patient_basic_info')
+      .select(`
+        id,
+        first_name,
+        last_name,
+        barangay,
+        province
+      `)
+      .or(
+        `first_name.ilike.%${safeTerm}%,
+         last_name.ilike.%${safeTerm}%,
+         barangay.ilike.%${safeTerm}%`
+          .replace(/\s+/g, '')
+      )
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (error) throw error;
+
+    return (patients || []).map(patient => ({
+      id: patient.id,
+      name: `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
+      station: `${patient.barangay || 'No Barangay'}, ${patient.province || 'N/A'}`
+    }));
+  }
+
   generateVisitSchedule(lmp, { visitCount = 9, time = '09:00' } = {}) {
     if (!lmp) return [];
     const lmpDate = new Date(lmp);
@@ -156,6 +189,37 @@ export default class PatientService {
       scheduled_time: `${time}:00`,
       type: 'Routine Prenatal'
     }));
+  }
+
+  generateSemesterSchedule(lmp, { time = '09:00' } = {}) {
+    if (!lmp) return [];
+    const lmpDate = new Date(lmp);
+    if (Number.isNaN(lmpDate.getTime())) return [];
+
+    const semesters = [
+      { startWeek: 2, endWeek: 13, name: '1st Trimester', visits: [0, 2, 4] },
+      { startWeek: 14, endWeek: 26, name: '2nd Trimester', visits: [0, 2, 4] },
+      { startWeek: 27, endWeek: 40, name: '3rd Trimester', visits: [0, 2, 4] }
+    ];
+
+    let visitNumber = 1;
+    const schedule = [];
+
+    for (const semester of semesters) {
+      for (let offset of semester.visits) {
+        const week = semester.startWeek + offset;
+        schedule.push({
+          date: this.addWeeksToDate(lmpDate, week),
+          week: week,
+          visitNumber: visitNumber++,
+          trimester: this.getTrimesterFromWeek(week),
+          scheduled_time: `${time}:00`,
+          type: 'Routine Prenatal'
+        });
+      }
+    }
+
+    return schedule;
   }
 
   async insertPrenatalSchedule(patientId, schedulePreview, createdBy, patientData = {}) {
@@ -320,13 +384,13 @@ export default class PatientService {
         ? patientData.conditions.join(', ') : null
     });
 
-    if (patientData.bp && patientData.weight) {
+    if (patientData.firstVisitDate) {
       const today = new Date().toISOString().split('T')[0];
       const firstVisitDate = patientData.firstVisitDate || today;
       const firstVisitTime = patientData.firstVisitTime ? `${patientData.firstVisitTime}:00` : '09:00:00';
       const upcomingSchedule = Array.isArray(patientData.schedulePreview) ? patientData.schedulePreview : [];
       const nextApptDate = upcomingSchedule.find(v => new Date(v.date) > new Date(firstVisitDate))?.date || null;
-      const bpMatch = patientData.bp.match(/^(\d+)[/\\s](\d+)$/);
+      const bpMatch = patientData.bp ? patientData.bp.match(/^(\d+)[/\\s](\d+)$/) : null;
 
       await this.supabase.from('prenatal_visits').insert({
         patient_id: patientId,
@@ -336,8 +400,7 @@ export default class PatientService {
         gestational_age: patientData.gestationalAge || (this.calculateWeeks(patientData.lmp) > 0 ? `${this.calculateWeeks(patientData.lmp)} weeks` : '1st visit'),
         bp_systolic: bpMatch ? parseInt(bpMatch[1]) : null,
         bp_diastolic: bpMatch ? parseInt(bpMatch[2]) : null,
-        weight_kg: parseFloat(patientData.weight),
-        height_cm: patientData.height ? parseFloat(patientData.height) : null,
+        weight_kg: patientData.weight ? parseFloat(patientData.weight) : null,
         temp_c: patientData.temp ? parseFloat(patientData.temp) : null,
         pulse_bpm: patientData.pulse ? parseInt(patientData.pulse) : null,
         resp_rate_cpm: patientData.respRate ? parseInt(patientData.respRate) : null,
@@ -346,7 +409,7 @@ export default class PatientService {
         fetal_movement: patientData.fetalMovement || null,
         presentation: patientData.presentation || null,
         tests_done: patientData.testsDone ? patientData.testsDone.split(',').map(s => s.trim()).filter(Boolean) : null,
-        supplements_given: patientData.supplementsGiven ? patientData.supplementsGiven.split(',').map(s => s.trim()).filter(Boolean) : null,
+        supplements_given: patientData.supplementsGiven || null,
         clinical_notes: patientData.visitNotes || 'Initial registration visit',
         next_appt_date: nextApptDate,
         next_appt_type: 'Follow-up Checkup',
@@ -358,6 +421,18 @@ export default class PatientService {
         bhw_assigned: createdBy,
         created_by: createdBy
       });
+    }
+
+    if (patientData.supplementRecords && patientData.supplementRecords.length > 0) {
+      const records = patientData.supplementRecords.map(record => ({
+        ...record,
+        patient_id: patientId,
+        created_by: createdBy
+      }));
+      const { error: suppError } = await this.supabase.from('supplements').insert(records);
+      if (suppError) {
+        console.error('Error inserting supplements:', suppError);
+      }
     }
 
     if (Array.isArray(patientData.schedulePreview) && patientData.schedulePreview.length) {
@@ -696,6 +771,20 @@ async getHighRiskPatients() {
     }
   }
 
+  async updatePregnancyStatus(patientId, status) {
+    try {
+      const { error } = await this.supabase
+        .from('pregnancy_info')
+        .update({ pregn_postp: status })
+        .eq('patient_id', patientId);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error updating pregnancy status:', error);
+      throw error;
+    }
+  }
+
   async getAvailableStations() {
     const { data } = await this.supabase
       .from('staff_profiles')
@@ -742,16 +831,16 @@ async getHighRiskPatients() {
   async getVaccinationRecords() {
     try {
       const { data, error } = await this.supabase
-        .from('vaccine_records')
+        .from('vaccinations')
         .select(`
           id,
           patient_id,
-          vaccine_name,
-          dose,
+          vaccine_inventory_id,
+          dose_number,
           date_administered,
           next_due_date,
           status,
-          administered_by,
+          created_by,
           notes,
           created_at
         `)
@@ -768,16 +857,16 @@ async getHighRiskPatients() {
   async getSupplementRecords() {
     try {
       const { data, error } = await this.supabase
-        .from('supplement_records')
+        .from('supplements')
         .select(`
           id,
           patient_id,
-          supplement_name,
-          dose,
+          supplement_inventory_id,
+          dosage,
           start_date,
           end_date,
           status,
-          administered_by,
+          created_by,
           notes,
           created_at
         `)
@@ -794,7 +883,7 @@ async getHighRiskPatients() {
   async addVaccinationRecord(record) {
     try {
       const { data, error } = await this.supabase
-        .from('vaccine_records')
+        .from('vaccinations')
         .insert([record])
         .select();
       
@@ -809,7 +898,7 @@ async getHighRiskPatients() {
   async addSupplementRecord(record) {
     try {
       const { data, error } = await this.supabase
-        .from('supplement_records')
+        .from('supplements')
         .insert([record])
         .select();
       
@@ -825,14 +914,14 @@ async getHighRiskPatients() {
     try {
       // Get all vaccination records
       const { data: vaccRecords, error: vaccError } = await this.supabase
-        .from('vaccine_records')
+        .from('vaccinations')
         .select('patient_id, status, date_administered');
       
       if (vaccError) throw vaccError;
       
       // Get all supplement records
       const { data: suppRecords, error: suppError } = await this.supabase
-        .from('supplement_records')
+        .from('supplements')
         .select('patient_id, status, start_date');
       
       if (suppError) throw suppError;
@@ -871,7 +960,7 @@ async getHighRiskPatients() {
         return isNewborn && (r.status === 'Pending' || r.status === 'Overdue');
       }).length;
       
-      const supplementsDistributed = (suppRecords || []).filter(r => r.status === 'Completed').length;
+      const supplementsDistributed = (suppRecords || []).filter(r => r.status === 'Ongoing').length;
       
       // Count low stock items from both tables
       const [vax, supp] = await Promise.all([

@@ -33,7 +33,7 @@ export default class StaffService {
       return (data || []).map(staff => ({
         id: staff.id,
         name: staff.full_name,
-        email: staff.users?.[0]?.email_address || 'N/A',
+        email: staff.users?.email_address || 'N/A',
         role: staff.role || 'Staff',
         station: staff.barangay_assignment || 'No Assignment',
         employeeId: staff.employee_id,
@@ -223,7 +223,7 @@ export default class StaffService {
     return {
       id: data.id,
       name: data.full_name,
-      email: data.users?.[0]?.email_address || 'N/A',
+      email: data.users?.email_address || 'N/A',
       role: data.role || 'Staff',
       station: data.barangay_assignment || 'No Assignment',
       employeeId: data.employee_id,

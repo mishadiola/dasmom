@@ -65,6 +65,48 @@ class BabyService {
   }
 }
 
+  async searchNewborns(query) {
+    const term = (query || '').trim();
+    if (!term || term.length < 2) return [];
+
+    const safeTerm = encodeURIComponent(term.trim().replace(/%/g, '\\%'));
+
+    const { data: newborns, error } = await supabase
+      .from('newborns')
+      .select(`
+        id,
+        baby_name,
+        mother_id,
+        deliveries!inner (delivery_date),
+        patient_basic_info!mother_id (
+          first_name,
+          last_name,
+          barangay,
+          province
+        )
+      `)
+      .or(
+        `baby_name.ilike.%${safeTerm}%,
+         patient_basic_info.first_name.ilike.%${safeTerm}%,
+         patient_basic_info.last_name.ilike.%${safeTerm}%`
+      )
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (error) throw error;
+
+    return (newborns || []).map(newborn => {
+      const mother = newborn.patient_basic_info;
+      return {
+        id: newborn.id,
+        name: newborn.baby_name || `Newborn of ${mother.first_name} ${mother.last_name}`,
+        station: `${mother.barangay || 'No Barangay'}, ${mother.province || 'N/A'}`,
+        motherName: `${mother.first_name || ''} ${mother.last_name || ''}`.trim(),
+        birthDate: newborn.deliveries.delivery_date
+      };
+    });
+  }
+
   async getAllDeliveries() {
     try {
       const { data, error } = await supabase
@@ -174,7 +216,7 @@ class BabyService {
 
     if (deliveryError) throw deliveryError;
 
-    const { error: newbornError } = await supabase
+    const { data: newborn, error: newbornError } = await supabase
       .from('newborns')
       .insert([{
         delivery_id: delivery.id,
@@ -189,11 +231,50 @@ class BabyService {
         condition_at_birth: newbornData.condition_at_birth || 'Healthy',
         risk_level: newbornData.risk_level || 'Normal',
         created_by: createdBy
-      }]);
+      }])
+      .select('id')
+      .single();
 
     if (newbornError) throw newbornError;
 
-    return { delivery_id: delivery.id };
+    // Schedule newborn vaccinations
+    const birthDate = new Date(deliveryData.delivery_date);
+    const vaccineSchedule = [
+      { months: 0, vaccines: ['BCG', 'Hepatitis B (HepB)'], doses: [1, 1] },
+      { months: 1.5, vaccines: ['DPT', 'OPV', 'Hepatitis B (HepB)'], doses: [1, 1, 2] },
+      { months: 2.5, vaccines: ['DPT', 'OPV', 'Hepatitis B (HepB)'], doses: [2, 2, 3] },
+      { months: 3.5, vaccines: ['DPT', 'OPV', 'Hepatitis B (HepB)', 'Tetanus Toxoid (TT)'], doses: [3, 3, 4, 1] },
+      { months: 9, vaccines: ['Tetanus Toxoid (TT)', 'Influenza'], doses: [2, 1] },
+      { months: 12, vaccines: ['Influenza'], doses: [2] }
+    ];
+
+    for (const schedule of vaccineSchedule) {
+      const scheduledDate = new Date(birthDate);
+      scheduledDate.setMonth(scheduledDate.getMonth() + schedule.months);
+      const dateStr = scheduledDate.toISOString().split('T')[0];
+
+      for (let i = 0; i < schedule.vaccines.length; i++) {
+        const vaccine = schedule.vaccines[i];
+        const dose = schedule.doses[i];
+        try {
+          const { data: inv } = await supabase.from('vaccine_inventory').select('id').eq('vaccine_name', vaccine).single();
+          if (inv) {
+            await supabase.from('vaccinations').insert({
+              patient_id: newborn.id,
+              vaccine_inventory_id: inv.id,
+              dose_number: dose,
+              date_administered: dateStr,
+              status: 'Scheduled',
+              created_by: createdBy
+            });
+          }
+        } catch (e) {
+          console.error(`Failed to schedule ${vaccine} for newborn ${newborn.id}:`, e);
+        }
+      }
+    }
+
+    return { delivery_id: delivery.id, newborn_id: newborn.id };
   }
 
   async getDeliveryStats() {

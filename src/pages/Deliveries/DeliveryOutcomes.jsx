@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import '../../styles/pages/DeliveryOutcomes.css';
 import babyservices from '../../services/babyservices';
+import PatientService from '../../services/patientservice';
 import supabase from '../../config/supabaseclient';
 
 const COMPLICATION_OPTIONS = ['None', 'Hemorrhage', 'Infection', 'Preeclampsia', 'Placenta Previa', 'Preterm'];
@@ -24,6 +25,8 @@ const DeliveryOutcomes = () => {
         view: 'outcomes'
     });
     const [showModal, setShowModal] = useState(false);
+    const [showViewModal, setShowViewModal] = useState(false);
+    const [selectedDelivery, setSelectedDelivery] = useState(null);
     const [sortField, setSortField] = useState('deliveryDate');
     const [sortAsc, setSortAsc] = useState(false);
     const [deliveries, setDeliveries] = useState([]);
@@ -182,6 +185,12 @@ const DeliveryOutcomes = () => {
                 stations={stations}
                 staffList={staffList}
             />
+
+            <ViewDeliveryModal
+                show={showViewModal}
+                onClose={() => setShowViewModal(false)}
+                delivery={selectedDelivery}
+            />
             
             {}
             <div className="do-controls">
@@ -288,7 +297,7 @@ const DeliveryOutcomes = () => {
                                             <td>{d.staff}</td>
                                             <td>
                                                 <div className="row-actions">
-                                                    <button className="action-btn view-btn" title="View"><Eye size={13} /></button>
+                                                    <button className="action-btn view-btn" title="View" onClick={() => { setSelectedDelivery(d); setShowViewModal(true); }}><Eye size={13} /></button>
                                                     <button className="action-btn edit-btn" title="Edit"><Edit2 size={13} /></button>
                                                 </div>
                                             </td>
@@ -313,6 +322,7 @@ const DeliveryOutcomes = () => {
 };
 
 const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => {
+    const patientService = new PatientService();
     const [section, setSection] = useState('patient');
     const [loading, setLoading] = useState(false);
     const [searchResults, setSearchResults] = useState([]);
@@ -465,6 +475,9 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
             };
 
             await babyservices.recordDelivery(deliveryData, newbornData);
+            
+            // Update mother's pregnancy status to Postpartum
+            await patientService.updatePregnancyStatus(form.patientId, 'Postpartum');
             
             onSuccess();
             onClose();
@@ -686,6 +699,148 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
                             {loading ? 'Saving...' : 'Save Delivery Record'}
                         </button>
                     )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ViewDeliveryModal = ({ show, onClose, delivery }) => {
+    if (!show || !delivery) return null;
+
+    return (
+        <div className="modal-backdrop" onClick={onClose}>
+            <div className="do-modal" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                    <div>
+                        <h2><Eye size={20} /> View Delivery Record</h2>
+                        <p>Delivery details for {delivery.patientName}</p>
+                    </div>
+                    <button className="modal-close" onClick={onClose}><X size={20} /></button>
+                </div>
+
+                <div className="modal-body">
+                    <div className="view-delivery-grid">
+                        <div className="view-section">
+                            <h3><User size={16} /> Patient Information</h3>
+                            <div className="view-fields">
+                                <div className="view-field">
+                                    <label>Patient Name:</label>
+                                    <span>{delivery.patientName}</span>
+                                </div>
+                                <div className="view-field">
+                                    <label>Patient ID:</label>
+                                    <span>{delivery.patientId}</span>
+                                </div>
+                                <div className="view-field">
+                                    <label>Station:</label>
+                                    <span>{delivery.station}</span>
+                                </div>
+                                <div className="view-field">
+                                    <label>Risk Level:</label>
+                                    <span>{delivery.riskLevel}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="view-section">
+                            <h3><Stethoscope size={16} /> Delivery Details</h3>
+                            <div className="view-fields">
+                                <div className="view-field">
+                                    <label>Delivery Date:</label>
+                                    <span>{delivery.deliveryDate}</span>
+                                </div>
+                                <div className="view-field">
+                                    <label>Delivery Time:</label>
+                                    <span>{delivery.deliveryTime || 'N/A'}</span>
+                                </div>
+                                <div className="view-field">
+                                    <label>Type:</label>
+                                    <span>{delivery.deliveryType}</span>
+                                </div>
+                                <div className="view-field">
+                                    <label>Mode:</label>
+                                    <span>{delivery.deliveryMode || 'N/A'}</span>
+                                </div>
+                                <div className="view-field">
+                                    <label>Facility:</label>
+                                    <span>{delivery.facility || 'N/A'}</span>
+                                </div>
+                                <div className="view-field">
+                                    <label>Attending Staff:</label>
+                                    <span>{delivery.staff || 'N/A'}</span>
+                                </div>
+                                <div className="view-field">
+                                    <label>Gestational Age:</label>
+                                    <span>{delivery.gestationalAge || 'N/A'}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="view-section">
+                            <h3><AlertTriangle size={16} /> Complications</h3>
+                            <div className="view-field">
+                                <span>{delivery.complications || 'None'}</span>
+                            </div>
+                        </div>
+
+                        <div className="view-section">
+                            <h3><Baby size={16} /> Baby Information</h3>
+                            <div className="view-fields">
+                                <div className="view-field">
+                                    <label>Outcome:</label>
+                                    <span>{delivery.babyOutcome}</span>
+                                </div>
+                                <div className="view-field">
+                                    <label>Weight:</label>
+                                    <span>{delivery.babyWeight ? `${delivery.babyWeight} kg` : 'N/A'}</span>
+                                </div>
+                                <div className="view-field">
+                                    <label>Length:</label>
+                                    <span>{delivery.babyLength ? `${delivery.babyLength} cm` : 'N/A'}</span>
+                                </div>
+                                <div className="view-field">
+                                    <label>Head Circumference:</label>
+                                    <span>{delivery.headCircumference ? `${delivery.headCircumference} cm` : 'N/A'}</span>
+                                </div>
+                                <div className="view-field">
+                                    <label>Gender:</label>
+                                    <span>{delivery.babyGender || 'N/A'}</span>
+                                </div>
+                                <div className="view-field">
+                                    <label>APGAR 1min:</label>
+                                    <span>{delivery.apgar1 || 'N/A'}</span>
+                                </div>
+                                <div className="view-field">
+                                    <label>APGAR 5min:</label>
+                                    <span>{delivery.apgar5 || 'N/A'}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="view-section">
+                            <h3><Calendar size={16} /> Follow-up</h3>
+                            <div className="view-fields">
+                                <div className="view-field">
+                                    <label>Postpartum Visit:</label>
+                                    <span>{delivery.postpartumDate || 'N/A'}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {delivery.notes && (
+                            <div className="view-section">
+                                <h3><FileText size={16} /> Notes</h3>
+                                <div className="view-field">
+                                    <span>{delivery.notes}</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="modal-footer">
+                    <button className="btn btn-outline" onClick={onClose}>Close</button>
                 </div>
             </div>
         </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import PatientService from '../../services/patientservice';
-
+import BabyService from '../../services/babyservices';
+import supabase from '../../config/supabaseclient';
 import { useNavigate } from 'react-router-dom';
 import {
     Search, Filter, Plus, X, Syringe, Pill, Package,
@@ -8,34 +9,6 @@ import {
     Eye, Edit2, Calendar, Download, RefreshCw, ChevronDown, ChevronUp, AlertCircle
 } from 'lucide-react';
 import '../../styles/pages/Vaccinations.css';
-
-/* ════════════════════════════════════
-   MOCK DATA
-════════════════════════════════════ */
-const SUMMARY_STATS = [
-    { label: 'Total Vaccinations Administered', value: 1250, color: 'lilac', icon: Syringe },
-    { label: 'Mothers Pending Vaccines', value: 42, color: 'pink', icon: AlertCircle },
-    { label: 'Newborns Pending Vaccines', value: 18, color: 'orange', icon: AlertCircle },
-    { label: 'Supplements Distributed', value: '1,500', unit: 'tablets', color: 'sage', icon: Pill },
-    { label: 'Low Stock Items', value: 3, color: 'rose', icon: Package },
-];
-
-const VACCINES = [];
-
-const SUPPLEMENTS = [];
-
-const STOCK = [
-    { item: 'Tetanus Toxoid (TT)', quantity: 12, unit: 'vials', threshold: 20, status: 'Low' },
-    { item: 'Iron Tablets', quantity: 320, unit: 'tablets', threshold: 500, status: 'Critical' },
-    { item: 'Folic Acid', quantity: 15, unit: 'strips', threshold: 50, status: 'Critical' },
-    { item: 'Calcium Tablets', quantity: 60, unit: 'tablets', threshold: 100, status: 'Low' },
-    { item: 'BCG Vaccine', quantity: 8, unit: 'vials', threshold: 10, status: 'Low' },
-    { item: 'Hepatitis B (HepB)', quantity: 38, unit: 'vials', threshold: 20, status: 'Sufficient' },
-    { item: 'Vitamin D Drops', quantity: 45, unit: 'bottles', threshold: 20, status: 'Sufficient' },
-    { item: 'OPV', quantity: 22, unit: 'vials', threshold: 15, status: 'Sufficient' },
-];
-
-const STOCK_ALERTS = [];
 
 const VACCINE_TYPES = ['Tetanus Toxoid (TT)', 'BCG', 'Hepatitis B (HepB)', 'Influenza', 'OPV', 'DPT'];
 const SUPPLEMENT_TYPES = ['Iron', 'Folic Acid', 'Calcium', 'Vitamin D'];
@@ -53,7 +26,7 @@ const RecordModal = ({ mode, onClose, onSave }) => {
     const updateForm = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
 
     const handleSave = async () => {
-        if (!form.patientName || !form.dose || !form.date || !form.staff) {
+        if (!form.patientName || (mode === 'vaccine' && (!form.vaccine || !form.dose)) || (mode === 'supplement' && (!form.supplement || !form.dose)) || !form.date || !form.staff) {
             alert('Please fill in all required fields.');
             return;
         }
@@ -61,35 +34,51 @@ const RecordModal = ({ mode, onClose, onSave }) => {
         setIsSaving(true);
         try {
             const patientService = new PatientService();
-            
-            // Extract patient ID from name (assuming format "Patient ID" or actual name)
-            const patientId = form.patientName.includes('Patient') 
-                ? form.patientName.split(' ')[1] 
-                : await patientService.findPatientByName(form.patientName);
-            
-            if (!patientId) {
-                alert('Patient not found. Please check the patient name.');
-                return;
+
+            let patientId;
+            if (form.patientType === 'Mother') {
+                const patients = await patientService.searchPatients(form.patientName);
+                if (patients.length !== 1) throw new Error('Please enter a unique patient name');
+                patientId = patients[0].id;
+            } else {
+                const newborns = await babyService.searchNewborns(form.patientName);
+                if (newborns.length !== 1) throw new Error('Please enter a unique newborn name');
+                patientId = newborns[0].id;
             }
 
-            const record = {
-                patient_id: patientId,
-                vaccine_name: form.vaccine,
-                supplement_name: form.supplement,
-                dose: form.dose,
-                date_administered: form.date,
-                next_due_date: form.nextDue,
-                start_date: form.date, // For supplements
-                end_date: form.nextDue, // For supplements
-                status: 'Completed',
-                administered_by: form.staff,
-                notes: form.notes
-            };
+            const currentUser = await patientService.getCurrentUserId();
+            if (!currentUser) throw new Error('No logged-in user');
 
             if (mode === 'vaccine') {
-                await patientService.addVaccinationRecord(record);
+                const { data: vaccInv } = await supabase.from('vaccine_inventory').select('id').eq('vaccine_name', form.vaccine).single();
+                if (!vaccInv) throw new Error('Vaccine not found in inventory');
+
+                const doseNumber = form.dose === '1st Dose' ? 1 : form.dose === '2nd Dose' ? 2 : form.dose === '3rd Dose' ? 3 : form.dose === 'Booster' ? 4 : 5;
+
+                await supabase.from('vaccinations').insert({
+                    patient_id: patientId,
+                    vaccine_inventory_id: vaccInv.id,
+                    dose_number: doseNumber,
+                    date_administered: form.date,
+                    next_due_date: form.nextDue || null,
+                    status: 'Completed',
+                    created_by: currentUser,
+                    notes: form.notes
+                });
             } else {
-                await patientService.addSupplementRecord(record);
+                const { data: suppInv } = await supabase.from('supplement_inventory').select('id').eq('supplement_name', form.supplement).single();
+                if (!suppInv) throw new Error('Supplement not found in inventory');
+
+                await supabase.from('supplements').insert({
+                    patient_id: patientId,
+                    supplement_inventory_id: suppInv.id,
+                    dosage: form.dose,
+                    start_date: form.date,
+                    end_date: form.nextDue || null,
+                    status: 'Ongoing',
+                    created_by: currentUser,
+                    notes: form.notes
+                });
             }
 
             if (onSave) {
@@ -99,7 +88,7 @@ const RecordModal = ({ mode, onClose, onSave }) => {
             }
         } catch (error) {
             console.error('Error saving record:', error);
-            alert('Failed to save record. Please try again.');
+            alert('Failed to save record: ' + error.message);
         } finally {
             setIsSaving(false);
         }
@@ -220,6 +209,7 @@ const RecordModal = ({ mode, onClose, onSave }) => {
 const Vaccinations = () => {
     const navigate = useNavigate();
     const patientService = new PatientService();
+    const babyService = BabyService;
 
     // State
     const [stats, setStats] = useState({
@@ -245,66 +235,136 @@ const Vaccinations = () => {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [newStats, newInventory, vaccRecords, suppRecords] = await Promise.all([
-                patientService.getVaccinationStats(),
-                patientService.getVaccineInventory(),
-                patientService.getVaccinationRecords(),
-                patientService.getSupplementRecords()
-            ]);
-            setStats(newStats);
-            setInventory(newInventory);
-            
-            // Get patient information for proper name display and age categorization
+
+            const { data: vaccRecords } = await supabase.from('vaccinations').select('*').order('created_at', { ascending: false });
+            const { data: suppRecords } = await supabase.from('supplements').select('*').order('created_at', { ascending: false });
+
+            // Get maps for names
+            const { data: vaccineInv } = await supabase.from('vaccine_inventory').select('id, vaccine_name');
+            const vaccineMap = new Map(vaccineInv.map(v => [v.id, v.vaccine_name]));
+            const { data: suppInv } = await supabase.from('supplement_inventory').select('id, supplement_name');
+            const suppMap = new Map(suppInv.map(s => [s.id, s.supplement_name]));
+            const { data: staff } = await supabase.from('staff_profiles').select('id, full_name');
+            const staffMap = new Map(staff.map(s => [s.id, s.full_name]));
+
+            // Get patient information
             const patientIds = [...new Set([...(vaccRecords || []).map(r => r.patient_id), ...(suppRecords || []).map(r => r.patient_id)])];
             const patients = patientIds.length > 0 ? await patientService.getPatientsByIds(patientIds) : [];
-            const patientMap = new Map((patients || []).map(p => [p.id, p]));
-            
-            // Transform vaccination records with patient data
-            const transformedVaccRecords = (vaccRecords || []).map(record => {
-                const patient = patientMap.get(record.patient_id);
-                const patientName = patient ? `${patient.first_name || ''} ${patient.last_name || ''}`.trim() : `Patient ${record.patient_id}`;
-                const age = patient ? calculateAge(patient.date_of_birth) : 0;
-                const patientType = age >= 18 ? 'Mother' : 'Newborn';
-                
-                return {
-                    id: record.id,
-                    patientName,
-                    patientId: record.patient_id,
-                    station: patient?.barangay || 'Unknown',
-                    type: patientType,
-                    vaccine: record.vaccine_name,
-                    dose: record.dose,
-                    dateAdministered: record.date_administered,
-                    nextDue: record.next_due_date,
-                    status: record.status,
-                    staff: record.administered_by,
-                    notes: record.notes
-                };
+            const patientMap = new Map(patients.map(p => [p.id, { ...p, type: 'Mother' }]));
+
+            // Get newborns for ids not in patients
+            const newbornIds = patientIds.filter(id => !patientMap.has(id));
+            if (newbornIds.length > 0) {
+                const { data: newborns } = await supabase.from('newborns').select('id, baby_name, mother_id, deliveries!inner (delivery_date), patient_basic_info!mother_id (first_name, last_name, barangay, province)').in('id', newbornIds);
+                newborns.forEach(newborn => {
+                    const mother = newborn.patient_basic_info;
+                    patientMap.set(newborn.id, {
+                        id: newborn.id,
+                        name: newborn.baby_name || `Newborn of ${mother.first_name} ${mother.last_name}`,
+                        station: `${mother.barangay}, ${mother.province}`,
+                        type: 'Newborn',
+                        date_of_birth: newborn.deliveries.delivery_date
+                    });
+                });
+            }
+
+            // Transform vaccination records
+            const transformedVaccRecords = (vaccRecords || []).map(record => ({
+                id: record.id,
+                patientId: record.patient_id,
+                patientName: patientMap.get(record.patient_id)?.name || 'Unknown',
+                station: patientMap.get(record.patient_id)?.station || 'Unknown',
+                type: patientMap.get(record.patient_id)?.type || 'Unknown',
+                vaccine: vaccineMap.get(record.vaccine_inventory_id) || 'Unknown',
+                dose: `${record.dose_number}${record.dose_number === 1 ? 'st' : record.dose_number === 2 ? 'nd' : record.dose_number === 3 ? 'rd' : 'th'} Dose`,
+                date: record.date_administered,
+                nextDue: record.next_due_date,
+                staff: staffMap.get(record.created_by) || 'Unknown',
+                notes: record.notes,
+                status: record.status
+            }));
+
+            // Transform supplement records
+            const transformedSuppRecords = (suppRecords || []).map(record => ({
+                id: record.id,
+                patientId: record.patient_id,
+                patientName: patientMap.get(record.patient_id)?.name || 'Unknown',
+                station: patientMap.get(record.patient_id)?.station || 'Unknown',
+                type: patientMap.get(record.patient_id)?.type || 'Unknown',
+                supplement: suppMap.get(record.supplement_inventory_id) || 'Unknown',
+                dose: record.dosage,
+                date: record.start_date,
+                nextDue: record.end_date,
+                staff: staffMap.get(record.created_by) || 'Unknown',
+                notes: record.notes,
+                status: record.status
+            }));
+
+            setVaccinationRecords(transformedVaccRecords);
+            setSupplementRecords(transformedSuppRecords);
+
+            // Update stats
+            setStats({
+                totalAdministered: vaccRecords.length,
+                mothersPending: 0, // TODO: calculate
+                newbornsPending: 0, // TODO: calculate
+                supplementsDistributed: suppRecords.length,
+                lowStockAlerts: 0 // TODO: calculate
             });
-            
-            // Transform supplement records with patient data
-            const transformedSuppRecords = (suppRecords || []).map(record => {
-                const patient = patientMap.get(record.patient_id);
-                const patientName = patient ? `${patient.first_name || ''} ${patient.last_name || ''}`.trim() : `Patient ${record.patient_id}`;
-                const age = patient ? calculateAge(patient.date_of_birth) : 0;
-                const patientType = age >= 18 ? 'Mother' : 'Newborn';
-                
-                return {
-                    id: record.id,
-                    patientName,
-                    patientId: record.patient_id,
-                    station: patient?.barangay || 'Unknown',
-                    type: patientType,
-                    supplement: record.supplement_name,
-                    dose: record.dose,
-                    startDate: record.start_date,
-                    endDate: record.end_date,
-                    status: record.status,
-                    staff: record.administered_by,
-                    notes: record.notes
-                };
-            });
-            
+
+            // Update inventory
+            const inventoryService = (await import('../../services/inventoryservice')).default;
+            const invSvc = new inventoryService();
+            const vaccineInvData = await invSvc.getVaccineInventory();
+            const suppInvData = await invSvc.getSupplementInventory();
+            const inventory = [...vaccineInvData.map(v => ({ ...v, type: 'vaccine', threshold: 20, status: v.quantity < 10 ? 'Critical' : v.quantity < 20 ? 'Low' : 'Sufficient' })), ...suppInvData.map(s => ({ ...s, type: 'supplement', threshold: 50, status: s.quantity < 25 ? 'Critical' : s.quantity < 50 ? 'Low' : 'Sufficient' }))];
+            setInventory(inventory);
+
+            // Fetch all patients and newborns to show all entities
+            const allPatients = await patientService.getAllPatients();
+            const { data: allNewborns } = await supabase.from('newborns').select('id, baby_name, mother_id, deliveries!inner (delivery_date), patient_basic_info!mother_id (first_name, last_name, barangay, province)').order('created_at', { ascending: false });
+
+            const existingPatientIds = new Set([...transformedVaccRecords.map(r => r.patientId), ...transformedSuppRecords.map(r => r.patientId)]);
+
+            for (const patient of allPatients) {
+              if (!existingPatientIds.has(patient.id)) {
+                transformedVaccRecords.push({
+                  id: `placeholder-patient-${patient.id}`,
+                  patientId: patient.id,
+                  patientName: patient.name,
+                  station: patient.station,
+                  type: patient.age >= 18 ? 'Mother' : 'Child',
+                  vaccine: 'No vaccinations scheduled',
+                  dose: '',
+                  date: '',
+                  nextDue: '',
+                  staff: '',
+                  notes: '',
+                  status: 'No records'
+                });
+              }
+            }
+
+            for (const newborn of allNewborns || []) {
+              if (!existingPatientIds.has(newborn.id)) {
+                const mother = newborn.patient_basic_info;
+                transformedVaccRecords.push({
+                  id: `placeholder-newborn-${newborn.id}`,
+                  patientId: newborn.id,
+                  patientName: newborn.baby_name || `Newborn of ${mother.first_name} ${mother.last_name}`,
+                  station: `${mother.barangay}, ${mother.province}`,
+                  type: 'Newborn',
+                  vaccine: 'No vaccinations scheduled',
+                  dose: '',
+                  date: '',
+                  nextDue: '',
+                  staff: '',
+                  notes: '',
+                  status: 'No records'
+                });
+              }
+            }
+
             setVaccinationRecords(transformedVaccRecords);
             setSupplementRecords(transformedSuppRecords);
         } catch (error) {

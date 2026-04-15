@@ -7,9 +7,9 @@ import {
     CheckCircle2, XCircle, Loader2
 } from 'lucide-react';
 import '../../styles/pages/AddPatient.css';
-import PatientService from "../../services/patientservice";
-
+import PatientService from "../../services/patientservice";import InventoryService from '../../services/inventoryservice';
 const patientService = new PatientService();
+const inventoryService = new InventoryService();
 const TABS = [
     { id: 'personal', label: 'Personal', icon: User },
     { id: 'pregnancy', label: 'Pregnancy', icon: HeartPulse },
@@ -33,6 +33,8 @@ const AddPatient = () => {
     const [doctorList, setDoctorList] = useState([]);
     const [schedulePreview, setSchedulePreview] = useState([]);
     const [loadingSchedule, setLoadingSchedule] = useState(false);
+    const [supplementsInventory, setSupplementsInventory] = useState([]);
+    const [supplementOptions, setSupplementOptions] = useState([]);
 
     const currentStaff = {
         id: user?.id || null,
@@ -53,9 +55,10 @@ const AddPatient = () => {
         assignedMidwife: '', assignedDoctor: '',
         bhwAssigned: currentStaff.full_name,
         bp: '', weight: '', height: '', bmi: '', temp: '', pulse: '', respRate: '', fundalHeight: '',
-        fetalMovement: '', presentation: '', testsDone: '', supplementsGiven: '', visitNotes: '',
+        fetalMovement: '', presentation: '', testsDone: '', supplementsGiven: [], visitNotes: '',
         fhr: '', hgb: '',
         emName: '', emRel: '', emPhone: '', emAddress: '',
+        supplements: []
     });
 
     useEffect(() => {
@@ -70,8 +73,30 @@ const AddPatient = () => {
                 setLoadingStations(false);
             }
         };
+        const loadSupplements = async () => {
+            try {
+                const inventory = await inventoryService.getSupplementInventory();
+                setSupplementsInventory(inventory);
+                console.log('✅ Supplements inventory loaded:', inventory);
+            } catch (err) {
+                console.error('Error loading supplements:', err);
+            }
+        };
         loadStations();
+        loadSupplements();
     }, []);
+
+    useEffect(() => {
+        if (supplementsInventory.length > 0) {
+            const options = supplementsInventory.map(item => ({
+                name: item.supplement_name,
+                defaultAmount: '1 ' + item.unit,
+                id: item.id
+            }));
+            setSupplementOptions(options);
+            setFormData(prev => ({ ...prev, supplements: options.map(o => ({ name: o.name, amount: o.defaultAmount, id: o.id })) }));
+        }
+    }, [supplementsInventory]);
 
     useEffect(() => {
         if (user) {
@@ -138,7 +163,7 @@ const AddPatient = () => {
 
         setLoadingSchedule(true);
         try {
-            const preview = patientService.generateVisitSchedule(formData.lmp, {
+            const preview = patientService.generateSemesterSchedule(formData.lmp, {
                 time: formData.firstVisitTime || '09:00'
             });
             setSchedulePreview(preview);
@@ -216,9 +241,26 @@ const AddPatient = () => {
 
         setIsSaving(true);
 
-try {
-    console.log('📤 Passing to PatientService.addPatient:', formData);
-    const newPatient = await patientService.addPatient(formData);
+        const preparedSupplements = formData.supplementsGiven.map(name => {
+            const supp = formData.supplements.find(s => s.name === name);
+            return `${name} (${supp?.amount || '1'})`;
+        });
+        const supplementRecords = formData.supplementsGiven.map(name => {
+            const supp = formData.supplements.find(s => s.name === name);
+            const inv = supplementsInventory.find(i => i.supplement_name === name);
+            return {
+                supplement_inventory_id: inv?.id,
+                dosage: supp?.amount || '1',
+                start_date: formData.firstVisitDate,
+                status: 'Ongoing',
+                notes: 'Initial distribution at registration'
+            };
+        });
+        const patientData = { ...formData, supplementsGiven: preparedSupplements, supplementRecords };
+
+        try {
+            console.log('📤 Passing to PatientService.addPatient:', patientData);
+            const newPatient = await patientService.addPatient(patientData);
     
     console.log('🎉 Patient created:', newPatient.id, `${newPatient.first_name || formData.firstName} ${newPatient.last_name || formData.lastName}`);
     
@@ -775,13 +817,43 @@ try {
                                 </div>
                                 <div className="form-group">
                                     <label>Supplements Given</label>
-                                    <input
-                                        type="text"
-                                        name="supplementsGiven"
-                                        value={formData.supplementsGiven}
-                                        onChange={handleChange}
-                                        placeholder="e.g. Iron, Folic Acid"
-                                    />
+                                    <div className="supplements-section">
+                                        {supplementOptions.map(option => {
+                                            const isChecked = formData.supplementsGiven.includes(option.name);
+                                            const supp = formData.supplements.find(s => s.name === option.name);
+                                            return (
+                                                <div key={option.name} className="supplement-item">
+                                                    <label>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isChecked}
+                                                            onChange={(e) => {
+                                                                if (e.target.checked) {
+                                                                    setFormData(prev => ({ ...prev, supplementsGiven: [...prev.supplementsGiven, option.name] }));
+                                                                } else {
+                                                                    setFormData(prev => ({ ...prev, supplementsGiven: prev.supplementsGiven.filter(n => n !== option.name) }));
+                                                                }
+                                                            }}
+                                                        />
+                                                        {option.name}
+                                                    </label>
+                                                    {isChecked && (
+                                                        <input
+                                                            type="text"
+                                                            value={supp?.amount || ''}
+                                                            onChange={(e) => {
+                                                                setFormData(prev => ({
+                                                                    ...prev,
+                                                                    supplements: prev.supplements.map(s => s.name === option.name ? { ...s, amount: e.target.value } : s)
+                                                                }));
+                                                            }}
+                                                            placeholder={option.defaultAmount}
+                                                        />
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                             </div>
                             <div className="form-group">

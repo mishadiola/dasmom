@@ -225,16 +225,176 @@ const AddUserModal = ({ onClose, onSuccess }) => {
         </div>
     );
 };
-
 /* ════════════════════════════
-   TAB 1: USER ACCOUNTS
+   EDIT USER MODAL
 ════════════════════════════ */
+const EditUserModal = ({ staff, onClose, onSuccess }) => {
+    const staffService = new StaffService();
+    const [form, setForm] = useState({ name: staff.name, email: staff.email, role: staff.role, station: staff.station });
+    const [stations, setStations] = useState([]);
+    const [showStationDropdown, setShowStationDropdown] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState('');
+    const update = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+    useEffect(() => {
+        const fetchStations = async () => {
+            setLoading(true);
+            try {
+                const stationList = await staffService.getAllStations();
+                setStations(stationList);
+            } catch (err) {
+                console.error('Failed to fetch stations:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchStations();
+    }, []);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setSubmitting(true);
+        setError('');
+
+        try {
+            await staffService.updateStaff(staff.id, {
+                fullName: form.name,
+                role: form.role,
+                station: form.station,
+            });
+            onSuccess();
+            onClose();
+        } catch (err) {
+            setError(err.message || 'Failed to update staff');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="modal-backdrop" onClick={onClose}>
+            <div className="set-modal" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                    <div><h2><Edit2 size={20} /> Edit Staff Account</h2><p>Update staff member details.</p></div>
+                    <button className="modal-close" onClick={onClose}><X size={20} /></button>
+                </div>
+                <div className="modal-body">
+                    {error && (
+                        <div className="form-error" style={{ padding: '12px', backgroundColor: '#fee', borderLeft: '4px solid #f66', marginBottom: '16px', borderRadius: '4px', color: '#c33' }}>
+                            <AlertCircle size={14} style={{ display: 'inline', marginRight: '6px' }} />
+                            {error}
+                        </div>
+                    )}
+                    <div className="form-grid-2">
+                        <div className="form-group form-group--full">
+                            <label>Full Name <span className="req">*</span></label>
+                            <input type="text" placeholder="e.g. Nurse Ana Reyes" value={form.name} onChange={e => update('name', e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                            <label>Email / Username</label>
+                            <input type="email" placeholder="user@gmail.com" value={form.email} disabled style={{ backgroundColor: '#f5f5f5' }} />
+                        </div>
+                        <div className="form-group">
+                            <label>Role <span className="req">*</span></label>
+                            <select value={form.role} onChange={e => update('role', e.target.value)}>
+                                <option value="Staff">Staff</option>
+                                <option value="Admin">Admin</option>
+                                <option value="Midwife">Midwife</option>
+                                <option value="Doctor">Doctor</option>
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label>Assign Station / Barangay</label>
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    type="text"
+                                    placeholder="Select or type barangay..."
+                                    value={form.station}
+                                    onChange={e => update('station', e.target.value)}
+                                    onFocus={() => setShowStationDropdown(true)}
+                                    style={{ paddingRight: '32px' }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowStationDropdown(!showStationDropdown)}
+                                    style={{
+                                        position: 'absolute',
+                                        right: '8px',
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        padding: '4px',
+                                    }}
+                                >
+                                    <ChevronDown size={16} />
+                                </button>
+                                {showStationDropdown && (
+                                    <div
+                                        style={{
+                                            position: 'absolute',
+                                            top: '100%',
+                                            left: 0,
+                                            right: 0,
+                                            backgroundColor: 'white',
+                                            border: '1px solid #ddd',
+                                            borderRadius: '6px',
+                                            marginTop: '4px',
+                                            zIndex: 100,
+                                            maxHeight: '200px',
+                                            overflowY: 'auto',
+                                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                        }}
+                                    >
+                                        {stations.length > 0 ? (
+                                            stations.map(s => (
+                                                <div
+                                                    key={s}
+                                                    onClick={() => { update('station', s); setShowStationDropdown(false); }}
+                                                    style={{
+                                                        padding: '10px 12px',
+                                                        cursor: 'pointer',
+                                                        borderBottom: '1px solid #f0f0f0',
+                                                        backgroundColor: form.station === s ? '#f0f0f0' : 'white',
+                                                        ':hover': { backgroundColor: '#f5f5f5' },
+                                                    }}
+                                                >
+                                                    {s}
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div style={{ padding: '10px 12px', color: '#999' }}>
+                                                No stations available. Type to create new.
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            <span className="form-hint">Select existing station or type to create a new one</span>
+                        </div>
+                    </div>
+                </div>
+                <div className="modal-footer">
+                    <button className="btn btn-outline" onClick={onClose} disabled={submitting}>Cancel</button>
+                    <button className="btn btn-primary" onClick={handleSubmit} disabled={submitting}>
+                        <CheckCircle2 size={15} /> {submitting ? 'Updating...' : 'Update Account'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
 const UserAccountsTab = () => {
     const staffService = new StaffService();
     const [search, setSearch] = useState('');
     const [roleFilter, setRoleFilter] = useState('All');
     const [statusFilter, setStatusFilter] = useState('All');
     const [showModal, setShowModal] = useState(false);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [selectedStaff, setSelectedStaff] = useState(null);
     const [staff, setStaff] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -332,7 +492,7 @@ const UserAccountsTab = () => {
                                     </td>
                                     <td>
                                         <div className="row-actions">
-                                            <button className="action-btn edit-btn" title="Edit"><Edit2 size={13} /></button>
+                                            <button className="action-btn edit-btn" title="Edit" onClick={() => { setSelectedStaff(u); setShowEditModal(true); }}><Edit2 size={13} /></button>
                                             <button className="action-btn key-btn" title="Reset Password"><Key size={13} /></button>
                                             <button className={`action-btn ${u.status === 'Active' ? 'deact-btn' : 'act-btn'}`} title={u.status === 'Active' ? 'Deactivate' : 'Activate'}>
                                                 {u.status === 'Active' ? <ToggleRight size={13} /> : <ToggleLeft size={13} />}
@@ -355,6 +515,7 @@ const UserAccountsTab = () => {
                 </table>
             </div>
             {showModal && <AddUserModal onClose={() => setShowModal(false)} onSuccess={handleModalSuccess} />}
+            {showEditModal && <EditUserModal staff={selectedStaff} onClose={() => setShowEditModal(false)} onSuccess={handleModalSuccess} />}
         </div>
     );
 };
