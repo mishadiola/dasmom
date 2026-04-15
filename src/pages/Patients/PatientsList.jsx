@@ -7,6 +7,7 @@ import {
     FileText, User, MapPin, Clock, AlertTriangle,
     X, CheckCircle2
 } from 'lucide-react';
+import '../../styles/pages/PatientsList.css';
 import PatientService from '../../services/patientservice';
 import EditPatientModal from '../../components/Patient/EditPatientModal';
 

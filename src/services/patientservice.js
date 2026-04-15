@@ -1065,7 +1065,6 @@ async getHighRiskPatients() {
       const { error: supError } = await this.supabase.from('supplements').insert(supData);
       if (supError) throw supError;
 
-      // Update inventory
       await inventoryService.updateInventoryQuantity('supplement_inventory', sup.id, currentStock - amount);
     }
   }
