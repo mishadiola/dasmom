@@ -423,3 +423,482 @@
     .detail-grid { grid-template-columns: 1fr; }
     .expand-detail { grid-template-columns: 1fr; }
 }
+
+/* ════════════════════════════
+   VACCINATION TRACKING REDESIGN
+════════════════════════════ */
+
+/* Page header specific for vaccination */
+.vacc-header .page-title {
+    display: flex;
+    align-items: center;
+}
+
+/* Vaccination stats grid */
+.vacc-stats {
+    grid-template-columns: repeat(5, 1fr);
+}
+
+/* Legend chips for vaccination */
+.vacc-legend .chip-completed { background: rgba(109,184,160,0.12); color: #3d8870; }
+.vacc-legend .chip-progress   { background: rgba(91,174,208,0.12);  color: #2d7fa3; }
+.vacc-legend .chip-overdue    { background: rgba(224,92,115,0.12);  color: #b73a52; }
+
+/* Vaccination table card */
+.vacc-table-card {
+    margin-top: 0;
+}
+
+/* Table header specific */
+.vacc-table th {
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+/* Progress mini bar in table */
+.vacc-progress-cell {
+    min-width: 100px;
+}
+
+.vacc-progress-mini {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.vacc-progress-track-mini {
+    flex: 1;
+    height: 8px;
+    background: #f0f2f5;
+    border-radius: 4px;
+    overflow: hidden;
+    min-width: 60px;
+}
+
+.vacc-progress-fill-mini {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.vacc-progress-fill-mini.progress-completed { background: #6db8a0; }
+.vacc-progress-fill-mini.progress-high     { background: linear-gradient(90deg, #6db8a0, #5baed0); }
+.vacc-progress-fill-mini.progress-medium  { background: #5baed0; }
+.vacc-progress-fill-mini.progress-low     { background: linear-gradient(90deg, #5baed0, #e8b84b); }
+.vacc-progress-fill-mini.progress-started { background: #e8b84b; }
+
+.vacc-progress-text {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-text);
+    min-width: 32px;
+}
+
+/* Vaccine count display */
+.vacc-count {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.vacc-completed {
+    color: #3d8870;
+    font-weight: 700;
+}
+
+.vacc-separator {
+    color: var(--color-text-muted);
+    margin: 0 3px;
+}
+
+.vacc-total {
+    color: var(--color-text-muted);
+}
+
+/* Next vaccine display */
+.next-vaccine-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.vaccine-dose {
+    color: var(--color-text-muted);
+    font-weight: 500;
+}
+
+.all-completed {
+    font-size: 12px;
+    font-weight: 600;
+    color: #3d8870;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Due date display */
+.next-date {
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.next-date.date-overdue {
+    color: #b73a52;
+}
+
+.no-date {
+    color: var(--color-text-muted);
+}
+
+/* Row highlighting for vaccination status */
+.nb-row--completed { border-left: 3px solid #6db8a0; background: rgba(109,184,160,0.04); }
+.nb-row--completed:hover { background: rgba(109,184,160,0.08); }
+
+.nb-row--progress { border-left: 3px solid #5baed0; background: rgba(91,174,208,0.04); }
+.nb-row--progress:hover { background: rgba(91,174,208,0.08); }
+
+.nb-row--started { border-left: 3px solid #e8b84b; background: rgba(232,184,75,0.04); }
+.nb-row--started:hover { background: rgba(232,184,75,0.08); }
+
+.nb-row--overdue { border-left: 3px solid #e05c73; background: rgba(224,92,115,0.06); }
+.nb-row--overdue:hover { background: rgba(224,92,115,0.1); }
+
+/* Vaccination actions */
+.vacc-actions {
+    gap: 6px;
+}
+
+/* Expanded vaccination details */
+.vacc-expand {
+    grid-template-columns: 1.2fr 1.5fr 1fr 0.8fr;
+}
+
+.vacc-expand-progress h4,
+.vacc-expand-list h4,
+.vacc-expand-next h4 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.expand-progress-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.expand-progress-track {
+    flex: 1;
+    height: 12px;
+    background: #f0f2f5;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.expand-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #6db8a0, #5baed0);
+    border-radius: 6px;
+    transition: width 0.5s ease;
+}
+
+.expand-progress-count {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin: 0;
+}
+
+/* Mini vaccine list */
+.vacc-mini-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.vacc-mini-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    background: white;
+    border: 1px solid #f0f2f5;
+}
+
+.vacc-mini-item.completed { border-left: 3px solid #6db8a0; }
+.vacc-mini-item.pending   { border-left: 3px solid #5baed0; }
+.vacc-mini-item.overdue   { border-left: 3px solid #e05c73; }
+
+.vacc-mini-name {
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.vacc-mini-status {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+}
+
+.vacc-mini-status.completed { background: rgba(109,184,160,0.15); color: #3d8870; }
+.vacc-mini-status.pending   { background: rgba(91,174,208,0.12);  color: #2d7fa3; }
+.vacc-mini-status.overdue   { background: rgba(224,92,115,0.15);  color: #b73a52; }
+
+.vacc-more {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    font-style: italic;
+    margin: 4px 0 0;
+}
+
+/* Next vaccine highlight */
+.next-vaccine-highlight {
+    background: linear-gradient(135deg, rgba(91,174,208,0.08), rgba(109,184,160,0.08));
+    border: 1px solid rgba(91,174,208,0.2);
+    border-radius: 10px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.next-vaccine-label {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-text);
+}
+
+.next-vaccine-dose {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.next-vaccine-date {
+    font-size: 12px;
+    font-weight: 600;
+    color: #2d7fa3;
+}
+
+.all-done {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #3d8870;
+    font-weight: 600;
+    font-size: 13px;
+    margin: 0;
+}
+
+.vacc-expand-actions {
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+}
+
+.vacc-expand-actions .btn {
+    font-size: 12px;
+    padding: 8px 14px;
+}
+
+/* Empty state for vaccination */
+.vacc-empty small {
+    display: block;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+/* Vaccination Modal Specific Styles */
+.vacc-modal {
+    max-width: 700px;
+}
+
+.vacc-header {
+    background: linear-gradient(135deg, rgba(224,92,115,0.08), rgba(185,129,138,0.06));
+}
+
+.vacc-progress-overview {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 8px;
+}
+
+.vacc-progress-card {
+    background: linear-gradient(135deg, #fafbfc, #f5f7fa);
+    border: 1px solid #eef0f4;
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.vacc-progress-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.vacc-progress-icon {
+    color: var(--color-rose);
+}
+
+.vacc-progress-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-text);
+}
+
+.vacc-progress-subtitle {
+    margin: 0;
+    font-size: 13px;
+    color: var(--color-text-muted);
+}
+
+.vacc-progress-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.vacc-progress-track {
+    flex: 1;
+    height: 14px;
+    background: #e5e8f0;
+    border-radius: 7px;
+    overflow: hidden;
+}
+
+.vacc-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #b9818a, #6db8a0);
+    border-radius: 7px;
+    transition: width 0.5s ease;
+}
+
+.vacc-progress-percent {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--color-text);
+    min-width: 45px;
+    text-align: right;
+}
+
+/* Status cards in modal */
+.vacc-status-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.vacc-status-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 14px;
+    border-radius: 10px;
+    gap: 4px;
+}
+
+.vacc-status-card.completed {
+    background: rgba(109,184,160,0.1);
+    color: #3d8870;
+}
+
+.vacc-status-card.upcoming {
+    background: rgba(91,174,208,0.1);
+    color: #2d7fa3;
+}
+
+.vacc-status-card.overdue {
+    background: rgba(224,92,115,0.1);
+    color: #b73a52;
+}
+
+.vacc-status-count {
+    font-size: 22px;
+    font-weight: 800;
+}
+
+.vacc-status-label {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* Vaccination schedule section */
+.vacc-schedule-section {
+    margin-top: 8px;
+}
+
+.vacc-section-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin: 0 0 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.vacc-table .col-vaccine {
+    font-weight: 700;
+    color: var(--color-text);
+}
+
+.vacc-table .row-completed {
+    background: rgba(109,184,160,0.05);
+}
+
+.vacc-table .row-overdue {
+    background: rgba(224,92,115,0.05);
+}
+
+/* Next vaccine alert */
+.next-vaccine-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: linear-gradient(135deg, rgba(232,184,75,0.1), rgba(232,184,75,0.05));
+    border: 1px solid rgba(232,184,75,0.3);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-top: 8px;
+    color: #a87c12;
+}
+
+.next-vaccine-alert strong {
+    color: var(--color-text);
+}
+
+.next-vaccine-alert p {
+    margin: 4px 0 0;
+    font-size: 13px;
+}
+
+/* Responsive for vaccination tracking */
+@media (max-width: 1100px) {
+    .vacc-expand {
+        grid-template-columns: 1fr 1fr;
+    }
+    .vacc-status-cards {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .vacc-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .vacc-expand {
+        grid-template-columns: 1fr;
+    }
+    .vacc-status-cards {
+        grid-template-columns: 1fr;
+    }
+    .vacc-progress-overview {
+        gap: 12px;
+    }
+}

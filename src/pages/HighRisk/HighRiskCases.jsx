@@ -5,7 +5,6 @@ import {
   Filter,
   AlertTriangle,
   Eye,
-  FileText,
   MapPin,
   Calendar,
   HeartPulse,
@@ -61,41 +60,43 @@ const HighRiskCases = () => {
         service.getHighRiskPatients(),
       ]);
 
-    const enriched = (patientsData || []).map((p) => {
-  const preg = p.pregnancy_info || {};
-  const lmp = preg.lmd;
-  const weeks = service.calculateWeeks(lmp);
+      const enriched = (patientsData || [])
+        .map((p) => {
+          const preg = p.pregnancy_info || {};
+          const lmp = preg.lmd;
+          const weeks = service.calculateWeeks(lmp);
 
-  const bp = p.bp_systolic && p.bp_diastolic
-    ? `${p.bp_systolic}/${p.bp_diastolic}`
-    : null;
+          const bp = p.bp_systolic && p.bp_diastolic
+            ? `${p.bp_systolic}/${p.bp_diastolic}`
+            : null;
 
-  const nextApptDate = p.next_appt_date || null;
-  const nextApptType = p.next_appt_type || 'Follow‑up Checkup';
+          const nextApptDate = p.next_appt_date || null;
 
-  return {
-    id: p.id,
-    name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unnamed Patient',
-    first_name: p.first_name,
-    last_name: p.last_name,
-    station: p.barangay || p.municipality || 'Unassigned',
-    riskLevel: preg.calculated_risk || 'High Risk',
-    condition: preg.risk_factors || 'High‑risk pregnancy',
-    gravida: preg.gravida || 0,
-    lmd: lmp || '',
-    edd: preg.edd || null,
-    bp, // ✅ latest Attended BP only
-    nextVisit: nextApptDate
-      ? new Date(nextApptDate).toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric',
+          return {
+            id: p.id,
+            name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unnamed Patient',
+            first_name: p.first_name,
+            last_name: p.last_name,
+            station: p.barangay || p.municipality || 'Unassigned',
+            riskLevel: preg.calculated_risk || 'High Risk',
+            condition: preg.risk_factors || 'High‑risk pregnancy',
+            gravida: preg.gravida || 0,
+            lmd: lmp || '',
+            edd: preg.edd || null,
+            bp, // latest Attended BP only
+            nextVisit: nextApptDate
+              ? new Date(nextApptDate).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })
+              : 'Initial',
+            weeks,
+            created_at: p.created_at, // for sorting
+          };
         })
-      : 'Initial Visit',
-    nextApptType,
-    weeks,
-  };
-});
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); // Newest first
+
       setStats({
         ...statsData,
         totalHighRisk: statsData.highRiskCount || 0,
@@ -104,7 +105,7 @@ const HighRiskCases = () => {
         needsImmediate: 0,
       });
       setPatients(enriched);
-      console.log('✅ Loaded high‑risk:', enriched.length, 'patients');
+      console.log('Loaded high‑risk:', enriched.length, 'patients');
     } catch (err) {
       console.error('Error loading high risk data:', err);
     } finally {
@@ -117,10 +118,10 @@ const HighRiskCases = () => {
     loadHighRiskData();
 
     const subscription = service.subscribeToHighRiskChanges(() => {
-      console.log('🔄 High risk changes detected, re‑fetching...');
+      console.log('High risk changes detected, re‑fetching...');
       clearTimeout(timeout);
       timeout = setTimeout(() => {
-        console.log('⏳ Debounced reload...');
+        console.log('Debounced reload...');
         loadHighRiskData();
       }, 500);
     });
@@ -149,7 +150,7 @@ const HighRiskCases = () => {
     
     // Status Filter (based on next visit)
     const today = new Date();
-    const nextVisitDate = p.nextVisit !== 'Initial Visit' ? new Date(p.nextVisit) : null;
+    const nextVisitDate = p.nextVisit !== 'Initial' ? new Date(p.nextVisit) : null;
     let status = 'Active';
     if (nextVisitDate) {
       const daysDiff = Math.ceil((nextVisitDate - today) / (1000 * 60 * 60 * 24));
@@ -161,7 +162,7 @@ const HighRiskCases = () => {
     
     // Date Range Filter
     let matchesDateRange = filterDateRange === 'All';
-    if (filterDateRange !== 'All' && p.nextVisit !== 'Initial Visit') {
+    if (filterDateRange !== 'All' && p.nextVisit !== 'Initial') {
       const visitDate = new Date(p.nextVisit);
       const daysDiff = Math.ceil((visitDate - today) / (1000 * 60 * 60 * 24));
       
@@ -455,28 +456,7 @@ const HighRiskCases = () => {
                             >
                               <Eye size={14} />
                             </button>
-                            <button
-                              className="action-btn record-btn"
-                              title={`Record ${p.nextApptType || 'Visit'}`}
-                              onClick={() => {
-                                navigate(
-                                  `/dashboard/patients/${p.id}?tab=visits&view=record&date=${p.nextVisit}`
-                                );
-                              }}
-                            >
-                              <FileText size={14} />
-                            </button>
                           </div>
-                          <small
-                            style={{
-                              fontSize: '11px',
-                              opacity: 0.85,
-                              display: 'block',
-                              marginTop: '2px',
-                            }}
-                          >
-                            {p.nextApptType}
-                          </small>
                         </td>
                       </tr>
                     ))

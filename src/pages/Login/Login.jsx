@@ -167,7 +167,6 @@ export default function Login() {
 
     return (
         <div className="login-page">
-            <p>testtest</p>
             {/* Forgot password modal */}
             {showForgot && (
                 <div
@@ -270,7 +269,7 @@ export default function Login() {
                                 placeholder="name@cityhealth.gov"
                                 value={email}
                                 onChange={(e) => {
-                                    setEmail(e.target.value.toLowerCase()); // Normalize lowercase
+                                    setEmail(e.target.value);
                                     if (errors.email) setErrors(p => ({ ...p, email: '' }));
                                 }}
                                 aria-invalid={!!errors.email}

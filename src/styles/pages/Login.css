@@ -7,16 +7,16 @@
     /*
      * min-height: 100vh  → fills full screen when tall enough
      * overflow-y: auto   → scrolls vertically instead of clipping on short screens
-     * justify-content: center → card stays centered when there is room
+     * justify-content: flex-start → prevents top cut-off, card stays at top with padding
      */
     min-height: 100vh;
     width: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    /* Safe vertical padding so card never touches screen edge when scrolling */
-    padding: 40px clamp(12px, 4vw, 24px);
+    justify-content: flex-start;
+    /* Safe vertical padding ensures card never touches screen edge or gets cut off */
+    padding: 60px clamp(12px, 4vw, 24px) 40px;
     font-family: var(--font);
     /* Exact brand colors as animated gradient background */
     background: linear-gradient(135deg,
@@ -137,7 +137,7 @@
 }
 
 .login-logo {
-    height: 100px;
+    height: 180px;
     max-width: 100%;
     width: auto;
     object-fit: contain;
@@ -244,6 +244,7 @@
     outline: none;
     transition: var(--t-normal);
     box-sizing: border-box;
+    text-transform: none; /* Prevent any case conversion */
 }
 
 .field-input::placeholder {
@@ -395,6 +396,10 @@
 
 /* Large tablets and small laptops (≤ 768px) */
 @media (max-width: 768px) {
+    .login-page {
+        padding: 40px clamp(12px, 4vw, 24px) 30px;
+    }
+
     .login-card {
         border-radius: var(--radius-lg);
         padding: clamp(24px, 4vh, 36px) clamp(16px, 4vw, 32px) clamp(20px, 3vh, 32px);
@@ -405,7 +410,7 @@
     }
 
     .login-logo {
-        height: clamp(80px, 12vw, 96px);
+        height: clamp(140px, 16vw, 160px);
     }
 
     .login-subtitle {
@@ -424,7 +429,7 @@
     }
 
     .login-logo {
-        height: clamp(72px, 14vw, 84px);
+        height: clamp(130px, 18vw, 150px);
     }
 
     .login-subtitle {
@@ -434,6 +439,11 @@
 
 /* Small mobile (≤ 480px) */
 @media (max-width: 480px) {
+    .login-page {
+        padding: 30px 16px 20px;
+        background-attachment: scroll;
+    }
+
     .login-card {
         border-radius: var(--radius-md);
         padding: clamp(20px, 5vh, 32px) clamp(16px, 5vw, 28px) clamp(16px, 4vh, 28px);
@@ -444,7 +454,7 @@
     }
 
     .login-logo {
-        height: clamp(60px, 16vw, 72px);
+        height: clamp(120px, 20vw, 140px);
     }
 
     .field-input {
@@ -458,6 +468,10 @@
 
 /* Very small mobile (≤ 360px) */
 @media (max-width: 360px) {
+    .login-page {
+        padding: 20px 12px 16px;
+    }
+
     .login-card {
         padding: clamp(16px, 4vh, 24px) clamp(12px, 4vw, 20px) clamp(12px, 3vh, 20px);
     }
@@ -467,7 +481,7 @@
     }
 
     .login-logo {
-        height: clamp(48px, 14vw, 64px);
+        height: clamp(100px, 18vw, 120px);
     }
 
     .login-logo-wrap {
@@ -487,6 +501,11 @@
 
 /* Short / landscape screens — compress card spacing so less scrolling needed */
 @media (max-height: 600px) {
+    .login-page {
+        padding: 20px 16px 16px;
+        justify-content: flex-start;
+    }
+
     .login-logo-wrap {
         margin-bottom: 8px;
     }
@@ -508,7 +527,7 @@
     }
 
     .login-logo {
-        height: clamp(48px, 10vh, 68px);
+        height: clamp(90px, 14vh, 130px);
     }
 
     .login-footer {
@@ -518,6 +537,10 @@
 
 /* Very short screens (≤ 500px height) */
 @media (max-height: 500px) {
+    .login-page {
+        padding: 16px 12px 12px;
+    }
+
     .login-logo-wrap {
         margin-bottom: 6px;
     }
@@ -527,7 +550,7 @@
     }
 
     .login-logo {
-        height: clamp(40px, 8vh, 56px);
+        height: clamp(80px, 12vh, 110px);
     }
 
     .login-form {

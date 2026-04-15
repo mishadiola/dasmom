@@ -1,7 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { 
     Mail, Lock, Eye, EyeOff, Loader2, 
-    Calendar, Activity, Heart, Baby 
+    Calendar, Activity, Heart, Baby, ArrowLeft
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/MotherLogin.css';
@@ -26,7 +26,6 @@ const MotherLogin = () => {
     try {
         // Check for mock credentials first (temporary testing)
         if (email === 'mother@gmail.com' && password === 'mother123') {
-            // Create mock user object for testing
             const mockUser = {
                 id: 'mock-mother-001',
                 email: 'mother@gmail.com',
@@ -35,7 +34,6 @@ const MotherLogin = () => {
                 station: 'Station 1',
                 barangay_assignment: 'Poblacion'
             };
-            
             setUser(mockUser);
             navigate('/mother-home');
             return;
@@ -50,7 +48,6 @@ const MotherLogin = () => {
         }
 
         setUser(user);
-
         const route = authService.getRedirectRoute(user.role);
         navigate(route);
 
@@ -63,33 +60,42 @@ const MotherLogin = () => {
 
     const highlights = [
         { icon: Activity, text: 'Track your pregnancy progress' },
-        { icon: Calendar, text: 'View upcoming appointments and vaccination schedule' },
-        { icon: Heart, text: 'Learn useful tips for prenatal and postpartum care' },
-        { icon: Baby, text: 'Access newborn information after delivery' }
+        { icon: Calendar, text: 'View upcoming appointments' },
+        { icon: Heart, text: 'Learn prenatal care tips' },
+        { icon: Baby, text: 'Access newborn information' }
     ];
 
     return (
-        <div className="mother-login-container">
-            <main className="mother-login-main">
-                <div className="mother-login-card">
-                    {/* ── Left Panel (Login Form) ── */}
-                    <div className="panel-left">
-                        <div className="login-header">
-                            <div className="login-logo">
-                                <img src={logo} alt="DasMom+ Logo" />
+        <div className="ml-container">
+            <div className="ml-background"></div>
+            
+            {/* Back Button */}
+            <button className="ml-back-btn" onClick={() => navigate('/landing')}>
+                <ArrowLeft size={18} />
+                <span>Go Back to Landing Page</span>
+            </button>
+
+            <main className="ml-main">
+                <div className="ml-card">
+                    {/* Left Panel - Login Form */}
+                    <div className="ml-panel-left">
+                        <div className="ml-login-header">
+                            <div className="ml-logo-wrapper">
+                                <img src={logo} alt="DasMom+ Logo" className="ml-logo" />
                             </div>
-                            <h1>Welcome Back!</h1>
-                            <p>Login to access your maternal health account</p>
+                            <h1 className="ml-title">Mother Login</h1>
+                            <p className="ml-subtitle">Access your maternal health dashboard</p>
                         </div>
 
-                        <form className="mother-form" onSubmit={handleSubmit}>
-                            <div className="form-group">
-                                <label>Email Address</label>
-                                <div className="input-container">
+                        <form className="ml-form" onSubmit={handleSubmit}>
+                            <div className="ml-form-group">
+                                <label className="ml-label">Email Address</label>
+                                <div className="ml-input-wrapper">
+                                    <Mail size={18} className="ml-input-icon" />
                                     <input 
                                         type="email" 
-                                        className="mother-input" 
-                                        placeholder="name@email.com"
+                                        className="ml-input" 
+                                        placeholder="Enter your email"
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
                                         required
@@ -97,78 +103,81 @@ const MotherLogin = () => {
                                 </div>
                             </div>
 
-                            <div className="form-group">
-                                <label>Password</label>
-                                <div className="input-container">
+                            <div className="ml-form-group">
+                                <label className="ml-label">Password</label>
+                                <div className="ml-input-wrapper">
+                                    <Lock size={18} className="ml-input-icon" />
                                     <input 
                                         type={showPassword ? "text" : "password"} 
-                                        className="mother-input" 
-                                        placeholder="Password"
+                                        className="ml-input" 
+                                        placeholder="Enter your password"
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                         required
                                     />
                                     <button 
                                         type="button" 
-                                        className="pwd-toggle"
+                                        className="ml-pwd-toggle"
                                         onClick={() => setShowPassword(!showPassword)}
+                                        aria-label={showPassword ? 'Hide password' : 'Show password'}
                                     >
                                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                     </button>
                                 </div>
                             </div>
 
-                            <button type="submit" className="mother-btn-primary" disabled={isLoading}>
+                            <button type="submit" className="ml-submit-btn" disabled={isLoading}>
                                 {isLoading ? (
-                                    <span className="btn-loading">
-                                        <Loader2 className="btn-spinner" aria-hidden="true" /> Logging In...
+                                    <span className="ml-btn-loading">
+                                        <Loader2 className="ml-spinner" /> Logging in...
                                     </span>
-                                ) : 'Login'}
+                                ) : (
+                                    <span>Login to Dashboard</span>
+                                )}
                             </button>
 
-                            <a href="#" className="forgot-link" onClick={(e) => e.preventDefault()}>
-                                Forgot Password?
-                            </a>
+                            <div className="ml-form-footer">
+                                <a href="#" className="ml-forgot-link" onClick={(e) => e.preventDefault()}>
+                                    Forgot your password?
+                                </a>
+                            </div>
                         </form>
                     </div>
 
-                    {/* ── Right Panel (Welcome / Info) ── */}
-                    <div className="panel-right">
-                        <div className="welcome-content">
-                            <h2>Congratulations Mommy!</h2>
-                            <p className="welcome-message">
-                                With this platform, you can ensure the safety of yourself and your baby in the womb. 
-                                You can view your personal information, track your appointments, learn important health tips, and stay updated. 
-                                Saludo kami sa’yo!
+                    {/* Right Panel - Welcome Info */}
+                    <div className="ml-panel-right">
+                        <div className="ml-welcome-section">
+                            <div className="ml-welcome-badge">
+                                <Heart size={16} />
+                                <span>Welcome, Mommy!</span>
+                            </div>
+                            <h2 className="ml-welcome-title">Congratulations!</h2>
+                            <p className="ml-welcome-text">
+                                DASMOM+ helps you ensure the safety of yourself and your baby. Track your pregnancy, view appointments, and access health information all in one place.
                             </p>
 
-                            <div className="highlights-list">
-                                {highlights.map((item, index) => (
-                                    <div className="highlight-item" key={index} data-index={index}>
-                                        <div className="highlight-icon">
-                                            <item.icon size={20} />
+                            <div className="ml-features-list">
+                                {highlights.map((item, index) => {
+                                    const Icon = item.icon;
+                                    return (
+                                        <div className="ml-feature-item" key={index}>
+                                            <div className="ml-feature-icon-wrapper">
+                                                <Icon size={20} />
+                                            </div>
+                                            <span className="ml-feature-text">{item.text}</span>
                                         </div>
-                                        <span className="highlight-text">{item.text}</span>
-                                    </div>
-                                ))}
+                                    );
+                                })}
+                            </div>
+
+                            <div className="ml-footer-info">
+                                <p className="ml-footer-location">City Health Office 3, Dasmariñas, Cavite</p>
+                                <p className="ml-footer-copy"> 2026 DASMOM+. All rights reserved.</p>
                             </div>
                         </div>
                     </div>
-
                 </div>
             </main>
-
-            {/* ── Footer ── */}
-            <footer className="mother-footer">
-                <div className="footer-content">
-                    <span className="footer-text">
-                        City Health Office 3, Dasmariñas, Cavite
-                    </span>
-                    <p className="footer-copyright">
-                        &copy; 2026 DasMom. All rights reserved.
-                    </p>
-                </div>
-            </footer>
         </div>
     );
 };

@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Search, Filter, Baby, Heart, AlertTriangle, Clock,
-    CheckCircle2, XCircle, ChevronRight, Eye, Plus,
+    CheckCircle2, XCircle, ChevronRight, Eye,
     AlertCircle, FileText, MapPin, Activity, Thermometer,
     Brain, Milk, Calendar, TrendingUp, Download, X
 } from 'lucide-react';
 import babyService from '../../services/babyservices';
+import * as XLSX from 'xlsx';
 import '../../styles/pages/PostpartumRecords.css';
 
 /* ════════════════════════════
@@ -117,7 +118,6 @@ const DetailModal = ({ mother, onClose }) => {
                 <div className="modal-footer">
                     <button className="btn btn-outline" onClick={onClose}>Close</button>
                     <button className="btn btn-outline"><Calendar size={15} /> Schedule Follow-up</button>
-                    <button className="btn btn-primary"><Plus size={15} /> Record Postpartum Visit</button>
                 </div>
             </div>
         </div>
@@ -169,6 +169,62 @@ const PostpartumRecords = () => {
 
     const handleFilter = (key, val) => setFilters(prev => ({ ...prev, [key]: val }));
 
+    const handleExportReport = () => {
+        const exportData = filtered.map(m => ({
+            'Patient Name': m.name,
+            'Patient ID': m.patientId,
+            'Station': m.station,
+            'Delivery Type': m.deliveryType,
+            'Delivery Date': m.deliveryDate,
+            'Days Postpartum': m.daysPostpartum,
+            'Baby Outcome': m.babyOutcome,
+            'Recovery Status': m.recoveryStatus,
+            'Recovery Progress': `${m.progress}%`,
+            'Last Checkup': m.lastCheckup,
+            'Next Follow-up': m.nextFollowUp,
+            'Follow-up Status': m.followUpStatus,
+            'Complications': m.complications,
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Postpartum Records');
+
+        // Auto-size columns
+        const colWidths = [
+            { wch: 25 }, // Patient Name
+            { wch: 15 }, // Patient ID
+            { wch: 20 }, // Station
+            { wch: 15 }, // Delivery Type
+            { wch: 15 }, // Delivery Date
+            { wch: 18 }, // Days Postpartum
+            { wch: 15 }, // Baby Outcome
+            { wch: 15 }, // Recovery Status
+            { wch: 18 }, // Recovery Progress
+            { wch: 15 }, // Last Checkup
+            { wch: 15 }, // Next Follow-up
+            { wch: 15 }, // Follow-up Status
+            { wch: 25 }, // Complications
+        ];
+        ws['!cols'] = colWidths;
+
+        // Add header styling
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+            const cell = ws[XLSX.utils.encode_cell({ r: 0, c: C })];
+            if (cell) {
+                cell.s = {
+                    font: { bold: true, color: { rgb: 'FFFFFF' } },
+                    fill: { fgColor: { rgb: 'B9818A' } },
+                    alignment: { horizontal: 'center', vertical: 'center' }
+                };
+            }
+        }
+
+        const dateStr = new Date().toISOString().split('T')[0];
+        XLSX.writeFile(wb, `Postpartum_Records_${dateStr}.xlsx`);
+    };
+
     const filtered = mothers.filter(m => {
         const s = searchTerm.toLowerCase();
         const matchSearch = m.name.toLowerCase().includes(s) || m.patientId.toLowerCase().includes(s) || m.station.toLowerCase().includes(s);
@@ -207,8 +263,7 @@ const PostpartumRecords = () => {
                     <p className="page-subtitle">Monitor mothers post-delivery — recovery, complications & follow-ups</p>
                 </div>
                 <div className="header-actions">
-                    <button className="btn btn-outline"><Download size={16} /> Export Report</button>
-                    <button className="btn btn-primary" onClick={() => navigate('/dashboard/prenatal/add')}><Plus size={16} /> Record Postpartum Visit</button>
+                    <button className="btn btn-outline" onClick={handleExportReport}><Download size={16} /> Export Report</button>
                 </div>
             </div>
 
@@ -337,16 +392,13 @@ const PostpartumRecords = () => {
                                                     <button className="action-btn view-btn" title="View Profile" onClick={() => setSelectedMother(m)}>
                                                         <Eye size={15} />
                                                     </button>
-                                                    <button className="action-btn record-btn" title="Record Checkup" onClick={() => navigate('/dashboard/prenatal/add')}>
-                                                        <Plus size={15} />
-                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
                                     ))}
                                     {filtered.length === 0 && (
                                         <tr>
-                                            <td colSpan="9" className="pp-empty">
+                                            <td colSpan="8" className="pp-empty">
                                                 <Baby size={28} />
                                                 <p>No postpartum records matching your filters.</p>
                                             </td>

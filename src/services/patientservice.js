@@ -533,6 +533,7 @@ async getHighRiskPatients() {
         last_name,
         barangay,
         municipality,
+        created_at,
         pregnancy_info (
           calculated_risk,
           risk_factors,
@@ -578,6 +579,7 @@ async getHighRiskPatients() {
         last_name: p.last_name,
         barangay: p.barangay,
         municipality: p.municipality,
+        created_at: p.created_at,
         pregnancy_info: {
           calculated_risk: preg.calculated_risk || 'Normal',
           risk_factors: preg.risk_factors || null,

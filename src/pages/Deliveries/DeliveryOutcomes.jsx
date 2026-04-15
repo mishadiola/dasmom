@@ -10,6 +10,7 @@ import '../../styles/pages/DeliveryOutcomes.css';
 import babyservices from '../../services/babyservices';
 import PatientService from '../../services/patientservice';
 import supabase from '../../config/supabaseclient';
+import * as XLSX from 'xlsx';
 
 const COMPLICATION_OPTIONS = ['None', 'Hemorrhage', 'Infection', 'Preeclampsia', 'Placenta Previa', 'Preterm'];
 const DELIVERY_TYPES = ['NSD', 'CS', 'Breech'];
@@ -77,6 +78,56 @@ const DeliveryOutcomes = () => {
 
     const handleFilter = (key, value) => {
         setFilters(prev => ({ ...prev, [key]: value }));
+    };
+
+    const handleExport = () => {
+        const exportData = filtered.map(d => ({
+            'Patient Name': d.patientName,
+            'Patient ID': d.patientId,
+            'Station': d.station,
+            'Delivery Date': d.deliveryDate,
+            'Delivery Time': d.deliveryTime || '',
+            'Delivery Type': d.deliveryType,
+            'Risk Level': d.riskLevel,
+            'Complications': d.complications || 'None',
+            'Baby Outcome': d.babyOutcome,
+            'Staff': d.staff || '',
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Delivery Outcomes');
+
+        // Auto-size columns
+        const colWidths = [
+            { wch: 25 }, // Patient Name
+            { wch: 15 }, // Patient ID
+            { wch: 20 }, // Station
+            { wch: 15 }, // Delivery Date
+            { wch: 15 }, // Delivery Time
+            { wch: 15 }, // Delivery Type
+            { wch: 15 }, // Risk Level
+            { wch: 20 }, // Complications
+            { wch: 15 }, // Baby Outcome
+            { wch: 20 }, // Staff
+        ];
+        ws['!cols'] = colWidths;
+
+        // Add header styling
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+            const cell = ws[XLSX.utils.encode_cell({ r: 0, c: C })];
+            if (cell) {
+                cell.s = {
+                    font: { bold: true, color: { rgb: 'FFFFFF' } },
+                    fill: { fgColor: { rgb: 'B9818A' } },
+                    alignment: { horizontal: 'center', vertical: 'center' }
+                };
+            }
+        }
+
+        const dateStr = new Date().toISOString().split('T')[0];
+        XLSX.writeFile(wb, `Delivery_Outcomes_${dateStr}.xlsx`);
     };
 
     const handleSort = (field) => {
@@ -156,7 +207,7 @@ const DeliveryOutcomes = () => {
                     <p className="page-subtitle">Record and monitor birth events — type, outcome, complications, and baby status</p>
                 </div>
                 <div className="header-actions">
-                    <button className="btn btn-outline"><Download size={16} /> Export Report</button>
+                    <button className="btn btn-outline" onClick={handleExport}><Download size={16} /> Export Report</button>
                     <button className="btn btn-primary" onClick={() => setShowModal(true)}>
                         <Plus size={16} /> Record New Delivery
                     </button>

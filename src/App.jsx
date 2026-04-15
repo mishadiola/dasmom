@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './routes/ProtectedRoute';
 
+import Landing from './pages/Landing/Landing';
 import Login from './pages/Login/Login';
 import MotherLogin from './pages/MotherLogin/MotherLogin';
 
@@ -45,6 +46,8 @@ function App() {
 
           {/* PUBLIC ROUTES */}
           <Route path="/" element={<Login />} />
+          <Route path="/landing" element={<Landing />} />
+          <Route path="/admin-login" element={<Login />} />
           <Route path="/mother-login" element={<MotherLogin />} />
           
 

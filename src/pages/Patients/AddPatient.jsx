@@ -20,6 +20,35 @@ const MEDICAL_CONDITIONS = [
     'Hypertension', 'Diabetes', 'Heart Disease', 'Asthma',
     'Anemia', 'Previous C-section'
 ];
+
+/* ════════════════════════════
+   STATION NAME FORMATTER
+════════════════════════════ */
+const formatStationName = (station) => {
+    if (!station) return '';
+    
+    const stationMap = {
+        'cho iii': 'City Health Office 3',
+        'cho 3': 'City Health Office 3',
+        'cho3': 'City Health Office 3',
+        'salawag': 'Salawag',
+    };
+    
+    const lowerStation = station.toLowerCase().trim();
+    
+    // Check for exact match in map
+    if (stationMap[lowerStation]) {
+        return stationMap[lowerStation];
+    }
+    
+    // For stations not in the map, apply general formatting
+    // Capitalize first letter of each word
+    return station
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+};
+
 const AddPatient = () => {
     const navigate = useNavigate();
     const { user } = useContext(AuthContext);  
@@ -467,7 +496,7 @@ const AddPatient = () => {
                                     >
                                         <option value="">Select Station ({availableStations.length} areas)</option>
                                         {availableStations.map(bgy => (
-                                            <option key={bgy} value={bgy}>{bgy}</option>
+                                            <option key={bgy} value={bgy}>{formatStationName(bgy)}</option>
                                         ))}
                                     </select>
                                 </div>

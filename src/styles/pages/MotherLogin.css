@@ -1,113 +1,196 @@
 @import '../variables.css';
 
-.mother-login-container {
+/* ════════════════════════════
+   MOTHER LOGIN - CLEAN DESIGN
+════════════════════════════ */
+
+.ml-container {
     min-height: 100vh;
     width: 100%;
     display: flex;
     flex-direction: column;
     font-family: var(--font);
-    background: linear-gradient(135deg,
-            var(--color-pink-light) 0%,
-            var(--color-yellow) 30%,
-            var(--color-sage) 65%,
-            var(--color-rose) 100%);
-    background-size: 300% 300%;
-    animation: bg-pan 18s ease infinite;
-    background-attachment: fixed;
+    background: linear-gradient(135deg, #fff5f7 0%, #fef3f5 50%, #f8f0f5 100%);
     position: relative;
     overflow-x: hidden;
-    overflow-y: auto;
-    box-sizing: border-box;
 }
 
-/* Soft decorative circle – top right */
-.mother-login-container::before {
-    content: '';
+.ml-background {
     position: absolute;
-    width: 40vmax;
-    height: 40vmax;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.18) 0%, transparent 70%);
-    top: -15vmax;
-    right: -15vmax;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at 20% 80%, rgba(185, 129, 138, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(109, 184, 160, 0.05) 0%, transparent 50%);
     pointer-events: none;
     z-index: 0;
 }
 
-/* Soft decorative circle – bottom left */
-.mother-login-container::after {
-    content: '';
+.ml-back-btn {
     position: absolute;
-    width: 32vmax;
-    height: 32vmax;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.14) 0%, transparent 70%);
-    bottom: -12vmax;
-    left: -12vmax;
-    pointer-events: none;
-    z-index: 0;
+    top: 24px;
+    left: 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: white;
+    border: 2px solid #f0f2f5;
+    border-radius: 12px;
+    padding: 12px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    z-index: 10;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
-.mother-login-main {
+.ml-back-btn:hover {
+    border-color: var(--color-rose);
+    color: var(--color-rose);
+    transform: translateX(-4px);
+    box-shadow: 0 4px 12px rgba(185, 129, 138, 0.15);
+}
+
+.ml-main {
     flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    padding: 40px 24px;
+    position: relative;
+    z-index: 1;
 }
 
-.mother-login-card {
+.ml-card {
     background: white;
     width: 100%;
-    max-width: 1000px;
-    min-height: 600px;
-    border-radius: var(--radius-xl);
+    max-width: 1100px;
+    min-height: 650px;
+    border-radius: 24px;
     display: flex;
     overflow: hidden;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-    animation: modalSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 20px 60px rgba(185, 129, 138, 0.15);
+    animation: mlSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* ── Left Panel (Login) ── */
-.panel-left {
+@keyframes mlSlideUp {
+    from {
+        transform: translateY(30px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* ════════════════════════════
+   LEFT PANEL - LOGIN FORM
+════════════════════════════ */
+.ml-panel-left {
     flex: 1;
     padding: 60px;
     display: flex;
     flex-direction: column;
     justify-content: center;
     background: #ffffff;
+    border-right: 1px solid #f0f2f5;
 }
 
-.login-header {
+.ml-login-header {
+    text-align: center;
     margin-bottom: 40px;
 }
 
-.login-logo {
-    margin-bottom: 20px;
-    text-align: center;
+.ml-logo-wrapper {
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: center;
 }
 
-.login-logo img {
-    height: 60px;
+.ml-logo {
+    height: 70px;
     width: auto;
     object-fit: contain;
 }
 
-.login-header h1 {
+.ml-title {
     font-size: 32px;
     font-weight: 800;
     color: var(--color-text);
-    margin-bottom: 8px;
-    text-align: center;
+    margin: 0 0 12px;
+    letter-spacing: -0.5px;
 }
 
-.login-header p {
+.ml-subtitle {
+    font-size: 15px;
     color: var(--color-text-muted);
-    font-size: 16px;
-    text-align: center;
+    margin: 0;
+    line-height: 1.5;
 }
 
-.pwd-toggle {
+.ml-form {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.ml-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ml-label {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-text);
+    letter-spacing: 0.5px;
+}
+
+.ml-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.ml-input-icon {
+    position: absolute;
+    left: 16px;
+    color: #a89bae;
+    transition: color 0.3s ease;
+}
+
+.ml-input {
+    width: 100%;
+    padding: 16px 16px 16px 48px;
+    border: 2px solid #f0f2f5;
+    border-radius: 12px;
+    font-size: 15px;
+    transition: all 0.3s ease;
+    outline: none;
+    background: #fafbfc;
+}
+
+.ml-input::placeholder {
+    color: #a89bae;
+}
+
+.ml-input:focus {
+    border-color: var(--color-rose);
+    background: white;
+    box-shadow: 0 0 0 4px rgba(185, 129, 138, 0.1);
+}
+
+.ml-input:focus + .ml-input-icon {
+    color: var(--color-rose);
+}
+
+.ml-pwd-toggle {
     position: absolute;
     right: 16px;
     background: none;
@@ -117,92 +200,62 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0;
-    transition: color 0.2s;
+    padding: 8px;
+    border-radius: 8px;
+    transition: all 0.2s;
 }
 
-.pwd-toggle:hover {
+.ml-pwd-toggle:hover {
     color: var(--color-rose);
+    background: rgba(185, 129, 138, 0.1);
 }
 
-.btn-loading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-}
-
-.btn-spinner {
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-
-.mother-form {
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-}
-
-.form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.form-group label {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--color-text);
-}
-
-.input-container {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
-
-.mother-input {
-    width: 100%;
-    padding: 14px 16px;
-    border: 2px solid #f0f2f5;
-    border-radius: var(--radius-md);
-    font-size: 15px;
-    transition: all 0.3s ease;
-    outline: none;
-    box-sizing: border-box;
-}
-
-.mother-input:focus {
-    border-color: var(--color-rose);
-    box-shadow: 0 0 0 4px rgba(185, 129, 138, 0.1);
-}
-
-.mother-btn-primary {
-    background: var(--color-rose);
+.ml-submit-btn {
+    background: linear-gradient(135deg, var(--color-rose), #b9818a);
     color: white;
-    padding: 16px;
+    padding: 18px 24px;
     border: none;
-    border-radius: var(--radius-md);
+    border-radius: 12px;
     font-size: 16px;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.3s ease;
-    margin-top: 10px;
-    box-shadow: 0 4px 12px rgba(185, 129, 138, 0.3);
+    box-shadow: 0 4px 16px rgba(185, 129, 138, 0.3);
+    margin-top: 8px;
 }
 
-.mother-btn-primary:hover {
-    background: var(--color-rose-dark);
+.ml-submit-btn:hover:not(:disabled) {
     transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(185, 129, 138, 0.4);
+    box-shadow: 0 6px 24px rgba(185, 129, 138, 0.4);
 }
 
-.forgot-link {
+.ml-submit-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.ml-btn-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.ml-spinner {
+    animation: mlSpin 1s linear infinite;
+}
+
+@keyframes mlSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.ml-form-footer {
     text-align: center;
+    margin-top: 8px;
+}
+
+.ml-forgot-link {
     color: var(--color-rose);
     font-size: 14px;
     font-weight: 600;
@@ -210,13 +263,15 @@
     transition: color 0.2s;
 }
 
-.forgot-link:hover {
+.ml-forgot-link:hover {
     color: var(--color-rose-dark);
     text-decoration: underline;
 }
 
-/* ── Right Panel (Welcome) ── */
-.panel-right {
+/* ════════════════════════════
+   RIGHT PANEL - WELCOME INFO
+════════════════════════════ */
+.ml-panel-right {
     flex: 1.1;
     padding: 60px;
     background: linear-gradient(135deg, #fdd5e5 0%, #ffe3a4 100%);
@@ -224,209 +279,229 @@
     flex-direction: column;
     justify-content: center;
     position: relative;
+    overflow: hidden;
 }
 
-.welcome-content {
-    color: var(--color-text);
+.ml-panel-right::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -50%;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, transparent 70%);
+    pointer-events: none;
+}
+
+.ml-welcome-section {
+    position: relative;
     z-index: 1;
+    color: var(--color-text);
 }
 
-.welcome-content h2 {
-    font-size: 36px;
+.ml-welcome-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.6);
+    padding: 10px 20px;
+    border-radius: 30px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-rose);
+    margin-bottom: 24px;
+    backdrop-filter: blur(8px);
+}
+
+.ml-welcome-title {
+    font-size: 38px;
     font-weight: 800;
-    margin-bottom: 20px;
+    margin: 0 0 20px;
     line-height: 1.2;
+    color: var(--color-text);
 }
 
-.welcome-message {
-    font-size: 18px;
-    line-height: 1.6;
-    margin-bottom: 40px;
-    color: rgba(45, 34, 52, 0.8);
+.ml-welcome-text {
+    font-size: 16px;
+    line-height: 1.7;
+    margin: 0 0 40px;
+    color: rgba(45, 34, 52, 0.85);
 }
 
-.highlights-list {
+.ml-features-list {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 16px;
 }
 
-.highlight-item {
+.ml-feature-item {
     display: flex;
     align-items: center;
     gap: 16px;
-    background: rgba(255, 255, 255, 0.4);
-    padding: 14px 20px;
-    border-radius: var(--radius-md);
-    backdrop-filter: blur(4px);
-    transition: transform 0.2s;
+    background: rgba(255, 255, 255, 0.5);
+    padding: 16px 20px;
+    border-radius: 12px;
+    backdrop-filter: blur(8px);
+    transition: all 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
-.highlight-item:hover {
-    transform: translateX(10px);
-    background: rgba(255, 255, 255, 0.6);
+.ml-feature-item:hover {
+    transform: translateX(8px);
+    background: rgba(255, 255, 255, 0.7);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
-.highlight-icon {
-    width: 40px;
-    height: 40px;
+.ml-feature-icon-wrapper {
+    width: 44px;
+    height: 44px;
     background: white;
     border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--color-rose);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    flex-shrink: 0;
 }
 
-.highlight-text {
+.ml-feature-text {
     font-weight: 600;
     font-size: 15px;
+    color: var(--color-text);
 }
 
-/* Animation delays for highlight items */
-.highlight-item[data-index="0"] { animation-delay: 0s; }
-.highlight-item[data-index="1"] { animation-delay: 0.1s; }
-.highlight-item[data-index="2"] { animation-delay: 0.2s; }
-.highlight-item[data-index="3"] { animation-delay: 0.3s; }
-
-/* ── Footer ── */
-.mother-footer {
-    padding: 30px;
-    text-align: center;
-    background: rgba(255, 255, 255, 0.5);
-    backdrop-filter: blur(10px);
+.ml-footer-info {
+    margin-top: 40px;
+    padding-top: 24px;
+    border-top: 1px solid rgba(255, 255, 255, 0.3);
 }
 
-.footer-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-}
-
-.cho-logo {
-    height: 32px;
-    opacity: 0.8;
-}
-
-.footer-text {
+.ml-footer-location {
     font-size: 14px;
-    color: var(--color-text-muted);
+    color: rgba(45, 34, 52, 0.8);
+    margin: 0 0 8px;
     font-weight: 500;
 }
 
-.footer-copyright {
-    font-size: 12px;
-    color: #a89bae;
-    margin-top: 4px;
+.ml-footer-copy {
+    font-size: 13px;
+    color: rgba(45, 34, 52, 0.6);
+    margin: 0;
 }
 
-/* ── Animations ── */
-@keyframes modalSlideUp {
-    from { transform: translateY(40px); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
-}
-
-@keyframes bg-pan {
-    0% {
-        background-position: 0% 50%;
-    }
-
-    50% {
-        background-position: 100% 50%;
-    }
-
-    100% {
-        background-position: 0% 50%;
-    }
-}
-
-/* ── Responsiveness ── */
-@media (max-width: 900px) {
-    .mother-login-card {
+/* ════════════════════════════
+   RESPONSIVE DESIGN
+════════════════════════════ */
+@media (max-width: 968px) {
+    .ml-card {
         flex-direction: column;
         max-width: 500px;
         min-height: auto;
     }
 
-    .panel-left, .panel-right {
+    .ml-panel-left {
+        padding: 50px 40px;
+        border-right: none;
+        border-bottom: 1px solid #f0f2f5;
+    }
+
+    .ml-panel-right {
         padding: 40px;
-    }
-
-    .panel-right {
-        order: 2;
         flex: none;
     }
 
-    .panel-left {
-        order: 1;
-        flex: none;
+    .ml-welcome-title {
+        font-size: 30px;
     }
 
-    .welcome-content h2 {
-        font-size: 28px;
+    .ml-welcome-text {
+        font-size: 15px;
     }
 
-    .welcome-message {
-        font-size: 16px;
+    .ml-back-btn {
+        top: 16px;
+        left: 16px;
+        padding: 10px 16px;
     }
 }
 
-@media (max-width: 500px) {
-    .mother-login-container {
-        background-attachment: scroll;
-    }
-
-    .mother-login-main {
+@media (max-width: 600px) {
+    .ml-main {
         padding: 0;
     }
 
-    .mother-login-card {
+    .ml-card {
         border-radius: 0;
         min-height: 100vh;
         max-width: 100%;
         box-shadow: none;
     }
 
-    .panel-left, .panel-right {
-        padding: 30px 20px;
+    .ml-panel-left,
+    .ml-panel-right {
+        padding: 40px 24px;
     }
 
-    .login-logo img {
-        height: 50px;
+    .ml-logo {
+        height: 55px;
     }
 
-    .login-header h1 {
+    .ml-title {
         font-size: 26px;
     }
 
-    .login-header p {
+    .ml-subtitle {
         font-size: 14px;
     }
 
-    .welcome-content h2 {
+    .ml-welcome-title {
+        font-size: 26px;
+    }
+
+    .ml-welcome-text {
+        font-size: 14px;
+    }
+
+    .ml-feature-item {
+        padding: 14px 16px;
+    }
+
+    .ml-feature-icon-wrapper {
+        width: 40px;
+        height: 40px;
+    }
+
+    .ml-feature-text {
+        font-size: 14px;
+    }
+
+    .ml-back-btn span {
+        display: none;
+    }
+
+    .ml-back-btn {
+        padding: 12px;
+    }
+}
+
+@media (max-width: 400px) {
+    .ml-panel-left,
+    .ml-panel-right {
+        padding: 32px 20px;
+    }
+
+    .ml-title {
         font-size: 24px;
     }
 
-    .welcome-message {
+    .ml-input {
+        padding: 14px 14px 14px 44px;
         font-size: 14px;
     }
 
-    .highlight-item {
-        padding: 12px 16px;
-    }
-
-    .highlight-icon {
-        width: 36px;
-        height: 36px;
-    }
-
-    .highlight-text {
-        font-size: 14px;
-    }
-
-    .mother-footer {
-        padding: 20px;
+    .ml-submit-btn {
+        padding: 16px 20px;
+        font-size: 15px;
     }
 }

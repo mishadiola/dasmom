@@ -1,227 +1,134 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-    Search, Filter, Plus, X, Baby, Heart, AlertTriangle,
-    CheckCircle2, Clock, XCircle, AlertCircle, Eye,
-    Edit2, Syringe, Pill, Activity, Calendar, Download,
-    TrendingUp, Scale, ChevronDown, ChevronUp, Ruler
+    Search, Filter, X, Baby, Heart, AlertTriangle,
+    CheckCircle2, Clock, AlertCircle, Eye,
+    Syringe, Calendar, Download, ChevronDown, ChevronUp,
+    TrendingUp, ShieldCheck, Timer
 } from 'lucide-react';
 import NewbornService from '../../services/newbornservice';
+import * as XLSX from 'xlsx';
 import '../../styles/pages/NewbornTracking.css';
 
 /* ════════════════════════════
-   DETAIL MODAL
+   VACCINATION DETAIL MODAL
 ════════════════════════════ */
-const DetailModal = ({ baby, onClose }) => {
-    const [tab, setTab] = useState('basic');
-
-    const TABS = [
-        { id: 'basic',   label: 'Basic Info',        icon: Baby },
-        { id: 'growth',  label: 'Growth',             icon: TrendingUp },
-        { id: 'vacc',    label: 'Vaccinations',       icon: Syringe },
-        { id: 'supp',    label: 'Supplements',        icon: Pill },
-        { id: 'checkup', label: 'Checkups',           icon: Activity },
-        { id: 'alerts',  label: `Alerts (${baby.alerts?.length || 0})`, icon: AlertTriangle },
-    ];
-
+const VaccinationDetailModal = ({ baby, onClose }) => {
     const vaccStatusClass = (s) => {
         if (s === 'Completed') return 'status-completed';
         if (s === 'Overdue') return 'status-overdue';
         return 'status-pending';
     };
 
-    const suppStatusClass = (s) => {
-        if (s === 'Ongoing') return 'status-ongoing';
-        if (s === 'Missed') return 'status-overdue';
-        return 'status-completed';
+    const getVaccinationProgress = () => {
+        if (!baby.vaccLog?.length) return { completed: 0, total: 0, percentage: 0 };
+        const completed = baby.vaccLog.filter(v => v.status === 'Completed').length;
+        return {
+            completed,
+            total: baby.vaccLog.length,
+            percentage: Math.round((completed / baby.vaccLog.length) * 100)
+        };
     };
+
+    const progress = getVaccinationProgress();
 
     return (
         <div className="modal-backdrop" onClick={onClose}>
-            <div className="nb-modal" onClick={e => e.stopPropagation()}>
+            <div className="nb-modal vacc-modal" onClick={e => e.stopPropagation()}>
                 {/* Header */}
-                <div className="modal-header">
+                <div className="modal-header vacc-header">
                     <div>
-                        <h2>{baby.babyName}</h2>
-                        <p>Mother: {baby.motherName} · {baby.motherId} · {baby.station}</p>
+                        <h2><Syringe size={22} style={{ verticalAlign: 'middle', marginRight: '8px' }} /> {baby.babyName}</h2>
+                        <p>Mother: {baby.motherName} · {baby.station}</p>
                     </div>
                     <button className="modal-close" onClick={onClose}><X size={20} /></button>
                 </div>
 
-                {/* Tab Nav */}
-                <div className="nb-tab-nav">
-                    {TABS.map(t => {
-                        const Icon = t.icon;
-                        return (
-                            <button key={t.id} className={`nb-tab-btn ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
-                                <Icon size={13} /> {t.label}
-                            </button>
-                        );
-                    })}
-                </div>
-
                 <div className="modal-body">
-
-                    {/* TAB 1: Basic Info */}
-                    {tab === 'basic' && (
-                        <div className="detail-grid">
-                            <div className="detail-item"><span>Baby Name / ID</span><strong>{baby.babyName}</strong></div>
-                            <div className="detail-item"><span>Baby ID</span><strong>{baby.id}</strong></div>
-                            <div className="detail-item"><span>Birth Date</span><strong>{baby.birthDate}</strong></div>
-                            <div className="detail-item"><span>Gender</span><strong>{baby.gender}</strong></div>
-                            <div className="detail-item"><span>Birth Weight</span><strong>{baby.birthWeight} kg</strong></div>
-                            <div className="detail-item"><span>Length at Birth</span><strong>{baby.length} cm</strong></div>
-                            <div className="detail-item"><span>Head Circumference</span><strong>{baby.headCirc} cm</strong></div>
-                            <div className="detail-item"><span>Gestational Age</span><strong>{baby.gestationalAge}</strong></div>
-                            <div className="detail-item"><span>Delivery Type</span><strong>{baby.deliveryType}</strong></div>
-                            <div className="detail-item"><span>Condition at Birth</span><strong>{baby.condition}</strong></div>
-                            <div className="detail-item"><span>Mother</span><strong>{baby.motherName} ({baby.motherId})</strong></div>
-                            <div className="detail-item"><span>Risk Level</span>
-                                <strong><span className={`risk-badge risk-${baby.riskLevel.toLowerCase()}`}>{baby.riskLevel}</span></strong>
+                    {/* Vaccination Progress Overview */}
+                    <div className="vacc-progress-overview">
+                        <div className="vacc-progress-card">
+                            <div className="vacc-progress-header">
+                                <ShieldCheck size={24} className="vacc-progress-icon" />
+                                <div>
+                                    <h3>Vaccination Progress</h3>
+                                    <p className="vacc-progress-subtitle">{progress.completed} of {progress.total} vaccines completed</p>
+                                </div>
                             </div>
-                            {baby.notes && <div className="detail-item full-width"><span>Notes</span><strong>{baby.notes}</strong></div>}
+                            <div className="vacc-progress-bar-wrap">
+                                <div className="vacc-progress-track">
+                                    <div 
+                                        className="vacc-progress-fill" 
+                                        style={{ width: `${progress.percentage}%` }}
+                                    ></div>
+                                </div>
+                                <span className="vacc-progress-percent">{progress.percentage}%</span>
+                            </div>
                         </div>
-                    )}
 
-                    {/* TAB 2: Growth */}
-                    {tab === 'growth' && (
-                        <div>
-                            <p className="tab-hint">Growth measurements recorded at each checkup.</p>
-                            <table className="nb-inner-table">
-                                <thead>
-                                    <tr><th>Date</th><th>Weight (kg)</th><th>Length (cm)</th><th>Head Circ. (cm)</th></tr>
-                                </thead>
-                                <tbody>
-                                    {baby.growthLog?.map((g, i) => (
-                                        <tr key={i}>
-                                            <td className="col-date">{g.date}</td>
-                                            <td className="col-val">{g.weight}</td>
-                                            <td className="col-val">{g.length}</td>
-                                            <td className="col-val">{g.headCirc}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                            {/* Visual growth indicator */}
-                            <div className="growth-bars">
-                                {baby.growthLog?.map((g, i) => (
-                                    <div key={i} className="growth-bar-group">
-                                        <div className="growth-bar-label">{g.date}</div>
-                                        <div className="growth-bar-track">
-                                            <div className="growth-bar-fill" style={{ width: `${Math.min(100, (g.weight / 5) * 100)}%` }}></div>
-                                        </div>
-                                        <span className="growth-bar-val">{g.weight}kg</span>
-                                    </div>
+                        <div className="vacc-status-cards">
+                            <div className="vacc-status-card completed">
+                                <CheckCircle2 size={18} />
+                                <span className="vacc-status-count">{baby.vaccLog?.filter(v => v.status === 'Completed').length || 0}</span>
+                                <span className="vacc-status-label">Completed</span>
+                            </div>
+                            <div className="vacc-status-card upcoming">
+                                <Timer size={18} />
+                                <span className="vacc-status-count">{baby.vaccLog?.filter(v => v.status === 'Pending').length || 0}</span>
+                                <span className="vacc-status-label">Upcoming</span>
+                            </div>
+                            <div className="vacc-status-card overdue">
+                                <AlertTriangle size={18} />
+                                <span className="vacc-status-count">{baby.vaccLog?.filter(v => v.status === 'Overdue').length || 0}</span>
+                                <span className="vacc-status-label">Overdue</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Vaccination Schedule Table */}
+                    <div className="vacc-schedule-section">
+                        <h3 className="vacc-section-title"><Calendar size={16} /> Vaccination Schedule</h3>
+                        <table className="nb-inner-table vacc-table">
+                            <thead>
+                                <tr>
+                                    <th>Vaccine</th>
+                                    <th>Dose</th>
+                                    <th>Scheduled Date</th>
+                                    <th>Date Given</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {baby.vaccLog?.map((v, i) => (
+                                    <tr key={i} className={v.status === 'Overdue' ? 'row-overdue' : v.status === 'Completed' ? 'row-completed' : ''}>
+                                        <td className="col-vaccine">{v.vaccine}</td>
+                                        <td>{v.dose}</td>
+                                        <td className="col-date">{v.nextDue || '—'}</td>
+                                        <td className="col-date">{v.date || <span className="not-yet">Pending</span>}</td>
+                                        <td><span className={`vacc-status ${vaccStatusClass(v.status)}`}>{v.status}</span></td>
+                                    </tr>
                                 ))}
-                            </div>
-                        </div>
-                    )}
+                            </tbody>
+                        </table>
+                    </div>
 
-                    {/* TAB 3: Vaccinations */}
-                    {tab === 'vacc' && (
-                        <div>
-                            <p className="tab-hint">Vaccination schedule for this newborn.</p>
-                            <table className="nb-inner-table">
-                                <thead>
-                                    <tr><th>Vaccine</th><th>Dose</th><th>Date Given</th><th>Next Due</th><th>Status</th></tr>
-                                </thead>
-                                <tbody>
-                                    {baby.vaccLog?.map((v, i) => (
-                                        <tr key={i}>
-                                            <td className="col-name">{v.vaccine}</td>
-                                            <td>{v.dose}</td>
-                                            <td className="col-date">{v.date || <span className="not-yet">Not given</span>}</td>
-                                            <td className="col-date">{v.nextDue || <span className="not-yet">—</span>}</td>
-                                            <td><span className={`vacc-status ${vaccStatusClass(v.status)}`}>{v.status}</span></td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                            <div className="tab-action">
-                                <button className="btn btn-primary"><Syringe size={14} /> Record Vaccination</button>
+                    {/* Next Vaccination Alert */}
+                    {baby.nextVaccine && (
+                        <div className="next-vaccine-alert">
+                            <Clock size={18} />
+                            <div>
+                                <strong>Next Vaccination:</strong> {baby.nextVaccine.vaccine} ({baby.nextVaccine.dose})
+                                <p>Scheduled for: {baby.nextVaccine.date}</p>
                             </div>
-                        </div>
-                    )}
-
-                    {/* TAB 4: Supplements */}
-                    {tab === 'supp' && (
-                        <div>
-                            <p className="tab-hint">Supplement distribution for this newborn.</p>
-                            <table className="nb-inner-table">
-                                <thead>
-                                    <tr><th>Supplement</th><th>Dose</th><th>Start Date</th><th>End Date</th><th>Status</th></tr>
-                                </thead>
-                                <tbody>
-                                    {baby.suppLog?.map((s, i) => (
-                                        <tr key={i}>
-                                            <td className="col-name">{s.supp}</td>
-                                            <td>{s.dose}</td>
-                                            <td className="col-date">{s.start}</td>
-                                            <td className="col-date">{s.end}</td>
-                                            <td><span className={`vacc-status ${suppStatusClass(s.status)}`}>{s.status}</span></td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                            <div className="tab-action">
-                                <button className="btn btn-primary"><Pill size={14} /> Record Supplement</button>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* TAB 5: Checkups */}
-                    {tab === 'checkup' && (
-                        <div>
-                            <p className="tab-hint">All recorded neonatal checkups and visits.</p>
-                            {baby.checkupLog?.length > 0 ? (
-                                <div className="checkup-list">
-                                    {baby.checkupLog.map((c, i) => (
-                                        <div key={i} className="checkup-card">
-                                            <div className="checkup-date">{c.date}</div>
-                                            <div className="checkup-body">
-                                                <p className="checkup-vitals">{c.vitals}</p>
-                                                <p className="checkup-staff">By {c.staff}</p>
-                                                {c.notes && <p className="checkup-notes">{c.notes}</p>}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="nb-empty"><Activity size={22} /><p>No checkup records yet.</p></div>
-                            )}
-                            <div className="tab-action">
-                                <button className="btn btn-primary"><Plus size={14} /> Record Checkup</button>
-                                <button className="btn btn-outline"><Calendar size={14} /> Schedule Next Visit</button>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* TAB 6: Alerts */}
-                    {tab === 'alerts' && (
-                        <div>
-                            {baby.alerts?.length > 0 ? (
-                                <div className="nb-alerts-list">
-                                    {baby.alerts.map((a, i) => (
-                                        <div key={i} className="nb-alert-item">
-                                            <AlertCircle size={15} className="nb-alert-icon" />
-                                            <span>{a}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="nb-empty nb-empty--ok">
-                                    <CheckCircle2 size={24} />
-                                    <p>No alerts — this newborn is healthy and on schedule.</p>
-                                </div>
-                            )}
                         </div>
                     )}
                 </div>
 
                 <div className="modal-footer">
                     <button className="btn btn-outline" onClick={onClose}>Close</button>
-                    <button className="btn btn-outline"><Calendar size={14} /> Schedule Visit</button>
-                    <button className="btn btn-primary"><Activity size={14} /> Record Vitals</button>
+                    <button className="btn btn-primary" onClick={() => navigate('/dashboard/vaccinations')}>
+                        <Syringe size={14} /> Go to Vaccination Page
+                    </button>
                 </div>
             </div>
         </div>
@@ -229,42 +136,58 @@ const DetailModal = ({ baby, onClose }) => {
 };
 
 /* ════════════════════════════
-   MAIN COMPONENT
+   MAIN COMPONENT - VACCINATION TRACKING
 ════════════════════════════ */
 const NewbornTracking = () => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filters, setFilters] = useState({ risk: 'All', vacc: 'All', weight: 'All', station: 'All' });
+    const [filters, setFilters] = useState({ status: 'All', progress: 'All', station: 'All' });
     const [selectedBaby, setSelectedBaby] = useState(null);
     const [expandedRow, setExpandedRow] = useState(null);
 
-    // Live data state
+    // Live data state - filtered for vaccination tracking
     const [stats, setStats] = useState({
-        totalNewborns: 0,
-        lowBirthWeight: 0,
-        highRisk: 0,
-        vaccinationsDue: 0,
-        missedFollowups: 0
+        totalWithVaccines: 0,
+        fullyVaccinated: 0,
+        partiallyVaccinated: 0,
+        overdueVaccines: 0,
+        upcomingDoses: 0
     });
     const [newborns, setNewborns] = useState([]);
-    const [alerts, setAlerts] = useState([]);
-    const [quickStats, setQuickStats] = useState({ female: 0, male: 0, nsd: 0, cs: 0, lbw: 0, nicu: 0 });
 
     const loadNewbornData = useCallback(async () => {
         try {
             const service = new NewbornService();
-            const [statsData, newbornsData, alertsData, quickStatsData] = await Promise.all([
-                service.getNewbornStats(),
-                service.getAllNewborns(),
-                service.getNewbornAlerts(),
-                service.getQuickStats()
-            ]);
+            const newbornsData = await service.getAllNewborns();
             
-            setStats(statsData);
-            setNewborns(newbornsData);
-            setAlerts(alertsData);
-            setQuickStats(quickStatsData);
+            // Filter only newborns with vaccination records
+            const withVaccines = (newbornsData || []).filter(b => 
+                b.vaccLog && b.vaccLog.length > 0
+            );
+            
+            // Calculate vaccination stats
+            const fullyVaccinated = withVaccines.filter(b => {
+                const completed = b.vaccLog.filter(v => v.status === 'Completed').length;
+                return completed === b.vaccLog.length;
+            }).length;
+
+            const overdueVaccines = withVaccines.filter(b => 
+                b.vaccLog.some(v => v.status === 'Overdue')
+            ).length;
+
+            const upcomingDoses = withVaccines.reduce((acc, b) => 
+                acc + b.vaccLog.filter(v => v.status === 'Pending').length, 0
+            );
+            
+            setStats({
+                totalWithVaccines: withVaccines.length,
+                fullyVaccinated,
+                partiallyVaccinated: withVaccines.length - fullyVaccinated,
+                overdueVaccines,
+                upcomingDoses
+            });
+            setNewborns(withVaccines);
         } catch (err) {
             console.error('Error loading newborn data:', err);
         } finally {
@@ -289,49 +212,110 @@ const NewbornTracking = () => {
 
     const handleFilter = (k, v) => setFilters(prev => ({ ...prev, [k]: v }));
 
-    const filtered = newborns.filter(b => {
-        const s = searchTerm.toLowerCase();
-        const matchSearch = b.babyName.toLowerCase().includes(s) || b.motherName.toLowerCase().includes(s) || b.id.toLowerCase().includes(s) || b.station.toLowerCase().includes(s);
-        const matchRisk = filters.risk === 'All' || b.riskLevel === filters.risk;
-        const matchVacc = filters.vacc === 'All' || b.vaccStatus === filters.vacc;
-        const matchWeight = filters.weight === 'All' ||
-            (filters.weight === 'Low' && b.birthWeight < 2.5) ||
-            (filters.weight === 'Normal' && b.birthWeight >= 2.5 && b.birthWeight < 4) ||
-            (filters.weight === 'High' && b.birthWeight >= 4);
-        const matchStation = filters.station === 'All' || b.station === filters.station;
-        return matchSearch && matchRisk && matchVacc && matchWeight && matchStation;
-    });
+    // Filter for vaccination tracking only
+    const filtered = useMemo(() => {
+        return newborns.filter(b => {
+            const s = searchTerm.toLowerCase();
+            const matchSearch = b.babyName?.toLowerCase().includes(s) || 
+                              b.motherName?.toLowerCase().includes(s) || 
+                              b.id?.toLowerCase().includes(s) || 
+                              b.station?.toLowerCase().includes(s);
+            
+            // Calculate vaccination progress
+            const completed = b.vaccLog?.filter(v => v.status === 'Completed').length || 0;
+            const total = b.vaccLog?.length || 0;
+            const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+            
+            // Status filter
+            const matchStatus = filters.status === 'All' || 
+                (filters.status === 'Completed' && percentage === 100) ||
+                (filters.status === 'In Progress' && percentage > 0 && percentage < 100) ||
+                (filters.status === 'Overdue' && b.vaccLog?.some(v => v.status === 'Overdue'));
+            
+            // Progress filter
+            const matchProgress = filters.progress === 'All' ||
+                (filters.progress === '0-25%' && percentage <= 25) ||
+                (filters.progress === '26-50%' && percentage > 25 && percentage <= 50) ||
+                (filters.progress === '51-75%' && percentage > 50 && percentage <= 75) ||
+                (filters.progress === '76-99%' && percentage > 75 && percentage < 100) ||
+                (filters.progress === '100%' && percentage === 100);
+            
+            const matchStation = filters.station === 'All' || b.station === filters.station;
+            
+            return matchSearch && matchStatus && matchProgress && matchStation;
+        });
+    }, [newborns, searchTerm, filters]);
+
+    const getVaccinationProgress = (baby) => {
+        const completed = baby.vaccLog?.filter(v => v.status === 'Completed').length || 0;
+        const total = baby.vaccLog?.length || 0;
+        return {
+            completed,
+            total,
+            percentage: total > 0 ? Math.round((completed / total) * 100) : 0
+        };
+    };
+
+    const getNextVaccine = (baby) => {
+        const pending = baby.vaccLog?.find(v => v.status === 'Pending' || v.status === 'Overdue');
+        return pending ? { vaccine: pending.vaccine, dose: pending.dose, date: pending.nextDue } : null;
+    };
 
     const getRowClass = (b) => {
-        if (b.riskLevel === 'High') return 'nb-row--high';
-        if (b.riskLevel === 'Monitor') return 'nb-row--monitor';
-        return 'nb-row--normal';
+        const progress = getVaccinationProgress(b);
+        if (b.vaccLog?.some(v => v.status === 'Overdue')) return 'nb-row--overdue';
+        if (progress.percentage === 100) return 'nb-row--completed';
+        if (progress.percentage >= 75) return 'nb-row--progress';
+        return 'nb-row--started';
     };
 
-    const getRiskBadge = (r) => {
-        if (r === 'High') return 'risk-high';
-        if (r === 'Monitor') return 'risk-monitor';
-        return 'risk-normal';
+    const getProgressBadge = (percentage) => {
+        if (percentage === 100) return 'progress-completed';
+        if (percentage >= 75) return 'progress-high';
+        if (percentage >= 50) return 'progress-medium';
+        if (percentage >= 25) return 'progress-low';
+        return 'progress-started';
     };
 
-    const getVaccBadge = (s) => {
-        if (s === 'Completed') return 'status-completed';
-        if (s === 'Overdue') return 'status-overdue';
-        return 'status-pending';
-    };
+    const handleExport = () => {
+        const exportData = filtered.map(b => {
+            const progress = getVaccinationProgress(b);
+            const nextVaccine = getNextVaccine(b);
+            return {
+                'Baby Name': b.babyName,
+                'Mother Name': b.motherName,
+                'Baby ID': b.id,
+                'Station': b.station,
+                'Birth Date': b.birthDate,
+                'Vaccines Completed': progress.completed,
+                'Total Vaccines': progress.total,
+                'Progress %': `${progress.percentage}%`,
+                'Next Vaccine': nextVaccine ? `${nextVaccine.vaccine} (${nextVaccine.dose})` : 'All Completed',
+                'Next Due Date': nextVaccine?.date || '—',
+            };
+        });
 
-    const getSuppBadge = (s) => {
-        if (s === 'Ongoing') return 'status-ongoing';
-        if (s === 'Missed') return 'status-overdue';
-        return 'status-completed';
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Newborn Vaccination Tracking');
+
+        // Auto-size columns
+        const colWidths = [
+            { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 12 },
+            { wch: 18 }, { wch: 15 }, { wch: 12 }, { wch: 25 }, { wch: 15 }
+        ];
+        ws['!cols'] = colWidths;
+
+        const dateStr = new Date().toISOString().split('T')[0];
+        XLSX.writeFile(wb, `Newborn_Vaccination_Tracking_${dateStr}.xlsx`);
     };
 
     const SUMMARY_CARDS = [
-        { label: 'Total Newborns', value: stats.totalNewborns, color: 'lilac', icon: Baby },
-        { label: 'Low Birth Weight (<2.5kg)', value: stats.lowBirthWeight, color: 'pink', icon: Scale },
-        { label: 'High-Risk Newborns', value: stats.highRisk, color: 'rose', icon: AlertCircle },
-        { label: 'Vaccinations Due', value: stats.vaccinationsDue, color: 'sage', icon: Syringe },
-        { label: 'Missed Follow-ups', value: stats.missedFollowups, color: 'orange', icon: XCircle },
+        { label: 'Newborns with Vaccines', value: stats.totalWithVaccines, color: 'lilac', icon: Baby },
+        { label: 'Fully Vaccinated', value: stats.fullyVaccinated, color: 'sage', icon: CheckCircle2 },
+        { label: 'In Progress', value: stats.partiallyVaccinated, color: 'blue', icon: Timer },
+        { label: 'Overdue Vaccines', value: stats.overdueVaccines, color: 'rose', icon: AlertTriangle },
+        { label: 'Upcoming Doses', value: stats.upcomingDoses, color: 'orange', icon: Calendar },
     ];
 
     if (loading) return (
@@ -345,20 +329,23 @@ const NewbornTracking = () => {
     );
 
     return (
-        <div className="nb-page">
+        <div className="nb-page vacc-tracking-page">
 
             {/* ── Page Header ── */}
-            <div className="page-header">
+            <div className="page-header vacc-header">
                 <div>
-                    <h1 className="page-title"><Heart size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Newborn Tracking</h1>
-                    <p className="page-subtitle">Monitor newborn health, growth, vaccinations, and follow-up schedules</p>
+                    <h1 className="page-title"><Syringe size={24} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Newborn Vaccination Tracking</h1>
+                    <p className="page-subtitle">Monitor vaccination schedules, progress, and upcoming doses for newborns</p>
                 </div>
                 <div className="header-actions">
+                    <button className="btn btn-outline" onClick={handleExport}>
+                        <Download size={14} /> Export Report
+                    </button>
                 </div>
             </div>
 
             {/* ── Summary Cards ── */}
-            <div className="nb-stats-grid">
+            <div className="nb-stats-grid vacc-stats">
                 {SUMMARY_CARDS.map(s => {
                     const Icon = s.icon;
                     return (
@@ -376,7 +363,7 @@ const NewbornTracking = () => {
             </div>
 
             {/* ── Search & Filters ── */}
-            <div className="nb-controls">
+            <div className="nb-controls vacc-controls">
                 <div className="nb-search-wrap">
                     <Search size={16} className="nb-search-icon" />
                     <input
@@ -387,25 +374,21 @@ const NewbornTracking = () => {
                         onChange={e => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <div className="nb-filters-row">
+                <div className="nb-filters-row vacc-filters">
                     <span className="filters-label"><Filter size={13} /> Filters:</span>
-                    <select value={filters.risk} onChange={e => handleFilter('risk', e.target.value)}>
-                        <option value="All">All Risk Levels</option>
-                        <option value="Normal">Normal</option>
-                        <option value="Monitor">Monitor</option>
-                        <option value="High">High Risk</option>
-                    </select>
-                    <select value={filters.weight} onChange={e => handleFilter('weight', e.target.value)}>
-                        <option value="All">All Birth Weights</option>
-                        <option value="Low">Low (&lt;2.5kg)</option>
-                        <option value="Normal">Normal (2.5–4kg)</option>
-                        <option value="High">High (&gt;4kg)</option>
-                    </select>
-                    <select value={filters.vacc} onChange={e => handleFilter('vacc', e.target.value)}>
-                        <option value="All">All Vaccine Status</option>
-                        <option value="Completed">Completed</option>
-                        <option value="Pending">Pending</option>
+                    <select value={filters.status} onChange={e => handleFilter('status', e.target.value)}>
+                        <option value="All">All Status</option>
+                        <option value="Completed">Fully Vaccinated</option>
+                        <option value="In Progress">In Progress</option>
                         <option value="Overdue">Overdue</option>
+                    </select>
+                    <select value={filters.progress} onChange={e => handleFilter('progress', e.target.value)}>
+                        <option value="All">All Progress</option>
+                        <option value="0-25%">0-25% Complete</option>
+                        <option value="26-50%">26-50% Complete</option>
+                        <option value="51-75%">51-75% Complete</option>
+                        <option value="76-99%">76-99% Complete</option>
+                        <option value="100%">100% Complete</option>
                     </select>
                     <select value={filters.station} onChange={e => handleFilter('station', e.target.value)}>
                         <option value="All">All Stations</option>
@@ -414,181 +397,178 @@ const NewbornTracking = () => {
                 </div>
             </div>
 
-            {/* ── Main Layout ── */}
-            <div className="nb-main-layout">
+            {/* ── Vaccination Tracking Table ── */}
+            <div className="nb-card vacc-table-card">
+                <div className="nb-card-head vacc-table-head">
+                    <h2><Baby size={17} /> Newborns with Vaccination Records</h2>
+                    <div className="nb-legend vacc-legend">
+                        <span className="legend-chip chip-completed"><CheckCircle2 size={11} /> Fully Vaccinated</span>
+                        <span className="legend-chip chip-progress"><TrendingUp size={11} /> In Progress</span>
+                        <span className="legend-chip chip-overdue"><AlertTriangle size={11} /> Overdue</span>
+                    </div>
+                    <span className="nb-count">{filtered.length} newborns</span>
+                </div>
 
-                {/* ── Newborn Table ── */}
-                <div className="nb-table-col">
-                    <div className="nb-card">
-                        <div className="nb-card-head">
-                            <h2><Baby size={17} /> Newborn Records</h2>
-                            <div className="nb-legend">
-                                <span className="legend-chip chip-normal"><CheckCircle2 size={11} /> Normal</span>
-                                <span className="legend-chip chip-monitor"><AlertTriangle size={11} /> Monitor</span>
-                                <span className="legend-chip chip-high"><AlertCircle size={11} /> High Risk</span>
-                            </div>
-                            <span className="nb-count">{filtered.length} records</span>
-                        </div>
-
-                        <div className="table-responsive">
-                            <table className="nb-table">
-                                <thead>
-                                    <tr>
-                                        <th>Baby</th>
-                                        <th>Mother</th>
-                                        <th>Birth Date</th>
-                                        <th>Gender</th>
-                                        <th>Weight</th>
-                                        <th>Gest. Age</th>
-                                        <th>Risk</th>
-                                        <th>Vaccines</th>
-                                        <th>Supplements</th>
-                                        <th>Next Appt.</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filtered.map(b => (
-                                        <React.Fragment key={b.id}>
-                                            <tr className={`nb-row ${getRowClass(b)}`}>
-                                                <td>
-                                                    <button className="expand-btn" onClick={() => setExpandedRow(expandedRow === b.id ? null : b.id)}>
-                                                        {expandedRow === b.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                                                    </button>
-                                                    <div className="nb-baby-cell">
-                                                        <div className={`nb-avatar nb-avatar--${b.gender.toLowerCase()}`}>
-                                                            {b.gender === 'Female' ? '♀' : b.gender === 'Male' ? '♂' : '?'}
-                                                        </div>
-                                                        <div>
-                                                            <span className="nb-baby-name">{b.babyName}</span>
-                                                            <span className="nb-baby-id" title={b.id}>{b.id.substring(0, 8)}...</span>
-                                                        </div>
+                <div className="table-responsive">
+                    <table className="nb-table vacc-table">
+                        <thead>
+                            <tr>
+                                <th>Baby</th>
+                                <th>Mother</th>
+                                <th>Birth Date</th>
+                                <th>Vaccination Progress</th>
+                                <th>Completed / Total</th>
+                                <th>Next Vaccine</th>
+                                <th>Next Due Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filtered.map(b => {
+                                const progress = getVaccinationProgress(b);
+                                const nextVaccine = getNextVaccine(b);
+                                return (
+                                    <React.Fragment key={b.id}>
+                                        <tr className={`nb-row ${getRowClass(b)}`}>
+                                            <td>
+                                                <button className="expand-btn" onClick={() => setExpandedRow(expandedRow === b.id ? null : b.id)}>
+                                                    {expandedRow === b.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                                </button>
+                                                <div className="nb-baby-cell">
+                                                    <div className={`nb-avatar nb-avatar--${b.gender?.toLowerCase() || 'unknown'}`}>
+                                                        {b.gender === 'Female' ? '♀' : b.gender === 'Male' ? '♂' : '?'}
                                                     </div>
-                                                </td>
-                                                <td onClick={() => navigate(`/dashboard/patients/${b.motherId}`)} style={{ cursor: 'pointer' }}>
-                                                    <span className="nb-mother-name patient-name-link">{b.motherName}</span>
-                                                    <span className="nb-mother-id">{b.station}</span>
-                                                </td>
-                                                <td className="nb-date">{b.birthDate}</td>
-                                                <td>
-                                                    <span className={`gender-badge gender-${b.gender.toLowerCase()}`}>{b.gender}</span>
-                                                </td>
-                                                <td>
-                                                    <span className={`weight-val ${b.birthWeight < 2.5 ? 'weight-low' : ''}`}>{b.birthWeight} kg</span>
-                                                    {b.birthWeight < 2.5 ? <span className="lbw-flag">LBW</span> : null}
-                                                </td>
-                                                <td className="nb-ga">{b.gestationalAge}</td>
-                                                <td>
-                                                    <span className={`risk-badge ${getRiskBadge(b.riskLevel)}`}>{b.riskLevel}</span>
-                                                </td>
-                                                <td>
-                                                    <span className={`vacc-status ${getVaccBadge(b.vaccStatus)}`}>{b.vaccStatus}</span>
-                                                </td>
-                                                <td>
-                                                    <span className={`vacc-status ${getSuppBadge(b.suppStatus)}`}>{b.suppStatus}</span>
-                                                </td>
-                                                <td>
-                                                    <span className="nb-date">{b.nextAppt}</span>
-                                                </td>
-                                                <td>
-                                                    <div className="row-actions">
-                                                        <button className="action-btn view-btn" title="View Full Profile" onClick={() => setSelectedBaby(b)}><Eye size={13} /></button>
-                                                        <button className="action-btn vacc-btn" title="Record Vaccination" onClick={() => navigate('/dashboard/vaccinations')}><Syringe size={13} /></button>
-                                                        <button className="action-btn vitals-btn" title="Record Vitals"><Activity size={13} /></button>
+                                                    <div>
+                                                        <span className="nb-baby-name">{b.babyName}</span>
+                                                        <span className="nb-baby-id" title={b.id}>{b.id?.substring(0, 8)}...</span>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td onClick={() => navigate(`/dashboard/patients/${b.motherId}`)} style={{ cursor: 'pointer' }}>
+                                                <span className="nb-mother-name patient-name-link">{b.motherName}</span>
+                                                <span className="nb-mother-id">{b.station}</span>
+                                            </td>
+                                            <td className="nb-date">{b.birthDate}</td>
+                                            <td>
+                                                <div className="vacc-progress-cell">
+                                                    <div className="vacc-progress-mini">
+                                                        <div className="vacc-progress-track-mini">
+                                                            <div 
+                                                                className={`vacc-progress-fill-mini ${getProgressBadge(progress.percentage)}`}
+                                                                style={{ width: `${progress.percentage}%` }}
+                                                            ></div>
+                                                        </div>
+                                                        <span className="vacc-progress-text">{progress.percentage}%</span>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="vacc-count">
+                                                <span className="vacc-completed">{progress.completed}</span>
+                                                <span className="vacc-separator">/</span>
+                                                <span className="vacc-total">{progress.total}</span>
+                                            </td>
+                                            <td>
+                                                {nextVaccine ? (
+                                                    <span className="next-vaccine-name">
+                                                        {nextVaccine.vaccine} <span className="vaccine-dose">({nextVaccine.dose})</span>
+                                                    </span>
+                                                ) : (
+                                                    <span className="all-completed"><CheckCircle2 size={12} /> All Done</span>
+                                                )}
+                                            </td>
+                                            <td className="nb-date">
+                                                {nextVaccine ? (
+                                                    <span className={`next-date ${b.vaccLog?.some(v => v.status === 'Overdue') ? 'date-overdue' : ''}`}>
+                                                        {nextVaccine.date}
+                                                    </span>
+                                                ) : (
+                                                    <span className="no-date">—</span>
+                                                )}
+                                            </td>
+                                            <td>
+                                                <div className="row-actions vacc-actions">
+                                                    <button className="action-btn view-btn" title="View Vaccination Details" onClick={() => setSelectedBaby(b)}>
+                                                        <Eye size={13} />
+                                                    </button>
+                                                    <button className="action-btn vacc-btn" title="Record Vaccination" onClick={() => navigate('/dashboard/vaccinations')}>
+                                                        <Syringe size={13} />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+
+                                        {/* Expanded vaccination details */}
+                                        {expandedRow === b.id && (
+                                            <tr className="nb-expanded-row">
+                                                <td colSpan="8">
+                                                    <div className="expand-detail vacc-expand">
+                                                        <div className="expand-col vacc-expand-progress">
+                                                            <h4><ShieldCheck size={14} /> Vaccination Progress</h4>
+                                                            <div className="expand-progress-bar">
+                                                                <div className="expand-progress-track">
+                                                                    <div className="expand-progress-fill" style={{ width: `${progress.percentage}%` }}></div>
+                                                                </div>
+                                                                <span>{progress.percentage}% Complete</span>
+                                                            </div>
+                                                            <p className="expand-progress-count">{progress.completed} of {progress.total} vaccines completed</p>
+                                                        </div>
+                                                        <div className="expand-col vacc-expand-list">
+                                                            <h4><Syringe size={14} /> Vaccine Schedule</h4>
+                                                            {b.vaccLog?.length ? (
+                                                                <div className="vacc-mini-list">
+                                                                    {b.vaccLog.slice(0, 5).map((v, i) => (
+                                                                        <div key={i} className={`vacc-mini-item ${v.status.toLowerCase()}`}>
+                                                                            <span className="vacc-mini-name">{v.vaccine}</span>
+                                                                            <span className={`vacc-mini-status ${v.status.toLowerCase()}`}>{v.status}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                    {b.vaccLog.length > 5 && (
+                                                                        <p className="vacc-more">+{b.vaccLog.length - 5} more vaccines...</p>
+                                                                    )}
+                                                                </div>
+                                                            ) : <p>No vaccines scheduled.</p>}
+                                                        </div>
+                                                        <div className="expand-col vacc-expand-next">
+                                                            <h4><Clock size={14} /> Next Upcoming</h4>
+                                                            {nextVaccine ? (
+                                                                <div className="next-vaccine-highlight">
+                                                                    <span className="next-vaccine-label">{nextVaccine.vaccine}</span>
+                                                                    <span className="next-vaccine-dose">{nextVaccine.dose}</span>
+                                                                    <span className="next-vaccine-date">Due: {nextVaccine.date}</span>
+                                                                </div>
+                                                            ) : (
+                                                                <p className="all-done"><CheckCircle2 size={16} /> All vaccinations completed!</p>
+                                                            )}
+                                                        </div>
+                                                        <div className="expand-col vacc-expand-actions">
+                                                            <button className="btn btn-outline" onClick={() => setSelectedBaby(b)}>
+                                                                View Full Details →
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </td>
                                             </tr>
+                                        )}
+                                    </React.Fragment>
+                                );
+                            })}
 
-                                            {/* Expanded quick-view */}
-                                            {expandedRow === b.id && (
-                                                <tr className="nb-expanded-row">
-                                                    <td colSpan="11">
-                                                        <div className="expand-detail">
-                                                            <div className="expand-col">
-                                                                <h4>📐 Growth</h4>
-                                                                <p><strong>Birth Weight:</strong> {b.birthWeight} kg</p>
-                                                                <p><strong>Length:</strong> {b.length} cm</p>
-                                                                <p><strong>Head Circ.:</strong> {b.headCirc} cm</p>
-                                                            </div>
-                                                            <div className="expand-col">
-                                                                <h4>💉 Vaccines</h4>
-                                                                {b.vaccLog?.length ? b.vaccLog.map((v, i) => (
-                                                                    <p key={i}><strong>{v.vaccine}:</strong> {v.status}</p>
-                                                                )) : <p>No vaccine records yet.</p>}
-                                                            </div>
-                                                            <div className="expand-col">
-                                                                <h4>💊 Supplements</h4>
-                                                                {b.suppLog?.length ? b.suppLog.map((s, i) => (
-                                                                    <p key={i}><strong>{s.supp}:</strong> {s.status}</p>
-                                                                )) : <p>No supplement records yet.</p>}
-                                                            </div>
-                                                            <div className="expand-col">
-                                                                <h4>⚠ Alerts</h4>
-                                                                {b.alerts?.length > 0 ? b.alerts.map((a, i) => (
-                                                                    <p key={i} className="expand-alert">{a}</p>
-                                                                )) : <p>No alerts.</p>}
-                                                                <div className="expand-actions">
-                                                                    <button className="btn btn-outline" onClick={() => setSelectedBaby(b)}>Full Profile →</button>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            )}
-                                        </React.Fragment>
-                                    ))}
-
-                                    {filtered.length === 0 && (
-                                        <tr>
-                                            <td colSpan="11" className="nb-empty">
-                                                <Baby size={28} />
-                                                <p>No newborn records match your criteria.</p>
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                {/* ── Side Alerts ── */}
-                <div className="nb-side-col">
-                    <div className="nb-card">
-                        <div className="nb-card-head">
-                            <h2><AlertTriangle size={16} /> Alerts</h2>
-                        </div>
-                        <div className="alerts-list">
-                            {alerts.map((a, i) => (
-                                <div key={i} className={`alert-item alert-${a.type}`}>
-                                    <div className="alert-dot"></div>
-                                    <div className="alert-body">
-                                        <p>{a.text}</p>
-                                        <span>{a.time}</span>
-                                    </div>
-                                </div>
-                            ))}
-                            {alerts.length === 0 && <p style={{ textAlign: 'center', padding: '20px', fontSize: '12px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No alerts at this time.</p>}
-                        </div>
-                    </div>
-
-                    {/* Quick Stats */}
-                    <div className="nb-card">
-                        <div className="nb-card-head"><h2><TrendingUp size={16} /> Quick Stats</h2></div>
-                        <div className="quick-stats-list">
-                            <div className="qs-row"><span>Female Newborns</span><strong className="qs-female">{quickStats.female}</strong></div>
-                            <div className="qs-row"><span>Male Newborns</span><strong className="qs-male">{quickStats.male}</strong></div>
-                            <div className="qs-row"><span>NSD Deliveries</span><strong className="qs-nsd">{quickStats.nsd}</strong></div>
-                            <div className="qs-row"><span>CS Deliveries</span><strong className="qs-cs">{quickStats.cs}</strong></div>
-                            <div className="qs-row"><span>Low Birth Weight</span><strong className="qs-lbw">{quickStats.lbw}</strong></div>
-                            <div className="qs-row"><span>In NICU / Spl Care</span><strong className="qs-nicu">{quickStats.nicu}</strong></div>
-                        </div>
-                    </div>
+                            {filtered.length === 0 && (
+                                <tr>
+                                    <td colSpan="8" className="nb-empty vacc-empty">
+                                        <Syringe size={32} />
+                                        <p>No newborns with vaccination records found.</p>
+                                        <small>Newborns without vaccination records do not appear in this page.</small>
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
-            {/* ── Detail Modal ── */}
-            {selectedBaby && <DetailModal baby={selectedBaby} onClose={() => setSelectedBaby(null)} />}
+            {/* ── Vaccination Detail Modal ── */}
+            {selectedBaby && <VaccinationDetailModal baby={selectedBaby} onClose={() => setSelectedBaby(null)} />}
         </div>
     );
 };
