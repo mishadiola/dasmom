@@ -25,7 +25,7 @@ import PatientProfile from './pages/Patients/PatientProfile';
 import AddPatient from './pages/Patients/AddPatient';
 import HighRiskCases from './pages/HighRisk/HighRiskCases';
 import Analytics from './pages/Analytics/Analytics';
-import PrenatalVisits from './pages/Prenatal/PrenatalVisits';
+import PrenatalVisits from './pages/prenatal/PrenatalVisits';
 import AddPrenatalVisit from './pages/Prenatal/AddPrenatalVisit';
 import PostpartumRecords from './pages/Postpartum/PostpartumRecords';
 import Vaccinations from './pages/Vaccinations/Vaccinations';
@@ -33,7 +33,6 @@ import DeliveryOutcomes from './pages/Deliveries/DeliveryOutcomes';
 import NewbornTracking from './pages/Newborns/NewbornTracking';
 import StationReports from './pages/Station/StationReports';
 import Settings from './pages/Settings/Settings';
-import PregnancyResources from './pages/Resources/PregnancyResources';
 import Inventory from './pages/Inventory/Inventory';
 
 import './App.css';
@@ -69,7 +68,6 @@ function App() {
             <Route path="newborns" element={<NewbornTracking />} />
             <Route path="stations" element={<StationReports />} />
             <Route path="analytics" element={<Analytics />} />
-            <Route path="resources" element={<PregnancyResources />} />
             <Route path="settings" element={<Settings />} />
           </Route>
 

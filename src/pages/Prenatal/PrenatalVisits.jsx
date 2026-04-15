@@ -15,6 +15,31 @@ const toLocalDateStr = (d) => {
     return new Date(d.getTime() - offset).toISOString().split('T')[0];
 };
 
+// New helper function for readable date formatting
+const formatReadableDate = (dateString) => {
+    if (!dateString) return '';
+    
+    const date = new Date(dateString);
+    const options = { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+    };
+    return date.toLocaleDateString('en-US', options);
+};
+
+// Helper function for formatting calendar date labels
+const formatCalendarDate = (dateString) => {
+    if (!dateString) return '';
+    
+    const date = new Date(dateString);
+    const options = { 
+        month: 'short', 
+        day: 'numeric' 
+    };
+    return date.toLocaleDateString('en-US', options);
+};
+
 const TIME_SLOTS = [
     '08:00 AM', '08:30 AM', '09:00 AM', '09:30 AM', '10:00 AM',
     '10:30 AM', '11:00 AM', '11:30 AM', '01:00 PM', '01:30 PM',
@@ -168,7 +193,7 @@ const PrenatalVisits = () => {
                 curr.setDate(start.getDate() + i);
                 days.push({
                     date: toLocalDateStr(curr),
-                    label: curr.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })
+                    label: formatCalendarDate(curr)
                 });
             }
             return days;
@@ -181,7 +206,7 @@ const PrenatalVisits = () => {
                 const curr = new Date(d.getFullYear(), d.getMonth(), i);
                 days.push({
                     date: toLocalDateStr(curr),
-                    label: i.toString()
+                    label: formatCalendarDate(curr)
                 });
             }
             return days;
@@ -249,14 +274,13 @@ const PrenatalVisits = () => {
     };
 
     const formatNavLabel = () => {
-        if (calendarView === 'day') return currentDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
-        const visibleDays = getVisibleDays(currentDate, calendarView);
+        if (calendarView === 'day') return formatReadableDate(visibleDays[0]?.date);
         if (!visibleDays || visibleDays.length === 0) return '';
         const start = new Date(visibleDays[0].date);
         const end = new Date(visibleDays[visibleDays.length - 1].date);
         return calendarView === 'week' 
-            ? `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-            : start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            ? `${formatReadableDate(start)} – ${formatReadableDate(end)}`
+            : formatReadableDate(start);
     };
 
     const getSlotStatus = useCallback((date, time) => {
@@ -274,8 +298,7 @@ const PrenatalVisits = () => {
     }, [appointments]);
 
     const handleSlotClick = (date, time, status) => {
-        if (status === 'FULL DAY' || status === 'Full') return;
-
+        // Calendar is now view-only - no manual scheduling allowed
         if (status !== 'Available') {
             setSelectedVisit({
                 ...status,
@@ -284,10 +307,7 @@ const PrenatalVisits = () => {
             });
             return;
         }
-
-        setSelectedSlot({ date, time });
-        setConflictWarning(null);
-        setBookingPanelOpen(true);
+        // Do nothing for available slots - no booking panel will open
     };
 
     const handleSelectPatient = (val) => {
@@ -336,14 +356,6 @@ const PrenatalVisits = () => {
                     <h1 className="page-title">Visits & Scheduling</h1>
                     <p className="page-subtitle">30 slots/day max (25 regular + 5 rescheduling)</p>
                 </div>
-                <div className="header-actions">
-                    <button className="btn btn-primary" onClick={() => {
-                        setSelectedSlot({ date: visibleDays[0]?.date, time: '08:00 AM' });
-                        setBookingPanelOpen(true);
-                    }}>
-                        <Plus size={16} /> Schedule Visit
-                    </button>
-                </div>
             </div>
 
             {/* CALENDAR SECTION */}
@@ -384,7 +396,7 @@ const PrenatalVisits = () => {
                                 <th className="th-time">Time</th>
                                 {visibleDays.map(day => (
                                     <th key={day.date} className={day.date === TODAY ? 'th-today' : ''}>
-                                        {day.label}
+                                        {formatCalendarDate(day.date)}
                                         {day.date === TODAY && <span className="today-badge">TODAY</span>}
                                     </th>
                                 ))}
@@ -403,7 +415,7 @@ const PrenatalVisits = () => {
                                                 className={`pc-slot ${status === 'Available' ? 'slot-avail' : 
                                                     status === 'FULL DAY' || status === 'Full' ? 'slot-full' : 
                                                     isHigh ? 'slot-high' : 'slot-booked'}`}
-                                                onClick={() => handleSlotClick(day.date, time, status)}
+                                                onClick={() => status !== 'Available' && handleSlotClick(day.date, time, status)}
                                             >
                                                 {status === 'Available' ? 'Available' : 
                                                  status === 'FULL DAY' ? 'FULL DAY' : 
@@ -423,21 +435,16 @@ const PrenatalVisits = () => {
                 </div>
             </div>
 
-            {/* VISITS TABLE - UNCHANGED (already perfect) */}
+            {/* VISITS TABLE */}
             <div className="pv-table-section">
                 <div className="section-header-row">
                     <h2 className="section-title"><Clock size={18} /> Upcoming & Recent Visits</h2>
-                    <div className="pv-table-legend">
-                        <span className="legend-chip chip-upcoming">Upcoming</span>
-                        <span className="legend-chip chip-completed">Completed</span>
-                        <span className="legend-chip chip-waiting">Waiting</span>
-                    </div>
                     <div className="table-filters">
                         <div className="header-search">
                             <Search size={14} className="hs-icon" />
                             <input 
                                 type="text" 
-                                placeholder="Search patient..." 
+                                placeholder="Search patient name…" 
                                 value={searchTerm}
                                 onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                                 className="hs-input"
@@ -450,7 +457,6 @@ const PrenatalVisits = () => {
                         >
                             <option value="All">All Statuses</option>
                             <option value="Completed">Completed</option>
-                            <option value="Waiting">Waiting</option>
                             <option value="Upcoming">Upcoming</option>
                         </select>
                     </div>
@@ -472,7 +478,7 @@ const PrenatalVisits = () => {
                         <tbody>
                             {paginatedVisits.map(visit => (
                                 <tr key={visit.id} className={getRowClass(visit.status)}>
-                                    <td className="cell-date"><CalendarCheck size={14} /> {visit.visitDate}</td>
+                                    <td className="cell-date"><CalendarCheck size={14} /> {formatReadableDate(visit.visitDate)}</td>
                                     <td>
                                         <div className="p-info">
                                             <span className="p-name">{visit.patientName}</span>
@@ -529,59 +535,6 @@ const PrenatalVisits = () => {
                     </div>
                 )}
             </div>
-
-            {/* BOOKING PANEL */}
-            {bookingPanelOpen && (
-                <>
-                    <div className="bk-overlay" onClick={() => setBookingPanelOpen(false)}></div>
-                    <div className="bk-panel slide-in-right">
-                        <div className="bk-header">
-                            <h2>Schedule Visit</h2>
-                            <button className="icon-btn-sm" onClick={() => setBookingPanelOpen(false)}><X size={18} /></button>
-                        </div>
-                        <div className="bk-body">
-                            <div className="bk-slot-info">
-                                <CalendarIcon size={14} /> <span>{selectedSlot.date}</span>
-                                <Clock size={14} className="ml-2" /> <span>{selectedSlot.time}</span>
-                            </div>
-                            <div className="form-group mt-4">
-                                <label>Select Patient</label>
-                                <SearchableDropdown
-                                    patients={livePatients}
-                                    value={bookingData.patientId}
-                                    onChange={handleSelectPatient}
-                                />
-                            </div>
-                            <div className="form-group mt-3">
-                                <label>Visit Type</label>
-                                <select value={bookingData.visitType} onChange={e => setBookingData({ ...bookingData, visitType: e.target.value })}>
-                                    <option>Routine Prenatal</option>
-                                    <option>High-Risk Follow-up</option>
-                                    <option>Walk-in</option>
-                                </select>
-                            </div>
-                            <div className="form-group mt-3">
-                                <label>Assigned Staff</label>
-                                <select value={bookingData.staff} onChange={e => setBookingData({ ...bookingData, staff: e.target.value })}>
-                                    <option value="">Auto-assign</option>
-                                    {staffList.map(s => <option key={s}>{s}</option>)}
-                                </select>
-                            </div>
-                            {conflictWarning && (
-                                <div className="conflict-box mt-3">
-                                    <AlertTriangle size={14} /> {conflictWarning}
-                                </div>
-                            )}
-                        </div>
-                        <div className="bk-footer">
-                            <button className="btn btn-outline" onClick={() => setBookingPanelOpen(false)}>Cancel</button>
-                            <button className="btn btn-primary" onClick={handleConfirmBooking} disabled={!bookingData.patientId}>
-                                Confirm (30/day limit)
-                            </button>
-                        </div>
-                    </div>
-                </>
-            )}
 
             {selectedVisit && (
                 <ScheduledVisitModal 

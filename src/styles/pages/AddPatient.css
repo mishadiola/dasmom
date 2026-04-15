@@ -111,7 +111,8 @@
     border-radius: 16px;
     border: 1px solid #eef0f4;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
-    min-height: 500px;
+    min-height: 600px;
+    height: calc(100vh - 200px);
     overflow: hidden;
     position: relative;
 }
@@ -156,19 +157,50 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
-/* ══════════════════════════════════════════
-   FORM CONTENT
-══════════════════════════════════════════ */
 .ap-content {
     flex: 1;
     padding: 32px 40px;
     min-width: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    height: 100%;
+    scrollbar-width: thin;
+    scrollbar-color: #eef0f4 transparent;
+}
+
+.ap-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.ap-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.ap-content::-webkit-scrollbar-thumb {
+    background: #eef0f4;
+    border-radius: 3px;
+}
+
+.ap-content::-webkit-scrollbar-thumb:hover {
+    background: #d1d5db;
 }
 
 .ap-section {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    padding-bottom: 60px;
+    min-height: fit-content;
+}
+
+/* ══════════════════════════════════════════
+   FORM CONTENT
+══════════════════════════════════════════ */
+.ap-form {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
 }
 
 .section-title {
@@ -190,7 +222,8 @@
     font-size: 16px;
     font-weight: 600;
     color: var(--color-text);
-    margin: 12px 0 8px;
+    margin: 20px 0 12px;
+    padding-top: 8px;
 }
 
 /* Grids */
@@ -224,7 +257,7 @@
     border: 0;
     height: 1px;
     background: #eef0f4;
-    margin: 12px 0;
+    margin: 20px 0;
 }
 
 /* Inputs */
@@ -511,6 +544,7 @@
 @media (max-width: 900px) {
     .ap-container {
         flex-direction: column;
+        height: calc(100vh - 150px);
     }
 
     .ap-sidebar {
@@ -519,6 +553,7 @@
         border-bottom: 1px solid #eef0f4;
         flex-direction: row;
         overflow-x: auto;
+        flex-shrink: 0;
     }
 
     .ap-tab {
@@ -528,6 +563,7 @@
 
     .ap-content {
         padding: 24px;
+        height: 100%;
     }
 
     .form-grid-3 {
@@ -540,6 +576,14 @@
 }
 
 @media (max-width: 600px) {
+    .ap-container {
+        height: calc(100vh - 120px);
+    }
+
+    .ap-content {
+        padding: 20px;
+        height: 100%;
+    }
 
     .form-grid-3,
     .form-grid-2 {
@@ -548,6 +592,10 @@
 
     .checkbox-grid {
         grid-template-columns: 1fr;
+    }
+
+    .ap-section {
+        padding-bottom: 40px;
     }
 }
 /*calendar*/

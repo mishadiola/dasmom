@@ -44,12 +44,66 @@ const STAFF_LIST = ['Nurse Ana', 'Nurse Bea', 'Midwife Elena', 'Midwife Ana', 'D
 /* ════════════════════════════════════
    RECORD MODAL COMPONENT
 ════════════════════════════════════ */
-const RecordModal = ({ mode, onClose }) => {
+const RecordModal = ({ mode, onClose, onSave }) => {
     const [form, setForm] = useState({
         patientType: 'Mother', patientName: '', vaccine: '',
         supplement: '', dose: '', date: '', nextDue: '', staff: STAFF_LIST[0], notes: ''
     });
+    const [isSaving, setIsSaving] = useState(false);
     const updateForm = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+
+    const handleSave = async () => {
+        if (!form.patientName || !form.dose || !form.date || !form.staff) {
+            alert('Please fill in all required fields.');
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            const patientService = new PatientService();
+            
+            // Extract patient ID from name (assuming format "Patient ID" or actual name)
+            const patientId = form.patientName.includes('Patient') 
+                ? form.patientName.split(' ')[1] 
+                : await patientService.findPatientByName(form.patientName);
+            
+            if (!patientId) {
+                alert('Patient not found. Please check the patient name.');
+                return;
+            }
+
+            const record = {
+                patient_id: patientId,
+                vaccine_name: form.vaccine,
+                supplement_name: form.supplement,
+                dose: form.dose,
+                date_administered: form.date,
+                next_due_date: form.nextDue,
+                start_date: form.date, // For supplements
+                end_date: form.nextDue, // For supplements
+                status: 'Completed',
+                administered_by: form.staff,
+                notes: form.notes
+            };
+
+            if (mode === 'vaccine') {
+                await patientService.addVaccinationRecord(record);
+            } else {
+                await patientService.addSupplementRecord(record);
+            }
+
+            if (onSave) {
+                onSave(); // Trigger parent refresh
+            } else {
+                onClose(); // Fallback to just close
+            }
+        } catch (error) {
+            console.error('Error saving record:', error);
+            alert('Failed to save record. Please try again.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     return (
         <div className="modal-backdrop" onClick={onClose}>
@@ -149,8 +203,11 @@ const RecordModal = ({ mode, onClose }) => {
                     </div>
                 </div>
                 <div className="modal-footer">
-                    <button className="btn btn-outline" onClick={onClose}>Cancel</button>
-                    <button className="btn btn-primary" onClick={onClose}><CheckCircle2 size={15} /> Confirm &amp; Save</button>
+                    <button className="btn btn-outline" onClick={onClose} disabled={isSaving}>Cancel</button>
+                    <button className="btn btn-primary" onClick={handleSave} disabled={isSaving}>
+                        {isSaving ? <RefreshCw size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                        {isSaving ? 'Saving...' : 'Confirm & Save'}
+                    </button>
                 </div>
             </div>
         </div>
@@ -173,6 +230,8 @@ const Vaccinations = () => {
         lowStockAlerts: 0
     });
     const [inventory, setInventory] = useState([]);
+    const [vaccinationRecords, setVaccinationRecords] = useState([]);
+    const [supplementRecords, setSupplementRecords] = useState([]);
     const [loading, setLoading] = useState(true);
 
     const [activeTab, setActiveTab] = useState('vaccines');    // 'vaccines' | 'supplements'
@@ -183,29 +242,108 @@ const Vaccinations = () => {
     const [sortField, setSortField] = useState('');
     const [sortAsc, setSortAsc] = useState(true);
 
+    const fetchData = async () => {
+        try {
+            setLoading(true);
+            const [newStats, newInventory, vaccRecords, suppRecords] = await Promise.all([
+                patientService.getVaccinationStats(),
+                patientService.getVaccineInventory(),
+                patientService.getVaccinationRecords(),
+                patientService.getSupplementRecords()
+            ]);
+            setStats(newStats);
+            setInventory(newInventory);
+            
+            // Get patient information for proper name display and age categorization
+            const patientIds = [...new Set([...(vaccRecords || []).map(r => r.patient_id), ...(suppRecords || []).map(r => r.patient_id)])];
+            const patients = patientIds.length > 0 ? await patientService.getPatientsByIds(patientIds) : [];
+            const patientMap = new Map((patients || []).map(p => [p.id, p]));
+            
+            // Transform vaccination records with patient data
+            const transformedVaccRecords = (vaccRecords || []).map(record => {
+                const patient = patientMap.get(record.patient_id);
+                const patientName = patient ? `${patient.first_name || ''} ${patient.last_name || ''}`.trim() : `Patient ${record.patient_id}`;
+                const age = patient ? calculateAge(patient.date_of_birth) : 0;
+                const patientType = age >= 18 ? 'Mother' : 'Newborn';
+                
+                return {
+                    id: record.id,
+                    patientName,
+                    patientId: record.patient_id,
+                    station: patient?.barangay || 'Unknown',
+                    type: patientType,
+                    vaccine: record.vaccine_name,
+                    dose: record.dose,
+                    dateAdministered: record.date_administered,
+                    nextDue: record.next_due_date,
+                    status: record.status,
+                    staff: record.administered_by,
+                    notes: record.notes
+                };
+            });
+            
+            // Transform supplement records with patient data
+            const transformedSuppRecords = (suppRecords || []).map(record => {
+                const patient = patientMap.get(record.patient_id);
+                const patientName = patient ? `${patient.first_name || ''} ${patient.last_name || ''}`.trim() : `Patient ${record.patient_id}`;
+                const age = patient ? calculateAge(patient.date_of_birth) : 0;
+                const patientType = age >= 18 ? 'Mother' : 'Newborn';
+                
+                return {
+                    id: record.id,
+                    patientName,
+                    patientId: record.patient_id,
+                    station: patient?.barangay || 'Unknown',
+                    type: patientType,
+                    supplement: record.supplement_name,
+                    dose: record.dose,
+                    startDate: record.start_date,
+                    endDate: record.end_date,
+                    status: record.status,
+                    staff: record.administered_by,
+                    notes: record.notes
+                };
+            });
+            
+            setVaccinationRecords(transformedVaccRecords);
+            setSupplementRecords(transformedSuppRecords);
+        } catch (error) {
+            console.error('Error loading dashboard data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    // Helper function to calculate age from date of birth
+    const calculateAge = (dateOfBirth) => {
+        if (!dateOfBirth) return 0;
+        const today = new Date();
+        const birthDate = new Date(dateOfBirth);
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+        return age;
+    };
+
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                setLoading(true);
-                const [newStats, newInventory] = await Promise.all([
-                    patientService.getVaccinationStats(),
-                    patientService.getVaccineInventory()
-                ]);
-                setStats(newStats);
-                setInventory(newInventory);
-            } catch (error) {
-                console.error('Error loading dashboard data:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchData();
     }, []);
+
+    // Refresh data when modal closes (assuming new record was added)
+    const handleModalClose = () => {
+        setRecordModal(null);
+        fetchData(); // Refresh data to show new records
+    };
 
     // Derived Stats for UI mapping
     const dynamicSummaryStats = [
         { label: 'Total Vaccinations Administered', value: stats.totalAdministered, color: 'lilac', icon: Syringe },
+        { label: 'Mothers Pending Vaccines', value: stats.mothersPending, color: 'pink', icon: AlertCircle },
+        { label: 'Newborns Pending Vaccines', value: stats.newbornsPending, color: 'orange', icon: AlertCircle },
         { label: 'Supplements Distributed', value: stats.supplementsDistributed, unit: 'units', color: 'sage', icon: Pill },
+        { label: 'Low Stock Items', value: stats.lowStockAlerts, color: 'rose', icon: Package },
     ];
 
     const handleFilter = (k, v) => setFilters(prev => ({ ...prev, [k]: v }));
@@ -218,7 +356,7 @@ const Vaccinations = () => {
     };
 
     // ── Filter + sort vaccines ──
-    const filteredVaccines = VACCINES
+    const filteredVaccines = vaccinationRecords
         .filter(v => {
             const s = searchTerm.toLowerCase();
             const matchSearch = v.patientName.toLowerCase().includes(s) || v.patientId.toLowerCase().includes(s) || v.station.toLowerCase().includes(s);
@@ -234,7 +372,7 @@ const Vaccinations = () => {
         });
 
     // ── Filter + sort supplements ──
-    const filteredSupplements = SUPPLEMENTS
+    const filteredSupplements = supplementRecords
         .filter(s => {
             const q = searchTerm.toLowerCase();
             const matchSearch = s.patientName.toLowerCase().includes(q) || s.patientId.toLowerCase().includes(q) || s.station.toLowerCase().includes(q);
@@ -242,6 +380,11 @@ const Vaccinations = () => {
             const matchStatus = filters.status === 'All' || s.status === filters.status;
             const matchItem = filters.item === 'All' || s.supplement === filters.item;
             return matchSearch && matchType && matchStatus && matchItem;
+        })
+        .sort((a, b) => {
+            if (!sortField) return 0;
+            const va = a[sortField] ?? ''; const vb = b[sortField] ?? '';
+            return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
         });
 
     const SortBtn = ({ field }) => (
@@ -504,7 +647,7 @@ const Vaccinations = () => {
 
 
             {/* ── Record Modal ── */}
-            {recordModal && <RecordModal mode={recordModal} onClose={() => setRecordModal(null)} />}
+            {recordModal && <RecordModal mode={recordModal} onClose={handleModalClose} />}
         </div>
     );
 };

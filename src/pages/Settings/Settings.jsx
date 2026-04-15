@@ -4,11 +4,11 @@ import { AuthContext } from '../../context/AuthContext';
 import AuthService from '../../services/authservice';
 import StaffService from '../../services/staffservice';
 import {
-    Users, Shield, Settings as SettingsIcon, FileText, User,
-    Plus, Search, Filter, Edit2, Trash2, RotateCcw, X, Eye, EyeOff,
-    CheckCircle2, XCircle, AlertCircle, Lock, Bell, Download,
-    Monitor, LogOut, Clock, ChevronDown, ToggleLeft, ToggleRight,
-    Key, Mail, MapPin, Activity, Save
+    Users, Settings as SettingsIcon, User,
+    Plus, Search, Edit2, Trash2, RotateCcw, X, Eye, EyeOff,
+    CheckCircle2, XCircle, AlertCircle, Bell,
+    Monitor, ChevronDown, ToggleLeft, ToggleRight,
+    Key, Save, Mail, MapPin, Clock, LogOut, Lock, FileText
 } from 'lucide-react';
 import '../../styles/pages/Settings.css';
 
@@ -24,72 +24,6 @@ const USERS = [
     { id: 6, name: 'Intern Rosa Cruz',   role: 'Staff',       email: 'rosa.cruz@gmail.com',     status: 'Active',   lastLogin: '2026-03-01 07:55 AM', avatar: 'RC' },
 ];
 
-const AUDIT_LOGS = [
-    { id: 1, user: 'Mish Diola',    action: 'Generated Report',   details: 'Station 3 monthly report exported to PDF', time: '2026-03-01 09:14 AM', ip: '192.168.1.10' },
-    { id: 2, user: 'Nurse Ana Reyes',     action: 'Added Patient',      details: 'New patient Maria Cruz (PT-2412) registered', time: '2026-03-01 08:50 AM', ip: '192.168.1.12' },
-    { id: 3, user: 'Midwife Elena Perez', action: 'Record Vitals',      details: 'Vitals recorded for PT-2401 – Maria Reyes', time: '2026-03-01 08:30 AM', ip: '192.168.1.11' },
-    { id: 4, user: 'Nurse Bea Gomez',     action: 'Login',              details: 'Successful login', time: '2026-02-28 04:45 PM', ip: '192.168.1.13' },
-    { id: 5, user: 'Mish Diola',    action: 'Created Account',    details: 'New staff account created for Intern Rosa Cruz', time: '2026-02-27 11:00 AM', ip: '192.168.1.10' },
-    { id: 6, user: 'Midwife Ana Magtibay','action': 'Record Delivery',   details: 'Delivery recorded for PT-2406 – Luz Ramos', time: '2026-02-27 10:00 AM', ip: '192.168.1.15' },
-    { id: 7, user: 'Nurse Ana Reyes',     action: 'Record Vaccination', details: 'BCG recorded for NB-001 – Baby Reyes', time: '2026-02-27 09:30 AM', ip: '192.168.1.12' },
-    { id: 8, user: 'Mish Diola',    action: 'Settings Changed',   details: 'Notification preferences updated', time: '2026-02-26 03:00 PM', ip: '192.168.1.10' },
-];
-
-const ROLES_DATA = [
-    {
-        role: 'Super Admin', color: 'rose', badge: 'badge-superadmin',
-        perms: {
-            patients: { view: true,  add: true,  edit: true,  delete: true  },
-            prenatal: { view: true,  add: true,  edit: true,  delete: true  },
-            highRisk: { view: true,  add: true,  edit: true,  delete: true  },
-            postpartum:{ view: true, add: true,  edit: true,  delete: true  },
-            deliveries:{ view: true, add: true,  edit: true,  delete: true  },
-            newborns:  { view: true, add: true,  edit: true,  delete: true  },
-            vaccinations:{view:true, add: true,  edit: true,  delete: true  },
-            station:  { view: true, add: true,  edit: true,  delete: true  },
-            analytics: { view: true, add: true,  edit: true,  delete: true  },
-            settings:  { view: true, add: true,  edit: true,  delete: true  },
-        }
-    },
-    {
-        role: 'Admin', color: 'blue', badge: 'badge-admin',
-        perms: {
-            patients: { view: true,  add: true,  edit: true,  delete: false },
-            prenatal: { view: true,  add: true,  edit: true,  delete: false },
-            highRisk: { view: true,  add: true,  edit: true,  delete: false },
-            postpartum:{ view: true, add: true,  edit: true,  delete: false },
-            deliveries:{ view: true, add: true,  edit: true,  delete: false },
-            newborns:  { view: true, add: true,  edit: true,  delete: false },
-            vaccinations:{view:true, add: true,  edit: true,  delete: false },
-            station:  { view: true, add: false, edit: false, delete: false },
-            analytics: { view: true, add: false, edit: false, delete: false },
-            settings:  { view: false,add: false, edit: false, delete: false },
-        }
-    },
-    {
-        role: 'Staff', color: 'green', badge: 'badge-staff',
-        perms: {
-            patients: { view: true,  add: true,  edit: true,  delete: false },
-            prenatal: { view: true,  add: true,  edit: false, delete: false },
-            highRisk: { view: true,  add: false, edit: false, delete: false },
-            postpartum:{ view: true, add: true,  edit: false, delete: false },
-            deliveries:{ view: true, add: true,  edit: false, delete: false },
-            newborns:  { view: true, add: true,  edit: false, delete: false },
-            vaccinations:{view:true, add: true,  edit: false, delete: false },
-            station:  { view: false,add: false, edit: false, delete: false },
-            analytics: { view: false,add: false, edit: false, delete: false },
-            settings:  { view: false,add: false, edit: false, delete: false },
-        }
-    },
-];
-
-const MODULE_LABELS = {
-    patients: 'Patient Profiles', prenatal: 'Prenatal Visits',
-    highRisk: 'High-Risk Cases', postpartum: 'Postpartum Records',
-    deliveries: 'Delivery Outcomes', newborns: 'Newborn Tracking',
-    vaccinations: 'Vaccinations', station: 'Station Reports',
-    analytics: 'Analytics', settings: 'Settings',
-};
 
 /* ════════════════════════════
    ADD USER MODAL
@@ -426,49 +360,6 @@ const UserAccountsTab = () => {
 };
 
 /* ════════════════════════════
-   TAB 2: ROLES & PERMISSIONS
-════════════════════════════ */
-const RolesTab = () => {
-    const modules = Object.keys(MODULE_LABELS);
-    const actions = ['view', 'add', 'edit', 'delete'];
-
-    return (
-        <div className="tab-content">
-            <p className="tab-desc">Review access levels for each system role. Only Super Admins can modify permissions.</p>
-            <div className="roles-grid">
-                {ROLES_DATA.map(rd => (
-                    <div key={rd.role} className={`role-card role-card--${rd.color}`}>
-                        <div className="role-card-head">
-                            <Shield size={16} />
-                            <span className={`role-badge ${rd.badge}`}>{rd.role}</span>
-                        </div>
-                        <div className="perm-table">
-                            <div className="perm-header">
-                                <span className="perm-module-col">Module</span>
-                                {actions.map(a => <span key={a} className="perm-action-col">{a}</span>)}
-                            </div>
-                            {modules.map(mod => (
-                                <div key={mod} className="perm-row">
-                                    <span className="perm-module">{MODULE_LABELS[mod]}</span>
-                                    {actions.map(a => (
-                                        <span key={a} className="perm-cell">
-                                            {rd.perms[mod]?.[a]
-                                                ? <CheckCircle2 size={13} className="perm-yes" />
-                                                : <XCircle size={13} className="perm-no" />
-                                            }
-                                        </span>
-                                    ))}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
-/* ════════════════════════════
    TAB 3: SYSTEM SETTINGS
 ════════════════════════════ */
 const SystemSettingsTab = () => {
@@ -588,76 +479,6 @@ const SystemSettingsTab = () => {
     );
 };
 
-/* ════════════════════════════
-   TAB 4: AUDIT LOGS
-════════════════════════════ */
-const AuditLogsTab = () => {
-    const [search, setSearch] = useState('');
-    const [actionFilter, setActionFilter] = useState('All');
-
-    const actionTypes = [...new Set(AUDIT_LOGS.map(l => l.action))];
-
-    const filtered = AUDIT_LOGS.filter(l => {
-        const s = search.toLowerCase();
-        const matchS = l.user.toLowerCase().includes(s) || l.details.toLowerCase().includes(s);
-        const matchA = actionFilter === 'All' || l.action === actionFilter;
-        return matchS && matchA;
-    });
-
-    const actionColor = (a) => {
-        if (a.includes('Delete') || a.includes('Deact')) return 'audit-rose';
-        if (a.includes('Created') || a.includes('Add')) return 'audit-green';
-        if (a.includes('Login')) return 'audit-blue';
-        if (a.includes('Settings')) return 'audit-yellow';
-        return 'audit-gray';
-    };
-
-    return (
-        <div className="tab-content">
-            <div className="tab-toolbar">
-                <div className="set-search-wrap">
-                    <Search size={15} className="set-search-icon" />
-                    <input className="set-search-input" placeholder="Search by user or action..." value={search} onChange={e => setSearch(e.target.value)} />
-                </div>
-                <select value={actionFilter} onChange={e => setActionFilter(e.target.value)} className="set-select">
-                    <option value="All">All Actions</option>
-                    {actionTypes.map(a => <option key={a}>{a}</option>)}
-                </select>
-                <button className="btn btn-outline"><Download size={14} /> Export Logs</button>
-            </div>
-
-            <div className="set-table-wrap">
-                <table className="set-table">
-                    <thead>
-                        <tr>
-                            <th>User</th>
-                            <th>Action</th>
-                            <th>Details</th>
-                            <th>Date / Time</th>
-                            <th>IP Address</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filtered.map(l => (
-                            <tr key={l.id}>
-                                <td>
-                                    <div className="user-cell">
-                                        <div className="user-avatar uav-staff">{l.user.split(' ').slice(-2).map(n=>n[0]).join('')}</div>
-                                        <span>{l.user}</span>
-                                    </div>
-                                </td>
-                                <td><span className={`audit-tag ${actionColor(l.action)}`}>{l.action}</span></td>
-                                <td className="audit-details">{l.details}</td>
-                                <td className="audit-time">{l.time}</td>
-                                <td className="audit-ip">{l.ip}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    );
-};
 
 /* ════════════════════════════
    TAB 5: PROFILE & SECURITY
@@ -678,7 +499,6 @@ const ProfileTab = () => {
     const [pwdForm, setPwdForm] = useState({ new: '', confirm: '' });
     const [showNew, setShowNew] = useState(false);
     
-    const [twoFA, setTwoFA] = useState(false);
 
     useEffect(() => {
         const fetchProfile = async () => {
@@ -766,11 +586,15 @@ const ProfileTab = () => {
                     </div>
                     <h3>{user?.fullName || 'User Account'}</h3>
                     <p className="profile-role">{user?.role?.toUpperCase() || 'Staff'}</p>
-                    <p className="profile-email"><Mail size={13} /> {user?.email}</p>
-                    <p className="profile-station">
+                    <div className="profile-info-item">
+                        <Mail size={13} /> {user?.email}
+                    </div>
+                    <div className="profile-info-item">
                         <MapPin size={13} /> {fullProfile?.barangay_assignment || 'No Assignment'}
-                    </p>
-                    <p className="profile-login"><Clock size={13} /> Active Session</p>
+                    </div>
+                    <div className="profile-info-item">
+                        <Clock size={13} /> Active Session
+                    </div>
                     <button className="btn btn-outline logout-btn" onClick={handleLogout}>
                         <LogOut size={14} /> Sign Out
                     </button>
@@ -851,26 +675,6 @@ const ProfileTab = () => {
                         </button>
                     </form>
 
-                    {/* Security Extras */}
-                    <div className="settings-section">
-                        <div className="section-header"><Shield size={16} /><h3>Security Settings</h3></div>
-                        <div className="setting-row">
-                            <div className="setting-info">
-                                <span className="setting-label">Two-Factor Authentication (2FA)</span>
-                                <span className="setting-desc">Add an extra layer of security to your account</span>
-                            </div>
-                            <button className={`toggle-switch ${twoFA ? 'toggle-on' : ''}`} onClick={() => setTwoFA(v => !v)} type="button">
-                                <span className="toggle-thumb" />
-                            </button>
-                        </div>
-                        <div className="setting-row">
-                            <div className="setting-info">
-                                <span className="setting-label">Active Sessions</span>
-                                <span className="setting-desc">View your currently logged in devices</span>
-                            </div>
-                            <button className="btn btn-outline btn-sm" type="button"><Activity size={13} /> View Log</button>
-                        </div>
-                    </div>
                 </div>
             </div>
 
@@ -906,10 +710,8 @@ const Settings = () => {
 
     const TABS = [
         { id: 'accounts',  label: 'User Accounts',      icon: Users },
-        { id: 'roles',     label: 'Roles & Permissions', icon: Shield },
         { id: 'system',    label: 'System Settings',    icon: SettingsIcon },
-        { id: 'audit',     label: 'Audit Logs',         icon: FileText },
-        { id: 'profile',   label: 'Profile & Security', icon: User },
+        { id: 'profile',   label: 'Profile', icon: User },
     ];
 
     return (
@@ -918,7 +720,7 @@ const Settings = () => {
             <div className="page-header">
                 <div>
                     <h1 className="page-title"><SettingsIcon size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Settings</h1>
-                    <p className="page-subtitle">Manage users, roles, system preferences, and audit logs</p>
+                    <p className="page-subtitle">Manage users, system preferences, and security settings</p>
                 </div>
             </div>
 
@@ -941,9 +743,7 @@ const Settings = () => {
             {/* ── Tab Content ── */}
             <div className="set-tab-content-wrap">
                 {activeTab === 'accounts' && <UserAccountsTab />}
-                {activeTab === 'roles'    && <RolesTab />}
                 {activeTab === 'system'   && <SystemSettingsTab />}
-                {activeTab === 'audit'    && <AuditLogsTab />}
                 {activeTab === 'profile'  && <ProfileTab />}
             </div>
         </div>

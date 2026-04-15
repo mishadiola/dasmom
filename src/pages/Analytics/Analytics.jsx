@@ -153,9 +153,6 @@ const Analytics = () => {
                     <h1 className="page-title">Analytics</h1>
                     <p className="page-subtitle">Proactive risk monitoring and population health insights</p>
                 </div>
-                <div className="header-actions">
-                    <button className="btn-export"><Activity size={14} /> Intelligence Report</button>
-                </div>
             </header>
 
             {/* ── Filter Bar ── */}

@@ -113,7 +113,16 @@ const Dashboard = () => {
 
             // Dynamically map schedule data instead of relying on empty mock arrays
             if (apptData) {
-                const mappedAppts = apptData.map(v => {
+                // Additional client-side filtering to ensure only today's appointments
+                const todayFiltered = apptData.filter(v => {
+                    if (!v.visit_date) return false;
+                    const visitDate = new Date(v.visit_date);
+                    const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate());
+                    return visitDateOnly.getTime() === todayDate.getTime();
+                });
+
+                const mappedAppts = todayFiltered.map(v => {
                     const info = v.patient_basic_info || {};
                     const pregInfo = Array.isArray(info.pregnancy_info) ? info.pregnancy_info[0] : info.pregnancy_info || {};
                     
@@ -141,8 +150,24 @@ const Dashboard = () => {
                     };
                 });
                 
+                // Remove duplicates based on patient ID (keep only the latest visit per patient for today)
+                const uniqueAppts = mappedAppts.reduce((acc, current) => {
+                    const existingIndex = acc.findIndex(item => item.name === current.name);
+                    if (existingIndex === -1) {
+                        acc.push(current);
+                    } else {
+                        // Keep the one with the later time
+                        const existingTime = acc[existingIndex].time;
+                        const currentTime = current.time;
+                        if (currentTime > existingTime) {
+                            acc[existingIndex] = current;
+                        }
+                    }
+                    return acc;
+                }, []);
+                
                 // Sort chronologically using internal patientService algorithm rules
-                mappedAppts.sort((a, b) => {
+                uniqueAppts.sort((a, b) => {
                    const parseTime = (t) => {
                        const [val, ampm] = t.split(' ');
                        let [hr, min] = val.split(':').map(Number);
@@ -153,7 +178,7 @@ const Dashboard = () => {
                    return parseTime(a.time) - parseTime(b.time);
                 });
 
-                setTodayAppts(mappedAppts);
+                setTodayAppts(uniqueAppts);
             }
 
             // Fetch Vaccine Stock

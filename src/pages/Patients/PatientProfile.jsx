@@ -9,6 +9,37 @@ import {
 } from 'lucide-react';
 import '../../styles/pages/PatientProfile.css';
 import PatientService from '../../services/patientservice';
+import EditPatientModal from '../../components/Patient/EditPatientModal';
+
+// Helper function for readable date formatting
+const formatReadableDate = (dateString) => {
+    if (!dateString) return '';
+    
+    const date = new Date(dateString);
+    const options = { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+    };
+    return date.toLocaleDateString('en-US', options);
+};
+
+// Helper function for proper ordinal formatting
+const getOrdinalSuffix = (num) => {
+    if (!num) return '';
+    
+    const lastDigit = num % 10;
+    const lastTwoDigits = num % 100;
+    
+    if (lastTwoDigits >= 11 && lastTwoDigits <= 13) {
+        return num + 'th';
+    }
+    
+    if (lastDigit === 1) return num + 'st';
+    if (lastDigit === 2) return num + 'nd';
+    if (lastDigit === 3) return num + 'rd';
+    return num + 'th';
+};
 
 const TABS = [
     { id: 'info', label: 'Basic Info', icon: User },
@@ -27,6 +58,7 @@ const PatientProfile = () => {
     const [activeTab, setActiveTab] = useState('info');
     const [p, setP] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [editModalOpen, setEditModalOpen] = useState(false);
 
     useEffect(() => {
         const fetchPatient = async () => {
@@ -43,6 +75,384 @@ const PatientProfile = () => {
 
         fetchPatient();
     }, [id]);
+
+    const handleEditPatient = () => {
+        setEditModalOpen(true);
+    };
+
+    const handlePatientUpdate = (updatedPatient) => {
+        setP(updatedPatient);
+    };
+
+    const handlePrintProfile = () => {
+        // Create a new window for printing
+        const printWindow = window.open('', '_blank');
+        
+        // Generate the HTML content for the PDF
+        const printContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Patient Profile - ${p.name}</title>
+                <style>
+                    body {
+                        font-family: Arial, sans-serif;
+                        margin: 20px;
+                        color: #333;
+                        line-height: 1.6;
+                    }
+                    .header {
+                        text-align: center;
+                        border-bottom: 2px solid #b9818a;
+                        padding-bottom: 20px;
+                        margin-bottom: 30px;
+                    }
+                    .patient-name {
+                        font-size: 24px;
+                        font-weight: bold;
+                        color: #b9818a;
+                        margin: 0;
+                    }
+                    .patient-info {
+                        font-size: 14px;
+                        color: #666;
+                        margin: 5px 0;
+                    }
+                    .section {
+                        margin-bottom: 30px;
+                    }
+                    .section-title {
+                        font-size: 18px;
+                        font-weight: bold;
+                        color: #b9818a;
+                        border-bottom: 1px solid #ddd;
+                        padding-bottom: 5px;
+                        margin-bottom: 15px;
+                    }
+                    .info-grid {
+                        display: grid;
+                        grid-template-columns: 1fr 1fr;
+                        gap: 15px;
+                        margin-bottom: 20px;
+                    }
+                    .info-item {
+                        margin-bottom: 10px;
+                    }
+                    .info-label {
+                        font-weight: bold;
+                        color: #555;
+                        display: inline-block;
+                        width: 120px;
+                    }
+                    .info-value {
+                        color: #333;
+                    }
+                    .risk-badge {
+                        background: #ffebee;
+                        color: #c62828;
+                        padding: 4px 8px;
+                        border-radius: 4px;
+                        font-size: 12px;
+                        font-weight: bold;
+                    }
+                    .footer {
+                        margin-top: 40px;
+                        text-align: center;
+                        font-size: 12px;
+                        color: #999;
+                        border-top: 1px solid #ddd;
+                        padding-top: 20px;
+                    }
+                    @media print {
+                        body { margin: 15px; }
+                        .section { page-break-inside: avoid; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1 class="patient-name">${p.name}</h1>
+                    <p class="patient-info">Patient ID: ${p.id} | Age: ${p.age} years | Station: ${p.station}</p>
+                    <p class="patient-info">Risk Level: <span class="risk-badge">${p.risk || 'Normal'}</span></p>
+                    <p class="patient-info">Generated on: ${new Date().toLocaleDateString()}</p>
+                </div>
+
+                <div class="section">
+                    <h2 class="section-title">Personal Information</h2>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">Date of Birth:</span>
+                            <span class="info-value">${p.dob || 'N/A'}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Age:</span>
+                            <span class="info-value">${p.age || 'N/A'} years</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Civil Status:</span>
+                            <span class="info-value">${p.civilStatus || 'N/A'}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Blood Type:</span>
+                            <span class="info-value">${p.bloodType || 'N/A'}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">PhilHealth:</span>
+                            <span class="info-value">${p.philhealth || 'Not Provided'}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h2 class="section-title">Contact Information</h2>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">Phone:</span>
+                            <span class="info-value">${p.phone || 'N/A'}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Address:</span>
+                            <span class="info-value">${p.address || 'N/A'}, ${p.station || 'N/A'}, ${p.municipality || 'N/A'}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Emergency Contact:</span>
+                            <span class="info-value">${p.emergencyContact?.name || 'N/A'}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Relationship:</span>
+                            <span class="info-value">${p.emergencyContact?.relationship || 'N/A'}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Emergency Phone:</span>
+                            <span class="info-value">${p.emergencyContact?.phone || 'N/A'}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h2 class="section-title">Pregnancy Information</h2>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">Trimester:</span>
+                            <span class="info-value">${p.trimester || 'N/A'}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Weeks:</span>
+                            <span class="info-value">${p.weeks || '0'} weeks</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">EDD:</span>
+                            <span class="info-value">${p.edd || 'TBD'}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">LMP:</span>
+                            <span class="info-value">${p.lmp || 'N/A'}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Risk Level:</span>
+                            <span class="info-value">${p.risk || 'Normal'}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h2 class="section-title">Medical History</h2>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">Allergies:</span>
+                            <span class="info-value">${p.allergies || 'None recorded'}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Medications:</span>
+                            <span class="info-value">${p.medications || 'None recorded'}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Previous Pregnancies:</span>
+                            <span class="info-value">${p.previousPregnancies || '0'}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Medical Conditions:</span>
+                            <span class="info-value">${p.medicalConditions || 'None recorded'}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="footer">
+                    <p>Generated by DasMom+ Health System on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
+                    <p>This document contains confidential patient information. Handle with care.</p>
+                </div>
+            </body>
+            </html>
+        `;
+        
+        // Write the content to the new window
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        
+        // Wait for the content to load, then print
+        printWindow.onload = function() {
+            printWindow.print();
+            printWindow.close();
+        };
+    };
+
+    const handlePrintVisits = () => {
+        // Create a new window for printing
+        const printWindow = window.open('', '_blank');
+        
+        // Generate the HTML content for the prenatal visits PDF
+        const visitsContent = p.visits && p.visits.length > 0 
+            ? p.visits.map((visit, index) => `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${formatReadableDate(visit.visitDate) || 'N/A'}</td>
+                    <td>${visit.trimester || 'N/A'}</td>
+                    <td>${visit.weeks || 'N/A'} weeks</td>
+                    <td>${visit.visitType || 'Checkup'}</td>
+                    <td>${visit.weight || 'N/A'} kg</td>
+                    <td>${visit.bp || 'N/A'}</td>
+                    <td>${visit.notes || 'No notes'}</td>
+                </tr>
+            `).join('')
+            : '<tr><td colspan="8" style="text-align: center; padding: 20px;">No prenatal visits recorded</td></tr>';
+        
+        const printContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Prenatal Visits - ${p.name}</title>
+                <style>
+                    body {
+                        font-family: Arial, sans-serif;
+                        margin: 20px;
+                        color: #333;
+                        line-height: 1.6;
+                    }
+                    .header {
+                        text-align: center;
+                        border-bottom: 2px solid #b9818a;
+                        padding-bottom: 20px;
+                        margin-bottom: 30px;
+                    }
+                    .patient-name {
+                        font-size: 24px;
+                        font-weight: bold;
+                        color: #b9818a;
+                        margin: 0;
+                    }
+                    .patient-info {
+                        font-size: 14px;
+                        color: #666;
+                        margin: 5px 0;
+                    }
+                    .section-title {
+                        font-size: 18px;
+                        font-weight: bold;
+                        color: #b9818a;
+                        margin-bottom: 20px;
+                    }
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-bottom: 30px;
+                    }
+                    th {
+                        background-color: #b9818a;
+                        color: white;
+                        padding: 12px;
+                        text-align: left;
+                        font-weight: bold;
+                        font-size: 12px;
+                    }
+                    td {
+                        padding: 10px 12px;
+                        border-bottom: 1px solid #ddd;
+                        font-size: 12px;
+                    }
+                    tr:nth-child(even) {
+                        background-color: #f9f9f9;
+                    }
+                    tr:hover {
+                        background-color: #f5f5f5;
+                    }
+                    .footer {
+                        margin-top: 40px;
+                        text-align: center;
+                        font-size: 12px;
+                        color: #999;
+                        border-top: 1px solid #ddd;
+                        padding-top: 20px;
+                    }
+                    .summary-info {
+                        background-color: #f8f9fa;
+                        padding: 15px;
+                        border-radius: 5px;
+                        margin-bottom: 20px;
+                        border-left: 4px solid #b9818a;
+                    }
+                    .summary-info p {
+                        margin: 5px 0;
+                        font-size: 14px;
+                    }
+                    @media print {
+                        body { margin: 15px; }
+                        table { page-break-inside: auto; }
+                        tr { page-break-inside: avoid; page-break-after: auto; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1 class="patient-name">${p.name}</h1>
+                    <p class="patient-info">Patient ID: ${p.id} | Age: ${p.age} years | Station: ${p.station}</p>
+                    <p class="patient-info">Prenatal Visits Schedule</p>
+                    <p class="patient-info">Generated on: ${new Date().toLocaleDateString()}</p>
+                </div>
+
+                <div class="summary-info">
+                    <p><strong>Total Visits:</strong> ${p.visits ? p.visits.length : 0}</p>
+                    <p><strong>Current Trimester:</strong> ${p.trimester || 'N/A'}</p>
+                    <p><strong>Weeks of Pregnancy:</strong> ${p.weeks || 'N/A'} weeks</p>
+                    <p><strong>Expected Due Date:</strong> ${p.edd || 'N/A'}</p>
+                </div>
+
+                <h2 class="section-title">Prenatal Visits Timeline</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Visit #</th>
+                            <th>Date</th>
+                            <th>Trimester</th>
+                            <th>Weeks</th>
+                            <th>Visit Type</th>
+                            <th>Weight (kg)</th>
+                            <th>Blood Pressure</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${visitsContent}
+                    </tbody>
+                </table>
+
+                <div class="footer">
+                    <p>Generated by DasMom+ Health System on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
+                    <p>This document contains confidential patient information. Handle with care.</p>
+                </div>
+            </body>
+            </html>
+        `;
+        
+        // Write the content to the new window
+        printWindow.document.write(printContent);
+        printWindow.document.close();
+        
+        // Wait for the content to load, then print
+        printWindow.onload = function() {
+            printWindow.print();
+            printWindow.close();
+        };
+    };
 
     if (loading) return (
         <div className="profile-page">
@@ -105,7 +515,8 @@ const PatientProfile = () => {
                         </div>
                     </div>
                     <div className="header-actions">
-                        <button className="btn btn-outline" title="Print Record"><Printer size={16} /></button>
+                        <button className="btn btn-outline" title="Print Record" onClick={handlePrintProfile}><Printer size={16} /></button>
+                        <button className="btn btn-outline" title="Edit Patient" onClick={handleEditPatient}><Edit size={16} /></button>
                         <button className="btn btn-primary"><Edit size={16} /> Record Visit</button>
                     </div>
                 </div>
@@ -366,7 +777,7 @@ const PatientProfile = () => {
                     <div className="timeline-card animate-fade">
                         <div className="timeline-header">
                             <h3 className="info-card-title">Prenatal Visits Timeline</h3>
-                            <button className="btn btn-sm btn-outline"><Printer size={12} /> Print Schedule</button>
+                            <button className="btn btn-sm btn-outline" onClick={handlePrintVisits}><Printer size={12} /> Print Schedule</button>
                         </div>
                         <div className="timeline-list">
                             {p.visits.length > 0 ? p.visits.map((v, i) => (
@@ -374,10 +785,10 @@ const PatientProfile = () => {
                                     <div className={`timeline-dot ${new Date(v.visit_date) < new Date() ? 'completed' : 'upcoming'}`}></div>
                                     <div className="timeline-content">
                                         <div className="timeline-top">
-                                            <span className="timeline-date">{v.visit_date}</span>
+                                            <span className="timeline-date">{formatReadableDate(v.visit_date)}</span>
                                             <div className="timeline-meta-row">
                                                 <span className="timeline-type">Visit #{v.visit_number}</span>
-                                                <span className="timeline-tag">{v.trimester}th Trim.</span>
+                                                <span className="timeline-tag">{getOrdinalSuffix(v.trimester)} Trim.</span>
                                             </div>
                                         </div>
                                         { v.bp && (
@@ -513,6 +924,14 @@ const PatientProfile = () => {
                 )}
 
             </div>
+
+            {editModalOpen && (
+                <EditPatientModal 
+                    patient={p}
+                    onClose={() => setEditModalOpen(false)}
+                    onSave={handlePatientUpdate}
+                />
+            )}
         </div>
     );
 };

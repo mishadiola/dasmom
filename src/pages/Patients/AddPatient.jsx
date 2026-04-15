@@ -15,7 +15,6 @@ const TABS = [
     { id: 'pregnancy', label: 'Pregnancy', icon: HeartPulse },
     { id: 'medical', label: 'Medical', icon: Activity },
     { id: 'prenatal', label: 'Prenatal', icon: Calendar },
-    { id: 'documents', label: 'Documents', icon: FileText },
 ];
 const MEDICAL_CONDITIONS = [
     'Hypertension', 'Diabetes', 'Heart Disease', 'Asthma',
@@ -294,10 +293,11 @@ try {
                     ))}
                 </aside>
 
-                <form onSubmit={handleSave}>
-                    {/* PERSONAL TAB - OLD FIELDS + NEW DROPDOWN */}
-                    {activeTab === 'personal' && (
-                        <div className="ap-section animate-fade">
+                <form onSubmit={handleSave} className="ap-form">
+                    <div className="ap-content">
+                        {/* PERSONAL TAB - OLD FIELDS + NEW DROPDOWN */}
+                        {activeTab === 'personal' && (
+                            <div className="ap-section animate-fade">
                             <h2 className="section-title">Personal Information</h2>
                             <div className="form-grid-3">
                                 <div className="form-group">
@@ -853,22 +853,7 @@ try {
                             </div>
                         </div>
                     )}
-                    {}
-                    {activeTab === 'documents' && (
-                        <div className="ap-section animate-fade">
-                            <h2 className="section-title">Documents Upload</h2>
-                            <p className="section-desc">Attach supporting documents like Ultrasound, Lab results, ID scan, etc.</p>
-                            <div className="upload-area">
-                                <UploadCloud size={40} className="upload-icon" />
-                                <h3>Click to upload or drag & drop</h3>
-                                <p>SVG, PNG, JPG or PDF (max. 5MB)</p>
-                                <button type="button" className="btn btn-outline mt-3">Browse Files</button>
-                            </div>
-                            <div className="document-list">
-                                <p className="empty-docs">No documents uploaded yet.</p>
-                            </div>
-                        </div>
-                    )}
+                    </div>
                 </form>
             </div>
         </div>

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import '../../styles/pages/PatientsList.css';
 import PatientService from '../../services/patientservice';
+import EditPatientModal from '../../components/Patient/EditPatientModal';
 
 const EMPTY_VITALS = {
     bp: '',
@@ -122,6 +123,7 @@ const PatientsList = () => {
     const [vitalModalPatient, setVitalModalPatient] = useState(null);
     const [vitalsHistory, setVitalsHistory] = useState({});
     const [vitalToast, setVitalToast] = useState(false);
+    const [editModalPatient, setEditModalPatient] = useState(null);
 
     useEffect(() => {
     const fetchPatients = async () => {
@@ -235,6 +237,12 @@ const PatientsList = () => {
         setVitalModalPatient(null);
         setVitalToast(true);
         setTimeout(() => setVitalToast(false), 3500);
+    };
+
+    const handlePatientUpdate = (updatedPatient) => {
+        setPatients(prevPatients => 
+            prevPatients.map(p => p.id === updatedPatient.id ? updatedPatient : p)
+        );
     };
 
     return (
@@ -462,7 +470,7 @@ const PatientsList = () => {
                                                 <Activity size={16} />
                                                 </button>
                                                 
-                                                <button type="button" className="action-btn edit-btn" data-tooltip="Edit Patient" onClick={(e) => { e.stopPropagation(); alert('Edit functionality is currently under development.'); }}>
+                                                <button type="button" className="action-btn edit-btn" data-tooltip="Edit Patient" onClick={(e) => { e.stopPropagation(); setEditModalPatient(p); }}>
                                                 <Edit size={16} />
                                                 </button>
                                                 
@@ -516,6 +524,14 @@ const PatientsList = () => {
                 history={vitalsHistory[vitalModalPatient.id] || []}
                 onSave={handleSaveVitals}
                 onClose={() => setVitalModalPatient(null)}
+            />
+        )}
+
+        {editModalPatient && (
+            <EditPatientModal
+                patient={editModalPatient}
+                onClose={() => setEditModalPatient(null)}
+                onSave={handlePatientUpdate}
             />
         )}
 

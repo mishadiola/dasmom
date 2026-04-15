@@ -9,6 +9,8 @@ import {
 import '../styles/layouts/DashboardLayout.css';
 import logo from '../assets/images/dasmom_logo.png';
 import { AuthContext } from '../context/AuthContext';
+import PatientService from '../services/patientservice';
+import supabase from '../config/supabaseclient';
 
 const NAV_ITEMS = [
     {
@@ -33,7 +35,6 @@ const NAV_ITEMS = [
             { label: 'Inventory Management', icon: Package, path: '/dashboard/inventory' },
             { label: 'Delivery Outcomes', icon: Stethoscope, path: '/dashboard/deliveries' },
             { label: 'Newborn Tracking', icon: Baby, path: '/dashboard/newborns' },
-            { label: 'Pregnancy Resources', icon: HeartPulse, path: '/dashboard/resources' },
         ],
     },
     {
@@ -58,12 +59,15 @@ const DashboardLayout = () => {
     const [sidebarMobile, setSidebarMobile] = useState(false);
     const [notifOpen, setNotifOpen] = useState(false);
     const [notifFilter, setNotifFilter] = useState('all');
+    const [notifications, setNotifications] = useState([]);
+    const [notifCount, setNotifCount] = useState(0);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const userMenuRef = useRef(null);
     const navigate = useNavigate();
     const location = useLocation();
     const { user, logout: authLogout } = useContext(AuthContext);
+    const patientService = new PatientService();
 
     // Determine if we are in User View based on path
     const isUserView = location.pathname.startsWith('/mother-home');
@@ -90,6 +94,128 @@ const DashboardLayout = () => {
         }, 800);
         return () => clearTimeout(timer);
     }, []);
+
+    // Fetch real notifications from database
+    useEffect(() => {
+        const fetchNotifications = async () => {
+            if (!user || isUserView) {
+                setNotifications([]);
+                setNotifCount(0);
+                return;
+            }
+
+            try {
+                const today = new Date().toISOString().split('T')[0];
+                const notifList = [];
+
+                // Fetch today's appointments
+                const { data: todayAppts } = await supabase
+                    .from('prenatal_visits')
+                    .select(`
+                        visit_date,
+                        patient_basic_info (first_name, last_name, barangay)
+                    `)
+                    .eq('visit_date', today)
+                    .limit(5);
+
+                if (todayAppts && todayAppts.length > 0) {
+                    notifList.push({
+                        category: 'appointments',
+                        type: 'info',
+                        text: `${todayAppts.length} prenatal visit${todayAppts.length > 1 ? 's' : ''} scheduled today`,
+                        time: 'Today'
+                    });
+                }
+
+                // Fetch missed appointments (past visits not completed)
+                const { data: missedAppts } = await supabase
+                    .from('prenatal_visits')
+                    .select(`
+                        visit_date,
+                        patient_basic_info (first_name, last_name)
+                    `)
+                    .lt('visit_date', today)
+                    .eq('status', 'Upcoming')
+                    .limit(3);
+
+                if (missedAppts && missedAppts.length > 0) {
+                    missedAppts.forEach(appt => {
+                        const patient = appt.patient_basic_info;
+                        notifList.push({
+                            category: 'appointments',
+                            type: 'warning',
+                            text: `${patient?.first_name} ${patient?.last_name} missed prenatal visit`,
+                            time: 'Missed'
+                        });
+                    });
+                }
+
+                // Fetch low stock inventory items
+                const { data: inventory } = await supabase
+                    .from('vaccine_inventory')
+                    .select('vaccine_name, current_stock, minimum_stock')
+                    .lt('current_stock', supabase.raw('minimum_stock * 1.2'))
+                    .limit(5);
+
+                if (inventory && inventory.length > 0) {
+                    inventory.forEach(item => {
+                        const percentage = (item.current_stock / item.minimum_stock) * 100;
+                        const severity = percentage < 50 ? 'critical' : 'low';
+                        notifList.push({
+                            category: 'inventory',
+                            type: severity === 'critical' ? 'alert' : 'warning',
+                            text: `${item.vaccine_name} stock ${severity} (${item.current_stock} units)`,
+                            time: 'Inventory'
+                        });
+                    });
+                }
+
+                // Fetch high-risk patients
+                const { data: highRiskPatients } = await supabase
+                    .from('pregnancy_info')
+                    .select(`
+                        calculated_risk,
+                        patient_basic_info (first_name, last_name, barangay)
+                    `)
+                    .neq('calculated_risk', 'Normal')
+                    .not('calculated_risk', 'is', null)
+                    .limit(3);
+
+                if (highRiskPatients && highRiskPatients.length > 0) {
+                    highRiskPatients.forEach(patient => {
+                        notifList.push({
+                            category: 'patients',
+                            type: 'alert',
+                            text: `${patient.patient_basic_info.first_name} ${patient.patient_basic_info.last_name} - ${patient.calculated_risk}`,
+                            time: patient.patient_basic_info.barangay
+                        });
+                    });
+                }
+
+                setNotifications(notifList);
+                setNotifCount(notifList.length);
+
+                // Set up real-time subscription for notifications
+                const subscription = supabase
+                    .channel('notifications-channel')
+                    .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+                        fetchNotifications(); // Refresh notifications on any database change
+                    })
+                    .subscribe();
+
+                return () => {
+                    supabase.removeChannel(subscription);
+                };
+
+            } catch (error) {
+                console.error('Error fetching notifications:', error);
+                setNotifications([]);
+                setNotifCount(0);
+            }
+        };
+
+        fetchNotifications();
+    }, [user, isUserView]);
 
     const handleLogout = () => {
         setShowLogoutModal(true);
@@ -141,7 +267,12 @@ const DashboardLayout = () => {
 
                 {/* Sidebar header */}
                 <div className="sidebar-header">
-                    <div className="sidebar-brand">
+                    <button 
+                        className="sidebar-brand" 
+                        onClick={() => navigate('/dashboard')}
+                        aria-label="Go to Dashboard"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                    >
                         <img src={logo} alt="DasMom+" className="sidebar-logo" />
                         {sidebarOpen && (
                             <div className="sidebar-brand-text">
@@ -149,7 +280,7 @@ const DashboardLayout = () => {
                                 <span className="sidebar-brand-sub">Health System</span>
                             </div>
                         )}
-                    </div>
+                    </button>
                     <button
                         className="sidebar-toggle desktop-toggle"
                         onClick={() => setSidebarOpen((v) => !v)}
@@ -170,10 +301,23 @@ const DashboardLayout = () => {
                                 <NavLink
                                     key={path}
                                     to={path}
-                                    end={path === '/dashboard'}
-                                    className={({ isActive }) =>
-                                        `nav-item${isActive ? ' nav-item--active' : ''}`
-                                    }
+                                    className={({ isActive }) => {
+                                        // For Mother side routes, use exact matching (all are distinct)
+                                        if (isUserView) {
+                                            const isExactMatch = location.pathname === path;
+                                            return `nav-item${isExactMatch ? ' nav-item--active' : ''}`;
+                                        }
+                                        // For Staff side, use prefix matching for nested routes
+                                        // but ensure only one item is active at a time
+                                        if (path === '/dashboard') {
+                                            const isExactMatch = location.pathname === path;
+                                            return `nav-item${isExactMatch ? ' nav-item--active' : ''}`;
+                                        }
+                                        // For other staff routes, check if current path starts with this path
+                                        // and is not the root dashboard
+                                        const isPrefixMatch = location.pathname.startsWith(path) && location.pathname !== '/dashboard';
+                                        return `nav-item${isPrefixMatch ? ' nav-item--active' : ''}`;
+                                    }}
                                     title={!sidebarOpen ? label : undefined}
                                     onClick={() => setSidebarMobile(false)}
                                 >
@@ -245,7 +389,9 @@ const DashboardLayout = () => {
                                 aria-expanded={notifOpen}
                             >
                                 <Bell size={19} />
-                                {/* Optional: notifications can be added back when data is available */}
+                                {notifCount > 0 && (
+                                    <span className="notif-badge">{notifCount}</span>
+                                )}
                             </button>
                             {notifOpen && !isUserView && (
                                 <div className="notif-panel" role="dialog" aria-label="Notifications">
@@ -258,9 +404,9 @@ const DashboardLayout = () => {
                                                 onChange={(e) => setNotifFilter(e.target.value)}
                                             >
                                                 <option value="all">All</option>
-                                                <option value="alert">Alerts</option>
-                                                <option value="warning">Warnings</option>
-                                                <option value="info">Info</option>
+                                                <option value="appointments">Appointments</option>
+                                                <option value="inventory">Inventory</option>
+                                                <option value="patients">Patients</option>
                                             </select>
                                             <button onClick={() => setNotifOpen(false)} aria-label="Close">
                                                 <X size={15} />
@@ -268,21 +414,21 @@ const DashboardLayout = () => {
                                         </div>
                                     </div>
                                     <ul className="notif-list">
-                                        {[
-                                            { type: 'alert', text: 'Maria R. – BP critically high', time: '5 min ago' },
-                                            { type: 'warning', text: 'TT Vaccine stock below threshold', time: '1 hr ago' },
-                                            { type: 'info', text: '3 prenatal visits scheduled today', time: '2 hrs ago' },
-                                            { type: 'warning', text: 'Ana Cruz missed her 32-week visit', time: 'Yesterday' },
-                                            { type: 'info', text: 'New newborn registered – Station 5', time: 'Yesterday' },
-                                        ].filter(n => notifFilter === 'all' || n.type === notifFilter).map((n, i) => (
-                                            <li key={i} className={`notif-item notif-item--${n.type}`}>
-                                                <span className="notif-dot" aria-hidden="true" />
-                                                <div>
-                                                    <p>{n.text}</p>
-                                                    <time>{n.time}</time>
-                                                </div>
-                                            </li>
-                                        ))}
+                                        {notifications.length === 0 ? (
+                                            <li className="notif-empty">No notifications</li>
+                                        ) : (
+                                            notifications
+                                                .filter(n => notifFilter === 'all' || n.category === notifFilter)
+                                                .map((n, i) => (
+                                                    <li key={i} className={`notif-item notif-item--${n.type}`}>
+                                                        <span className="notif-dot" aria-hidden="true" />
+                                                        <div>
+                                                            <p>{n.text}</p>
+                                                            <time>{n.time}</time>
+                                                        </div>
+                                                    </li>
+                                                ))
+                                        )}
                                     </ul>
                                 </div>
                             )}

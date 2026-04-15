@@ -434,6 +434,14 @@
     overflow-y: auto;
 }
 
+.notif-empty {
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 13px;
+    font-style: italic;
+}
+
 .notif-item {
     display: flex;
     align-items: flex-start;

@@ -335,7 +335,7 @@ export default function Login() {
                 <div className="last-login" aria-label="Last activity"><Clock size={12} aria-hidden="true" /><span>Last login: {lastLogin.time} · {lastLogin.device}</span></div>
                 <div className="login-notice" role="note"><p>Authorized personnel only. Access is monitored and recorded for security purposes.</p></div>
                 <div className="login-role-switch">
-                    <button type="button" className="role-switch-btn" onClick={() => navigate('/')}><User size={14} />Login as User</button>
+                    <button type="button" className="role-switch-btn" onClick={() => navigate('/mother-login')}><User size={14} />Login as User</button>
                 </div>
             </main>
 

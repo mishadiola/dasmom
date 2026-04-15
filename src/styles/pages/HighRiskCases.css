@@ -272,6 +272,25 @@
     vertical-align: middle;
 }
 
+/* ── Row Numbering Column ── */
+.hr-table .row-number-header {
+    text-align: center;
+    width: 40px;
+    min-width: 40px;
+    padding: 11px 8px;
+}
+
+.hr-table .row-number-cell {
+    text-align: center;
+    width: 40px;
+    min-width: 40px;
+    padding: 14px 8px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    font-size: 12px;
+    vertical-align: middle;
+}
+
 /* ── Row Highlighting ── */
 .row-high-risk {
     border-left: 3px solid #e05c73;

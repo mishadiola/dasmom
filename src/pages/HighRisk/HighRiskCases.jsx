@@ -43,6 +43,10 @@ const HighRiskCases = () => {
   const [patients, setPatients] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStation, setFilterStation] = useState('All');
+  const [filterRiskLevel, setFilterRiskLevel] = useState('All');
+  const [filterTrimester, setFilterTrimester] = useState('All');
+  const [filterStatus, setFilterStatus] = useState('All');
+  const [filterDateRange, setFilterDateRange] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
@@ -133,7 +137,53 @@ const HighRiskCases = () => {
       (p.name || '').toLowerCase().includes(search) ||
       (p.id || '').toLowerCase().includes(search);
     const matchesStation = filterStation === 'All' || p.station === filterStation;
-    return matchesSearch && matchesStation;
+    
+    // Risk Level Filter
+    const matchesRiskLevel = filterRiskLevel === 'All' || p.riskLevel === filterRiskLevel;
+    
+    // Trimester Filter
+    let patientTrimester = 1;
+    if (p.weeks >= 13) patientTrimester = 2;
+    if (p.weeks >= 27) patientTrimester = 3;
+    const matchesTrimester = filterTrimester === 'All' || patientTrimester.toString() === filterTrimester;
+    
+    // Status Filter (based on next visit)
+    const today = new Date();
+    const nextVisitDate = p.nextVisit !== 'Initial Visit' ? new Date(p.nextVisit) : null;
+    let status = 'Active';
+    if (nextVisitDate) {
+      const daysDiff = Math.ceil((nextVisitDate - today) / (1000 * 60 * 60 * 24));
+      if (daysDiff < 0) status = 'Overdue';
+      else if (daysDiff <= 7) status = 'Upcoming';
+      else status = 'Scheduled';
+    }
+    const matchesStatus = filterStatus === 'All' || status === filterStatus;
+    
+    // Date Range Filter
+    let matchesDateRange = filterDateRange === 'All';
+    if (filterDateRange !== 'All' && p.nextVisit !== 'Initial Visit') {
+      const visitDate = new Date(p.nextVisit);
+      const daysDiff = Math.ceil((visitDate - today) / (1000 * 60 * 60 * 24));
+      
+      switch (filterDateRange) {
+        case 'today':
+          matchesDateRange = daysDiff === 0;
+          break;
+        case 'week':
+          matchesDateRange = daysDiff >= 0 && daysDiff <= 7;
+          break;
+        case 'month':
+          matchesDateRange = daysDiff >= 0 && daysDiff <= 30;
+          break;
+        case 'overdue':
+          matchesDateRange = daysDiff < 0;
+          break;
+        default:
+          matchesDateRange = true;
+      }
+    }
+    
+    return matchesSearch && matchesStation && matchesRiskLevel && matchesTrimester && matchesStatus && matchesDateRange;
   });
 
   const totalPages = Math.ceil(filteredPatients.length / itemsPerPage);
@@ -223,6 +273,8 @@ const HighRiskCases = () => {
           <span className="filters-label">
             <Filter size={13} /> Filters:
           </span>
+          
+          {/* Station Filter */}
           <select
             value={filterStation}
             onChange={(e) => {
@@ -237,6 +289,64 @@ const HighRiskCases = () => {
               </option>
             ))}
           </select>
+          
+          {/* Risk Level Filter */}
+          <select
+            value={filterRiskLevel}
+            onChange={(e) => {
+              setFilterRiskLevel(e.target.value);
+              setCurrentPage(1);
+            }}
+          >
+            <option value="All">All Risk Levels</option>
+            <option value="High Risk">High Risk</option>
+            <option value="Moderate Risk">Moderate Risk</option>
+            <option value="Normal Risk">Normal Risk</option>
+          </select>
+          
+          {/* Trimester Filter */}
+          <select
+            value={filterTrimester}
+            onChange={(e) => {
+              setFilterTrimester(e.target.value);
+              setCurrentPage(1);
+            }}
+          >
+            <option value="All">All Trimesters</option>
+            <option value="1">1st Trimester</option>
+            <option value="2">2nd Trimester</option>
+            <option value="3">3rd Trimester</option>
+          </select>
+          
+          {/* Status Filter */}
+          <select
+            value={filterStatus}
+            onChange={(e) => {
+              setFilterStatus(e.target.value);
+              setCurrentPage(1);
+            }}
+          >
+            <option value="All">All Statuses</option>
+            <option value="Active">Active</option>
+            <option value="Upcoming">Upcoming (7 days)</option>
+            <option value="Scheduled">Scheduled</option>
+            <option value="Overdue">Overdue</option>
+          </select>
+          
+          {/* Date Range Filter */}
+          <select
+            value={filterDateRange}
+            onChange={(e) => {
+              setFilterDateRange(e.target.value);
+              setCurrentPage(1);
+            }}
+          >
+            <option value="All">All Dates</option>
+            <option value="today">Today</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="overdue">Overdue</option>
+          </select>
         </div>
       </div>
 
@@ -249,17 +359,6 @@ const HighRiskCases = () => {
               <h2>
                 <HeartPulse size={17} /> Real‑Time High‑Risk Monitoring
               </h2>
-              <div className="hr-legend">
-                <span className="legend-chip chip-high">
-                  <AlertCircle size={11} /> High Risk
-                </span>
-                <span className="legend-chip chip-monitor">
-                  <AlertTriangle size={11} /> Monitor
-                </span>
-                <span className="legend-chip chip-normal">
-                  <Activity size={11} /> Stable
-                </span>
-              </div>
               <span className="hr-count">{filteredPatients.length} patients</span>
             </div>
 
@@ -267,6 +366,7 @@ const HighRiskCases = () => {
               <table className="hr-table">
                 <thead>
                   <tr>
+                    <th className="row-number-header">#</th>
                     <th>Patient Profile</th>
                     <th>Stage</th>
                     <th>Conditions / Complications</th>
@@ -278,8 +378,11 @@ const HighRiskCases = () => {
                 </thead>
                 <tbody>
                   {paginatedPatients.length > 0 ? (
-                    paginatedPatients.map((p) => (
+                    paginatedPatients.map((p, index) => (
                       <tr key={p.id} className={getRowClass(p)}>
+                        <td className="row-number-cell">
+                          {startIndex + index + 1}
+                        </td>
                         <td>
                           <div
                             className="patient-cell"
@@ -379,7 +482,7 @@ const HighRiskCases = () => {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="7" className="hr-empty">
+                      <td colSpan="8" className="hr-empty">
                         <AlertTriangle size={28} />
                         <p>No high‑risk patients found matching your criteria.</p>
                       </td>

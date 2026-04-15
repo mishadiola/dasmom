@@ -583,6 +583,37 @@ async getHighRiskPatients() {
     return (count || 0) + 1;
   }
 
+  async findPatientByName(patientName) {
+    try {
+      const { data, error } = await this.supabase
+        .from('patient_basic_info')
+        .select('id')
+        .ilike('first_name', `%${patientName.split(' ')[0]}%`)
+        .limit(1);
+      
+      if (error) throw error;
+      return data?.[0]?.id || null;
+    } catch (err) {
+      console.error('Error finding patient by name:', err);
+      return null;
+    }
+  }
+
+  async getPatientsByIds(patientIds) {
+    try {
+      const { data, error } = await this.supabase
+        .from('patient_basic_info')
+        .select('id, first_name, last_name, date_of_birth, barangay')
+        .in('id', patientIds);
+      
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      console.error('Error fetching patients by IDs:', err);
+      return [];
+    }
+  }
+
   async getPatientById(patientId) {
     const { data } = await this.supabase
       .from('patient_basic_info')
@@ -631,6 +662,40 @@ async getHighRiskPatients() {
     };
   }
 
+  async updatePatient(patientId, updateData) {
+    try {
+      const { data, error } = await this.supabase
+        .from('patient_basic_info')
+        .update({
+          first_name: updateData.first_name,
+          last_name: updateData.last_name,
+          date_of_birth: updateData.date_of_birth,
+          age: updateData.age,
+          civil_status: updateData.civil_status,
+          blood_type: updateData.blood_type,
+          philhealthnumber: updateData.philhealth,
+          contact_no: updateData.phone,
+          house_no: updateData.address,
+          barangay: updateData.station,
+          municipality: updateData.municipality,
+          emergency_contact: {
+            name: updateData.emergency_contact_name,
+            relationship: updateData.emergency_contact_relationship,
+            phone: updateData.emergency_contact_phone
+          }
+        })
+        .eq('id', patientId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error updating patient:', error);
+      throw error;
+    }
+  }
+
   async getAvailableStations() {
     const { data } = await this.supabase
       .from('staff_profiles')
@@ -674,26 +739,153 @@ async getHighRiskPatients() {
     }));
   }
 
+  async getVaccinationRecords() {
+    try {
+      const { data, error } = await this.supabase
+        .from('vaccine_records')
+        .select(`
+          id,
+          patient_id,
+          vaccine_name,
+          dose,
+          date_administered,
+          next_due_date,
+          status,
+          administered_by,
+          notes,
+          created_at
+        `)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      console.error('Error fetching vaccination records:', err);
+      return [];
+    }
+  }
+
+  async getSupplementRecords() {
+    try {
+      const { data, error } = await this.supabase
+        .from('supplement_records')
+        .select(`
+          id,
+          patient_id,
+          supplement_name,
+          dose,
+          start_date,
+          end_date,
+          status,
+          administered_by,
+          notes,
+          created_at
+        `)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data || [];
+    } catch (err) {
+      console.error('Error fetching supplement records:', err);
+      return [];
+    }
+  }
+
+  async addVaccinationRecord(record) {
+    try {
+      const { data, error } = await this.supabase
+        .from('vaccine_records')
+        .insert([record])
+        .select();
+      
+      if (error) throw error;
+      return data[0];
+    } catch (err) {
+      console.error('Error adding vaccination record:', err);
+      throw err;
+    }
+  }
+
+  async addSupplementRecord(record) {
+    try {
+      const { data, error } = await this.supabase
+        .from('supplement_records')
+        .insert([record])
+        .select();
+      
+      if (error) throw error;
+      return data[0];
+    } catch (err) {
+      console.error('Error adding supplement record:', err);
+      throw err;
+    }
+  }
+
   async getVaccinationStats() {
     try {
-      // Aggregate stats for the Vaccinations dashboard
-      const { count: totalVaccinated } = await this.supabase
-        .from('prenatal_visits')
-        .select('*', { count: 'exact', head: true });
-
+      // Get all vaccination records
+      const { data: vaccRecords, error: vaccError } = await this.supabase
+        .from('vaccine_records')
+        .select('patient_id, status, date_administered');
+      
+      if (vaccError) throw vaccError;
+      
+      // Get all supplement records
+      const { data: suppRecords, error: suppError } = await this.supabase
+        .from('supplement_records')
+        .select('patient_id, status, start_date');
+      
+      if (suppError) throw suppError;
+      
+      // Get patient information to distinguish mothers vs newborns
+      const { data: patients, error: patientError } = await this.supabase
+        .from('patient_basic_info')
+        .select('id, date_of_birth');
+      
+      if (patientError) throw patientError;
+      
+      const patientMap = new Map((patients || []).map(p => [p.id, p]));
+      const today = new Date();
+      
+      // Calculate statistics
+      const totalAdministered = (vaccRecords || []).filter(r => r.status === 'Completed').length;
+      
+      // Count mothers vs newborns with pending vaccinations
+      const mothersPending = (vaccRecords || []).filter(r => {
+        const patient = patientMap.get(r.patient_id);
+        if (!patient) return false;
+        
+        const age = today.getFullYear() - new Date(patient.date_of_birth).getFullYear();
+        const isMother = age >= 18; // Assume 18+ as mothers
+        
+        return isMother && (r.status === 'Pending' || r.status === 'Overdue');
+      }).length;
+      
+      const newbornsPending = (vaccRecords || []).filter(r => {
+        const patient = patientMap.get(r.patient_id);
+        if (!patient) return false;
+        
+        const age = today.getFullYear() - new Date(patient.date_of_birth).getFullYear();
+        const isNewborn = age < 1; // Assume < 1 year as newborns
+        
+        return isNewborn && (r.status === 'Pending' || r.status === 'Overdue');
+      }).length;
+      
+      const supplementsDistributed = (suppRecords || []).filter(r => r.status === 'Completed').length;
+      
       // Count low stock items from both tables
       const [vax, supp] = await Promise.all([
         inventoryService.getVaccineInventory(),
         inventoryService.getSupplementInventory()
       ]);
-
+      
       const lowStock = [...vax, ...supp].filter(i => i.quantity < i.min_stock).length;
-
+      
       return {
-        totalAdministered: totalVaccinated || 0,
-        mothersPending: 0,
-        newbornsPending: 0,
-        supplementsDistributed: 0,
+        totalAdministered,
+        mothersPending,
+        newbornsPending,
+        supplementsDistributed,
         lowStockAlerts: lowStock
       };
     } catch (err) {
