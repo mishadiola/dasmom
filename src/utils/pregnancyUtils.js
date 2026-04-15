@@ -79,3 +79,69 @@ export const formatDateLong = (date) => {
         day: 'numeric'
     });
 };
+
+/**
+ * Get weekly milestone information based on gestational week
+ * @param {number} weeks 
+ * @returns {{title: string, description: string}}
+ */
+export const getWeeklyMilestone = (weeks) => {
+    const milestones = {
+        '1-4': {
+            title: 'Early Development',
+            description: 'Your baby is beginning to form. The neural tube, heart, and other organs are starting to develop.'
+        },
+        '5-8': {
+            title: 'Organ Formation',
+            description: 'All major organs are forming. Tiny fingers and toes are developing, and the heart is beating.'
+        },
+        '9-12': {
+            title: 'First Trimester Milestone',
+            description: 'Your baby is fully formed and growing rapidly. Fingers and toes are separated, and facial features are developing.'
+        },
+        '13-16': {
+            title: 'Second Trimester Begins',
+            description: 'Your baby can make facial expressions and may suck their thumb. Bones are hardening.'
+        },
+        '17-20': {
+            title: 'Mid-Pregnancy',
+            description: 'Your baby is growing stronger. You may feel the first movements (quickening) around this time.'
+        },
+        '21-24': {
+            title: 'Rapid Growth Phase',
+            description: 'Your baby is gaining weight quickly. Eyebrows and eyelashes are growing, and the skin is still transparent.'
+        },
+        '25-28': {
+            title: 'Viability Milestone',
+            description: 'Your baby can now open and close eyes. With proper medical care, survival outside the womb is possible.'
+        },
+        '29-32': {
+            title: 'Third Trimester Begins',
+            description: 'Your baby is getting stronger and gaining more weight. Brain development is accelerating.'
+        },
+        '33-36': {
+            title: 'Final Growth Spurt',
+            description: 'Your baby is practicing breathing movements and gaining weight rapidly in preparation for birth.'
+        },
+        '37-40': {
+            title: 'Full Term Approaching',
+            description: 'Your baby is considered full term. They are ready for birth and practicing breathing and sucking reflexes.'
+        },
+        '41-42': {
+            title: 'Post-Term',
+            description: 'Your baby is continuing to grow and gain weight. Your healthcare provider will monitor you closely.'
+        }
+    };
+
+    if (weeks <= 4) return milestones['1-4'];
+    if (weeks <= 8) return milestones['5-8'];
+    if (weeks <= 12) return milestones['9-12'];
+    if (weeks <= 16) return milestones['13-16'];
+    if (weeks <= 20) return milestones['17-20'];
+    if (weeks <= 24) return milestones['21-24'];
+    if (weeks <= 28) return milestones['25-28'];
+    if (weeks <= 32) return milestones['29-32'];
+    if (weeks <= 36) return milestones['33-36'];
+    if (weeks <= 40) return milestones['37-40'];
+    return milestones['41-42'];
+};

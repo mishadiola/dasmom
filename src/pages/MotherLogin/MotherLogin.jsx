@@ -75,6 +75,9 @@ const MotherLogin = () => {
                     {/* ── Left Panel (Login Form) ── */}
                     <div className="panel-left">
                         <div className="login-header">
+                            <div className="login-logo">
+                                <img src={logo} alt="DasMom+ Logo" />
+                            </div>
                             <h1>Welcome Back!</h1>
                             <p>Login to access your maternal health account</p>
                         </div>
@@ -108,7 +111,6 @@ const MotherLogin = () => {
                                     <button 
                                         type="button" 
                                         className="pwd-toggle"
-                                        style={{ position: 'absolute', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: '#a89bae' }}
                                         onClick={() => setShowPassword(!showPassword)}
                                     >
                                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -118,9 +120,9 @@ const MotherLogin = () => {
 
                             <button type="submit" className="mother-btn-primary" disabled={isLoading}>
                                 {isLoading ? (
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                                        <Loader2 className="btn-spinner" size={20} aria-hidden="true" /> Logging In...
-                                    </div>
+                                    <span className="btn-loading">
+                                        <Loader2 className="btn-spinner" aria-hidden="true" /> Logging In...
+                                    </span>
                                 ) : 'Login'}
                             </button>
 
@@ -142,7 +144,7 @@ const MotherLogin = () => {
 
                             <div className="highlights-list">
                                 {highlights.map((item, index) => (
-                                    <div className="highlight-item" key={index} style={{ animationDelay: `${index * 0.1}s` }}>
+                                    <div className="highlight-item" key={index} data-index={index}>
                                         <div className="highlight-icon">
                                             <item.icon size={20} />
                                         </div>
@@ -162,7 +164,7 @@ const MotherLogin = () => {
                     <span className="footer-text">
                         City Health Office 3, Dasmariñas, Cavite
                     </span>
-                    <p style={{ fontSize: '12px', color: '#a89bae', marginTop: '4px' }}>
+                    <p className="footer-copyright">
                         &copy; 2026 DasMom. All rights reserved.
                     </p>
                 </div>

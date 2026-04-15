@@ -3,7 +3,7 @@ import {
     User, Mail, Phone, MapPin, ShieldCheck,
     Lock, LogOut, Edit2, Trash2, Plus,
     X, Users, Baby, Heart, ChevronDown, ChevronUp,
-    Calendar, UserCheck
+    Calendar, UserCheck, ArrowLeft
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/UserAccount.css';
@@ -219,24 +219,14 @@ const UserAccount = () => {
     return (
         <div className="user-account-container">
             {/* ── Page Title ── */}
-            <div className="page-header" style={{ marginBottom: '16px' }}>
-                <h1 className="page-title">User Account</h1>
-            </div>
-
-            {/* ── Profile Header ── */}
-            <header className="account-header-card">
-                <div className="account-avatar-section">
-                    <div className="account-avatar-large">
-                        <img
-                            src="https://ui-avatars.com/api/?name=Mish+Diola&background=b9818a&color=fff&size=128"
-                            alt="Mish Diola"
-                        />
-                    </div>
-                    <div className="account-avatar-info">
-                        <h1>{userData.name}</h1>
-                        <p className="account-location">
-                            <MapPin size={14} /> {userData.station}
-                        </p>
+            <header className="mother-page-header">
+                <div className="mother-page-header-content">
+                    <button className="back-btn" onClick={() => navigate('/mother-home')}>
+                        <ArrowLeft size={18} />
+                    </button>
+                    <div className="mother-page-header-text">
+                        <h1>User Account</h1>
+                        <p>Manage your personal information and family details</p>
                     </div>
                 </div>
             </header>

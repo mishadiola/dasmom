@@ -12,6 +12,8 @@ const MyAppointments = () => {
     const [viewMode, setViewMode] = useState('calendar'); // 'calendar' or 'list'
     const [currentMonth, setCurrentMonth] = useState(new Date(2026, 2, 1)); // March 2026
     const [selectedDate, setSelectedDate] = useState(null);
+    const [filterTab, setFilterTab] = useState('All'); // 'All', 'Upcoming', 'Past' for list view
+    const [calendarFilter, setCalendarFilter] = useState('All Events'); // 'All Events', 'Appointments', 'Prenatal Visits', 'Vaccinations', 'Other Health Records' for calendar view
 
     const APPOINTMENTS = [
         { id: 1, date: '2026-03-10', time: '08:00 AM', type: 'Prenatal', location: 'Station 3 Health Center', status: 'Upcoming', notes: 'Routine 2nd trimester checkup', color: 'green' },
@@ -54,7 +56,21 @@ const MyAppointments = () => {
     const getAppointmentsForDay = (day, isCurrentMonth) => {
         if (!isCurrentMonth) return [];
         const dateStr = `2026-03-${day.toString().padStart(2, '0')}`;
-        return APPOINTMENTS.filter(a => a.date === dateStr);
+        let appointments = APPOINTMENTS.filter(a => a.date === dateStr);
+        
+        // Filter by calendar filter
+        if (calendarFilter === 'All Events') {
+            return appointments;
+        } else if (calendarFilter === 'Appointments') {
+            return appointments.filter(a => a.type === 'Prenatal' || a.type === 'Postpartum');
+        } else if (calendarFilter === 'Prenatal Visits') {
+            return appointments.filter(a => a.type === 'Prenatal');
+        } else if (calendarFilter === 'Vaccinations') {
+            return appointments.filter(a => a.type === 'Vaccination');
+        } else if (calendarFilter === 'Other Health Records') {
+            return appointments.filter(a => a.type === 'Postpartum');
+        }
+        return appointments;
     };
 
     const handlePrevMonth = () => {
@@ -65,19 +81,35 @@ const MyAppointments = () => {
         setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
     };
 
+    const getFilteredAppointments = () => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        if (filterTab === 'All') {
+            return APPOINTMENTS;
+        } else if (filterTab === 'Upcoming') {
+            return APPOINTMENTS.filter(a => new Date(a.date) >= today && a.status === 'Upcoming');
+        } else if (filterTab === 'Past') {
+            return APPOINTMENTS.filter(a => new Date(a.date) < today || a.status === 'Completed');
+        }
+        return APPOINTMENTS;
+    };
+
+    const filteredAppointments = getFilteredAppointments();
+
     return (
         <div className="my-appointments-page">
-            <header className="appt-header">
-                <div className="header-left">
+            <header className="mother-page-header">
+                <div className="mother-page-header-content">
                     <button className="back-btn" onClick={() => navigate('/dashboard/user-home')}>
                         <ArrowLeft size={18} />
                     </button>
-                    <div>
+                    <div className="mother-page-header-text">
                         <h1>Appointments</h1>
                         <p>Keep track of your upcoming visits and health schedule</p>
                     </div>
                 </div>
-                <div className="header-actions">
+                <div className="mother-page-header-actions">
                     <div className="view-toggle">
                         <button 
                             className={`toggle-btn ${viewMode === 'calendar' ? 'active' : ''}`}
@@ -105,6 +137,39 @@ const MyAppointments = () => {
                                 <button className="today-btn">Today</button>
                                 <button onClick={handleNextMonth}><ChevronRight size={20} /></button>
                             </div>
+                        </div>
+
+                        <div className="calendar-filters">
+                            <button 
+                                className={`calendar-filter-btn ${calendarFilter === 'All Events' ? 'active' : ''}`}
+                                onClick={() => setCalendarFilter('All Events')}
+                            >
+                                All Events
+                            </button>
+                            <button 
+                                className={`calendar-filter-btn ${calendarFilter === 'Appointments' ? 'active' : ''}`}
+                                onClick={() => setCalendarFilter('Appointments')}
+                            >
+                                Appointments
+                            </button>
+                            <button 
+                                className={`calendar-filter-btn ${calendarFilter === 'Prenatal Visits' ? 'active' : ''}`}
+                                onClick={() => setCalendarFilter('Prenatal Visits')}
+                            >
+                                Prenatal Visits
+                            </button>
+                            <button 
+                                className={`calendar-filter-btn ${calendarFilter === 'Vaccinations' ? 'active' : ''}`}
+                                onClick={() => setCalendarFilter('Vaccinations')}
+                            >
+                                Vaccinations
+                            </button>
+                            <button 
+                                className={`calendar-filter-btn ${calendarFilter === 'Other Health Records' ? 'active' : ''}`}
+                                onClick={() => setCalendarFilter('Other Health Records')}
+                            >
+                                Other Health Records
+                            </button>
                         </div>
 
                         <div className="calendar-grid">
@@ -177,13 +242,29 @@ const MyAppointments = () => {
                 ) : (
                     <div className="list-container">
                         <div className="list-filters">
-                            <button className="filter-btn active">All</button>
-                            <button className="filter-btn">Upcoming</button>
-                            <button className="filter-btn">Past</button>
+                            <button 
+                                className={`filter-btn ${filterTab === 'All' ? 'active' : ''}`}
+                                onClick={() => setFilterTab('All')}
+                            >
+                                All
+                            </button>
+                            <button 
+                                className={`filter-btn ${filterTab === 'Upcoming' ? 'active' : ''}`}
+                                onClick={() => setFilterTab('Upcoming')}
+                            >
+                                Upcoming
+                            </button>
+                            <button 
+                                className={`filter-btn ${filterTab === 'Past' ? 'active' : ''}`}
+                                onClick={() => setFilterTab('Past')}
+                            >
+                                Past
+                            </button>
                         </div>
 
                         <div className="appt-list">
-                            {APPOINTMENTS.sort((a, b) => new Date(b.date) - new Date(a.date)).map(a => (
+                            {filteredAppointments.length > 0 ? (
+                                filteredAppointments.sort((a, b) => new Date(b.date) - new Date(a.date)).map(a => (
                                 <div key={a.id} className="appt-list-item">
                                     <div className={`appt-date-box ${a.color}`}>
                                         <span className="m">MAR</span>
@@ -208,7 +289,13 @@ const MyAppointments = () => {
                                         <button className="btn-icon-outline" title="Download"><Download size={16} /></button>
                                     </div>
                                 </div>
-                            ))}
+                            ))
+                            ) : (
+                                <div className="empty-state">
+                                    <CalendarDays size={32} />
+                                    <p>No appointments found for this filter.</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}

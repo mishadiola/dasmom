@@ -3,10 +3,11 @@ import {
     Syringe, Search, Filter, Calendar, 
     CheckCircle2, Clock, AlertCircle, 
     ChevronRight, Info, Download, Printer,
-    HeartPulse, Baby
+    HeartPulse, Baby, ArrowLeft
 } from 'lucide-react';
 import '../../styles/pages/UserVaccinations.css';
 import VaccineDetailModal from '../../components/MotherDashboard/VaccineDetailModal';
+import { useNavigate } from 'react-router-dom';
 
 const VACCINATION_DATA = [
     {
@@ -97,6 +98,7 @@ const VACCINATION_DATA = [
 ];
 
 const UserVaccinations = () => {
+    const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
     const [filter, setFilter] = useState('All');
     const [selectedVaccine, setSelectedVaccine] = useState(null);
@@ -121,16 +123,21 @@ const UserVaccinations = () => {
 
     return (
         <div className="user-vaccinations-page">
-            <div className="uv-header">
-                <div className="uv-title-area">
-                    <h1>Vaccinations</h1>
-                    <p>Keep track of your and your baby’s vaccinations to ensure safety and healthy development.</p>
+            <header className="mother-page-header">
+                <div className="mother-page-header-content">
+                    <button className="back-btn" onClick={() => navigate('/mother-home')}>
+                        <ArrowLeft size={18} />
+                    </button>
+                    <div className="mother-page-header-text">
+                        <h1>Vaccinations</h1>
+                        <p>Keep track of your and your baby's vaccinations to ensure safety and healthy development</p>
+                    </div>
                 </div>
-                <div className="uv-actions">
+                <div className="mother-page-header-actions">
                     <button className="uv-btn-icon" title="Print Schedule"><Printer size={18} /></button>
                     <button className="uv-btn-icon" title="Download PDF"><Download size={18} /></button>
                 </div>
-            </div>
+            </header>
 
             <div className="uv-progress-section">
                 <div className="uv-progress-card">

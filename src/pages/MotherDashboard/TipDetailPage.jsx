@@ -76,46 +76,26 @@ const TipDetailPage = () => {
                 <span className="tdp-breadcrumb-current">{tip.title}</span>
             </nav>
 
-            {/* ── Hero Header ── */}
-            <div className={`tdp-hero ${tip.colorClass}`}>
-                <div className="tdp-hero-deco" />
-                <div className="tdp-hero-deco tdp-hero-deco--2" />
-                <div className="tdp-hero-content">
-                    {/* Hero Meta */}
-                    <div className="tdp-hero-meta">
-                        <span className="tdp-cat-badge">{tip.category}</span>
-                        {tip.sources && tip.sources.length > 0 && (
-                            <span className="tdp-verified-badge" title="Verified by credible medical sources">
-                                <ShieldCheck size={12} /> Verified Source
-                            </span>
-                        )}
-                        {isRead && (
-                            <span className="tdp-read-badge">
-                                <CheckCircle2 size={12} /> You've read this
-                            </span>
-                        )}
-                    </div>
-                    <h1>{tip.title}</h1>
-                    <p>{tip.description}</p>
-                    <div className="tdp-hero-footer">
-                        <span className="tdp-read-time">
-                            <Clock size={14} /> {tip.readTime}
-                        </span>
-                        <div className="tdp-hero-actions">
-                            <button
-                                className={`tdp-action-btn ${isBookmarked ? 'bookmarked' : ''}`}
-                                onClick={toggleBookmark}
-                            >
-                                {isBookmarked ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
-                                {isBookmarked ? 'Saved' : 'Save'}
-                            </button>
-                        </div>
+            <header className="mother-page-header">
+                <div className="mother-page-header-content">
+                    <button className="back-btn" onClick={() => navigate('/dashboard/user-tips')}>
+                        <ArrowLeft size={18} />
+                    </button>
+                    <div className="mother-page-header-text">
+                        <h1>{tip.title}</h1>
+                        <p>{tip.category} • {tip.readTime}</p>
                     </div>
                 </div>
-                <div className="tdp-hero-icon">
-                    {tip.icon}
+                <div className="mother-page-header-actions">
+                    <button
+                        className={`tdp-action-btn ${isBookmarked ? 'bookmarked' : ''}`}
+                        onClick={toggleBookmark}
+                    >
+                        {isBookmarked ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+                        {isBookmarked ? 'Saved' : 'Save'}
+                    </button>
                 </div>
-            </div>
+            </header>
 
             {/* ── Article Content ── */}
             <div className="tdp-layout">

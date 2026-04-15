@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
     Activity, Heart, Thermometer, Weight, TrendingUp, 
-    Download, Printer, ArrowLeft, Filter, AlertCircle, 
+    Download, ArrowLeft, Filter, AlertCircle, 
     CheckCircle2, ChevronRight, Calendar
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -23,6 +23,10 @@ const MyVitals = () => {
     const filteredVitals = filterTrimester === 'All' 
         ? VITALS_DATA 
         : VITALS_DATA.filter(v => v.trimester === filterTrimester);
+
+    const handleDownloadPDF = () => {
+        window.print();
+    };
 
     // Simple SVG Line Chart Component
     const VitalsChart = ({ data, dataKey, color, label, icon: Icon }) => {
@@ -93,19 +97,18 @@ const MyVitals = () => {
 
     return (
         <div className="my-vitals-page">
-            <header className="vitals-header">
-                <div className="header-left">
-                    <button className="back-btn" onClick={() => navigate('/dashboard/user-home')}>
+            <header className="mother-page-header">
+                <div className="mother-page-header-content">
+                    <button className="back-btn" onClick={() => navigate('/mother-home')}>
                         <ArrowLeft size={18} />
                     </button>
-                    <div>
-                        <h1>Record Vitals</h1>
-                        <p>Track your pregnancy health safely and conveniently</p>
+                    <div className="mother-page-header-text">
+                        <h1>Vital Records</h1>
+                        <p>View your pregnancy health records and vital signs history</p>
                     </div>
                 </div>
-                <div className="header-actions">
-                    <button className="action-btn-outline"><Printer size={16} /> Print</button>
-                    <button className="action-btn-primary"><Download size={16} /> Download PDF</button>
+                <div className="mother-page-header-actions">
+                    <button className="action-btn-primary" onClick={handleDownloadPDF}><Download size={16} /> Download PDF</button>
                 </div>
             </header>
 
@@ -254,7 +257,7 @@ const MyVitals = () => {
 
             <footer className="vitals-footer">
                 <AlertCircle size={14} />
-                <p>All vitals are read-only and recorded during your visits. Contact your health station for corrections.</p>
+                <p>All vital records are view-only. These are recorded during your prenatal visits. Contact your health station for any corrections.</p>
             </footer>
         </div>
     );

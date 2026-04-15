@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
     User, Lock, Bell, HelpCircle, LogOut, 
-    Shield, ChevronRight, Clock, Mail, Phone, ExternalLink
+    Shield, ChevronRight, Clock, Mail, Phone, ExternalLink, ArrowLeft
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/UserSettings.css';
@@ -42,9 +42,16 @@ const UserSettings = () => {
 
     return (
         <div className="user-settings-container">
-            <header className="settings-header">
-                <h1>Settings</h1>
-                <p>Manage your personal information and security</p>
+            <header className="mother-page-header">
+                <div className="mother-page-header-content">
+                    <button className="back-btn" onClick={() => navigate('/mother-home')}>
+                        <ArrowLeft size={18} />
+                    </button>
+                    <div className="mother-page-header-text">
+                        <h1>Settings</h1>
+                        <p>Manage your personal information and security</p>
+                    </div>
+                </div>
             </header>
 
             <div className="settings-content">

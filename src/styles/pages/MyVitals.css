@@ -384,3 +384,87 @@
         display: none;
     }
 }
+
+/* ── Print Styles ── */
+@media print {
+    .my-vitals-page {
+        max-width: 100%;
+        margin: 0;
+        padding: 20px;
+    }
+
+    .vitals-header {
+        display: none;
+    }
+
+    .vitals-content {
+        background: white;
+    }
+
+    .vitals-summary-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+        page-break-inside: avoid;
+    }
+
+    .v-summary-card {
+        box-shadow: none;
+        border: 1px solid #e2e8f0;
+    }
+
+    .vitals-alerts {
+        page-break-inside: avoid;
+    }
+
+    .v-alert-banner {
+        border: 1px solid #e2e8f0;
+        page-break-inside: avoid;
+    }
+
+    .charts-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+        page-break-inside: avoid;
+    }
+
+    .vitals-chart-card {
+        box-shadow: none;
+        border: 1px solid #e2e8f0;
+        page-break-inside: avoid;
+    }
+
+    .v-table-wrap {
+        box-shadow: none;
+        border: 1px solid #e2e8f0;
+    }
+
+    .v-table {
+        font-size: 12px;
+    }
+
+    .v-table th {
+        background: #f8fafc !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .v-table-row:hover {
+        background: none;
+    }
+
+    .vitals-footer {
+        display: none;
+    }
+
+    .history-filters {
+        display: none;
+    }
+
+    @page {
+        margin: 1cm;
+    }
+
+    body {
+        background: white;
+    }
+}

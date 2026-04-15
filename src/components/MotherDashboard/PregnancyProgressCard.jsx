@@ -1,15 +1,16 @@
 import React from 'react';
-import { Calendar, Baby, Timer, ChevronRight } from 'lucide-react';
+import { Calendar, Baby, Timer, Sparkles, ChevronRight } from 'lucide-react';
 import { 
     calculateEDD, 
     calculateGestationalAge, 
     calculateTimeRemaining, 
     calculateProgress, 
     formatDateLong,
-    getTrimester
+    getTrimester,
+    getWeeklyMilestone
 } from '../../utils/pregnancyUtils';
 
-const PregnancyProgressCard = ({ lmpDate, babySizeData }) => {
+const PregnancyProgressCard = ({ lmpDate }) => {
     // If no LMP date provided, we can't calculate. For mock, we'll use a default.
     const lmp = lmpDate || '2025-08-20'; // Default for demo if not provided
     
@@ -18,6 +19,7 @@ const PregnancyProgressCard = ({ lmpDate, babySizeData }) => {
     const timeRem = calculateTimeRemaining(edd);
     const progress = calculateProgress(lmp);
     const trimester = getTrimester(gestAge.weeks);
+    const milestone = getWeeklyMilestone(gestAge.weeks);
 
     return (
         <div className="mother-card pregnancy-progress-card">
@@ -39,17 +41,16 @@ const PregnancyProgressCard = ({ lmpDate, babySizeData }) => {
                             <p className="gest-val">{gestAge.weeks} weeks pregnant</p>
                         </div>
                     </div>
-                    {babySizeData && (
-                        <div className="gest-item">
-                            <div className="gest-icon bg-yellow-soft">
-                                <span>{babySizeData.emoji}</span>
-                            </div>
-                            <div className="gest-content">
-                                <span className="gest-label">Baby size:</span>
-                                <p className="gest-val">{babySizeData.name}</p>
-                            </div>
+                    <div className="gest-item milestone-item">
+                        <div className="gest-icon bg-yellow-soft">
+                            <Sparkles size={18} />
                         </div>
-                    )}
+                        <div className="gest-content">
+                            <span className="gest-label">This Week:</span>
+                            <p className="gest-val milestone-title">{milestone.title}</p>
+                            <p className="gest-desc milestone-desc">{milestone.description}</p>
+                        </div>
+                    </div>
                     <div className="gest-item">
                         <div className="gest-icon bg-blue-soft">
                             <Timer size={18} />
@@ -69,7 +70,18 @@ const PregnancyProgressCard = ({ lmpDate, babySizeData }) => {
                     <div className="custom-progress-bar">
                         <div 
                             className="progress-fill" 
-                            style={{ width: `${progress}%` }}
+                            style={{ 
+                                width: `${Math.max(progress, 5)}%`,
+                                backgroundColor: '#b9818a',
+                                backgroundImage: 'linear-gradient(90deg, #b9818a 0%, #ff8fa3 100%)',
+                                height: '100%',
+                                borderRadius: '50px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'flex-end',
+                                paddingRight: '12px',
+                                minWidth: '50px'
+                            }}
                         >
                             <span className="progress-percentage">{Math.round(progress)}%</span>
                         </div>

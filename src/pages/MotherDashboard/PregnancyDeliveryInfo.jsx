@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import {
     Baby, Heart, ChevronDown, ChevronUp, Plus, Trash2, Edit2,
     Printer, Save, Check, X, Info, AlertTriangle, FileText,
-    MapPin, Users, ShieldCheck, ClipboardList, CheckSquare, Square
+    MapPin, Users, ShieldCheck, ClipboardList, CheckSquare, Square, ArrowLeft
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/PregnancyDeliveryInfo.css';
 
 // ─── Complication options ────────────────────────────────────────────
@@ -144,6 +145,7 @@ const PastPregnancyCard = ({ index, data, onChange, onRemove }) => {
 
 // ─── Main Component ──────────────────────────────────────────────────
 const PregnancyDeliveryInfo = () => {
+    const navigate = useNavigate();
     const [saved, setSaved] = useState(false);
     const [agreed, setAgreed] = useState(false);
 
@@ -188,13 +190,17 @@ const PregnancyDeliveryInfo = () => {
 
     return (
         <div className="pdi-page">
-            {/* ── Page Header ── */}
-            <div className="pdi-header">
-                <div className="pdi-header-text">
-                    <h1><Baby size={26} /> Delivery Info</h1>
-                    <p>Your past pregnancy history and delivery preferences — all in one place.</p>
+            <header className="mother-page-header">
+                <div className="mother-page-header-content">
+                    <button className="back-btn" onClick={() => navigate('/mother-home')}>
+                        <ArrowLeft size={18} />
+                    </button>
+                    <div className="mother-page-header-text">
+                        <h1>Delivery Info</h1>
+                        <p>Your past pregnancy history and delivery preferences</p>
+                    </div>
                 </div>
-                <div className="pdi-header-actions">
+                <div className="mother-page-header-actions">
                     <button className="pdi-btn pdi-btn--outline" onClick={handlePrint}>
                         <Printer size={15} /> Print / Export
                     </button>
@@ -207,7 +213,7 @@ const PregnancyDeliveryInfo = () => {
                         {saved ? <><Check size={15} /> Saved!</> : <><Save size={15} /> Save Changes</>}
                     </button>
                 </div>
-            </div>
+            </header>
 
             {/* ── Progress Indicator ── */}
             <div className="pdi-progress-bar-wrap">

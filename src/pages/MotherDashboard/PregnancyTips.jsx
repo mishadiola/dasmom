@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
     Search, HeartPulse, Sparkles, BookOpen, Apple, Dumbbell,
     Brain, Baby, Syringe, Heart, Bookmark, BookmarkCheck,
-    CheckCircle2, ChevronRight, Star, X, ShieldCheck
+    CheckCircle2, ChevronRight, Star, X, ShieldCheck, ArrowLeft
 } from 'lucide-react';
 import '../../styles/pages/PregnancyTips.css';
 
@@ -554,59 +554,41 @@ const PregnancyTips = () => {
 
     const isActiveFiler = searchTerm !== '' || activeCategory !== 'All' || showBookmarksOnly;
     const readCount = readIds.length;
-    const totalCount = TIPS_DATA.length;
-    const progressPct = Math.round((readCount / totalCount) * 100);
 
     return (
-        <div className="pt-page">
-            {/* ── Header ── */}
-            <div className="pt-header">
-                <div className="pt-header-text">
-                    <h1>Pregnancy Tips</h1>
-                    <p>Expert guidance and care for every stage of your journey. 🌸</p>
+        <div className="pregnancy-tips-container">
+            <header className="mother-page-header">
+                <div className="mother-page-header-content">
+                    <button className="back-btn" onClick={() => navigate('/mother-home')}>
+                        <ArrowLeft size={18} />
+                    </button>
+                    <div className="mother-page-header-text">
+                        <h1>Pregnancy Tips</h1>
+                        <p>Expert guidance and care for every stage of your journey</p>
+                    </div>
                 </div>
-                <div className="pt-progress-pill">
-                    <div className="pt-progress-ring">
-                        <svg viewBox="0 0 36 36" className="pt-ring-svg">
-                            <path
-                                className="pt-ring-bg"
-                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                            />
-                            <path
-                                className="pt-ring-fill"
-                                strokeDasharray={`${progressPct}, 100`}
-                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                            />
-                        </svg>
-                        <span className="pt-ring-pct">{progressPct}%</span>
+            </header>
+
+        {/* ── Tip of the Day Banner ── */}
+        {!isActiveFiler && tipOfTheDay && (
+            <div className="pt-tod-banner" onClick={() => handleTipClick(tipOfTheDay.id)}>
+                <div className="pt-tod-deco" />
+                <div className="pt-tod-deco pt-tod-deco--2" />
+                <div className="pt-tod-content">
+                    <div className="pt-tod-label">
+                        <Star size={14} /> Tip of the Day
                     </div>
-                    <div className="pt-progress-text">
-                        <strong>You've read {readCount} of {totalCount} tips</strong>
-                        <span>Keep learning! 💪</span>
-                    </div>
+                    <h2>{tipOfTheDay.title}</h2>
+                    <p>{tipOfTheDay.description}</p>
+                    <span className="pt-tod-cta">
+                        Read Full Article <ChevronRight size={16} />
+                    </span>
+                </div>
+                <div className={`pt-tod-icon-wrap ${tipOfTheDay.colorClass}`}>
+                    {tipOfTheDay.icon}
                 </div>
             </div>
-
-            {/* ── Tip of the Day Banner ── */}
-            {!isActiveFiler && tipOfTheDay && (
-                <div className="pt-tod-banner" onClick={() => handleTipClick(tipOfTheDay.id)}>
-                    <div className="pt-tod-deco" />
-                    <div className="pt-tod-deco pt-tod-deco--2" />
-                    <div className="pt-tod-content">
-                        <div className="pt-tod-label">
-                            <Star size={14} /> Tip of the Day
-                        </div>
-                        <h2>{tipOfTheDay.title}</h2>
-                        <p>{tipOfTheDay.description}</p>
-                        <span className="pt-tod-cta">
-                            Read Full Article <ChevronRight size={16} />
-                        </span>
-                    </div>
-                    <div className={`pt-tod-icon-wrap ${tipOfTheDay.colorClass}`}>
-                        {tipOfTheDay.icon}
-                    </div>
-                </div>
-            )}
+        )}
 
             {/* ── Controls ── */}
             <div className="pt-controls">

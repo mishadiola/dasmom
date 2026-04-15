@@ -82,16 +82,63 @@
     margin-bottom: 40px;
 }
 
+.login-logo {
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.login-logo img {
+    height: 60px;
+    width: auto;
+    object-fit: contain;
+}
+
 .login-header h1 {
     font-size: 32px;
     font-weight: 800;
     color: var(--color-text);
     margin-bottom: 8px;
+    text-align: center;
 }
 
 .login-header p {
     color: var(--color-text-muted);
     font-size: 16px;
+    text-align: center;
+}
+
+.pwd-toggle {
+    position: absolute;
+    right: 16px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #a89bae;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: color 0.2s;
+}
+
+.pwd-toggle:hover {
+    color: var(--color-rose);
+}
+
+.btn-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn-spinner {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 .mother-form {
@@ -237,6 +284,12 @@
     font-size: 15px;
 }
 
+/* Animation delays for highlight items */
+.highlight-item[data-index="0"] { animation-delay: 0s; }
+.highlight-item[data-index="1"] { animation-delay: 0.1s; }
+.highlight-item[data-index="2"] { animation-delay: 0.2s; }
+.highlight-item[data-index="3"] { animation-delay: 0.3s; }
+
 /* ── Footer ── */
 .mother-footer {
     padding: 30px;
@@ -261,6 +314,12 @@
     font-size: 14px;
     color: var(--color-text-muted);
     font-weight: 500;
+}
+
+.footer-copyright {
+    font-size: 12px;
+    color: #a89bae;
+    margin-top: 4px;
 }
 
 /* ── Animations ── */
@@ -288,6 +347,7 @@
     .mother-login-card {
         flex-direction: column;
         max-width: 500px;
+        min-height: auto;
     }
 
     .panel-left, .panel-right {
@@ -296,21 +356,12 @@
 
     .panel-right {
         order: 2;
+        flex: none;
     }
 
     .panel-left {
         order: 1;
-    }
-}
-
-@media (max-width: 500px) {
-    .mother-login-card {
-        border-radius: 0;
-        min-height: 100vh;
-    }
-
-    .panel-left, .panel-right {
-        padding: 30px 20px;
+        flex: none;
     }
 
     .welcome-content h2 {
@@ -319,5 +370,63 @@
 
     .welcome-message {
         font-size: 16px;
+    }
+}
+
+@media (max-width: 500px) {
+    .mother-login-container {
+        background-attachment: scroll;
+    }
+
+    .mother-login-main {
+        padding: 0;
+    }
+
+    .mother-login-card {
+        border-radius: 0;
+        min-height: 100vh;
+        max-width: 100%;
+        box-shadow: none;
+    }
+
+    .panel-left, .panel-right {
+        padding: 30px 20px;
+    }
+
+    .login-logo img {
+        height: 50px;
+    }
+
+    .login-header h1 {
+        font-size: 26px;
+    }
+
+    .login-header p {
+        font-size: 14px;
+    }
+
+    .welcome-content h2 {
+        font-size: 24px;
+    }
+
+    .welcome-message {
+        font-size: 14px;
+    }
+
+    .highlight-item {
+        padding: 12px 16px;
+    }
+
+    .highlight-icon {
+        width: 36px;
+        height: 36px;
+    }
+
+    .highlight-text {
+        font-size: 14px;
+    }
+
+    .mother-footer {
+        padding: 20px;
     }
 }
