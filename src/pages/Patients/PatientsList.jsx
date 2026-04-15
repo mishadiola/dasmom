@@ -7,29 +7,39 @@ import {
     FileText, User, MapPin, Clock, AlertTriangle,
     X, CheckCircle2
 } from 'lucide-react';
-import '../../styles/pages/PatientsList.css';
 import PatientService from '../../services/patientservice';
 import EditPatientModal from '../../components/Patient/EditPatientModal';
 
 const EMPTY_VITALS = {
-    bp: '',
+    bpSystolic: '',
+    bpDiastolic: '',
     weight: '',
     temp: '',
-    heartRate: '',
-    gestationalAge: '',
-    fetalHeartRate: '',
+    pulse: '',
+    respRate: '',
+    fundalHeight: '',
+    fhr: '',
+    fetalMovement: '',
+    presentation: '',
     notes: '',
     date: new Date().toISOString().split('T')[0],
 };
 
-const RecordVitalsModal = ({ patient, history, onSave, onClose }) => {
+const RecordVitalsModal = ({ patient, onSave, onClose, supplements }) => {
     const [form, setForm] = useState({ ...EMPTY_VITALS });
     const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
+    const [selectedSupplements, setSelectedSupplements] = useState({});
+    const [supplementAmounts, setSupplementAmounts] = useState({});
+
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (!form.bp || !form.weight || !form.date) return;
-        onSave(patient.id, { ...form, patientName: patient.name });
+        if (!form.bpSystolic || !form.bpDiastolic || !form.weight || !form.date) return;
+        const supplementsData = Object.keys(selectedSupplements).filter(id => selectedSupplements[id]).map(id => {
+            const sup = supplements.find(s => s.id === id);
+            return { id, amount: supplementAmounts[id] || 0, unit: sup?.unit || 'units' };
+        });
+        onSave(patient.id, { ...form, patientName: patient.name }, supplementsData);
     };
 
     return (
@@ -46,28 +56,44 @@ const RecordVitalsModal = ({ patient, history, onSave, onClose }) => {
                 <form className="pv-modal-body" onSubmit={handleSubmit}>
                     <div className="vm-grid">
                         <div className="vm-field">
-                            <label className="vm-label">Blood Pressure *</label>
-                            <input className="vm-input" value={form.bp} onChange={e => set('bp', e.target.value)} required />
+                            <label className="vm-label">Blood Pressure Systolic *</label>
+                            <input className="vm-input" type="number" value={form.bpSystolic} onChange={e => set('bpSystolic', e.target.value)} required />
+                        </div>
+                        <div className="vm-field">
+                            <label className="vm-label">Blood Pressure Diastolic *</label>
+                            <input className="vm-input" type="number" value={form.bpDiastolic} onChange={e => set('bpDiastolic', e.target.value)} required />
                         </div>
                         <div className="vm-field">
                             <label className="vm-label">Weight (kg) *</label>
                             <input className="vm-input" type="number" value={form.weight} onChange={e => set('weight', e.target.value)} required />
                         </div>
                         <div className="vm-field">
-                            <label className="vm-label">Body Temperature</label>
-                            <input className="vm-input" type="number" value={form.temp} onChange={e => set('temp', e.target.value)} />
+                            <label className="vm-label">Body Temperature (°C)</label>
+                            <input className="vm-input" type="number" step="0.1" value={form.temp} onChange={e => set('temp', e.target.value)} />
                         </div>
                         <div className="vm-field">
-                            <label className="vm-label">Heart Rate</label>
-                            <input className="vm-input" type="number" value={form.heartRate} onChange={e => set('heartRate', e.target.value)} />
+                            <label className="vm-label">Pulse (bpm)</label>
+                            <input className="vm-input" type="number" value={form.pulse} onChange={e => set('pulse', e.target.value)} />
                         </div>
                         <div className="vm-field">
-                            <label className="vm-label">Gestational Age</label>
-                            <input className="vm-input" type="number" value={form.gestationalAge} onChange={e => set('gestationalAge', e.target.value)} />
+                            <label className="vm-label">Respiratory Rate (cpm)</label>
+                            <input className="vm-input" type="number" value={form.respRate} onChange={e => set('respRate', e.target.value)} />
                         </div>
                         <div className="vm-field">
-                            <label className="vm-label">Fetal Heart Rate</label>
-                            <input className="vm-input" type="number" value={form.fetalHeartRate} onChange={e => set('fetalHeartRate', e.target.value)} />
+                            <label className="vm-label">Fundal Height (cm)</label>
+                            <input className="vm-input" type="number" step="0.1" value={form.fundalHeight} onChange={e => set('fundalHeight', e.target.value)} />
+                        </div>
+                        <div className="vm-field">
+                            <label className="vm-label">Fetal Heart Rate (bpm)</label>
+                            <input className="vm-input" type="number" value={form.fhr} onChange={e => set('fhr', e.target.value)} />
+                        </div>
+                        <div className="vm-field">
+                            <label className="vm-label">Fetal Movement</label>
+                            <input className="vm-input" value={form.fetalMovement} onChange={e => set('fetalMovement', e.target.value)} />
+                        </div>
+                        <div className="vm-field">
+                            <label className="vm-label">Presentation</label>
+                            <input className="vm-input" value={form.presentation} onChange={e => set('presentation', e.target.value)} />
                         </div>
                         <div className="vm-field">
                             <label className="vm-label">Date *</label>
@@ -76,7 +102,34 @@ const RecordVitalsModal = ({ patient, history, onSave, onClose }) => {
                     </div>
 
                     <div className="vm-field vm-field--full">
+                        <label className="vm-label">Clinical Notes</label>
                         <textarea className="vm-textarea" value={form.notes} onChange={e => set('notes', e.target.value)} />
+                    </div>
+
+                    <div className="vm-supplements">
+                        <h3>Administer Supplements</h3>
+                        {supplements.map(sup => (
+                            <div key={sup.id} className="vm-supplement-item">
+                                <label>
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedSupplements[sup.id] || false}
+                                        onChange={e => setSelectedSupplements(prev => ({ ...prev, [sup.id]: e.target.checked }))}
+                                    />
+                                    {sup.name} (Stock: {sup.stock} {sup.unit})
+                                </label>
+                                {selectedSupplements[sup.id] && (
+                                    <input
+                                        type="number"
+                                        placeholder="Amount"
+                                        value={supplementAmounts[sup.id] || ''}
+                                        onChange={e => setSupplementAmounts(prev => ({ ...prev, [sup.id]: e.target.value }))}
+                                        min="0"
+                                        max={sup.stock}
+                                    />
+                                )}
+                            </div>
+                        ))}
                     </div>
 
                     <div className="pv-modal-footer">
@@ -121,9 +174,9 @@ const PatientsList = () => {
     const itemsPerPage = 10;
 
     const [vitalModalPatient, setVitalModalPatient] = useState(null);
-    const [vitalsHistory, setVitalsHistory] = useState({});
     const [vitalToast, setVitalToast] = useState(false);
     const [editModalPatient, setEditModalPatient] = useState(null);
+    const [supplements, setSupplements] = useState([]);
 
     useEffect(() => {
     const fetchPatients = async () => {
@@ -136,7 +189,18 @@ const PatientsList = () => {
         }
     };
 
+    const fetchSupplements = async () => {
+        try {
+            const patientService = new PatientService();
+            const data = await patientService.getSupplementInventory();
+            setSupplements(data);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
     fetchPatients();
+    fetchSupplements();
 }, []);
 
 
@@ -229,14 +293,17 @@ const PatientsList = () => {
         XLSX.writeFile(workbook, 'patient_profiles.xlsx');
     };
 
-    const handleSaveVitals = (patientId, record) => {
-        setVitalsHistory(prev => ({
-            ...prev,
-            [patientId]: [record, ...(prev[patientId] || [])]
-        }));
-        setVitalModalPatient(null);
-        setVitalToast(true);
-        setTimeout(() => setVitalToast(false), 3500);
+    const handleSaveVitals = async (patientId, record, supplements) => {
+        try {
+            const patientService = new PatientService();
+            await patientService.recordVitals(patientId, record, supplements);
+            setVitalModalPatient(null);
+            setVitalToast(true);
+            setTimeout(() => setVitalToast(false), 3500);
+        } catch (err) {
+            console.error('Error saving vitals:', err);
+            alert('Error saving vitals: ' + err.message);
+        }
     };
 
     const handlePatientUpdate = (updatedPatient) => {
@@ -521,9 +588,9 @@ const PatientsList = () => {
         {vitalModalPatient && (
             <RecordVitalsModal
                 patient={vitalModalPatient}
-                history={vitalsHistory[vitalModalPatient.id] || []}
                 onSave={handleSaveVitals}
                 onClose={() => setVitalModalPatient(null)}
+                supplements={supplements}
             />
         )}
 

@@ -828,6 +828,16 @@ async getHighRiskPatients() {
     }));
   }
 
+  async getSupplementInventory() {
+    const data = await inventoryService.getSupplementInventory();
+    return data.map(item => ({
+      id: item.id,
+      name: item.item_name,
+      stock: item.quantity,
+      unit: item.unit || 'units',
+    }));
+  }
+
   async getVaccinationRecords() {
     try {
       const { data, error } = await this.supabase
@@ -986,6 +996,77 @@ async getHighRiskPatients() {
         supplementsDistributed: 0,
         lowStockAlerts: 0
       };
+    }
+  }
+
+  async recordVitals(patientId, vitals, supplements) {
+    const createdBy = await this.getCurrentUserId();
+    if (!createdBy) throw new Error('No logged-in user');
+
+    // Check if visit exists for this date
+    const { data: existingVisit } = await this.supabase
+      .from('prenatal_visits')
+      .select('id')
+      .eq('patient_id', patientId)
+      .eq('visit_date', vitals.date)
+      .maybeSingle();
+
+    const visitData = {
+      patient_id: patientId,
+      created_by: createdBy,
+      visit_date: vitals.date,
+      bp_systolic: vitals.bpSystolic ? parseInt(vitals.bpSystolic) : null,
+      bp_diastolic: vitals.bpDiastolic ? parseInt(vitals.bpDiastolic) : null,
+      weight_kg: vitals.weight ? parseFloat(vitals.weight) : null,
+      temp_c: vitals.temp ? parseFloat(vitals.temp) : null,
+      pulse_bpm: vitals.pulse ? parseInt(vitals.pulse) : null,
+      resp_rate_cpm: vitals.respRate ? parseInt(vitals.respRate) : null,
+      fundal_height_cm: vitals.fundalHeight ? parseFloat(vitals.fundalHeight) : null,
+      fhr_bpm: vitals.fhr ? parseInt(vitals.fhr) : null,
+      fetal_movement: vitals.fetalMovement || null,
+      presentation: vitals.presentation || null,
+      clinical_notes: vitals.notes || null,
+      status: 'Attended',
+      attended_date: new Date().toISOString(),
+    };
+
+    if (existingVisit) {
+      // Update existing
+      const { error: visitError } = await this.supabase
+        .from('prenatal_visits')
+        .update(visitData)
+        .eq('id', existingVisit.id);
+      if (visitError) throw visitError;
+    } else {
+      // Insert new
+      const { error: visitError } = await this.supabase.from('prenatal_visits').insert(visitData);
+      if (visitError) throw visitError;
+    }
+
+    // Handle supplements
+    for (const sup of supplements) {
+      const amount = parseInt(sup.amount);
+      if (amount <= 0) continue;
+
+      // Check stock
+      const currentStock = await inventoryService.getSupplementInventory().then(data => data.find(i => i.id === sup.id)?.quantity || 0);
+      if (currentStock < amount) throw new Error(`Insufficient stock for supplement`);
+
+      // Insert supplement record
+      const supData = {
+        patient_id: patientId,
+        supplement_inventory_id: sup.id,
+        dosage: `${amount} ${sup.unit || 'units'}`,
+        start_date: vitals.date,
+        status: 'Completed',
+        created_by: createdBy,
+      };
+
+      const { error: supError } = await this.supabase.from('supplements').insert(supData);
+      if (supError) throw supError;
+
+      // Update inventory
+      await inventoryService.updateInventoryQuantity('supplement_inventory', sup.id, currentStock - amount);
     }
   }
 }
