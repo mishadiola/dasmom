@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import {
     Search, Filter, Plus, ChevronLeft, ChevronRight, ChevronDown, Check,
     Eye, Edit, Trash, Activity, CalendarPlus,
@@ -208,6 +209,24 @@ const PatientsList = () => {
     const hasActiveFilters = filters.trimesters.length > 0 || filters.risks.length > 0 || filters.stations.length > 0 || filters.sortBy !== 'newest';
 
 
+    const handleExport = () => {
+        const exportData = sortedPatients.map(p => ({
+            'Patient ID': p.id || '',
+            'Name': p.name || '',
+            'Station': p.station || 'Unassigned',
+            'Age': p.age || 'N/A',
+            'Gestation': p.weeks ? `${p.weeks} weeks (T${p.trimester || 1})` : 'N/A',
+            'Risk Level': p.risk || 'Normal',
+            'Next Appointment': p.nextAppt || 'No upcoming appt'
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(exportData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Patient Profiles');
+
+        XLSX.writeFile(workbook, 'patient_profiles.xlsx');
+    };
+
     const handleSaveVitals = (patientId, record) => {
         setVitalsHistory(prev => ({
             ...prev,
@@ -228,7 +247,7 @@ const PatientsList = () => {
                     <p className="page-subtitle">Manage and monitor all registered pregnant patients</p>
                 </div>
                 <div className="header-actions">
-                    <button className="btn btn-outline">
+                    <button className="btn btn-outline" onClick={handleExport}>
                         <FileText size={16} />
                         Export List
                     </button>

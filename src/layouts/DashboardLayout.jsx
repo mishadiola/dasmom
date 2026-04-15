@@ -3,7 +3,7 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
     LayoutDashboard, Users, Baby, AlertTriangle, CalendarCheck,
     HeartPulse, Syringe, Truck, Activity, BarChart3, Settings,
-    Bell, LogOut, Menu, X, ChevronLeft, Search, Shield,
+    Bell, LogOut, Menu, X, ChevronLeft, ChevronRight, Search, Shield,
     MapPin, FileText, Stethoscope, RefreshCw, ClipboardList, Package
 } from 'lucide-react';
 import '../styles/layouts/DashboardLayout.css';
@@ -201,27 +201,38 @@ const DashboardLayout = () => {
             ═══════════════════════════════ */}
             <div className="main-area">
 
-                {/* ── Top Header ── */}
-                <header className="topbar" role="banner">
-                    {/* Left side */}
-                    <div className="topbar-left">
+                {/* ── Mobile Sidebar Toggle Handle ── */}
+                {!sidebarMobile && (
+                    <div className="mobile-only" style={{
+                        position: 'fixed',
+                        top: '50%',
+                        left: '0',
+                        transform: 'translateY(-50%)',
+                        zIndex: 45,
+                    }}>
                         <button
-                            className="topbar-menu-btn mobile-only"
                             onClick={() => setSidebarMobile(true)}
-                            aria-label="Open navigation"
+                            aria-label="Open sidebar"
+                            style={{
+                                background: 'var(--color-rose)',
+                                color: 'white',
+                                border: 'none',
+                                padding: '16px 8px',
+                                borderRadius: '0 8px 8px 0',
+                                boxShadow: '3px 0 12px rgba(0,0,0,0.1)',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}
                         >
-                            <Menu size={20} />
+                            <ChevronRight size={20} />
                         </button>
-                        <div className="topbar-search">
-                            <Search size={15} className="search-icon" aria-hidden="true" />
-                            <input
-                                type="search"
-                                placeholder="Search patient, station, ID…"
-                                className="search-input"
-                                aria-label="Search"
-                            />
-                        </div>
                     </div>
+                )}
+
+                {/* ── Top Header ── */}
+                <header className="topbar" style={{ justifyContent: 'flex-end' }} role="banner">
 
                     {/* Right side */}
                     <div className="topbar-right">
