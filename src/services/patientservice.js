@@ -132,11 +132,55 @@ export default class PatientService {
   }
 
   async getAllMidwives() {
-    const { data } = await this.supabase
+    const { data, error } = await this.supabase
       .from('staff_profiles')
-      .select('full_name')
-      .or('role.ilike.%midwife%,role.ilike.%doctor%');
-    return data?.map(s => s.full_name) || [];
+      .select('id, full_name, barangay_assignment, role')
+      .ilike('role', '%midwife%')
+      .order('full_name');
+
+    return error ? [] : (data || []);
+  }
+
+  generateVisitSchedule(lmp, { visitCount = 9, time = '09:00' } = {}) {
+    if (!lmp) return [];
+    const lmpDate = new Date(lmp);
+    if (Number.isNaN(lmpDate.getTime())) return [];
+
+    const weekOffsets = [4, 8, 12, 16, 20, 24, 28, 32, 36].slice(0, visitCount);
+
+    return weekOffsets.map((weeks, index) => ({
+      date: this.addWeeksToDate(lmpDate, weeks),
+      week: weeks,
+      visitNumber: index + 1,
+      trimester: this.getTrimesterFromWeek(weeks),
+      scheduled_time: `${time}:00`,
+      type: 'Routine Prenatal'
+    }));
+  }
+
+  async insertPrenatalSchedule(patientId, schedulePreview, createdBy, patientData = {}) {
+    if (!Array.isArray(schedulePreview) || schedulePreview.length === 0) return;
+
+    const rows = schedulePreview.map((visit, index) => ({
+      patient_id: patientId,
+      created_by: createdBy,
+      visit_date: visit.date,
+      visit_number: index + 2,
+      trimester: visit.trimester,
+      gestational_age: `${visit.week}w`,
+      scheduled_time: visit.scheduled_time,
+      next_appt_type: visit.type || 'Routine Prenatal',
+      status: 'Scheduled',
+      assigned_midwife: patientData.assignedMidwife || null,
+      assigned_doctor: patientData.assignedDoctor || null,
+      bhw_assigned: createdBy,
+      created_at: new Date().toISOString()
+    }));
+
+    const { error } = await this.supabase.from('prenatal_visits').insert(rows);
+    if (error) {
+      console.error('Error inserting prenatal schedule:', error);
+    }
   }
 
   async getPrenatalVisits() {
@@ -278,32 +322,55 @@ export default class PatientService {
 
     if (patientData.bp && patientData.weight) {
       const today = new Date().toISOString().split('T')[0];
-      const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      const firstVisitDate = patientData.firstVisitDate || today;
+      const firstVisitTime = patientData.firstVisitTime ? `${patientData.firstVisitTime}:00` : '09:00:00';
+      const upcomingSchedule = Array.isArray(patientData.schedulePreview) ? patientData.schedulePreview : [];
+      const nextApptDate = upcomingSchedule.find(v => new Date(v.date) > new Date(firstVisitDate))?.date || null;
       const bpMatch = patientData.bp.match(/^(\d+)[/\\s](\d+)$/);
-      
+
       await this.supabase.from('prenatal_visits').insert({
         patient_id: patientId,
-        visit_date: today,
+        visit_date: firstVisitDate,
         visit_number: 1,
         trimester: this.calculateTrimester(patientData.lmp),
-        gestational_age: this.calculateWeeks(patientData.lmp) > 0 ? `${this.calculateWeeks(patientData.lmp)} weeks` : '1st visit',
-        bp_systolic: parseInt(bpMatch[1]),
-        bp_diastolic: parseInt(bpMatch[2]),
+        gestational_age: patientData.gestationalAge || (this.calculateWeeks(patientData.lmp) > 0 ? `${this.calculateWeeks(patientData.lmp)} weeks` : '1st visit'),
+        bp_systolic: bpMatch ? parseInt(bpMatch[1]) : null,
+        bp_diastolic: bpMatch ? parseInt(bpMatch[2]) : null,
         weight_kg: parseFloat(patientData.weight),
+        height_cm: patientData.height ? parseFloat(patientData.height) : null,
+        temp_c: patientData.temp ? parseFloat(patientData.temp) : null,
+        pulse_bpm: patientData.pulse ? parseInt(patientData.pulse) : null,
+        resp_rate_cpm: patientData.respRate ? parseInt(patientData.respRate) : null,
+        fundal_height_cm: patientData.fundalHeight ? parseFloat(patientData.fundalHeight) : null,
         fhr_bpm: patientData.fhr ? parseInt(patientData.fhr) : null,
-        next_appt_date: nextWeek, 
+        fetal_movement: patientData.fetalMovement || null,
+        presentation: patientData.presentation || null,
+        tests_done: patientData.testsDone ? patientData.testsDone.split(',').map(s => s.trim()).filter(Boolean) : null,
+        supplements_given: patientData.supplementsGiven ? patientData.supplementsGiven.split(',').map(s => s.trim()).filter(Boolean) : null,
+        clinical_notes: patientData.visitNotes || 'Initial registration visit',
+        next_appt_date: nextApptDate,
         next_appt_type: 'Follow-up Checkup',
+        scheduled_time: firstVisitTime,
+        status: 'Attended',
+        attended_date: new Date().toISOString(),
+        assigned_midwife: patientData.assignedMidwife || null,
+        assigned_doctor: patientData.assignedDoctor || null,
+        bhw_assigned: createdBy,
         created_by: createdBy
       });
     }
 
-    await this.smartSemesterScheduling({
-      patientId, lmp: patientData.lmp, createdBy,
-      maxPerDay: 30 
-    });
+    if (Array.isArray(patientData.schedulePreview) && patientData.schedulePreview.length) {
+      await this.insertPrenatalSchedule(patientId, patientData.schedulePreview, createdBy, patientData);
+    } else {
+      await this.smartSemesterScheduling({
+        patientId, lmp: patientData.lmp, createdBy,
+        maxPerDay: 30
+      });
+    }
 
-  return await this.getPatientById(patientId);
-}
+    return await this.getPatientById(patientId);
+  }
 
 async smartSemesterScheduling({ patientId, lmp, createdBy, maxPerDay = 30 }) {
   const lmpDate = new Date(lmp);

@@ -49,9 +49,13 @@ const AddPatient = () => {
         lmp: '', edd: '', gestationalAge: '', pregnancyType: 'Singleton',
         plannedDeliveryPlace: 'Hospital',
         conditions: [], otherConditions: '', riskLevel: 'Low Risk',
-        firstVisitDate: '', assignedMidwife: '', assignedDoctor: '',
+        firstVisitDate: new Date().toISOString().split('T')[0],
+        firstVisitTime: '09:00',
+        assignedMidwife: '', assignedDoctor: '',
         bhwAssigned: currentStaff.full_name,
-        bp: '', weight: '', height: '', bmi: '', fhr: '', hgb: '',
+        bp: '', weight: '', height: '', bmi: '', temp: '', pulse: '', respRate: '', fundalHeight: '',
+        fetalMovement: '', presentation: '', testsDone: '', supplementsGiven: '', visitNotes: '',
+        fhr: '', hgb: '',
         emName: '', emRel: '', emPhone: '', emAddress: '',
     });
 
@@ -126,6 +130,26 @@ const AddPatient = () => {
             }));
         }
     }, [formData.lmp]);
+
+    useEffect(() => {
+        if (!formData.lmp) {
+            setSchedulePreview([]);
+            return;
+        }
+
+        setLoadingSchedule(true);
+        try {
+            const preview = patientService.generateVisitSchedule(formData.lmp, {
+                time: formData.firstVisitTime || '09:00'
+            });
+            setSchedulePreview(preview);
+        } catch (err) {
+            console.error('Error building schedule preview:', err);
+            setSchedulePreview([]);
+        } finally {
+            setLoadingSchedule(false);
+        }
+    }, [formData.lmp, formData.firstVisitTime]);
 
     useEffect(() => {
         let risk = 'Low Risk';
@@ -551,16 +575,43 @@ try {
 
                             <div className="form-grid-2">
                                 <div className="form-group">
-                                    <label>Auto-Scheduled Visits Calendar</label>
+                                    <label>First Consultation Date</label>
+                                    <input
+                                        type="date"
+                                        name="firstVisitDate"
+                                        value={formData.firstVisitDate}
+                                        onChange={handleChange}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>Scheduled Time</label>
+                                    <input
+                                        type="time"
+                                        name="firstVisitTime"
+                                        value={formData.firstVisitTime}
+                                        onChange={handleChange}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="form-grid-2">
+                                <div className="form-group">
+                                    <label>Auto-Scheduled Visits Preview</label>
                                     {formData.lmp && !loadingSchedule ? (
-                                        <div className="visit-calendar">
-                                        {schedulePreview.map((visit, i) => (
-                                            <div key={i} className={`calendar-day trimester-${visit.trimester}`}>
-                                            <div className="day-number">{new Date(visit.date).getDate()}</div>
-                                            <div className="week-label">{visit.week}w</div>
+                                        schedulePreview.length > 0 ? (
+                                            <div className="visit-calendar visit-calendar--preview">
+                                                {schedulePreview.map((visit, i) => (
+                                                    <div key={i} className={`calendar-day trimester-${visit.trimester}`}>
+                                                        <div className="day-number">{new Date(visit.date).getDate()}</div>
+                                                        <div className="week-label">{visit.week}w</div>
+                                                        <div className="date-label">{new Date(visit.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                                                        <div className="visit-number">Visit {visit.visitNumber + 1}</div>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
-                                        </div>
+                                        ) : (
+                                            <div>No schedule available yet.</div>
+                                        )
                                     ) : formData.lmp ? (
                                         <div>Loading calendar...</div>
                                     ) : (
@@ -650,6 +701,98 @@ try {
                                         onChange={handleChange} 
                                     />
                                 </div>
+                            </div>
+                            <div className="form-grid-3">
+                                <div className="form-group">
+                                    <label>Temperature (°C)</label>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        name="temp"
+                                        value={formData.temp}
+                                        onChange={handleChange}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>Pulse (bpm)</label>
+                                    <input
+                                        type="number"
+                                        name="pulse"
+                                        value={formData.pulse}
+                                        onChange={handleChange}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>Respiratory Rate (cpm)</label>
+                                    <input
+                                        type="number"
+                                        name="respRate"
+                                        value={formData.respRate}
+                                        onChange={handleChange}
+                                    />
+                                </div>
+                            </div>
+                            <div className="form-grid-3">
+                                <div className="form-group">
+                                    <label>Fundal Height (cm)</label>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        name="fundalHeight"
+                                        value={formData.fundalHeight}
+                                        onChange={handleChange}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>Fetal Movement</label>
+                                    <input
+                                        type="text"
+                                        name="fetalMovement"
+                                        value={formData.fetalMovement}
+                                        onChange={handleChange}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>Presentation</label>
+                                    <input
+                                        type="text"
+                                        name="presentation"
+                                        value={formData.presentation}
+                                        onChange={handleChange}
+                                    />
+                                </div>
+                            </div>
+                            <div className="form-grid-2">
+                                <div className="form-group">
+                                    <label>Tests Done</label>
+                                    <input
+                                        type="text"
+                                        name="testsDone"
+                                        value={formData.testsDone}
+                                        onChange={handleChange}
+                                        placeholder="e.g. CBC, Urinalysis"
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>Supplements Given</label>
+                                    <input
+                                        type="text"
+                                        name="supplementsGiven"
+                                        value={formData.supplementsGiven}
+                                        onChange={handleChange}
+                                        placeholder="e.g. Iron, Folic Acid"
+                                    />
+                                </div>
+                            </div>
+                            <div className="form-group">
+                                <label>Initial Visit Notes</label>
+                                <textarea
+                                    name="visitNotes"
+                                    rows={3}
+                                    value={formData.visitNotes}
+                                    onChange={handleChange}
+                                    placeholder="Brief consultation notes..."
+                                />
                             </div>
 
                             <hr className="divider" />
