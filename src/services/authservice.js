@@ -130,15 +130,10 @@ export default class AuthService {
 
 
   async logout() {
-    try {
-      await this.supabase.auth.signOut();
-    } catch (err) {
-      console.error('Error during Supabase signout:', err);
-    }
+    await this.supabase.auth.signOut();
     this._currentUser = null;
     localStorage.removeItem('user');
-    localStorage.removeItem('dasmom_last_login');
-    console.log('User session thoroughly cleared.');
+    console.log('User logged out');
   }
 
   saveUser(user) {

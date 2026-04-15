@@ -249,6 +249,17 @@ const HighRiskCases = () => {
               <h2>
                 <HeartPulse size={17} /> Real‑Time High‑Risk Monitoring
               </h2>
+              <div className="hr-legend">
+                <span className="legend-chip chip-high">
+                  <AlertCircle size={11} /> High Risk
+                </span>
+                <span className="legend-chip chip-monitor">
+                  <AlertTriangle size={11} /> Monitor
+                </span>
+                <span className="legend-chip chip-normal">
+                  <Activity size={11} /> Stable
+                </span>
+              </div>
               <span className="hr-count">{filteredPatients.length} patients</span>
             </div>
 
@@ -256,7 +267,6 @@ const HighRiskCases = () => {
               <table className="hr-table">
                 <thead>
                   <tr>
-                    <th style={{ width: '40px' }}>#</th>
                     <th>Patient Profile</th>
                     <th>Stage</th>
                     <th>Conditions / Complications</th>
@@ -268,11 +278,8 @@ const HighRiskCases = () => {
                 </thead>
                 <tbody>
                   {paginatedPatients.length > 0 ? (
-                    paginatedPatients.map((p, idx) => (
+                    paginatedPatients.map((p) => (
                       <tr key={p.id} className={getRowClass(p)}>
-                        <td style={{ color: 'var(--color-text-muted)', fontSize: '12px', fontWeight: 500 }}>
-                          {startIndex + idx + 1}
-                        </td>
                         <td>
                           <div
                             className="patient-cell"
@@ -372,7 +379,7 @@ const HighRiskCases = () => {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="8" className="hr-empty">
+                      <td colSpan="7" className="hr-empty">
                         <AlertTriangle size={28} />
                         <p>No high‑risk patients found matching your criteria.</p>
                       </td>

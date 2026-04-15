@@ -19,32 +19,28 @@ class InventoryService {
   async getVaccineInventory() {
     const { data, error } = await supabase
       .from('vaccine_inventory')
-      .select('id, vaccine_name, quantity, min_stock, created_by, created_at');
+      .select('id, vaccine_name, quantity, created_by, created_at');
 
     if (error) throw error;
 
     return data.map(row => ({
       id: row.id,
       item_name: row.vaccine_name,
-      quantity: row.quantity ?? 0,
-      min_stock: row.min_stock ?? 0,
-      unit: 'vials',
+      quantity: row.quantity,
     }));
   }
 
   async getSupplementInventory() {
     const { data, error } = await supabase
       .from('supplement_inventory')
-      .select('id, supplement_name, quantity, min_stock, created_by, created_at');
+      .select('id, supplement_name, quantity, created_by, created_at');
 
     if (error) throw error;
 
     return data.map(row => ({
       id: row.id,
       item_name: row.supplement_name,
-      quantity: row.quantity ?? 0,
-      min_stock: row.min_stock ?? 0,
-      unit: 'units',
+      quantity: row.quantity,
     }));
   }
 

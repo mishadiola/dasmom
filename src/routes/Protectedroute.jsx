@@ -1,19 +1,14 @@
 import React, { useContext } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext'; 
 
 export default function ProtectedRoute({ pageKey, children }) {
   const { user } = useContext(AuthContext); 
-  const location = useLocation();
 
   console.log('ProtectedRoute: checking access', { pageKey, user });
 
   if (!user) {
-    console.log('No user in context, redirecting...');
-    // If we're on a mother path, redirect to mother-login
-    if (location.pathname.startsWith('/mother-home')) {
-      return <Navigate to="/mother-login" replace />;
-    }
+    console.log('No user in context, redirecting to /');
     return <Navigate to="/" replace />;
   }
   const roleConfig = {

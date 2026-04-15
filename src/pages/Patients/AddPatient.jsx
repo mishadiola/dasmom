@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import {
     ArrowLeft, Save, X, FileText, User, Activity,
@@ -15,6 +15,7 @@ const TABS = [
     { id: 'pregnancy', label: 'Pregnancy', icon: HeartPulse },
     { id: 'medical', label: 'Medical', icon: Activity },
     { id: 'prenatal', label: 'Prenatal', icon: Calendar },
+    { id: 'documents', label: 'Documents', icon: FileText },
 ];
 const MEDICAL_CONDITIONS = [
     'Hypertension', 'Diabetes', 'Heart Disease', 'Asthma',
@@ -22,9 +23,6 @@ const MEDICAL_CONDITIONS = [
 ];
 const AddPatient = () => {
     const navigate = useNavigate();
-    const { id } = useParams();
-    const isEditMode = !!id;
-    const [fetchingPatient, setFetchingPatient] = useState(isEditMode);
     const { user } = useContext(AuthContext);  
     const [activeTab, setActiveTab] = useState('personal');
     const [toast, setToast] = useState(null);
@@ -56,61 +54,6 @@ const AddPatient = () => {
         bp: '', weight: '', height: '', bmi: '', fhr: '', hgb: '',
         emName: '', emRel: '', emPhone: '', emAddress: '',
     });
-
-    useEffect(() => {
-        if (isEditMode) {
-            const fetchPatient = async () => {
-                try {
-                    const data = await patientService.getPatientById(id);
-                    if (data) {
-                        setFormData({
-                            firstName: data.first_name || '',
-                            middleName: data.middle_name || '',
-                            lastName: data.last_name || '',
-                            suffix: data.suffix || '',
-                            dob: data.date_of_birth || '',
-                            age: data.age || '',
-                            civilStatus: data.civilStatus || '',
-                            contactNumber: data.phone || '',
-                            email: data.email || '',
-                            address: data.address || '',
-                            station: data.station || '',
-                            municipality: data.municipality || 'Dasmariñas',
-                            province: data.province || 'Cavite',
-                            philhealth: data.philhealth || '',
-                            validId: data.valid_id || '',
-                            pregnancyStatus: data.pregnancyStatus || 'Pregnant',
-                            gravida: data.gravida || '',
-                            para: data.para || '',
-                            lmp: data.lmp || '',
-                            edd: data.edd || '',
-                            gestationalAge: `${data.weeks}w`,
-                            pregnancyType: data.pregnancyType || 'Singleton',
-                            plannedDeliveryPlace: data.plannedDeliveryPlace || 'Hospital',
-                            conditions: data.medicalConditions || [],
-                            otherConditions: data.otherConditions || '',
-                            riskLevel: data.risk || 'Low Risk',
-                            bhwAssigned: data.bhw_assigned || currentStaff.full_name,
-                            emName: data.emergencyContact?.name || '',
-                            emRel: data.emergencyContact?.relationship || '',
-                            emPhone: data.emergencyContact?.phone || '',
-                            emAddress: data.emergencyContact?.address || '',
-                            // Initial vitals if available
-                            bp: data.visits?.[0]?.bp_systolic ? `${data.visits[0].bp_systolic}/${data.visits[0].bp_diastolic}` : '',
-                            weight: data.visits?.[0]?.weight_kg || '',
-                            height: data.visits?.[0]?.height_cm || '',
-                        });
-                    }
-                } catch (err) {
-                    console.error("Error fetching patient for edit:", err);
-                    setToast({ type: 'error', message: 'Failed to load patient data.' });
-                } finally {
-                    setFetchingPatient(false);
-                }
-            };
-            fetchPatient();
-        }
-    }, [id, isEditMode]);
 
     useEffect(() => {
         const loadStations = async () => {
@@ -251,24 +194,20 @@ const AddPatient = () => {
         setIsSaving(true);
 
 try {
-    console.log(`📤 Passing to PatientService.${isEditMode ? 'updatePatient' : 'addPatient'}:`, formData);
+    console.log('📤 Passing to PatientService.addPatient:', formData);
+    const newPatient = await patientService.addPatient(formData);
     
-    let result;
-    if (isEditMode) {
-        result = await patientService.updatePatient(id, formData);
-    } else {
-        result = await patientService.addPatient(formData);
-    }
-    
-    console.log(`🎉 Patient ${isEditMode ? 'updated' : 'created'}:`, result.id);
+    console.log('🎉 Patient created:', newPatient.id, `${newPatient.first_name || formData.firstName} ${newPatient.last_name || formData.lastName}`);
     
     setToast({ 
         type: 'success', 
-        message: `✅ Patient ${isEditMode ? 'updated' : 'saved'} successfully!
-        👤 ${result.name || formData.firstName + ' ' + formData.lastName}`
+        message: `✅ Patient saved successfully!
+        👤 ${newPatient.first_name || formData.firstName} ${newPatient.last_name || formData.lastName}
+        📅 Semester visits auto-scheduled
+        🏘️ ${newPatient.barangay || formData.station}` 
     });
     
-    setTimeout(() => navigate(`/dashboard/patients/${result.id}`), 1500);
+    navigate(`/dashboard/patients/${newPatient.id}`);  
 } 
         catch (err) {
             console.error('💥 Save failed:', err);
@@ -293,16 +232,16 @@ try {
                     <button className="back-link" onClick={() => navigate(-1)}>
                         <ArrowLeft size={16} /> Back to Patient List
                     </button>
-                    <h1 className="ap-title">{isEditMode ? 'Edit Patient Profile' : 'Add New Pregnant Patient'}</h1>
-                    <p>{isEditMode ? `Editing Record ID: ${id}` : `BHW: ${currentStaff.full_name} | Available Stations: ${availableStations.length}`}</p>
+                    <h1 className="ap-title">Add New Pregnant Patient</h1>
+                    <p>BHW: {currentStaff.full_name} | Available Stations: {availableStations.length}</p>
                 </div>
                 <div className="ap-actions">
                     <button className="btn btn-outline" onClick={() => navigate(-1)} disabled={isSaving}>
                         <X size={15} /> Cancel
                     </button>
-                    <button className="btn btn-primary" onClick={handleSave} disabled={isSaving || !currentStaff.id || fetchingPatient}>
+                    <button className="btn btn-primary" onClick={handleSave} disabled={isSaving || !currentStaff.id}>
                         {isSaving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-                        {isSaving ? (isEditMode ? 'Updating...' : 'Saving...') : (isEditMode ? 'Save Changes' : 'Save & Auto-Schedule Visits')}
+                        {isSaving ? 'Saving...' : 'Save & Auto-Schedule Visits'}
                     </button>
                 </div>
             </div>
@@ -331,7 +270,7 @@ try {
                     ))}
                 </aside>
 
-                <form onSubmit={handleSave} className="ap-content">
+                <form onSubmit={handleSave}>
                     {/* PERSONAL TAB - OLD FIELDS + NEW DROPDOWN */}
                     {activeTab === 'personal' && (
                         <div className="ap-section animate-fade">
@@ -567,7 +506,7 @@ try {
                             </div>
                         </div>
                     )}
-
+                    {}
                     {activeTab === 'medical' && (
                         <div className="ap-section animate-fade">
                             <h2 className="section-title">Medical Risk Assessment</h2>
@@ -605,7 +544,7 @@ try {
                             </div>
                         </div>
                     )}
-
+                    {}
                     {activeTab === 'prenatal' && (
                         <div className="ap-section animate-fade">
                             <h2 className="section-title">Prenatal Care & Initial Vitals</h2>
@@ -634,6 +573,7 @@ try {
                                 </div>
                             </div>
 
+                            {}
                             <div className="form-grid-2">
                                 <div className="form-group">
                                     <label>Assigned Midwife ({formData.station})</label>
@@ -767,6 +707,22 @@ try {
                                         className={missingFields.includes('emAddress') ? 'error-field' : ''}
                                     />
                                 </div>
+                            </div>
+                        </div>
+                    )}
+                    {}
+                    {activeTab === 'documents' && (
+                        <div className="ap-section animate-fade">
+                            <h2 className="section-title">Documents Upload</h2>
+                            <p className="section-desc">Attach supporting documents like Ultrasound, Lab results, ID scan, etc.</p>
+                            <div className="upload-area">
+                                <UploadCloud size={40} className="upload-icon" />
+                                <h3>Click to upload or drag & drop</h3>
+                                <p>SVG, PNG, JPG or PDF (max. 5MB)</p>
+                                <button type="button" className="btn btn-outline mt-3">Browse Files</button>
+                            </div>
+                            <div className="document-list">
+                                <p className="empty-docs">No documents uploaded yet.</p>
                             </div>
                         </div>
                     )}

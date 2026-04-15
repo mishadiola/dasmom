@@ -1,4 +1,4 @@
-import supabase from '../config/supabaseClient';
+import supabase from '../config/supabaseclient';
 import AuthService from './authservice';
 import InventoryService from './inventoryservice';
 
@@ -301,66 +301,11 @@ export default class PatientService {
       patientId, lmp: patientData.lmp, createdBy,
       maxPerDay: 30 
     });
-  }
 
-  async updatePatient(patientId, formData) {
-    if (!patientId) throw new Error("Patient ID is required for updates");
+  return await this.getPatientById(patientId);
+}
 
-    // 1. Update User Email
-    const { error: err0 } = await this.supabase
-      .from('users')
-      .update({ email_address: formData.email })
-      .eq('id', patientId);
-    if (err0) throw err0;
-
-    // 2. Update Basic Info
-    const { error: err1 } = await this.supabase
-      .from('patient_basic_info')
-      .update({
-        first_name: formData.firstName,
-        middle_name: formData.middleName || null,
-        last_name: formData.lastName,
-        suffix: formData.suffix || null,
-        date_of_birth: formData.dob,
-        civil_status: formData.civilStatus || null,
-        contact_no: formData.contactNumber,
-        house_no: formData.address || '',
-        municipality: formData.municipality,
-        barangay: formData.station,
-        province: formData.province,
-        philhealthnumber: formData.philhealth || null,
-        emergency_contact: {
-          name: formData.emName || null,
-          relationship: formData.emRel || null,
-          phone: formData.emPhone || null,
-          address: formData.emAddress || null
-        }
-      })
-      .eq('id', patientId);
-    if (err1) throw err1;
-
-    // 3. Update Pregnancy Info
-    const { error: err2 } = await this.supabase
-      .from('pregnancy_info')
-      .update({
-        pregn_postp: formData.pregnancyStatus,
-        lmd: formData.lmp,
-        edd: formData.edd,
-        pregnancy_type: formData.pregnancyType,
-        place_of_delivery: formData.plannedDeliveryPlace,
-        calculated_risk: formData.riskLevel || 'Normal',
-        gravida: parseInt(formData.gravida) || 1,
-        para: parseInt(formData.para) || 0,
-        risk_factors: Array.isArray(formData.conditions) && formData.conditions.length > 0 
-          ? formData.conditions.join(', ') : null
-      })
-      .eq('patient_id', patientId);
-    if (err2) throw err2;
-
-    return await this.getPatientById(patientId);
-  }
-
-  async smartSemesterScheduling({ patientId, lmp, createdBy, maxPerDay = 30 }) {
+async smartSemesterScheduling({ patientId, lmp, createdBy, maxPerDay = 30 }) {
   const lmpDate = new Date(lmp);
   const semesters = [
     { startWeek: 2, endWeek: 13, name: '1st Trimester', visits: [0, 2, 4] },
@@ -572,21 +517,19 @@ async getHighRiskPatients() {
   }
 
   async getPatientById(patientId) {
-    const { data, error } = await this.supabase
+    const { data } = await this.supabase
       .from('patient_basic_info')
       .select(`
         *,
-        users!inner(email_address),
         pregnancy_info(*),
         prenatal_visits(*)
       `)
       .eq('id', patientId)
       .single();
 
-    if (error || !data) return null;
+    if (!data) return null;
 
     const preg = Array.isArray(data.pregnancy_info) ? data.pregnancy_info[0] : data.pregnancy_info || {};
-    const email = data.users?.email_address || 'N/A';
 
     return {
       ...data,
@@ -594,7 +537,6 @@ async getHighRiskPatients() {
       age: this.calculateAge(data.date_of_birth),
       station: data.barangay,
       phone: data.contact_no || 'N/A',
-      email: email,
       address: data.house_no,
       dob: data.date_of_birth,
       civilStatus: data.civil_status,
@@ -667,58 +609,25 @@ async getHighRiskPatients() {
 
   async getVaccinationStats() {
     try {
-      // 1. Total vaccination records administered (vaccine_records table)
-      const { count: totalAdministered } = await this.supabase
-        .from('vaccine_records')
+      // Aggregate stats for the Vaccinations dashboard
+      const { count: totalVaccinated } = await this.supabase
+        .from('prenatal_visits')
         .select('*', { count: 'exact', head: true });
 
-      // 2. Mothers pending vaccines: patients with pregnancy_info but NO vaccine_records
-      const { data: allPatientIds } = await this.supabase
-        .from('pregnancy_info')
-        .select('patient_id');
-
-      const { data: vaccinatedPatientIds } = await this.supabase
-        .from('vaccine_records')
-        .select('patient_id');
-
-      const vaccinatedSet = new Set((vaccinatedPatientIds || []).map(v => v.patient_id));
-      const mothersPending = (allPatientIds || []).filter(p => !vaccinatedSet.has(p.patient_id)).length;
-
-      // 3. Newborns pending vaccines: newborns with no vaccine entry in vaccine_records
-      const { data: allNewborns } = await this.supabase
-        .from('newborns')
-        .select('patient_id');
-
-      const newbornMotherIds = [...new Set((allNewborns || []).map(n => n.patient_id).filter(Boolean))];
-      let newbornsPending = 0;
-      if (newbornMotherIds.length > 0) {
-        const { data: newbornVaccRecords } = await this.supabase
-          .from('vaccine_records')
-          .select('patient_id')
-          .in('patient_id', newbornMotherIds);
-        const newbornVaccinatedSet = new Set((newbornVaccRecords || []).map(v => v.patient_id));
-        newbornsPending = newbornMotherIds.filter(id => !newbornVaccinatedSet.has(id)).length;
-      }
-
-      // 4. Supplements distributed: sum all quantities from supplement_inventory records
-      const { data: suppData } = await this.supabase
-        .from('supplement_inventory')
-        .select('quantity');
-      const supplementsDistributed = (suppData || []).reduce((sum, row) => sum + (row.quantity ?? 0), 0);
-
-      // 5. Low stock items: items below min_stock in both inventory tables
+      // Count low stock items from both tables
       const [vax, supp] = await Promise.all([
         inventoryService.getVaccineInventory(),
         inventoryService.getSupplementInventory()
       ]);
-      const lowStockAlerts = [...vax, ...supp].filter(i => i.quantity < i.min_stock).length;
+
+      const lowStock = [...vax, ...supp].filter(i => i.quantity < i.min_stock).length;
 
       return {
-        totalAdministered: totalAdministered || 0,
-        mothersPending,
-        newbornsPending,
-        supplementsDistributed,
-        lowStockAlerts
+        totalAdministered: totalVaccinated || 0,
+        mothersPending: 0,
+        newbornsPending: 0,
+        supplementsDistributed: 0,
+        lowStockAlerts: lowStock
       };
     } catch (err) {
       console.error('Error fetching vaccination stats:', err);

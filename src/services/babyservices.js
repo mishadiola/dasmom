@@ -387,9 +387,11 @@ async getPostpartumStats() {
 
         return {
             summary: [
-                { label: 'Recent Deliveries (42 days)', value: recent,         color: 'lilac',  icon: 'Baby' },
-                { label: 'Due for Postpartum Visit',     value: due,            color: 'pink',   icon: 'Calendar' },
-                { label: 'With Complications',           value: complications,  color: 'rose',   icon: 'AlertTriangle' },
+                { label: 'Recent Deliveries (42 days)', value: recent, color: 'lilac', icon: 'Baby' },
+                { label: 'Due for Postpartum Visit', value: due, color: 'pink', icon: 'Calendar' },
+                { label: 'Missed Follow-ups', value: missed, color: 'orange', icon: 'XCircle' },
+                { label: 'With Complications', value: complications, color: 'rose', icon: 'AlertTriangle' },
+                { label: 'Recovered Mothers', value: recovered, color: 'sage', icon: 'CheckCircle2' },
             ],
             stationRecovery: Object.values(stationMap).sort((a, b) => b.total - a.total)
         };

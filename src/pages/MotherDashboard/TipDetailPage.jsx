@@ -42,8 +42,8 @@ const TipDetailPage = () => {
             <div className="tdp-not-found">
                 <BookOpen size={64} />
                 <h2>Article not found</h2>
-                <button onClick={() => navigate('/mother-home/user-tips')}>
-                    <ArrowLeft size={16} /> Back to Resources
+                <button onClick={() => navigate('/dashboard/user-tips')}>
+                    <ArrowLeft size={16} /> Back to Tips
                 </button>
             </div>
         );
@@ -69,8 +69,8 @@ const TipDetailPage = () => {
         <div className="tdp-page">
             {/* ── Breadcrumb ── */}
             <nav className="tdp-breadcrumb">
-                <button className="tdp-back" onClick={() => navigate('/mother-home/user-tips')}>
-                    <ArrowLeft size={16} /> Back to Pregnancy Resources
+                <button className="tdp-back" onClick={() => navigate('/dashboard/user-tips')}>
+                    <ArrowLeft size={16} /> Back to Pregnancy Tips
                 </button>
                 <span className="tdp-breadcrumb-sep">/</span>
                 <span className="tdp-breadcrumb-current">{tip.title}</span>
@@ -202,7 +202,7 @@ const TipDetailPage = () => {
                         <div
                             key={rel.id}
                             className="tdp-related-card"
-                            onClick={() => navigate(`/mother-home/user-tips/${rel.id}`)}
+                            onClick={() => navigate(`/dashboard/user-tips/${rel.id}`)}
                         >
                             <div className={`tdp-related-cover ${rel.colorClass}`}>
                                 <div className="tdp-related-icon">{rel.icon}</div>
