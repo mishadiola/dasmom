@@ -20,6 +20,12 @@
     gap: 20px;
 }
 
+.stat-card--active {
+    border: 2px solid var(--color-rose);
+    box-shadow: 0 4px 16px rgba(185, 129, 138, 0.2);
+    transform: translateY(-2px);
+}
+
 .inv-main-layout {
     display: grid;
     grid-template-columns: 1fr 300px;
@@ -174,6 +180,51 @@
     font-size: 16px;
 }
 
+.stock-level-display {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.stock-text {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+}
+
+.stock-separator {
+    color: var(--color-text-muted);
+    font-weight: 400;
+}
+
+.stock-max {
+    color: var(--color-text-muted);
+    font-weight: 400;
+    font-size: 13px;
+}
+
+.stock-percentage {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    margin-left: 4px;
+}
+
+.stock-progress-bar {
+    width: 100%;
+    height: 6px;
+    background: #f0f2f5;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.stock-progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
 .status-badge {
     font-size: 11px;
     font-weight: 700;
@@ -200,17 +251,43 @@
     width: 32px;
     height: 32px;
     border-radius: 8px;
+    border: none;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: #fff;
+    background: #f0f2f5;
 }
 
-.edit-btn { background: rgba(91,174,208,0.1); color: #2d7fa3; }
-.edit-btn:hover { background: rgba(91,174,208,0.2); }
+.edit-btn {
+    background: #6db8a0;
+}
+.edit-btn:hover {
+    background: #5aa68a;
+}
 
-.delete-btn { background: rgba(224,92,115,0.08); color: #e05c73; }
-.delete-btn:hover { background: rgba(224,92,115,0.15); }
+.archive-btn {
+    background: #888;
+}
+.archive-btn:hover {
+    background: #777;
+}
+
+.restore-btn {
+    background: #6db8a0;
+}
+.restore-btn:hover {
+    background: #5aa68a;
+}
+
+.delete-btn {
+    background: #e05c73;
+}
+.delete-btn:hover {
+    background: #d94f6a;
+}
 
 /* ── MODAL ── */
 .modal-overlay {

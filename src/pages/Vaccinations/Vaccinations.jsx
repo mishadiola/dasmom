@@ -228,6 +228,7 @@ const Vaccinations = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState({ patientType: 'All', status: 'All', item: 'All' });
     const [recordModal, setRecordModal] = useState(null);      // null | 'vaccine' | 'supplement'
+    const [expirationSummaryModal, setExpirationSummaryModal] = useState(null);      // null | 'vaccine' | 'supplement'
     const [expandedRows, setExpandedRows] = useState({});
     const [sortField, setSortField] = useState('');
     const [sortAsc, setSortAsc] = useState(true);
@@ -269,36 +270,50 @@ const Vaccinations = () => {
             }
 
             // Transform vaccination records
-            const transformedVaccRecords = (vaccRecords || []).map(record => ({
-                id: record.id,
-                patientId: record.patient_id,
-                patientName: patientMap.get(record.patient_id)?.name || 'Unknown',
-                station: patientMap.get(record.patient_id)?.station || 'Unknown',
-                type: patientMap.get(record.patient_id)?.type || 'Unknown',
-                vaccine: vaccineMap.get(record.vaccine_inventory_id) || 'Unknown',
-                dose: `${record.dose_number}${record.dose_number === 1 ? 'st' : record.dose_number === 2 ? 'nd' : record.dose_number === 3 ? 'rd' : 'th'} Dose`,
-                date: record.date_administered,
+            const transformedVaccRecords = (vaccRecords || []).map(record => {
+                const expirationDate = calculateExpirationDate(record.date_administered, 'vaccine');
+                const expStatus = getExpirationStatus(expirationDate);
+                return {
+                    id: record.id,
+                    patientId: record.patient_id,
+                    patientName: patientMap.get(record.patient_id)?.name || 'Unknown',
+                    station: patientMap.get(record.patient_id)?.station || 'Unknown',
+                    type: patientMap.get(record.patient_id)?.type || 'Unknown',
+                    vaccine: vaccineMap.get(record.vaccine_inventory_id) || 'Unknown',
+                    dose: `${record.dose_number}${record.dose_number === 1 ? 'st' : record.dose_number === 2 ? 'nd' : record.dose_number === 3 ? 'rd' : 'th'} Dose`,
+                    date: record.date_administered,
                 nextDue: record.next_due_date,
+                expirationDate: expirationDate,
+                expirationStatus: expStatus.status,
+                expirationClass: expStatus.class,
                 staff: staffMap.get(record.created_by) || 'Unknown',
                 notes: record.notes,
                 status: record.status
-            }));
+                };
+            });
 
             // Transform supplement records
-            const transformedSuppRecords = (suppRecords || []).map(record => ({
-                id: record.id,
-                patientId: record.patient_id,
-                patientName: patientMap.get(record.patient_id)?.name || 'Unknown',
-                station: patientMap.get(record.patient_id)?.station || 'Unknown',
-                type: patientMap.get(record.patient_id)?.type || 'Unknown',
-                supplement: suppMap.get(record.supplement_inventory_id) || 'Unknown',
-                dose: record.dosage,
-                date: record.start_date,
-                nextDue: record.end_date,
-                staff: staffMap.get(record.created_by) || 'Unknown',
-                notes: record.notes,
-                status: record.status
-            }));
+            const transformedSuppRecords = (suppRecords || []).map(record => {
+                const expirationDate = calculateExpirationDate(record.start_date, 'supplement');
+                const expStatus = getExpirationStatus(expirationDate);
+                return {
+                    id: record.id,
+                    patientId: record.patient_id,
+                    patientName: patientMap.get(record.patient_id)?.name || 'Unknown',
+                    station: patientMap.get(record.patient_id)?.station || 'Unknown',
+                    type: patientMap.get(record.patient_id)?.type || 'Unknown',
+                    supplement: suppMap.get(record.supplement_inventory_id) || 'Unknown',
+                    dose: record.dosage,
+                    date: record.start_date,
+                    nextDue: record.end_date,
+                    expirationDate: expirationDate,
+                    expirationStatus: expStatus.status,
+                    expirationClass: expStatus.class,
+                    staff: staffMap.get(record.created_by) || 'Unknown',
+                    notes: record.notes,
+                    status: record.status
+                };
+            });
 
             setVaccinationRecords(transformedVaccRecords);
             setSupplementRecords(transformedSuppRecords);
@@ -320,51 +335,6 @@ const Vaccinations = () => {
             const inventory = [...vaccineInvData.map(v => ({ ...v, type: 'vaccine', threshold: 20, status: v.quantity < 10 ? 'Critical' : v.quantity < 20 ? 'Low' : 'Sufficient' })), ...suppInvData.map(s => ({ ...s, type: 'supplement', threshold: 50, status: s.quantity < 25 ? 'Critical' : s.quantity < 50 ? 'Low' : 'Sufficient' }))];
             setInventory(inventory);
 
-            // Fetch all patients and newborns to show all entities
-            const allPatients = await patientService.getAllPatients();
-            const { data: allNewborns } = await supabase.from('newborns').select('id, baby_name, mother_id, deliveries!inner (delivery_date), patient_basic_info!mother_id (first_name, last_name, barangay, province)').order('created_at', { ascending: false });
-
-            const existingPatientIds = new Set([...transformedVaccRecords.map(r => r.patientId), ...transformedSuppRecords.map(r => r.patientId)]);
-
-            for (const patient of allPatients) {
-              if (!existingPatientIds.has(patient.id)) {
-                transformedVaccRecords.push({
-                  id: `placeholder-patient-${patient.id}`,
-                  patientId: patient.id,
-                  patientName: patient.name,
-                  station: patient.station,
-                  type: patient.age >= 18 ? 'Mother' : 'Child',
-                  vaccine: 'No vaccinations scheduled',
-                  dose: '',
-                  date: '',
-                  nextDue: '',
-                  staff: '',
-                  notes: '',
-                  status: 'No records'
-                });
-              }
-            }
-
-            for (const newborn of allNewborns || []) {
-              if (!existingPatientIds.has(newborn.id)) {
-                const mother = newborn.patient_basic_info;
-                transformedVaccRecords.push({
-                  id: `placeholder-newborn-${newborn.id}`,
-                  patientId: newborn.id,
-                  patientName: newborn.baby_name || `Newborn of ${mother.first_name} ${mother.last_name}`,
-                  station: `${mother.barangay}, ${mother.province}`,
-                  type: 'Newborn',
-                  vaccine: 'No vaccinations scheduled',
-                  dose: '',
-                  date: '',
-                  nextDue: '',
-                  staff: '',
-                  notes: '',
-                  status: 'No records'
-                });
-              }
-            }
-
             setVaccinationRecords(transformedVaccRecords);
             setSupplementRecords(transformedSuppRecords);
         } catch (error) {
@@ -385,6 +355,37 @@ const Vaccinations = () => {
             age--;
         }
         return age;
+    };
+
+    // Helper function to calculate expiration date (frontend only)
+    const calculateExpirationDate = (dateGiven, itemType) => {
+        if (!dateGiven) return null;
+        const given = new Date(dateGiven);
+        // Vaccines typically expire 1 year after administration
+        // Supplements typically expire 6 months after start
+        const monthsToAdd = itemType === 'vaccine' ? 12 : 6;
+        given.setMonth(given.getMonth() + monthsToAdd);
+        return given.toISOString().split('T')[0];
+    };
+
+    // Helper function to determine expiration status
+    const getExpirationStatus = (expirationDate) => {
+        if (!expirationDate) return { status: 'Unknown', class: 'status-unknown' };
+        
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const expDate = new Date(expirationDate);
+        expDate.setHours(0, 0, 0, 0);
+        
+        const daysUntilExpiry = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
+        
+        if (daysUntilExpiry < 0) {
+            return { status: 'Expired', class: 'status-expired', days: daysUntilExpiry };
+        } else if (daysUntilExpiry <= 30) {
+            return { status: 'Near Expiry', class: 'status-near-expiry', days: daysUntilExpiry };
+        } else {
+            return { status: 'Valid', class: 'status-valid', days: daysUntilExpiry };
+        }
     };
 
     useEffect(() => {
@@ -589,6 +590,7 @@ const Vaccinations = () => {
                                             <th><span onClick={() => handleSort('vaccine')} className="sortable-head">Vaccine <SortBtn field="vaccine" /></span></th>
                                             <th>Dose</th>
                                             <th>Date Given</th>
+                                            <th>Expiration</th>
                                             <th>Next Due</th>
                                             <th>Status</th>
                                             <th>Staff</th>
@@ -615,11 +617,20 @@ const Vaccinations = () => {
                                                     <td className="vacc-item-name">{v.vaccine}</td>
                                                     <td className="vacc-dose">{v.dose}</td>
                                                     <td className="vacc-date">{v.dateAdministered || <span className="not-yet">Not given</span>}</td>
+                                                    <td className="vacc-date">
+                                                        {v.expirationDate ? (
+                                                            <>
+                                                                <span className={`exp-status ${v.expirationClass}`}>{v.expirationStatus}</span>
+                                                                <span className="exp-date">{v.expirationDate}</span>
+                                                            </>
+                                                        ) : <span className="not-yet">—</span>}
+                                                    </td>
                                                     <td className="vacc-date">{v.nextDue || <span className="not-yet">—</span>}</td>
                                                     <td><span className={`vacc-status ${vaccineStatusClass(v.status)}`}>{v.status}</span></td>
                                                     <td className="vacc-staff">{v.staff}</td>
                                                     <td>
                                                         <div className="row-actions">
+                                                            <button className="action-btn view-btn" title="View Details" onClick={() => setExpirationSummaryModal({ patientId: v.patientId, patientName: v.patientName, type: 'vaccine' })}><Eye size={13} /></button>
                                                             <button className="action-btn record-btn" title="Record Dose" onClick={() => setRecordModal('vaccine')}><Plus size={13} /></button>
                                                             <button className="action-btn edit-btn" title="Edit"><Edit2 size={13} /></button>
                                                         </div>
@@ -660,6 +671,7 @@ const Vaccinations = () => {
                                             <th>Supplement</th>
                                             <th>Dose</th>
                                             <th>Start Date</th>
+                                            <th>Expiration</th>
                                             <th>End Date</th>
                                             <th>Status</th>
                                             <th>Staff</th>
@@ -682,11 +694,20 @@ const Vaccinations = () => {
                                                 <td className="vacc-item-name">{s.supplement}</td>
                                                 <td className="vacc-dose">{s.dose}</td>
                                                 <td className="vacc-date">{s.startDate}</td>
+                                                <td className="vacc-date">
+                                                    {s.expirationDate ? (
+                                                        <>
+                                                            <span className={`exp-status ${s.expirationClass}`}>{s.expirationStatus}</span>
+                                                            <span className="exp-date">{s.expirationDate}</span>
+                                                        </>
+                                                    ) : <span className="not-yet">—</span>}
+                                                </td>
                                                 <td className="vacc-date">{s.endDate}</td>
                                                 <td><span className={`vacc-status ${supplementStatusClass(s.status)}`}>{s.status}</span></td>
                                                 <td className="vacc-staff">{s.staff}</td>
                                                 <td>
                                                     <div className="row-actions">
+                                                        <button className="action-btn view-btn" title="View Details" onClick={() => setExpirationSummaryModal({ patientId: s.patientId, patientName: s.patientName, type: 'supplement' })}><Eye size={13} /></button>
                                                         <button className="action-btn record-btn" title="Record Intake" onClick={() => setRecordModal('supplement')}><Plus size={13} /></button>
                                                         <button className="action-btn edit-btn" title="Edit"><Edit2 size={13} /></button>
                                                     </div>
@@ -708,6 +729,95 @@ const Vaccinations = () => {
 
             {/* ── Record Modal ── */}
             {recordModal && <RecordModal mode={recordModal} onClose={handleModalClose} />}
+
+            {/* ── Expiration Summary Modal ── */}
+            {expirationSummaryModal && (
+                <div className="modal-backdrop" onClick={() => setExpirationSummaryModal(null)}>
+                    <div className="vacc-modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <div>
+                                <h2><AlertCircle size={20} /> Expiration Summary</h2>
+                                <p>{expirationSummaryModal.patientName} - {expirationSummaryModal.type === 'vaccine' ? 'Vaccinations' : 'Supplements'}</p>
+                            </div>
+                            <button className="modal-close" onClick={() => setExpirationSummaryModal(null)}><X size={20} /></button>
+                        </div>
+                        <div className="modal-body">
+                            {(() => {
+                                const records = expirationSummaryModal.type === 'vaccine' 
+                                    ? vaccinationRecords.filter(r => r.patientId === expirationSummaryModal.patientId)
+                                    : supplementRecords.filter(r => r.patientId === expirationSummaryModal.patientId);
+                                
+                                const expiredCount = records.filter(r => r.expirationStatus === 'Expired').length;
+                                const nearExpiryCount = records.filter(r => r.expirationStatus === 'Near Expiry').length;
+                                const validCount = records.filter(r => r.expirationStatus === 'Valid').length;
+                                const totalCount = records.length;
+
+                                return (
+                                    <>
+                                        {/* Summary Section */}
+                                        <div className="exp-summary-grid">
+                                            <div className="exp-summary-card exp-summary-total">
+                                                <div className="exp-summary-value">{totalCount}</div>
+                                                <div className="exp-summary-label">Total Items</div>
+                                            </div>
+                                            <div className="exp-summary-card exp-summary-expired">
+                                                <div className="exp-summary-value">{expiredCount}</div>
+                                                <div className="exp-summary-label">Expired</div>
+                                            </div>
+                                            <div className="exp-summary-card exp-summary-near">
+                                                <div className="exp-summary-value">{nearExpiryCount}</div>
+                                                <div className="exp-summary-label">Near Expiry</div>
+                                            </div>
+                                            <div className="exp-summary-card exp-summary-valid">
+                                                <div className="exp-summary-value">{validCount}</div>
+                                                <div className="exp-summary-label">Valid</div>
+                                            </div>
+                                        </div>
+
+                                        {/* Detailed List View */}
+                                        <div className="exp-detailed-list">
+                                            <h3>Detailed Records</h3>
+                                            {records.length === 0 ? (
+                                                <p className="no-records">No records found for this patient.</p>
+                                            ) : (
+                                                <table className="exp-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Item Name</th>
+                                                            <th>Type</th>
+                                                            <th>Date Given</th>
+                                                            <th>Expiration Date</th>
+                                                            <th>Status</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {records.map(r => (
+                                                            <tr key={r.id}>
+                                                                <td>{expirationSummaryModal.type === 'vaccine' ? r.vaccine : r.supplement}</td>
+                                                                <td>{expirationSummaryModal.type === 'vaccine' ? 'Vaccine' : 'Supplement'}</td>
+                                                                <td>{r.date}</td>
+                                                                <td>{r.expirationDate || '—'}</td>
+                                                                <td>
+                                                                    <span className={`exp-status-badge ${r.expirationClass}`}>
+                                                                        {r.expirationStatus}
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            )}
+                                        </div>
+                                    </>
+                                );
+                            })()}
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-primary" onClick={() => setExpirationSummaryModal(null)}>Close</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

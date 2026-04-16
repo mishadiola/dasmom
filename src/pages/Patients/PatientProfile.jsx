@@ -182,7 +182,7 @@ const PatientProfile = () => {
                     <div class="info-grid">
                         <div class="info-item">
                             <span class="info-label">Date of Birth:</span>
-                            <span class="info-value">${p.dob || 'N/A'}</span>
+                            <span class="info-value">${formatReadableDate(p.dob) || 'N/A'}</span>
                         </div>
                         <div class="info-item">
                             <span class="info-label">Age:</span>
@@ -556,7 +556,7 @@ const PatientProfile = () => {
                                     </div>
                                     <div className="mc-field">
                                         <label>Date of Birth</label>
-                                        <span>{p.dob} <em>({p.age} y/o)</em></span>
+                                        <span>{formatReadableDate(p.dob)} <em>({p.age} y/o)</em></span>
                                     </div>
                                     <div className="mc-field">
                                         <label>Civil Status</label>
@@ -780,28 +780,52 @@ const PatientProfile = () => {
                             <button className="btn btn-sm btn-outline" onClick={handlePrintVisits}><Printer size={12} /> Print Schedule</button>
                         </div>
                         <div className="timeline-list">
-                            {p.visits.length > 0 ? p.visits.map((v, i) => (
-                                <div className="timeline-item" key={i}>
-                                    <div className={`timeline-dot ${new Date(v.visit_date) < new Date() ? 'completed' : 'upcoming'}`}></div>
-                                    <div className="timeline-content">
-                                        <div className="timeline-top">
-                                            <span className="timeline-date">{formatReadableDate(v.visit_date)}</span>
-                                            <div className="timeline-meta-row">
-                                                <span className="timeline-type">Visit #{v.visit_number}</span>
-                                                <span className="timeline-tag">{getOrdinalSuffix(v.trimester)} Trim.</span>
+                            {p.visits.length > 0 ? (() => {
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+                                
+                                // Sort visits by date
+                                const sortedVisits = [...p.visits].sort((a, b) => new Date(a.visit_date) - new Date(b.visit_date));
+                                
+                                // Find the next upcoming appointment
+                                const nextAppointmentIndex = sortedVisits.findIndex(v => new Date(v.visit_date) >= today);
+                                
+                                return sortedVisits.map((v, i) => {
+                                    const visitDate = new Date(v.visit_date);
+                                    visitDate.setHours(0, 0, 0, 0);
+                                    
+                                    let visitStatus = 'future';
+                                    if (visitDate < today) {
+                                        visitStatus = 'past';
+                                    } else if (i === nextAppointmentIndex) {
+                                        visitStatus = 'next';
+                                    }
+                                    
+                                    return (
+                                        <div className={`timeline-item timeline-item--${visitStatus}`} key={i}>
+                                            <div className={`timeline-dot ${visitStatus === 'past' ? 'completed' : visitStatus === 'next' ? 'next' : 'upcoming'}`}></div>
+                                            <div className="timeline-content">
+                                                <div className="timeline-top">
+                                                    <span className="timeline-date">{formatReadableDate(v.visit_date)}</span>
+                                                    {visitStatus === 'next' && <span className="timeline-badge-next">Next Appointment</span>}
+                                                    <div className="timeline-meta-row">
+                                                        <span className="timeline-type">Visit #{v.visit_number}</span>
+                                                        <span className="timeline-tag">{getOrdinalSuffix(v.trimester)} Trim.</span>
+                                                    </div>
+                                                </div>
+                                                { v.bp && (
+                                                    <div className="timeline-vitals">
+                                                        <Shield size={12} /> {v.bp}
+                                                        <Scale size={12} /> {v.weight}kg
+                                                        <Activity size={12} /> {v.fht || 'N/A'} bpm
+                                                    </div>
+                                                )}
+                                                {v.notes && <p className="timeline-notes">{v.notes}</p>}
                                             </div>
                                         </div>
-                                        { v.bp && (
-                                            <div className="timeline-vitals">
-                                                <Shield size={12} /> {v.bp}
-                                                <Scale size={12} /> {v.weight}kg  // Now this will work as Scale is imported
-                                                <Activity size={12} /> {v.fht || 'N/A'} bpm
-                                            </div>
-                                        )}
-                                        {v.notes && <p className="timeline-notes">{v.notes}</p>}
-                                    </div>
-                                </div>
-                            )) : (
+                                    );
+                                });
+                            })() : (
                                 <div className="empty-state-mini">
                                     <CalendarCheck size={32} />
                                     <p>No prenatal visits recorded yet.</p>

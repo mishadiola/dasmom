@@ -189,6 +189,10 @@
 .deact-btn { background: rgba(109,184,160,0.1); color: #3d8870; }
 .deact-btn:hover { background: rgba(109,184,160,0.2); }
 .act-btn   { background: rgba(91,174,208,0.1);  color: #2d7fa3; }
+.archive-btn   { background: rgba(136,136,136,0.1);  color: #666; }
+.archive-btn:hover { background: rgba(136,136,136,0.2); }
+.restore-btn   { background: rgba(109,184,160,0.1);  color: #2e7d32; }
+.restore-btn:hover { background: rgba(109,184,160,0.2); }
 .del-btn   { background: rgba(224,92,115,0.1);  color: #b73a52; }
 .del-btn:hover { background: rgba(224,92,115,0.2); }
 

@@ -373,9 +373,6 @@ const PostpartumRecords = () => {
                                             </td>
                                             <td>
                                                 <span className={`recovery-badge ${getRecoveryBadge(m.recoveryStatus)}`}>{m.recoveryStatus}</span>
-                                                <div className="mini-progress">
-                                                    <div className="mini-fill" style={{ width: `${m.progress}%`, background: m.progress >= 80 ? '#6db8a0' : m.progress >= 50 ? '#e8b84b' : '#e05c73' }}></div>
-                                                </div>
                                             </td>
                                             <td className="pp-date-cell">{m.lastCheckup}</td>
                                             <td>

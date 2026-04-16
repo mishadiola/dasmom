@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import {
     Plus, Search, LayoutGrid, List, MoreVertical,
-    Edit2, Trash2, Eye, X, Filter, ChevronRight,
+    Edit2, Archive, ArchiveRestore, Eye, X, Filter, ChevronRight,
     FileText, Video, ClipboardList, CheckSquare,
-    Globe, Lock, Archive, Clock
+    Globe, Lock, Archive as ArchiveIcon, Clock
 } from 'lucide-react';
 import { TIPS_DATA } from '../MotherDashboard/PregnancyTips';
 import '../../styles/pages/PregnancyResources.css';
@@ -17,10 +17,12 @@ const PregnancyResources = () => {
     const [viewMode, setViewMode] = useState('table'); // 'table' | 'grid'
     const [searchTerm, setSearchTerm] = useState('');
     const [activeCategory, setActiveCategory] = useState('All');
+    const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
     const [showAddModal, setShowAddModal] = useState(false);
     const [resources, setResources] = useState([...TIPS_DATA].map(t => ({
         ...t,
         status: 'Published',
+        archiveStatus: 'active',
         type: 'Article',
         dateAdded: 'Feb 26, 2026',
         author: 'CHO Admin'
@@ -38,7 +40,8 @@ const PregnancyResources = () => {
         const matchesSearch = res.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
             res.description.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCategory = activeCategory === 'All' || res.category === activeCategory;
-        return matchesSearch && matchesCategory;
+        const matchesArchive = archiveFilter === 'all' || res.archiveStatus === archiveFilter;
+        return matchesSearch && matchesCategory && matchesArchive;
     });
 
     const handleAddResource = () => {
@@ -61,9 +64,15 @@ const PregnancyResources = () => {
         });
     };
 
-    const handleDelete = (id) => {
-        if (window.confirm('Are you sure you want to delete this resource?')) {
-            setResources(resources.filter(r => r.id !== id));
+    const handleArchive = (id) => {
+        if (window.confirm('Are you sure you want to archive this resource? It will be removed from active lists but can be restored.')) {
+            setResources(resources.map(r => r.id === id ? { ...r, archiveStatus: 'archived' } : r));
+        }
+    };
+
+    const handleRestore = (id) => {
+        if (window.confirm('Are you sure you want to restore this resource? It will be moved back to active lists.')) {
+            setResources(resources.map(r => r.id === id ? { ...r, archiveStatus: 'active' } : r));
         }
     };
 
@@ -123,6 +132,18 @@ const PregnancyResources = () => {
                             <option key={cat} value={cat}>{cat}</option>
                         ))}
                     </select>
+
+                    <ArchiveIcon size={16} className="pr-filter-ico" />
+                    <select
+                        className="pr-select"
+                        style={{ width: '120px' }}
+                        value={archiveFilter}
+                        onChange={(e) => setArchiveFilter(e.target.value)}
+                    >
+                        <option value="active">Active</option>
+                        <option value="archived">Archived</option>
+                        <option value="all">All</option>
+                    </select>
                 </div>
             </div>
 
@@ -171,13 +192,23 @@ const PregnancyResources = () => {
                                             <button className="pr-icon-btn" title="Edit">
                                                 <Edit2 size={14} />
                                             </button>
-                                            <button
-                                                className="pr-icon-btn"
-                                                title="Delete"
-                                                onClick={() => handleDelete(res.id)}
-                                            >
-                                                <Trash2 size={14} />
-                                            </button>
+                                            {res.archiveStatus === 'archived' ? (
+                                                <button
+                                                    className="pr-icon-btn pr-icon-btn--restore"
+                                                    title="Restore"
+                                                    onClick={() => handleRestore(res.id)}
+                                                >
+                                                    <ArchiveRestore size={14} />
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    className="pr-icon-btn pr-icon-btn--archive"
+                                                    title="Archive"
+                                                    onClick={() => handleArchive(res.id)}
+                                                >
+                                                    <Archive size={14} />
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>
@@ -210,13 +241,23 @@ const PregnancyResources = () => {
                                     <button className="pr-icon-btn" title="Edit">
                                         <Edit2 size={14} />
                                     </button>
-                                    <button
-                                        className="pr-icon-btn"
-                                        title="Delete"
-                                        onClick={() => handleDelete(res.id)}
-                                    >
-                                        <Trash2 size={14} />
-                                    </button>
+                                    {res.archiveStatus === 'archived' ? (
+                                        <button
+                                            className="pr-icon-btn pr-icon-btn--restore"
+                                            title="Restore"
+                                            onClick={() => handleRestore(res.id)}
+                                        >
+                                            <ArchiveRestore size={14} />
+                                        </button>
+                                    ) : (
+                                        <button
+                                            className="pr-icon-btn pr-icon-btn--archive"
+                                            title="Archive"
+                                            onClick={() => handleArchive(res.id)}
+                                        >
+                                            <Archive size={14} />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>

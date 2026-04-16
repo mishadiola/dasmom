@@ -13,6 +13,161 @@
 }
 
 /* ════════════════════════════
+   EXPIRATION STATUS STYLES
+════════════════════════════ */
+.exp-status {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 12px;
+    margin-bottom: 2px;
+}
+
+.status-expired {
+    color: #b73a52;
+    background: rgba(224, 92, 115, 0.12);
+}
+
+.status-near-expiry {
+    color: #a87c12;
+    background: rgba(232, 184, 75, 0.12);
+}
+
+.status-valid {
+    color: #3d8870;
+    background: rgba(109, 184, 160, 0.12);
+}
+
+.status-unknown {
+    color: #888;
+    background: rgba(136, 136, 136, 0.12);
+}
+
+.exp-date {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-left: 4px;
+}
+
+.exp-status-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 20px;
+    display: inline-block;
+}
+
+/* ════════════════════════════
+   EXPIRATION SUMMARY MODAL
+════════════════════════════ */
+.exp-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.exp-summary-card {
+    padding: 16px;
+    border-radius: 12px;
+    text-align: center;
+    border: 1px solid #eef0f4;
+    background: #f8f9fb;
+}
+
+.exp-summary-total {
+    background: linear-gradient(135deg, rgba(185, 129, 138, 0.1), rgba(220, 88, 115, 0.05));
+    border-color: rgba(185, 129, 138, 0.3);
+}
+
+.exp-summary-expired {
+    background: linear-gradient(135deg, rgba(224, 92, 115, 0.1), rgba(224, 92, 115, 0.05));
+    border-color: rgba(224, 92, 115, 0.3);
+}
+
+.exp-summary-near {
+    background: linear-gradient(135deg, rgba(232, 184, 75, 0.1), rgba(232, 184, 75, 0.05));
+    border-color: rgba(232, 184, 75, 0.3);
+}
+
+.exp-summary-valid {
+    background: linear-gradient(135deg, rgba(109, 184, 160, 0.1), rgba(109, 184, 160, 0.05));
+    border-color: rgba(109, 184, 160, 0.3);
+}
+
+.exp-summary-value {
+    font-size: 28px;
+    font-weight: 800;
+    margin-bottom: 4px;
+}
+
+.exp-summary-total .exp-summary-value {
+    color: var(--color-rose);
+}
+
+.exp-summary-expired .exp-summary-value {
+    color: #e05c73;
+}
+
+.exp-summary-near .exp-summary-value {
+    color: #e8b84b;
+}
+
+.exp-summary-valid .exp-summary-value {
+    color: #6db8a0;
+}
+
+.exp-summary-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.exp-detailed-list {
+    margin-top: 20px;
+}
+
+.exp-detailed-list h3 {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    color: var(--color-text);
+}
+
+.exp-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.exp-table th {
+    text-align: left;
+    padding: 12px;
+    background: #f8f9fb;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    font-weight: 700;
+    border-bottom: 2px solid #f0f2f5;
+}
+
+.exp-table td {
+    padding: 12px;
+    border-bottom: 1px solid #f0f2f5;
+    font-size: 13px;
+}
+
+.no-records {
+    text-align: center;
+    padding: 40px;
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+/* ════════════════════════════
    SUMMARY STAT CARDS
 ════════════════════════════ */
 .vacc-stats-grid {

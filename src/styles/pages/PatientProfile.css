@@ -385,6 +385,48 @@
 .timeline-item {
     position: relative;
     padding-left: 36px;
+    transition: all 0.2s ease;
+}
+
+.timeline-item--past {
+    opacity: 0.6;
+}
+
+.timeline-item--past .timeline-content {
+    background: #f8f9fb;
+    border-color: #eef0f4;
+}
+
+.timeline-item--past .timeline-date {
+    color: #a0a0a0;
+}
+
+.timeline-item--next {
+    opacity: 1;
+}
+
+.timeline-item--next .timeline-content {
+    background: linear-gradient(135deg, rgba(185, 129, 138, 0.05), rgba(220, 88, 115, 0.02));
+    border: 2px solid var(--color-rose);
+    box-shadow: 0 4px 16px rgba(185, 129, 138, 0.15);
+}
+
+.timeline-item--next .timeline-date {
+    color: var(--color-rose);
+    font-weight: 800;
+}
+
+.timeline-item--future {
+    opacity: 0.8;
+}
+
+.timeline-item--future .timeline-content {
+    background: #fafafa;
+    border-color: #e8e8e8;
+}
+
+.timeline-item--future .timeline-date {
+    color: #888;
 }
 
 .timeline-dot {
@@ -396,6 +438,31 @@
     border-radius: 50%;
     background: var(--color-rose);
     box-shadow: 0 0 0 4px rgba(185, 129, 138, 0.2);
+}
+
+.timeline-dot.completed {
+    background: #a0a0a0;
+    box-shadow: 0 0 0 4px rgba(160, 160, 160, 0.2);
+}
+
+.timeline-dot.next {
+    background: var(--color-rose);
+    box-shadow: 0 0 0 4px rgba(185, 129, 138, 0.4);
+    animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+    0%, 100% {
+        box-shadow: 0 0 0 4px rgba(185, 129, 138, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(185, 129, 138, 0.2);
+    }
+}
+
+.timeline-dot.upcoming {
+    background: #c8c8c8;
+    box-shadow: 0 0 0 4px rgba(200, 200, 200, 0.2);
 }
 
 .timeline-content {
@@ -424,6 +491,30 @@
     background: rgba(185, 129, 138, 0.1);
     padding: 2px 8px;
     border-radius: 4px;
+}
+
+.timeline-badge-next {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: white;
+    background: linear-gradient(135deg, var(--color-rose), #dc5873);
+    padding: 4px 10px;
+    border-radius: 99px;
+    box-shadow: 0 2px 8px rgba(185, 129, 138, 0.3);
+    animation: badge-pulse 2s ease-in-out infinite;
+}
+
+@keyframes badge-pulse {
+    0%, 100% {
+        box-shadow: 0 2px 8px rgba(185, 129, 138, 0.3);
+    }
+    50% {
+        box-shadow: 0 2px 12px rgba(185, 129, 138, 0.5);
+    }
 }
 
 .timeline-vitals {

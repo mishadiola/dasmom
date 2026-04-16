@@ -11,6 +11,7 @@ import babyservices from '../../services/babyservices';
 import PatientService from '../../services/patientservice';
 import supabase from '../../config/supabaseclient';
 import * as XLSX from 'xlsx';
+import { formatTime12Hour } from '../../utils/pregnancyUtils';
 
 const COMPLICATION_OPTIONS = ['None', 'Hemorrhage', 'Infection', 'Preeclampsia', 'Placenta Previa', 'Preterm'];
 const DELIVERY_TYPES = ['NSD', 'CS', 'Breech'];
@@ -86,7 +87,7 @@ const DeliveryOutcomes = () => {
             'Patient ID': d.patientId,
             'Station': d.station,
             'Delivery Date': d.deliveryDate,
-            'Delivery Time': d.deliveryTime || '',
+            'Delivery Time': formatTime12Hour(d.deliveryTime) || '',
             'Delivery Type': d.deliveryType,
             'Risk Level': d.riskLevel,
             'Complications': d.complications || 'None',
@@ -334,7 +335,7 @@ const DeliveryOutcomes = () => {
                                             </td>
                                             <td>
                                                 <span className="do-date">{d.deliveryDate}</span>
-                                                {d.deliveryTime && <span className="do-time">{d.deliveryTime}</span>}
+                                                {d.deliveryTime && <span className="do-time">{formatTime12Hour(d.deliveryTime)}</span>}
                                             </td>
                                             <td><span className={`dt-badge dt-${d.deliveryType?.toLowerCase()}`}>{d.deliveryType}</span></td>
                                             <td><span className={`risk-badge ${getRiskBadge(d.riskLevel)}`}>{d.riskLevel}</span></td>
@@ -803,7 +804,7 @@ const ViewDeliveryModal = ({ show, onClose, delivery }) => {
                                 </div>
                                 <div className="view-field">
                                     <label>Delivery Time:</label>
-                                    <span>{delivery.deliveryTime || 'N/A'}</span>
+                                    <span>{formatTime12Hour(delivery.deliveryTime) || 'N/A'}</span>
                                 </div>
                                 <div className="view-field">
                                     <label>Type:</label>

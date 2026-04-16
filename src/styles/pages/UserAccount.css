@@ -474,6 +474,28 @@ textarea.read-only-input {
     background: #ffc8d9;
 }
 
+.ua-mem-btn--archive {
+    background: #f5f5f5;
+    color: #666;
+    border-color: rgba(102, 102, 102, 0.15);
+    padding: 6px 10px;
+}
+
+.ua-mem-btn--archive:hover {
+    background: #e8e8e8;
+}
+
+.ua-mem-btn--restore {
+    background: #e8f5e9;
+    color: #2e7d32;
+    border-color: rgba(46, 125, 50, 0.15);
+    padding: 6px 10px;
+}
+
+.ua-mem-btn--restore:hover {
+    background: #c8e6c9;
+}
+
 .ua-mem-btn--delete {
     background: #fff0f0;
     color: #e53935;

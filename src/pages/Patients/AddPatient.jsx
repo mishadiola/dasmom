@@ -17,8 +17,12 @@ const TABS = [
     { id: 'prenatal', label: 'Prenatal', icon: Calendar },
 ];
 const MEDICAL_CONDITIONS = [
-    'Hypertension', 'Diabetes', 'Heart Disease', 'Asthma',
-    'Anemia', 'Previous C-section'
+    { name: 'Hypertension', risk: 'High' },
+    { name: 'Diabetes', risk: 'High' },
+    { name: 'Heart Disease', risk: 'High' },
+    { name: 'Asthma', risk: 'Medium' },
+    { name: 'Anemia', risk: 'Medium' },
+    { name: 'Previous C-section', risk: 'High' }
 ];
 
 /* ════════════════════════════
@@ -56,6 +60,7 @@ const AddPatient = () => {
     const [toast, setToast] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
     const [missingFields, setMissingFields] = useState([]);
+    const [nameValidationErrors, setNameValidationErrors] = useState({});
     const [loadingStations, setLoadingStations] = useState(true);
     const [availableStations, setAvailableStations] = useState([]);
     const [midwifeList, setMidwifeList] = useState([]);
@@ -64,6 +69,7 @@ const AddPatient = () => {
     const [loadingSchedule, setLoadingSchedule] = useState(false);
     const [supplementsInventory, setSupplementsInventory] = useState([]);
     const [supplementOptions, setSupplementOptions] = useState([]);
+    const [otherConditionRisk, setOtherConditionRisk] = useState('Low');
 
     const currentStaff = {
         id: user?.id || null,
@@ -206,18 +212,31 @@ const AddPatient = () => {
 
     useEffect(() => {
         let risk = 'Low Risk';
-        const hasHighRisk = formData.conditions.some(c =>
-            ['Hypertension', 'Heart Disease', 'Diabetes', 'Previous C-section'].includes(c)
-        );
-        const hasMedRisk = formData.conditions.some(c =>
-            ['Asthma', 'Anemia'].includes(c)
-        );
+        
+        // Check selected conditions from MEDICAL_CONDITIONS
+        const selectedConditions = formData.conditions.map(conditionName => {
+            return MEDICAL_CONDITIONS.find(c => c.name === conditionName);
+        }).filter(Boolean);
+        
+        // Check if any High Risk condition exists
+        const hasHighRisk = selectedConditions.some(c => c.risk === 'High');
+        
+        // Check if any Medium Risk condition exists
+        const hasMedRisk = selectedConditions.some(c => c.risk === 'Medium');
+        
+        // Check Other Conditions risk level
+        const hasOtherCondition = formData.otherConditions && formData.otherConditions.trim() !== '';
+        const otherRisk = hasOtherCondition ? otherConditionRisk : null;
 
-        if (hasHighRisk) risk = 'High Risk';
-        else if (hasMedRisk) risk = 'Medium Risk';
+        // Determine overall risk
+        if (hasHighRisk || otherRisk === 'High') {
+            risk = 'High Risk';
+        } else if (hasMedRisk || otherRisk === 'Medium') {
+            risk = 'Medium Risk';
+        }
 
         setFormData(prev => ({ ...prev, riskLevel: risk }));
-    }, [formData.conditions]);
+    }, [formData.conditions, formData.otherConditions, otherConditionRisk]);
 
     const handleChange = (e) => {
         const { name, value, type } = e.target;
@@ -228,6 +247,29 @@ const AddPatient = () => {
             finalValue = finalValue.replace(/\D/g, '').slice(0, 11);
         }
 
+        // Validate name fields (First Name, Middle Name, Last Name)
+        if (name === 'firstName' || name === 'middleName' || name === 'lastName') {
+            // Allow only letters, spaces, hyphens, and apostrophes
+            const namePattern = /^[A-Za-z\s'-]*$/;
+            
+            if (finalValue && !namePattern.test(finalValue)) {
+                // Contains invalid characters (numbers or special chars other than -, ', space)
+                setNameValidationErrors(prev => ({
+                    ...prev,
+                    [name]: 'Name fields must contain letters only and cannot include numbers.'
+                }));
+                // Don't update formData if invalid
+                return;
+            } else {
+                // Clear error if valid or empty
+                setNameValidationErrors(prev => {
+                    const updated = { ...prev };
+                    delete updated[name];
+                    return updated;
+                });
+            }
+        }
+
         setFormData(prev => ({ ...prev, [name]: finalValue }));
 
         if (missingFields.includes(name) || missingFields.includes(name + '-invalid')) {
@@ -235,19 +277,39 @@ const AddPatient = () => {
         }
     };
 
-    const handleCheckbox = (condition) => {
+    const handleCheckbox = (conditionName) => {
         setFormData(prev => {
             const current = [...prev.conditions];
-            if (current.includes(condition)) {
-                return { ...prev, conditions: current.filter(c => c !== condition) };
+            if (current.includes(conditionName)) {
+                return { ...prev, conditions: current.filter(c => c !== conditionName) };
             }
-            return { ...prev, conditions: [...current, condition] };
+            return { ...prev, conditions: [...current, conditionName] };
         });
     };
 
     const handleSave = async (e) => {
         e.preventDefault();
         if (isSaving || !user?.id) return;
+
+        // Validate name fields before submission
+        const namePattern = /^[A-Za-z\s'-]*$/;
+        const nameErrors = {};
+        
+        if (formData.firstName && !namePattern.test(formData.firstName)) {
+            nameErrors.firstName = 'Name fields must contain letters only and cannot include numbers.';
+        }
+        if (formData.middleName && !namePattern.test(formData.middleName)) {
+            nameErrors.middleName = 'Name fields must contain letters only and cannot include numbers.';
+        }
+        if (formData.lastName && !namePattern.test(formData.lastName)) {
+            nameErrors.lastName = 'Name fields must contain letters only and cannot include numbers.';
+        }
+        
+        if (Object.keys(nameErrors).length > 0) {
+            setNameValidationErrors(nameErrors);
+            setToast({ type: 'error', message: 'Please fix the validation errors before saving.' });
+            return;
+        }
 
         const requiredPersonal = ['firstName', 'lastName', 'dob', 'email', 'contactNumber', 'address', 'station'];
         const requiredEmergency = ['emName', 'emRel', 'emPhone', 'emAddress'];
@@ -379,8 +441,13 @@ const AddPatient = () => {
                                         value={formData.firstName} 
                                         onChange={handleChange} 
                                         required 
-                                        className={missingFields.includes('firstName') ? 'error-field' : ''} 
+                                        className={missingFields.includes('firstName') || nameValidationErrors.firstName ? 'error-field' : ''} 
                                     />
+                                    {nameValidationErrors.firstName && (
+                                        <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
+                                            {nameValidationErrors.firstName}
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="form-group">
                                     <label>Middle Name</label>
@@ -388,8 +455,14 @@ const AddPatient = () => {
                                         type="text" 
                                         name="middleName" 
                                         value={formData.middleName} 
-                                        onChange={handleChange} 
+                                        onChange={handleChange}
+                                        className={nameValidationErrors.middleName ? 'error-field' : ''} 
                                     />
+                                    {nameValidationErrors.middleName && (
+                                        <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
+                                            {nameValidationErrors.middleName}
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="form-group">
                                     <label>Last Name <span className="req">*</span></label>
@@ -399,8 +472,13 @@ const AddPatient = () => {
                                         value={formData.lastName} 
                                         onChange={handleChange} 
                                         required 
-                                        className={missingFields.includes('lastName') ? 'error-field' : ''} 
+                                        className={missingFields.includes('lastName') || nameValidationErrors.lastName ? 'error-field' : ''} 
                                     />
+                                    {nameValidationErrors.lastName && (
+                                        <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
+                                            {nameValidationErrors.lastName}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 
@@ -609,13 +687,17 @@ const AddPatient = () => {
                             <h3 className="section-subtitle">Pre-existing Conditions</h3>
                             <div className="checkbox-grid">
                                 {MEDICAL_CONDITIONS.map(cond => (
-                                    <label key={cond} className="custom-checkbox">
+                                    <label key={cond.name} className="custom-checkbox">
                                         <input 
                                             type="checkbox" 
-                                            checked={formData.conditions.includes(cond)}
-                                            onChange={() => handleCheckbox(cond)} 
+                                            checked={formData.conditions.includes(cond.name)}
+                                            onChange={() => handleCheckbox(cond.name)} 
                                         />
-                                        <span className="checkmark"></span> {cond}
+                                        <span className="checkmark"></span> 
+                                        <span>{cond.name}</span>
+                                        <span className={`risk-badge risk-badge--${cond.risk.toLowerCase()}`}>
+                                            {cond.risk} Risk
+                                        </span>
                                     </label>
                                 ))}
                             </div>
@@ -628,6 +710,45 @@ const AddPatient = () => {
                                     onChange={handleChange} 
                                     placeholder="Specify other conditions here..."
                                 />
+                                {formData.otherConditions && (
+                                    <div className="mt-2">
+                                        <label style={{fontSize: '12px', fontWeight: 600, marginBottom: '4px', display: 'block'}}>
+                                            Risk Level:
+                                        </label>
+                                        <div style={{display: 'flex', gap: '16px', flexWrap: 'wrap'}}>
+                                            <label style={{display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px'}}>
+                                                <input 
+                                                    type="radio" 
+                                                    name="otherConditionRisk"
+                                                    value="Low"
+                                                    checked={otherConditionRisk === 'Low'}
+                                                    onChange={(e) => setOtherConditionRisk(e.target.value)}
+                                                /> 
+                                                Low Risk
+                                            </label>
+                                            <label style={{display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px'}}>
+                                                <input 
+                                                    type="radio" 
+                                                    name="otherConditionRisk"
+                                                    value="Medium"
+                                                    checked={otherConditionRisk === 'Medium'}
+                                                    onChange={(e) => setOtherConditionRisk(e.target.value)}
+                                                /> 
+                                                Medium Risk
+                                            </label>
+                                            <label style={{display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px'}}>
+                                                <input 
+                                                    type="radio" 
+                                                    name="otherConditionRisk"
+                                                    value="High"
+                                                    checked={otherConditionRisk === 'High'}
+                                                    onChange={(e) => setOtherConditionRisk(e.target.value)}
+                                                /> 
+                                                High Risk
+                                            </label>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="risk-summary mt-4">

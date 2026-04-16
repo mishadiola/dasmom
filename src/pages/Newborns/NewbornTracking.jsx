@@ -10,6 +10,19 @@ import NewbornService from '../../services/newbornservice';
 import * as XLSX from 'xlsx';
 import '../../styles/pages/NewbornTracking.css';
 
+// Helper function for readable date formatting
+const formatDateLong = (dateString) => {
+    if (!dateString) return 'N/A';
+    
+    const date = new Date(dateString);
+    const options = { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+    };
+    return date.toLocaleDateString('en-US', options);
+};
+
 /* ════════════════════════════
    VACCINATION DETAIL MODAL
 ════════════════════════════ */
@@ -286,7 +299,7 @@ const NewbornTracking = () => {
                 'Mother Name': b.motherName,
                 'Baby ID': b.id,
                 'Station': b.station,
-                'Birth Date': b.birthDate,
+                'Birth Date': formatDateLong(b.birthDate),
                 'Vaccines Completed': progress.completed,
                 'Total Vaccines': progress.total,
                 'Progress %': `${progress.percentage}%`,
@@ -448,7 +461,7 @@ const NewbornTracking = () => {
                                                 <span className="nb-mother-name patient-name-link">{b.motherName}</span>
                                                 <span className="nb-mother-id">{b.station}</span>
                                             </td>
-                                            <td className="nb-date">{b.birthDate}</td>
+                                            <td className="nb-date">{formatDateLong(b.birthDate)}</td>
                                             <td>
                                                 <div className="vacc-progress-cell">
                                                     <div className="vacc-progress-mini">

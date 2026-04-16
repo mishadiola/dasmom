@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import {
     Search, Filter, Plus, ChevronLeft, ChevronRight, ChevronDown, Check,
-    Eye, Edit, Trash, Activity, CalendarPlus,
+    Eye, Edit, Archive, ArchiveRestore, Activity, CalendarPlus,
     FileText, User, MapPin, Clock, AlertTriangle,
     X, CheckCircle2
 } from 'lucide-react';
@@ -149,6 +149,7 @@ const PatientsList = () => {
     const [patients, setPatients] = useState([]);
 
     const [searchTerm, setSearchTerm] = useState('');
+    const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
     const [filters, setFilters] = useState({
         trimesters: [],
         risks: [],
@@ -221,8 +222,9 @@ const PatientsList = () => {
         
         const matchesRisk = filters.risks.length === 0 || filters.risks.includes(derivedRisk);
         const matchesStation = filters.stations.length === 0 || filters.stations.includes(p.station);
+        const matchesArchive = archiveFilter === 'all' || (p.archiveStatus || 'active') === archiveFilter;
 
-        return matchesSearch && matchesTri && matchesRisk && matchesStation;
+        return matchesSearch && matchesTri && matchesRisk && matchesStation && matchesArchive;
     });
 
     const sortedPatients = [...filteredPatients].sort((a, b) => {
@@ -311,6 +313,22 @@ const PatientsList = () => {
         setPatients(prevPatients => 
             prevPatients.map(p => p.id === updatedPatient.id ? updatedPatient : p)
         );
+    };
+
+    const handleArchive = (patientId) => {
+        if (window.confirm('Are you sure you want to archive this patient? It will be removed from active lists but can be restored.')) {
+            setPatients(prevPatients => 
+                prevPatients.map(p => p.id === patientId ? { ...p, archiveStatus: 'archived' } : p)
+            );
+        }
+    };
+
+    const handleRestore = (patientId) => {
+        if (window.confirm('Are you sure you want to restore this patient? It will be moved back to active lists.')) {
+            setPatients(prevPatients => 
+                prevPatients.map(p => p.id === patientId ? { ...p, archiveStatus: 'active' } : p)
+            );
+        }
     };
 
     return (
@@ -429,6 +447,17 @@ const PatientsList = () => {
                         )}
                     </div>
 
+                    {/* Archive Filter */}
+                    <select 
+                        className="filter-select"
+                        value={archiveFilter}
+                        onChange={(e) => { setArchiveFilter(e.target.value); setCurrentPage(1); }}
+                    >
+                        <option value="active">Active</option>
+                        <option value="archived">Archived</option>
+                        <option value="all">All</option>
+                    </select>
+
                     {/* Record Sorting Popover */}
                     <div className="filter-dropdown-container">
                         <button 
@@ -472,6 +501,7 @@ const PatientsList = () => {
                     <table className="patients-table">
                         <thead>
                             <tr>
+                                <th>No.</th>
                                 <th>Patient ID</th>
                                 <th>Name</th>
                                 <th>Station</th>
@@ -485,8 +515,9 @@ const PatientsList = () => {
 
                         <tbody>
                             {paginatedPatients.length > 0 ? (
-                                paginatedPatients.map(p => (
+                                paginatedPatients.map((p, index) => (
                                     <tr key={p.id} className="table-row">
+                                        <td className="cell-number">{(currentPage - 1) * itemsPerPage + index + 1}</td>
                                         <td className="cell-id">{p.id}</td>
 
                                         <td>
@@ -532,31 +563,37 @@ const PatientsList = () => {
                                                 <button type="button" className="action-btn view-btn" data-tooltip="View Profile" onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/${p.id}`); }}>
                                                 <Eye size={16} />
                                                 </button>
-                                                
-                                                {}
+
                                                 <button type="button" className="action-btn vitals-btn" data-tooltip="Record Vitals" onClick={(e) => { e.stopPropagation(); setVitalModalPatient(p); }}>
                                                 <Activity size={16} />
                                                 </button>
-                                                
+
                                                 <button type="button" className="action-btn edit-btn" data-tooltip="Edit Patient" onClick={(e) => { e.stopPropagation(); setEditModalPatient(p); }}>
                                                 <Edit size={16} />
                                                 </button>
-                                                
-                                                <button type="button" className="action-btn delete-btn" data-tooltip="Delete Patient" onClick={(e) => {
-                                                e.stopPropagation();
-                                                if(window.confirm('Are you sure you want to delete this patient?')) {
-                                                    console.log('Delete logic triggered');
-                                                }
-                                                }}>
-                                                <Trash size={16} />
-                                                </button>
+
+                                                {(p.archiveStatus || 'active') === 'archived' ? (
+                                                    <button type="button" className="action-btn restore-btn" data-tooltip="Restore Patient" onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleRestore(p.id);
+                                                    }}>
+                                                    <ArchiveRestore size={16} />
+                                                    </button>
+                                                ) : (
+                                                    <button type="button" className="action-btn archive-btn" data-tooltip="Archive Patient" onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleArchive(p.id);
+                                                    }}>
+                                                    <Archive size={16} />
+                                                    </button>
+                                                )}
                                             </div>
-                                            </td>
+                                        </td>
                                     </tr>
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan="8" className="empty-state">
+                                    <td colSpan="9" className="empty-state">
                                         <User size={32} />
                                         <p>No patients found.</p>
                                     </td>

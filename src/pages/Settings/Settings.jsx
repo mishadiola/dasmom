@@ -5,7 +5,7 @@ import AuthService from '../../services/authservice';
 import StaffService from '../../services/staffservice';
 import {
     Users, Settings as SettingsIcon, User,
-    Plus, Search, Edit2, Trash2, RotateCcw, X, Eye, EyeOff,
+    Plus, Search, Edit2, Archive, ArchiveRestore, RotateCcw, X, Eye, EyeOff,
     CheckCircle2, XCircle, AlertCircle, Bell,
     Monitor, ChevronDown, ToggleLeft, ToggleRight,
     Key, Save, Mail, MapPin, Clock, LogOut, Lock, FileText
@@ -418,6 +418,7 @@ const EditUserModal = ({ staff, onClose, onSuccess }) => {
 const UserAccountsTab = () => {
     const staffService = new StaffService();
     const [search, setSearch] = useState('');
+    const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
     const [roleFilter, setRoleFilter] = useState('All');
     const [statusFilter, setStatusFilter] = useState('All');
     const [showModal, setShowModal] = useState(false);
@@ -447,11 +448,28 @@ const UserAccountsTab = () => {
         const matchS = u.name.toLowerCase().includes(s) || u.email.toLowerCase().includes(s);
         const matchR = roleFilter === 'All' || u.role === roleFilter;
         const matchSt = statusFilter === 'All' || u.status === statusFilter;
-        return matchS && matchR && matchSt;
+        const matchArchive = archiveFilter === 'all' || (u.archiveStatus || 'active') === archiveFilter;
+        return matchS && matchR && matchSt && matchArchive;
     });
 
     const handleModalSuccess = () => {
         fetchStaff();
+    };
+
+    const handleArchive = (staffId) => {
+        if (window.confirm('Are you sure you want to archive this staff account? It will be removed from active lists but can be restored.')) {
+            setStaff(prevStaff =>
+                prevStaff.map(u => u.id === staffId ? { ...u, archiveStatus: 'archived' } : u)
+            );
+        }
+    };
+
+    const handleRestore = (staffId) => {
+        if (window.confirm('Are you sure you want to restore this staff account? It will be moved back to active lists.')) {
+            setStaff(prevStaff =>
+                prevStaff.map(u => u.id === staffId ? { ...u, archiveStatus: 'active' } : u)
+            );
+        }
     };
 
     if (loading) {
@@ -484,6 +502,11 @@ const UserAccountsTab = () => {
                     <option value="All">All Statuses</option>
                     <option>Active</option>
                     <option>Inactive</option>
+                </select>
+                <select value={archiveFilter} onChange={e => setArchiveFilter(e.target.value)} className="set-select">
+                    <option value="active">Active</option>
+                    <option value="archived">Archived</option>
+                    <option value="all">All</option>
                 </select>
                 <button className="btn btn-primary" onClick={() => setShowModal(true)}><Plus size={15} /> Add Staff</button>
             </div>
@@ -526,7 +549,15 @@ const UserAccountsTab = () => {
                                                 {u.status === 'Active' ? <ToggleRight size={13} /> : <ToggleLeft size={13} />}
                                             </button>
                                             {u.role !== 'Super Admin' && (
-                                                <button className="action-btn del-btn" title="Delete"><Trash2 size={13} /></button>
+                                                (u.archiveStatus || 'active') === 'archived' ? (
+                                                    <button className="action-btn restore-btn" title="Restore" onClick={() => handleRestore(u.id)}>
+                                                        <ArchiveRestore size={13} />
+                                                    </button>
+                                                ) : (
+                                                    <button className="action-btn archive-btn" title="Archive" onClick={() => handleArchive(u.id)}>
+                                                        <Archive size={13} />
+                                                    </button>
+                                                )
                                             )}
                                         </div>
                                     </td>

@@ -7,7 +7,8 @@ import {
   AlertTriangle,
   RefreshCw,
   Edit2,
-  Trash2,
+  Archive,
+  ArchiveRestore,
   Syringe,
   Pill,
 } from 'lucide-react';
@@ -25,6 +26,8 @@ const Inventory = () => {
   const [supplements, setSupplements] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [activeSummaryFilter, setActiveSummaryFilter] = useState(null);
+  const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
   const [vaccStats, setVaccStats] = useState({ mothersPending: 0, newbornsPending: 0 });
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -47,13 +50,17 @@ const Inventory = () => {
         id: row?.id || '',
         item_name: row?.vaccine_name || row?.item_name || 'Unknown',
         quantity: row?.quantity || 0,
+        max_stock: row?.max_stock || 500,
         unit: 'vial',
+        status: row?.status || 'active',
       }));
       const mappedSupplements = (suppData || []).map(row => ({
         id: row?.id || '',
         item_name: row?.supplement_name || row?.item_name || 'Unknown',
         quantity: row?.quantity || 0,
+        max_stock: row?.max_stock || 1000,
         unit: 'pcs',
+        status: row?.status || 'active',
       }));
 
       setVaccines(mappedVaccines);
@@ -83,6 +90,12 @@ const Inventory = () => {
     return { label: 'In Stock', class: 'status-ok' };
   };
 
+  const getStockPercentage = (current, max) => {
+    if (!max || max === 0) return 0;
+    const percentage = Math.round((current / max) * 100);
+    return Math.min(100, Math.max(0, percentage));
+  };
+
   const currentItems = activeTab === 'vaccines' ? vaccines : supplements;
 
   const filteredItems = currentItems
@@ -91,7 +104,21 @@ const Inventory = () => {
       const matchesSearch = (item.item_name || '').toLowerCase().includes(searchTerm.toLowerCase());
       const status = getStatus(item.quantity || 0).label;
       const matchesStatus = statusFilter === 'All' || status === statusFilter;
-      return matchesSearch && matchesStatus;
+      
+      // Apply archive filter
+      const itemStatus = item.status || 'active';
+      const matchesArchive = archiveFilter === 'all' || itemStatus === archiveFilter;
+      
+      // Apply summary card filter
+      let matchesSummary = true;
+      if (activeSummaryFilter === 'lowStock') {
+        matchesSummary = (item.quantity || 0) > 0 && (item.quantity || 0) <= 20;
+      } else if (activeSummaryFilter === 'outOfStock') {
+        matchesSummary = (item.quantity || 0) <= 0;
+      }
+      // If activeSummaryFilter is 'all' or null, show all items
+      
+      return matchesSearch && matchesStatus && matchesSummary && matchesArchive;
     });
 
   const totalItems = (currentItems || []).length;
@@ -138,12 +165,35 @@ const Inventory = () => {
     }
   };
 
-  const handleDelete = async (table, id) => {
-    if (!window.confirm('Are you sure you want to delete this item?')) return;
+  const handleArchive = async (table, id) => {
+    if (!window.confirm('Are you sure you want to archive this item? It will be removed from active lists but can be restored.')) return;
     try {
-      await inventoryService.deleteInventoryItem(table, id);
+      // Soft delete: Update status to 'archived' instead of deleting
+      const { error } = await inventoryService.supabase
+        .from(table)
+        .update({ status: 'archived' })
+        .eq('id', id);
+      
+      if (error) throw error;
+      fetchData(); // Refresh data
     } catch (error) {
-      alert('Failed to delete item: ' + error.message);
+      alert('Failed to archive item: ' + error.message);
+    }
+  };
+
+  const handleRestore = async (table, id) => {
+    if (!window.confirm('Are you sure you want to restore this item? It will be moved back to active lists.')) return;
+    try {
+      // Restore: Update status to 'active'
+      const { error } = await inventoryService.supabase
+        .from(table)
+        .update({ status: 'active' })
+        .eq('id', id);
+      
+      if (error) throw error;
+      fetchData(); // Refresh data
+    } catch (error) {
+      alert('Failed to restore item: ' + error.message);
     }
   };
 
@@ -167,7 +217,11 @@ const Inventory = () => {
       </div>
 
       <div className="inv-stats-grid">
-        <div className="stat-card stat-card--lilac">
+        <div 
+          className={`stat-card stat-card--lilac ${activeSummaryFilter === null ? 'stat-card--active' : ''}`}
+          onClick={() => setActiveSummaryFilter(null)}
+          style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+        >
           <div className="stat-top">
             <div className="stat-icon stat-icon--lilac">
               <Package size={20} />
@@ -176,7 +230,11 @@ const Inventory = () => {
           <div className="stat-value">{totalItems}</div>
           <div className="stat-label">Total Items</div>
         </div>
-        <div className="stat-card stat-card--orange">
+        <div 
+          className={`stat-card stat-card--orange ${activeSummaryFilter === 'lowStock' ? 'stat-card--active' : ''}`}
+          onClick={() => setActiveSummaryFilter('lowStock')}
+          style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+        >
           <div className="stat-top">
             <div className="stat-icon stat-icon--orange">
               <AlertTriangle size={20} />
@@ -185,7 +243,11 @@ const Inventory = () => {
           <div className="stat-value">{lowStockCount}</div>
           <div className="stat-label">Low Stock</div>
         </div>
-        <div className="stat-card stat-card--rose">
+        <div 
+          className={`stat-card stat-card--rose ${activeSummaryFilter === 'outOfStock' ? 'stat-card--active' : ''}`}
+          onClick={() => setActiveSummaryFilter('outOfStock')}
+          style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+        >
           <div className="stat-top">
             <div className="stat-icon stat-icon--rose">
               <Package size={20} />
@@ -194,7 +256,7 @@ const Inventory = () => {
           <div className="stat-value">{outOfStockCount}</div>
           <div className="stat-label">Out of Stock</div>
         </div>
-        <div className="stat-card stat-card--pink">
+        <div className="stat-card stat-card--pink" style={{ cursor: 'default' }}>
           <div className="stat-top">
             <div className="stat-icon stat-icon--pink">
               <AlertTriangle size={20} />
@@ -203,7 +265,7 @@ const Inventory = () => {
           <div className="stat-value">{vaccStats.mothersPending}</div>
           <div className="stat-label">Mothers Pending Vaccines</div>
         </div>
-        <div className="stat-card stat-card--sage">
+        <div className="stat-card stat-card--sage" style={{ cursor: 'default' }}>
           <div className="stat-top">
             <div className="stat-icon stat-icon--sage">
               <AlertTriangle size={20} />
@@ -239,6 +301,15 @@ const Inventory = () => {
             <option value="Low Stock">Low Stock</option>
             <option value="Out of Stock">Out of Stock</option>
           </select>
+          <Archive size={14} className="filter-icon" />
+          <select
+            value={archiveFilter}
+            onChange={e => setArchiveFilter(e.target.value)}
+          >
+            <option value="active">Active</option>
+            <option value="archived">Archived</option>
+            <option value="all">All</option>
+          </select>
         </div>
       </div>
 
@@ -263,7 +334,7 @@ const Inventory = () => {
             <thead>
               <tr>
                 <th>Item Name</th>
-                <th>Current Quantity</th>
+                <th>Stock Level</th>
                 <th>Unit</th>
                 <th>Status</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
@@ -279,15 +350,32 @@ const Inventory = () => {
               ) : filteredItems.length > 0 ? (
                 filteredItems.map(item => {
                   const status = getStatus(item.quantity);
+                  const percentage = getStockPercentage(item.quantity || 0, item.max_stock || 500);
                   return (
                     <tr key={item.id} className="inv-row">
                       <td className="item-name-cell">
                         <strong>{item.item_name}</strong>
                       </td>
                       <td className="quantity-cell">
-                        <span className={`qty-text ${status.class}`}>
-                          {item.quantity}
-                        </span>
+                        <div className="stock-level-display">
+                          <div className="stock-text">
+                            <span className={`qty-text ${status.class}`}>
+                              {item.quantity}
+                            </span>
+                            <span className="stock-separator">/</span>
+                            <span className="stock-max">{item.max_stock}</span>
+                            <span className="stock-percentage">({percentage}%)</span>
+                          </div>
+                          <div className="stock-progress-bar">
+                            <div 
+                              className="stock-progress-fill"
+                              style={{ 
+                                width: `${percentage}%`,
+                                background: percentage <= 20 ? '#e05c73' : percentage <= 50 ? '#e8b84b' : '#6db8a0'
+                              }}
+                            ></div>
+                          </div>
+                        </div>
                       </td>
                       <td className="unit-cell">{item.unit || 'pcs'}</td>
                       <td>
@@ -316,20 +404,37 @@ const Inventory = () => {
                           >
                             <Edit2 size={13} />
                           </button>
-                          <button
-                            className="action-btn delete-btn"
-                            title="Delete Item"
-                            onClick={() =>
-                              handleDelete(
-                                activeTab === 'vaccines'
-                                  ? 'vaccine_inventory'
-                                  : 'supplement_inventory',
-                                item.id
-                              )
-                            }
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                          {item.status === 'archived' ? (
+                            <button
+                              className="action-btn restore-btn"
+                              title="Restore Item"
+                              onClick={() =>
+                                handleRestore(
+                                  activeTab === 'vaccines'
+                                    ? 'vaccine_inventory'
+                                    : 'supplement_inventory',
+                                  item.id
+                                )
+                              }
+                            >
+                              <ArchiveRestore size={13} />
+                            </button>
+                          ) : (
+                            <button
+                              className="action-btn archive-btn"
+                              title="Archive Item"
+                              onClick={() =>
+                                handleArchive(
+                                  activeTab === 'vaccines'
+                                    ? 'vaccine_inventory'
+                                    : 'supplement_inventory',
+                                  item.id
+                                )
+                              }
+                            >
+                              <Archive size={13} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

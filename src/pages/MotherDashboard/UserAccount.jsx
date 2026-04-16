@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
     User, Mail, Phone, MapPin, ShieldCheck,
-    Lock, LogOut, Edit2, Trash2, Plus,
+    Lock, LogOut, Edit2, Archive, ArchiveRestore, Plus,
     X, Users, Baby, Heart, ChevronDown, ChevronUp,
     Calendar, UserCheck, ArrowLeft
 } from 'lucide-react';
@@ -32,18 +32,18 @@ const formatDate = (iso) => {
 const BLANK_PARTNER = { name: '', age: '', phone: '', email: '', relationship: 'Partner' };
 const BLANK_CHILD   = { name: '', gender: 'Female', dob: '', notes: '' };
 
-// ─── Delete Confirmation Modal ────────────────────────────────────────
-const DeleteConfirmModal = ({ target, onConfirm, onCancel }) => (
+// ─── Archive Confirmation Modal ────────────────────────────────────────
+const ArchiveConfirmModal = ({ target, onConfirm, onCancel }) => (
     <div className="ua-modal-overlay" onClick={onCancel}>
         <div className="ua-modal-card ua-modal-card--sm" onClick={e => e.stopPropagation()}>
-            <div className="ua-modal-icon ua-modal-icon--danger">
-                <Trash2 size={24} />
+            <div className="ua-modal-icon ua-modal-icon--warning">
+                <Archive size={24} />
             </div>
-            <h3>Remove {target}?</h3>
-            <p>This action cannot be undone.</p>
+            <h3>Archive {target}?</h3>
+            <p>This will remove the record from active lists but can be restored.</p>
             <div className="ua-modal-actions">
                 <button className="ua-modal-btn ua-modal-btn--cancel" onClick={onCancel}>Cancel</button>
-                <button className="ua-modal-btn ua-modal-btn--danger" onClick={onConfirm}>Yes, Remove</button>
+                <button className="ua-modal-btn ua-modal-btn--warning" onClick={onConfirm}>Yes, Archive</button>
             </div>
         </div>
     </div>
@@ -182,36 +182,44 @@ const UserAccount = () => {
         phone: '+63 994 423 5141',
         email: 'hari@gmail.com',
         relationship: 'Husband',
+        archiveStatus: 'active',
     });
     const [children, setChildren] = useState([
-        { name: 'Maria Diola', gender: 'Female', dob: '2019-01-10', notes: '' },
-        { name: 'Leo Diola',   gender: 'Male',   dob: '2021-05-23', notes: 'Allergic to peanuts' },
+        { name: 'Maria Diola', gender: 'Female', dob: '2019-01-10', notes: '', archiveStatus: 'active' },
+        { name: 'Leo Diola',   gender: 'Male',   dob: '2021-05-23', notes: 'Allergic to peanuts', archiveStatus: 'active' },
     ]);
+    const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
     const [familyOpen, setFamilyOpen] = useState(true);
 
     // ── Modal State ───────────────────────────────────────────────────
     const [showPartnerModal, setShowPartnerModal] = useState(false);
     const [showChildModal, setShowChildModal]     = useState(false);
     const [editChildIdx, setEditChildIdx]         = useState(null);
-    const [deleteTarget, setDeleteTarget]         = useState(null); // { type: 'partner'|'child', idx? }
+    const [archiveTarget, setArchiveTarget]       = useState(null); // { type: 'partner'|'child', idx? }
 
     // ── Handlers ──────────────────────────────────────────────────────
-    const handleSavePartner = (data) => { setPartner(data); setShowPartnerModal(false); };
-    const handleDeletePartner = () => { setPartner(null); setDeleteTarget(null); };
+    const handleSavePartner = (data) => { setPartner({ ...data, archiveStatus: 'active' }); setShowPartnerModal(false); };
+    const handleArchivePartner = () => { setPartner(prev => ({ ...prev, archiveStatus: 'archived' })); setArchiveTarget(null); };
+    const handleRestorePartner = () => { setPartner(prev => ({ ...prev, archiveStatus: 'active' })); setArchiveTarget(null); };
 
     const handleSaveChild = (data, idx) => {
         setChildren(prev => {
             const next = [...prev];
-            if (idx !== null && idx !== undefined) next[idx] = data;
-            else next.push(data);
+            if (idx !== null && idx !== undefined) next[idx] = { ...data, archiveStatus: 'active' };
+            else next.push({ ...data, archiveStatus: 'active' });
             return next;
         });
         setShowChildModal(false);
         setEditChildIdx(null);
     };
-    const handleDeleteChild = (idx) => {
-        setChildren(prev => prev.filter((_, i) => i !== idx));
-        setDeleteTarget(null);
+    const handleArchiveChild = (idx) => {
+        setChildren(prev => prev.map((c, i) => i === idx ? { ...c, archiveStatus: 'archived' } : c));
+        setArchiveTarget(null);
+    };
+
+    const handleRestoreChild = (idx) => {
+        setChildren(prev => prev.map((c, i) => i === idx ? { ...c, archiveStatus: 'active' } : c));
+        setArchiveTarget(null);
     };
 
     const openEditChild = (idx) => { setEditChildIdx(idx); setShowChildModal(true); };
@@ -364,12 +372,21 @@ const UserAccount = () => {
                                             >
                                                 <Edit2 size={13} /> Edit
                                             </button>
-                                            <button
-                                                className="ua-mem-btn ua-mem-btn--delete"
-                                                onClick={() => setDeleteTarget({ type: 'partner' })}
-                                            >
-                                                <Trash2 size={13} />
-                                            </button>
+                                            {(partner.archiveStatus || 'active') === 'archived' ? (
+                                                <button
+                                                    className="ua-mem-btn ua-mem-btn--restore"
+                                                    onClick={() => handleRestorePartner()}
+                                                >
+                                                    <ArchiveRestore size={13} />
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    className="ua-mem-btn ua-mem-btn--archive"
+                                                    onClick={() => setArchiveTarget({ type: 'partner' })}
+                                                >
+                                                    <Archive size={13} />
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 ) : (
@@ -422,12 +439,21 @@ const UserAccount = () => {
                                                         >
                                                             <Edit2 size={13} /> Edit
                                                         </button>
-                                                        <button
-                                                            className="ua-mem-btn ua-mem-btn--delete"
-                                                            onClick={() => setDeleteTarget({ type: 'child', idx: i })}
-                                                        >
-                                                            <Trash2 size={13} />
-                                                        </button>
+                                                        {(child.archiveStatus || 'active') === 'archived' ? (
+                                                            <button
+                                                                className="ua-mem-btn ua-mem-btn--restore"
+                                                                onClick={() => handleRestoreChild(i)}
+                                                            >
+                                                                <ArchiveRestore size={13} />
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                className="ua-mem-btn ua-mem-btn--archive"
+                                                                onClick={() => setArchiveTarget({ type: 'child', idx: i })}
+                                                            >
+                                                                <Archive size={13} />
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </div>
                                             );
@@ -479,15 +505,15 @@ const UserAccount = () => {
                     onClose={() => { setShowChildModal(false); setEditChildIdx(null); }}
                 />
             )}
-            {deleteTarget && (
-                <DeleteConfirmModal
-                    target={deleteTarget.type === 'partner' ? 'Partner' : children[deleteTarget.idx]?.name || 'Child'}
+            {archiveTarget && (
+                <ArchiveConfirmModal
+                    target={archiveTarget.type === 'partner' ? 'Partner' : 'Child'}
                     onConfirm={() =>
-                        deleteTarget.type === 'partner'
-                            ? handleDeletePartner()
-                            : handleDeleteChild(deleteTarget.idx)
+                        archiveTarget.type === 'partner'
+                            ? handleArchivePartner()
+                            : handleArchiveChild(archiveTarget.idx)
                     }
-                    onCancel={() => setDeleteTarget(null)}
+                    onCancel={() => setArchiveTarget(null)}
                 />
             )}
         </div>
