@@ -33,6 +33,32 @@ const RecordVitalsModal = ({ patient, onSave, onClose, supplements }) => {
     const [selectedSupplements, setSelectedSupplements] = useState({});
     const [supplementAmounts, setSupplementAmounts] = useState({});
 
+    useEffect(() => {
+        if (!patient) return;
+
+        const latestVisit = Array.isArray(patient.visits) && patient.visits.length > 0
+            ? [...patient.visits].sort((a, b) => new Date(b.visit_date) - new Date(a.visit_date))[0]
+            : null;
+
+        const initialForm = {
+            ...EMPTY_VITALS,
+            date: latestVisit?.visit_date ? latestVisit.visit_date.split('T')[0] : new Date().toISOString().split('T')[0],
+            bpSystolic: latestVisit?.bp_systolic || '',
+            bpDiastolic: latestVisit?.bp_diastolic || '',
+            weight: latestVisit?.weight_kg || '',
+            temp: latestVisit?.temp_c || '',
+            pulse: latestVisit?.pulse_bpm || '',
+            respRate: latestVisit?.resp_rate_cpm || '',
+            fundalHeight: latestVisit?.fundal_height_cm || '',
+            fhr: latestVisit?.fhr_bpm || '',
+            fetalMovement: latestVisit?.fetal_movement || '',
+            presentation: latestVisit?.presentation || '',
+            notes: latestVisit?.clinical_notes || '',
+        };
+
+        setForm(initialForm);
+    }, [patient]);
+
     const handleSubmit = (e) => {
         e.preventDefault();
         if (!form.bpSystolic || !form.bpDiastolic || !form.weight || !form.date) return;
@@ -178,7 +204,38 @@ const PatientsList = () => {
     const [vitalModalPatient, setVitalModalPatient] = useState(null);
     const [vitalToast, setVitalToast] = useState(false);
     const [editModalPatient, setEditModalPatient] = useState(null);
+    const [modalLoading, setModalLoading] = useState({ edit: false, vitals: false });
     const [supplements, setSupplements] = useState([]);
+
+    const openEditModal = async (patientId) => {
+        setEditModalPatient(null);
+        setModalLoading(prev => ({ ...prev, edit: true }));
+        try {
+            const patientService = new PatientService();
+            const detailedPatient = await patientService.getPatientById(patientId);
+            setEditModalPatient(detailedPatient);
+        } catch (err) {
+            console.error('Error loading patient details for edit:', err);
+            alert('Unable to load patient details. Please try again.');
+        } finally {
+            setModalLoading(prev => ({ ...prev, edit: false }));
+        }
+    };
+
+    const openVitalsModal = async (patientId) => {
+        setVitalModalPatient(null);
+        setModalLoading(prev => ({ ...prev, vitals: true }));
+        try {
+            const patientService = new PatientService();
+            const detailedPatient = await patientService.getPatientById(patientId);
+            setVitalModalPatient(detailedPatient);
+        } catch (err) {
+            console.error('Error loading patient details for vitals:', err);
+            alert('Unable to load patient details. Please try again.');
+        } finally {
+            setModalLoading(prev => ({ ...prev, vitals: false }));
+        }
+    };
 
     useEffect(() => {
     const fetchPatients = async () => {
@@ -311,7 +368,22 @@ const PatientsList = () => {
 
     const handlePatientUpdate = (updatedPatient) => {
         setPatients(prevPatients => 
-            prevPatients.map(p => p.id === updatedPatient.id ? updatedPatient : p)
+            prevPatients.map(p => {
+                if (p.id !== updatedPatient.id) return p;
+
+                const merged = {
+                    ...p,
+                    ...updatedPatient,
+                    name: `${updatedPatient.first_name || p.first_name || ''} ${updatedPatient.last_name || p.last_name || ''}`.trim(),
+                    station: updatedPatient.barangay || updatedPatient.municipality || p.station,
+                    age: updatedPatient.date_of_birth
+                        ? Math.floor((new Date() - new Date(updatedPatient.date_of_birth)) / (365.25 * 24 * 60 * 60 * 1000))
+                        : p.age,
+                    nextAppt: updatedPatient.nextAppt ?? p.nextAppt,
+                };
+
+                return merged;
+            })
         );
     };
 
@@ -564,11 +636,11 @@ const PatientsList = () => {
                                                 <Eye size={16} />
                                                 </button>
 
-                                                <button type="button" className="action-btn vitals-btn" data-tooltip="Record Vitals" onClick={(e) => { e.stopPropagation(); setVitalModalPatient(p); }}>
+                                                <button type="button" className="action-btn vitals-btn" data-tooltip="Record Vitals" onClick={(e) => { e.stopPropagation(); openVitalsModal(p.id); }} disabled={modalLoading.vitals}>
                                                 <Activity size={16} />
                                                 </button>
 
-                                                <button type="button" className="action-btn edit-btn" data-tooltip="Edit Patient" onClick={(e) => { e.stopPropagation(); setEditModalPatient(p); }}>
+                                                <button type="button" className="action-btn edit-btn" data-tooltip="Edit Patient" onClick={(e) => { e.stopPropagation(); openEditModal(p.id); }} disabled={modalLoading.edit}>
                                                 <Edit size={16} />
                                                 </button>
 

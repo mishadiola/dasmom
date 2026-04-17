@@ -24,6 +24,19 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
 
+    const calculateAge = (dob) => {
+        if (!dob) return '';
+        const birth = new Date(dob);
+        if (Number.isNaN(birth.getTime())) return '';
+        const today = new Date();
+        let age = today.getFullYear() - birth.getFullYear();
+        const monthDiff = today.getMonth() - birth.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+            age -= 1;
+        }
+        return age >= 0 ? age.toString() : '';
+    };
+
     useEffect(() => {
         if (patient) {
             // Split full name into first and last name
@@ -35,7 +48,7 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
                 firstName: firstName,
                 lastName: lastName,
                 dateOfBirth: patient.dob || '',
-                age: patient.age || '',
+                age: patient.age || calculateAge(patient.dob),
                 civilStatus: patient.civilStatus || '',
                 bloodType: patient.bloodType || '',
                 philhealth: patient.philhealth || '',
@@ -52,10 +65,16 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setFormData(prev => ({
-            ...prev,
-            [name]: value
-        }));
+        setFormData(prev => {
+            const nextState = {
+                ...prev,
+                [name]: value
+            };
+            if (name === 'dateOfBirth') {
+                nextState.age = calculateAge(value);
+            }
+            return nextState;
+        });
         // Clear error when user starts typing
         if (errors[name]) {
             setErrors(prev => ({
@@ -76,9 +95,6 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
         }
         if (!formData.dateOfBirth) {
             newErrors.dateOfBirth = 'Date of birth is required';
-        }
-        if (!formData.age || formData.age < 0) {
-            newErrors.age = 'Valid age is required';
         }
         if (!formData.phone.trim()) {
             newErrors.phone = 'Phone number is required';
@@ -111,9 +127,8 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
                 first_name: formData.firstName,
                 last_name: formData.lastName,
                 date_of_birth: formData.dateOfBirth,
-                age: parseInt(formData.age),
                 civil_status: formData.civilStatus,
-                blood_type: formData.bloodType,
+                bloodtype: formData.bloodType,
                 philhealth: formData.philhealth,
                 phone: formData.phone,
                 address: formData.address,
@@ -134,7 +149,7 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
                     ...patient,
                     name: `${formData.firstName} ${formData.lastName}`,
                     dob: formData.dateOfBirth,
-                    age: formData.age,
+                    age: calculateAge(formData.dateOfBirth),
                     civilStatus: formData.civilStatus,
                     bloodType: formData.bloodType,
                     philhealth: formData.philhealth,
@@ -232,17 +247,15 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
                                     {errors.dateOfBirth && <span className="error-text">{errors.dateOfBirth}</span>}
                                 </div>
                                 <div className="form-group">
-                                    <label>Age *</label>
+                                    <label>Age</label>
                                     <input
                                         type="number"
                                         name="age"
                                         value={formData.age}
-                                        onChange={handleChange}
+                                        readOnly
                                         min="0"
                                         max="120"
-                                        className={errors.age ? 'error' : ''}
                                     />
-                                    {errors.age && <span className="error-text">{errors.age}</span>}
                                 </div>
                                 <div className="form-group">
                                     <label>Civil Status</label>

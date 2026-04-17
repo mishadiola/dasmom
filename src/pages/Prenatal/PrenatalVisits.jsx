@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import PatientService from '../../services/patientservice';
 import {
     Search, Plus, Eye, Edit2, Trash2, CalendarCheck,
@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import ScheduledVisitModal from '../../components/Prenatal/ScheduledVisitModal';
 import PatientModal from '../../components/Prenatal/PatientModal';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/PrenatalVisits.css';
 
 const toLocalDateStr = (d) => {
@@ -46,6 +46,16 @@ const TIME_SLOTS = [
     '10:30 AM', '11:00 AM', '11:30 AM', '01:00 PM', '01:30 PM',
     '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM', '04:00 PM'
 ];
+
+// Helper to convert TIME_SLOTS format (12-hour) to 24-hour format
+const convertTo24Hour = (timeStr) => {
+    const [time, period] = timeStr.trim().split(' ');
+    const [hours, minutes] = time.split(':');
+    let h = parseInt(hours);
+    if (period === 'PM' && h !== 12) h += 12;
+    if (period === 'AM' && h === 12) h = 0;
+    return `${String(h).padStart(2, '0')}:${minutes}`;
+};
 
 const SearchableDropdown = ({ patients, value, onChange }) => {
     const [query, setQuery] = useState('');
@@ -121,59 +131,20 @@ const SearchableDropdown = ({ patients, value, onChange }) => {
 
 const PrenatalVisits = () => {
     const navigate = useNavigate();
-    const location = useLocation();
 
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('All');
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 20;
-    const [bookingPanelOpen, setBookingPanelOpen] = useState(false);
     const [currentDate, setCurrentDate] = useState(new Date());
     const [toast, setToast] = useState(null);
     const [calendarView, setCalendarView] = useState('week'); // day, week, month
     const [selectedVisit, setSelectedVisit] = useState(null);
     const [appointments, setAppointments] = useState([]);
     const [visitsTable, setVisitsTable] = useState([]);
-    const [staffList, setStaffList] = useState([]);
-    const [livePatients, setLivePatients] = useState([]);
-    const [selectedSlot, setSelectedSlot] = useState({ date: null, time: null });
-    const [bookingData, setBookingData] = useState({
-        patientId: '',
-        patientName: '',
-        visitType: 'Routine Prenatal',
-        staff: '',
-        location: 'Main Clinic - Rm 1'
-    });
-    const [conflictWarning, setConflictWarning] = useState(null);
     const [selectedPatient, setSelectedPatient] = useState(null);
 
-    const patientService = new PatientService();
-
-    const fetchData = async () => {
-        try {
-            const vDays = getVisibleDays(currentDate, calendarView);
-            if (vDays.length === 0) return;
-            
-            // Fetch perfectly aligned with the visual grid columns
-            const startDate = vDays[0].date;
-            const endDate = vDays[vDays.length - 1].date;
-
-            const [patientsData, visitsData, staffData, apptsData] = await Promise.all([
-                patientService.getAllPatients(),
-                patientService.getPrenatalVisits(),
-                patientService.getAllMidwives(),
-                patientService.getAppointments(startDate, endDate, calendarView)
-            ]);
-
-            setLivePatients(patientsData || []);
-            setVisitsTable(visitsData || []);
-            setStaffList(staffData || []);
-            setAppointments(apptsData || []);
-
-        } catch (error) {
-            console.error(error);
-        }
-    };
+    const patientService = useMemo(() => new PatientService(), []);
 
     const getVisibleDays = (date, view) => {
         const d = new Date(date);
@@ -216,6 +187,29 @@ const PrenatalVisits = () => {
         return [];
     };
 
+    const fetchData = useCallback(async () => {
+        try {
+            const vDays = getVisibleDays(currentDate, calendarView);
+            if (vDays.length === 0) return;
+            
+            // Fetch perfectly aligned with the visual grid columns
+            const startDate = vDays[0].date;
+            const endDate = vDays[vDays.length - 1].date;
+
+            const [, visitsData, apptsData] = await Promise.all([
+                patientService.getAllPatients(),
+                patientService.getPrenatalVisits(),
+                patientService.getAppointments(startDate, endDate, calendarView)
+            ]);
+
+            setVisitsTable(visitsData || []);
+            setAppointments(apptsData || []);
+
+        } catch (error) {
+            console.error(error);
+        }
+    }, [currentDate, calendarView, patientService]);
+
     const handleUpdateVisitStatus = async (visitId, updates) => {
         try {
             await patientService.updatePrenatalVisitStatus(visitId, updates);
@@ -228,11 +222,6 @@ const PrenatalVisits = () => {
             setTimeout(() => setToast(null), 3000);
         }
     };
-
-    // Top-level debug log (safe)
-    useEffect(() => {
-        console.log('handleUpdateVisitStatus is a function:', typeof handleUpdateVisitStatus);
-    }, []);
 
     // Now useEffect for channel
     useEffect(() => {
@@ -253,7 +242,7 @@ const PrenatalVisits = () => {
         return () => {
             patientService.supabase.removeChannel(subscription);
         };
-    }, [calendarView, currentDate]);
+    }, [calendarView, currentDate, fetchData, patientService.supabase]);
 
     const handlePrev = () => {
         setCurrentDate(prev => {
@@ -286,18 +275,41 @@ const PrenatalVisits = () => {
     };
 
     const getSlotStatus = useCallback((date, time) => {
-        const dayAppts = appointments.filter(a => {
-            return a.date === date;
-        });
+        const time24 = convertTo24Hour(time);
         
+        // Filter visits for this EXACT date and time slot (not >= range)
+        const visitsForSlot = visitsTable.filter(v => {
+            if (!v.visitDate) return false;
+            const visitDateTime = new Date(v.visitDate);
+            const visitDate = visitDateTime.toISOString().split('T')[0];
+            const visitTime24 = visitDateTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+            // Only show visit in the exact time slot it's scheduled for
+            return visitDate === date && visitTime24 === time24;
+        });
+
+        // Deduplicate by patient ID per time slot per day
+        const uniqueVisits = [];
+        const seenPatients = new Set();
+        for (const v of visitsForSlot) {
+            if (!seenPatients.has(v.patientId)) {
+                uniqueVisits.push(v);
+                seenPatients.add(v.patientId);
+            }
+        }
+
+        if (uniqueVisits.length > 0) {
+            const visit = uniqueVisits[0];
+            return { hasVisit: true, visits: uniqueVisits, status: visit.status, patient: visit.patientName, type: 'Prenatal Visit' };
+        }
+
+        const dayAppts = appointments.filter(a => a.date === date);
         const timeAppts = dayAppts.filter(a => a.time === time);
         
-        if (dayAppts.length >= 30) return 'FULL DAY'; 
-        if (timeAppts.length >= 2) return 'Full';
-        
+        if (dayAppts.length >= 35) return { status: 'FULL_DAY', label: 'FULL DAY' };
+        if (timeAppts.length >= 2) return { status: 'FULL', label: 'FULL' };
         if (timeAppts.length === 1) return timeAppts[0];
-        return 'Available';
-    }, [appointments]);
+        return { status: 'AVAILABLE', label: 'Available' };
+    }, [visitsTable, appointments]);
 
     const handleSlotClick = (date, time, status) => {
         // Calendar is now view-only - no manual scheduling allowed
@@ -310,22 +322,6 @@ const PrenatalVisits = () => {
             return;
         }
         // Do nothing for available slots - no booking panel will open
-    };
-
-    const handleSelectPatient = (val) => {
-        const p = livePatients.find(pt => pt.id === val);
-        if (p) {
-            setBookingData({ ...bookingData, patientId: p.id, patientName: p.name });
-        } else {
-            setBookingData({ ...bookingData, patientId: '', patientName: '' });
-        }
-        setConflictWarning(null);
-    };
-
-    const handleConfirmBooking = async () => {
-        setToast('Visit scheduled successfully!');
-        setBookingPanelOpen(false);
-        setTimeout(() => setToast(null), 3000);
     };
 
     const visibleDays = getVisibleDays(currentDate, calendarView);
@@ -341,11 +337,20 @@ const PrenatalVisits = () => {
             id: visit.patientId,
             name: visit.patientName,
             risk: visit.risk,
-            nextVisit: filteredVisits.filter(v => v.patientId === visit.patientId)
-                .sort((a, b) => new Date(a.visitDate) - new Date(b.visitDate))
-                .find(v => new Date(v.visitDate) >= new Date())?.visitDate || 'No upcoming',
-            lastVisit: filteredVisits.filter(v => v.patientId === visit.patientId)
-                .sort((a, b) => new Date(b.visitDate) - new Date(a.visitDate))[0]?.visitDate || 'N/A',
+            nextVisit: (() => {
+                const nextScheduled = filteredVisits.filter(v => v.patientId === visit.patientId && v.status === 'Scheduled' && new Date(v.visitDate) >= new Date()).sort((a, b) => new Date(a.visitDate) - new Date(b.visitDate))[0];
+                return nextScheduled ? formatReadableDate(nextScheduled.visitDate) : 'No upcoming';
+            })(),
+            // Show last ATTENDED visit (not just any visit)
+            lastVisit: (() => {
+                const attended = filteredVisits.filter(v => v.patientId === visit.patientId && v.status === 'Attended')
+                    .sort((a, b) => {
+                        const dateA = a.attendedDate ? new Date(a.attendedDate) : new Date(a.visitDate);
+                        const dateB = b.attendedDate ? new Date(b.attendedDate) : new Date(b.visitDate);
+                        return dateB - dateA;
+                    })[0];
+                return attended ? (attended.attendedDate || attended.visitDate) : 'No completed visit';
+            })(),
             totalVisits: filteredVisits.filter(v => v.patientId === visit.patientId).length
         }])).values()
     );
@@ -353,13 +358,6 @@ const PrenatalVisits = () => {
     const totalPages = Math.ceil(uniquePatients.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
     const paginatedPatients = uniquePatients.slice(startIndex, startIndex + itemsPerPage);
-
-    const getRowClass = (status) => {
-        if (status === 'Upcoming') return 'tr-upcoming';
-        if (status === 'Completed') return 'tr-completed';
-        if (status === 'Waiting') return 'tr-waiting';
-        return '';
-    };
 
     const TODAY = new Date().toISOString().split('T')[0];
 
@@ -407,48 +405,133 @@ const PrenatalVisits = () => {
                 </div>
 
                 <div className="pv-grid-container">
-                    <table className="pc-grid">
-                        <thead>
-                            <tr>
-                                <th className="th-time">Time</th>
-                                {visibleDays.map(day => (
-                                    <th key={day.date} className={day.date === TODAY ? 'th-today' : ''}>
-                                        {formatCalendarDate(day.date)}
-                                        {day.date === TODAY && <span className="today-badge">TODAY</span>}
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {TIME_SLOTS.map(time => (
-                                <tr key={time}>
-                                    <td className="td-time">{time}</td>
-                                    {visibleDays.map(day => {
-                                        const status = getSlotStatus(day.date, time);
-                                        const isHigh = status !== 'Available' && status !== 'Full' && status.risk === 'High Risk';
-                                        return (
-                                            <td
-                                                key={day.date}
-                                                className={`pc-slot ${status === 'Available' ? 'slot-avail' : 
-                                                    status === 'FULL DAY' || status === 'Full' ? 'slot-full' : 
-                                                    isHigh ? 'slot-high' : 'slot-booked'}`}
-                                                onClick={() => status !== 'Available' && handleSlotClick(day.date, time, status)}
-                                            >
-                                                {status === 'Available' ? 'Available' : 
-                                                 status === 'FULL DAY' ? 'FULL DAY' : 
-                                                 status === 'Full' ? 'FULL' : (
-                                                    <div className="booked-card">
-                                                        <span className="bc-name">{status.patient}</span>
-                                                        <span className="bc-type">{status.type}</span>
-                                                    </div>
-                                                )}
-                                            </td>
-                                        );
-                                    })}
+                    {calendarView === 'day' ? (
+                        <table className="pc-grid">
+                            <thead>
+                                <tr>
+                                    <th className="th-time">Time</th>
+                                    {visibleDays.map(day => (
+                                        <th key={day.date} className={day.date === TODAY ? 'th-today' : ''}>
+                                            {formatCalendarDate(day.date)}
+                                            {day.date === TODAY && <span className="today-badge">TODAY</span>}
+                                        </th>
+                                    ))}
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {TIME_SLOTS.map(time => (
+                                    <tr key={time}>
+                                        <td className="td-time">{time}</td>
+                                        {visibleDays.map(day => {
+                                            const slotData = getSlotStatus(day.date, time);
+                                            let slotClass = 'slot-avail';
+                                            
+                                            if (slotData.hasVisit) {
+                                                // Status-based coloring for prenatal visits
+                                                if (slotData.status === 'Attended') {
+                                                    slotClass = 'slot-attended'; // Green
+                                                } else if (slotData.status === 'Missed') {
+                                                    slotClass = 'slot-missed'; // Red
+                                                } else if (slotData.status === 'Scheduled') {
+                                                    slotClass = 'slot-scheduled'; // Yellow
+                                                } else if (slotData.status === 'Cancelled') {
+                                                    slotClass = 'slot-cancelled'; // Gray
+                                                }
+                                            } else if (slotData.status === 'FULL_DAY' || slotData.status === 'FULL') {
+                                                slotClass = 'slot-full';
+                                            } else if (slotData.status && slotData.status !== 'AVAILABLE') {
+                                                slotClass = 'slot-booked';
+                                            }
+
+                                            return (
+                                                <td
+                                                    key={day.date}
+                                                    className={`pc-slot ${slotClass}`}
+                                                    onClick={() => slotData.status !== 'AVAILABLE' && handleSlotClick(day.date, time, slotData)}
+                                                >
+                                                    {slotData.hasVisit ? (
+                                                        <div className="booked-card">
+                                                            <span className="bc-name">{slotData.patient}</span>
+                                                            <span className="bc-type">{slotData.status}</span>
+                                                        </div>
+                                                    ) : slotData.label === 'FULL DAY' ? (
+                                                        'FULL DAY'
+                                                    ) : slotData.label === 'FULL' ? (
+                                                        'FULL'
+                                                    ) : slotData.status === 'AVAILABLE' ? (
+                                                        'Available'
+                                                    ) : (
+                                                        <div className="booked-card">
+                                                            <span className="bc-name">{slotData.patient}</span>
+                                                            <span className="bc-type">{slotData.type}</span>
+                                                        </div>
+                                                    )}
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    ) : (
+                        <div className={`day-grid ${calendarView}-grid`}>
+                            {calendarView === 'week' ? (
+                                <div className="week-row">
+                                    {visibleDays.map(day => (
+                                        <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`}>
+                                            <h4 className="day-header">
+                                                {formatCalendarDate(day.date)}
+                                                {day.date === TODAY && <span className="today-badge">TODAY</span>}
+                                            </h4>
+                                            <div className="day-visits">
+                                                {visitsTable.filter(v => v.visitDateOnly === day.date).map(v => (
+                                                    <div key={v.id} className={`visit-item status-${v.status.toLowerCase()}`}>
+                                                        <span className="visit-patient">{v.patientName}</span>
+                                                        <span className="visit-status">{v.status}</span>
+                                                        <span className="visit-time">{new Date(v.visitDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                    </div>
+                                                ))}
+                                                {visitsTable.filter(v => v.visitDateOnly === day.date).length === 0 && (
+                                                    <div className="no-visits">No visits</div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                // Month view: group days into weeks
+                                (() => {
+                                    const weeks = [];
+                                    for (let i = 0; i < visibleDays.length; i += 7) {
+                                        weeks.push(visibleDays.slice(i, i + 7));
+                                    }
+                                    return weeks.map((week, weekIndex) => (
+                                        <div key={weekIndex} className="week-row">
+                                            {week.map(day => (
+                                                <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`}>
+                                                    <h4 className="day-header">
+                                                        {formatCalendarDate(day.date)}
+                                                        {day.date === TODAY && <span className="today-badge">TODAY</span>}
+                                                    </h4>
+                                                    <div className="day-visits">
+                                                        {visitsTable.filter(v => v.visitDateOnly === day.date).map(v => (
+                                                            <div key={v.id} className={`visit-item status-${v.status.toLowerCase()}`}>
+                                                                <span className="visit-patient">{v.patientName}</span>
+                                                                <span className="visit-status">{v.status}</span>
+                                                            </div>
+                                                        ))}
+                                                        {visitsTable.filter(v => v.visitDateOnly === day.date).length === 0 && (
+                                                            <div className="no-visits">No visits</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ));
+                                })()
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -510,7 +593,7 @@ const PrenatalVisits = () => {
                                     <td>{patient.totalVisits}</td>
                                     <td className="text-right">
                                         <div className="row-actions">
-                                            <button className="icon-btn" onClick={() => navigate('/dashboard/prenatal/add')}><Plus size={14} /></button>
+                                            <button className="icon-btn" onClick={() => navigate(`/dashboard/prenatal/add/${patient.id}`)}><Plus size={14} /></button>
                                             <button className="icon-btn" onClick={() => setSelectedPatient(patient.id)}><Eye size={14} /></button>
                                         </div>
                                     </td>

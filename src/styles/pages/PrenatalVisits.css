@@ -200,6 +200,57 @@
     cursor: not-allowed;
 }
 
+.slot-booked {
+    background: rgba(91, 174, 208, 0.12);
+    border-left: 3px solid #5baed0;
+}
+
+/* Status-based slot colors */
+.slot-attended {
+    background: rgba(34, 197, 94, 0.15);
+    border-left: 3px solid #22c55e;
+}
+
+.slot-attended .booked-card {
+    background: rgba(34, 197, 94, 0.1);
+    border-left: 3px solid #22c55e;
+}
+
+.slot-missed {
+    background: rgba(239, 68, 68, 0.15);
+    border-left: 3px solid #ef4444;
+}
+
+.slot-missed .booked-card {
+    background: rgba(239, 68, 68, 0.1);
+    border-left: 3px solid #ef4444;
+}
+
+.slot-scheduled {
+    background: rgba(234, 179, 8, 0.15);
+    border-left: 3px solid #eab308;
+}
+
+.slot-scheduled .booked-card {
+    background: rgba(234, 179, 8, 0.1);
+    border-left: 3px solid #eab308;
+}
+
+.slot-cancelled {
+    background: rgba(107, 114, 128, 0.15);
+    border-left: 3px solid #6b7280;
+}
+
+.slot-cancelled .booked-card {
+    background: rgba(107, 114, 128, 0.1);
+    border-left: 3px solid #6b7280;
+}
+
+.slot-high {
+    background: rgba(224, 92, 115, 0.12);
+    border-left: 3px solid #e05c73;
+}
+
 .booked-card {
     height: 100%;
     background: rgba(91, 174, 208, 0.12);
@@ -545,6 +596,118 @@
     font-weight: 700;
     padding: 4px 10px;
     border-radius: 20px;
+}
+
+/* ── Day Grid Calendar ── */
+.day-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.week-grid .week-row {
+    display: flex;
+    gap: 8px;
+}
+
+.month-grid .week-row {
+    display: flex;
+    gap: 8px;
+}
+
+.day-cell {
+    flex: 1;
+    background: #ffffff;
+    border: 1px solid #eef0f4;
+    border-radius: 8px;
+    padding: 12px;
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.day-today {
+    border-color: var(--color-rose);
+    background: rgba(185, 129, 138, 0.05);
+}
+
+.day-header {
+    font-weight: 600;
+    color: var(--color-text);
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.day-header .today-badge {
+    background: var(--color-rose);
+    color: white;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: 700;
+}
+
+.day-visits {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+}
+
+.visit-item {
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.visit-item.status-attended {
+    background: rgba(109, 184, 160, 0.1);
+    border-left: 3px solid #6db8a0;
+}
+
+.visit-item.status-scheduled {
+    background: rgba(255, 193, 7, 0.1);
+    border-left: 3px solid #ffc107;
+}
+
+.visit-item.status-missed {
+    background: rgba(220, 53, 69, 0.1);
+    border-left: 3px solid #dc3545;
+}
+
+.visit-item.status-cancelled {
+    background: rgba(108, 117, 125, 0.1);
+    border-left: 3px solid #6c757d;
+}
+
+.visit-patient {
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.visit-status {
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.visit-time {
+    font-size: 11px;
+    color: var(--color-text-muted);
+}
+
+.no-visits {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    font-style: italic;
+    padding: 8px;
 }
 
 .pill-completed {

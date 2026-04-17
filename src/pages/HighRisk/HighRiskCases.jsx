@@ -78,7 +78,11 @@ const HighRiskCases = () => {
             first_name: p.first_name,
             last_name: p.last_name,
             station: p.barangay || p.municipality || 'Unassigned',
-            riskLevel: preg.calculated_risk || 'High Risk',
+            riskLevel: preg.calculated_risk
+              ? preg.calculated_risk.toLowerCase().includes('monitor')
+                ? 'Medium Risk'
+                : preg.calculated_risk
+              : 'High Risk',
             condition: preg.risk_factors || 'High‑risk pregnancy',
             gravida: preg.gravida || 0,
             lmd: lmp || '',
@@ -96,6 +100,8 @@ const HighRiskCases = () => {
           };
         })
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); // Newest first
+
+      const uniquePatients = Array.from(new Map(enriched.map((item) => [item.id, item])).values());
 
       setStats({
         ...statsData,
@@ -208,7 +214,7 @@ const HighRiskCases = () => {
 
   const getRowClass = (p) => {
     if (p.riskLevel === 'High Risk') return 'row-high-risk';
-    if (p.riskLevel === 'Moderate Risk') return 'row-moderate-risk';
+    if (p.riskLevel === 'Medium Risk') return 'row-moderate-risk';
     return 'row-monitor';
   };
 
@@ -301,7 +307,7 @@ const HighRiskCases = () => {
           >
             <option value="All">All Risk Levels</option>
             <option value="High Risk">High Risk</option>
-            <option value="Moderate Risk">Moderate Risk</option>
+            <option value="Medium Risk">Medium Risk</option>
             <option value="Normal Risk">Normal Risk</option>
           </select>
           

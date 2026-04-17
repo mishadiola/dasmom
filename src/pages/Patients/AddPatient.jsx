@@ -85,8 +85,6 @@ const AddPatient = () => {
         lmp: '', edd: '', gestationalAge: '', pregnancyType: 'Singleton',
         plannedDeliveryPlace: 'Hospital',
         conditions: [], otherConditions: '', riskLevel: 'Low Risk',
-        firstVisitDate: new Date().toISOString().split('T')[0],
-        firstVisitTime: '09:00',
         assignedMidwife: '', assignedDoctor: '',
         bhwAssigned: currentStaff.full_name,
         bp: '', weight: '', height: '', bmi: '', temp: '', pulse: '', respRate: '', fundalHeight: '',
@@ -199,16 +197,17 @@ const AddPatient = () => {
         setLoadingSchedule(true);
         try {
             const preview = patientService.generateSemesterSchedule(formData.lmp, {
-                time: formData.firstVisitTime || '09:00'
+                time: '08:00'
             });
-            setSchedulePreview(preview);
+            const futurePreview = patientService.filterScheduleAfterToday(preview);
+            setSchedulePreview(futurePreview);
         } catch (err) {
             console.error('Error building schedule preview:', err);
             setSchedulePreview([]);
         } finally {
             setLoadingSchedule(false);
         }
-    }, [formData.lmp, formData.firstVisitTime]);
+    }, [formData.lmp]);
 
     useEffect(() => {
         let risk = 'Low Risk';
@@ -218,10 +217,8 @@ const AddPatient = () => {
             return MEDICAL_CONDITIONS.find(c => c.name === conditionName);
         }).filter(Boolean);
         
-        // Check if any High Risk condition exists
+        const selectedConditionCount = selectedConditions.length;
         const hasHighRisk = selectedConditions.some(c => c.risk === 'High');
-        
-        // Check if any Medium Risk condition exists
         const hasMedRisk = selectedConditions.some(c => c.risk === 'Medium');
         
         // Check Other Conditions risk level
@@ -229,7 +226,7 @@ const AddPatient = () => {
         const otherRisk = hasOtherCondition ? otherConditionRisk : null;
 
         // Determine overall risk
-        if (hasHighRisk || otherRisk === 'High') {
+        if (hasHighRisk || selectedConditionCount >= 2 || otherRisk === 'High') {
             risk = 'High Risk';
         } else if (hasMedRisk || otherRisk === 'Medium') {
             risk = 'Medium Risk';
@@ -332,6 +329,23 @@ const AddPatient = () => {
 
         setIsSaving(true);
 
+        const today = new Date();
+        const todayDateOnly = today.toISOString().split('T')[0];
+        const upcomingVisit = (schedulePreview || []).find((v) => {
+            const visitDate = new Date(v.date);
+            return !Number.isNaN(visitDate.getTime()) && visitDate >= today;
+        });
+
+        const autoFirstVisitDate = upcomingVisit
+            ? upcomingVisit.date
+            : todayDateOnly;
+
+        const filteredSchedulePreview = patientService.filterScheduleAfterToday(schedulePreview).filter((v) => {
+            const visitDate = new Date(v.date);
+            const firstDate = new Date(autoFirstVisitDate);
+            return !Number.isNaN(visitDate.getTime()) && visitDate > firstDate;
+        });
+
         const preparedSupplements = formData.supplementsGiven.map(name => {
             const supp = formData.supplements.find(s => s.name === name);
             return `${name} (${supp?.amount || '1'})`;
@@ -342,12 +356,18 @@ const AddPatient = () => {
             return {
                 supplement_inventory_id: inv?.id,
                 dosage: supp?.amount || '1',
-                start_date: formData.firstVisitDate,
+                start_date: autoFirstVisitDate,
                 status: 'Ongoing',
                 notes: 'Initial distribution at registration'
             };
         });
-        const patientData = { ...formData, supplementsGiven: preparedSupplements, supplementRecords };
+        const patientData = {
+            ...formData,
+            firstVisitDate: autoFirstVisitDate,
+            schedulePreview: filteredSchedulePreview,
+            supplementsGiven: preparedSupplements,
+            supplementRecords
+        };
 
         try {
             console.log('📤 Passing to PatientService.addPatient:', patientData);
@@ -767,22 +787,9 @@ const AddPatient = () => {
 
                             <div className="form-grid-2">
                                 <div className="form-group">
-                                    <label>First Consultation Date</label>
-                                    <input
-                                        type="date"
-                                        name="firstVisitDate"
-                                        value={formData.firstVisitDate}
-                                        onChange={handleChange}
-                                    />
-                                </div>
-                                <div className="form-group">
-                                    <label>Scheduled Time</label>
-                                    <input
-                                        type="time"
-                                        name="firstVisitTime"
-                                        value={formData.firstVisitTime}
-                                        onChange={handleChange}
-                                    />
+                                    <p className="field-note">
+                                        First consultation is generated automatically from the LMP schedule. You do not need to select a date manually.
+                                    </p>
                                 </div>
                             </div>
 

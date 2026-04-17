@@ -287,6 +287,20 @@
     gap: 12px;
 }
 
+.supplement-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.quantity-input {
+    width: 60px;
+    padding: 4px 8px;
+    border: 1px solid #d1d6e0;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
 .check-lbl {
     display: flex;
     align-items: center;

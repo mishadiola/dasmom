@@ -19,7 +19,7 @@ class InventoryService {
   async getVaccineInventory() {
     const { data, error } = await supabase
       .from('vaccine_inventory')
-      .select('id, vaccine_name, quantity, created_by, created_at');
+      .select('id, vaccine_name, quantity, unit, max_quantity, created_by, created_at');
 
     if (error) throw error;
 
@@ -27,13 +27,16 @@ class InventoryService {
       id: row.id,
       item_name: row.vaccine_name,
       quantity: row.quantity,
+      unit: row.unit || 'vials',
+      max_stock: row.max_quantity,
+      status: row.status,
     }));
   }
 
   async getSupplementInventory() {
     const { data, error } = await supabase
       .from('supplement_inventory')
-      .select('id, supplement_name, quantity, created_by, created_at');
+      .select('id, supplement_name, quantity, unit, max_quant, created_by, created_at');
 
     if (error) throw error;
 
@@ -41,10 +44,13 @@ class InventoryService {
       id: row.id,
       item_name: row.supplement_name,
       quantity: row.quantity,
+      unit: row.unit || 'pcs',
+      max_stock: row.max_quant,
+      status: row.status,
     }));
   }
 
-  async addInventoryItem(table, { item_name, quantity }) {
+  async addInventoryItem(table, { item_name, quantity, unit }) {
     await this._ensureAdmin(); // only admins
 
     const currentUser = await this.auth.getAuthUser();
@@ -52,7 +58,8 @@ class InventoryService {
 
     const payload = {
       quantity: Number(quantity),
-      created_by: currentUser.id, // ← this is likely the missing field
+      unit: unit || (table === 'vaccine_inventory' ? 'vials' : 'pcs'),
+      created_by: currentUser.id,
     };
 
     if (table === 'vaccine_inventory') {

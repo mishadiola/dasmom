@@ -32,8 +32,12 @@ const Inventory = () => {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(null);
-  const [form, setForm] = useState({ item_name: '', quantity: '', unit: '' });
+  const [form, setForm] = useState({ item_name: '', quantity: '', unit: 'vials' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const vaccineUnitOptions = ['vials', 'doses', 'ml'];
+  const supplementUnitOptions = ['pcs', 'tablets', 'bottles', 'capsules'];
+  const unitOptions = activeTab === 'vaccines' ? vaccineUnitOptions : supplementUnitOptions;
 
   const fetchData = async () => {
     setLoading(true);
@@ -51,7 +55,7 @@ const Inventory = () => {
         item_name: row?.vaccine_name || row?.item_name || 'Unknown',
         quantity: row?.quantity || 0,
         max_stock: row?.max_stock || 500,
-        unit: 'vial',
+        unit: row?.unit || 'vials',
         status: row?.status || 'active',
       }));
       const mappedSupplements = (suppData || []).map(row => ({
@@ -59,7 +63,7 @@ const Inventory = () => {
         item_name: row?.supplement_name || row?.item_name || 'Unknown',
         quantity: row?.quantity || 0,
         max_stock: row?.max_stock || 1000,
-        unit: 'pcs',
+        unit: row?.unit || 'pcs',
         status: row?.status || 'active',
       }));
 
@@ -84,9 +88,11 @@ const Inventory = () => {
     };
   }, []);
 
-  const getStatus = qty => {
+  const getStatus = (qty, maxStock) => {
     if (qty <= 0) return { label: 'Out of Stock', class: 'status-out' };
-    if (qty <= 20) return { label: 'Low Stock', class: 'status-low' };
+    // 20% of max stock threshold
+    const threshold = maxStock ? Math.ceil(maxStock * 0.2) : 20;
+    if (qty <= threshold) return { label: 'Low Stock', class: 'status-low' };
     return { label: 'In Stock', class: 'status-ok' };
   };
 
@@ -102,7 +108,7 @@ const Inventory = () => {
     .filter(item => item && typeof item === 'object')
     .filter(item => {
       const matchesSearch = (item.item_name || '').toLowerCase().includes(searchTerm.toLowerCase());
-      const status = getStatus(item.quantity || 0).label;
+      const status = getStatus(item.quantity || 0, item.max_stock).label;
       const matchesStatus = statusFilter === 'All' || status === statusFilter;
       
       // Apply archive filter
@@ -112,7 +118,8 @@ const Inventory = () => {
       // Apply summary card filter
       let matchesSummary = true;
       if (activeSummaryFilter === 'lowStock') {
-        matchesSummary = (item.quantity || 0) > 0 && (item.quantity || 0) <= 20;
+        const threshold = item.max_stock ? Math.ceil(item.max_stock * 0.2) : 20;
+        matchesSummary = (item.quantity || 0) > 0 && (item.quantity || 0) <= threshold;
       } else if (activeSummaryFilter === 'outOfStock') {
         matchesSummary = (item.quantity || 0) <= 0;
       }
@@ -122,7 +129,10 @@ const Inventory = () => {
     });
 
   const totalItems = (currentItems || []).length;
-  const lowStockCount = (currentItems || []).filter(i => (i?.quantity || 0) > 0 && (i?.quantity || 0) <= 20).length;
+  const lowStockCount = (currentItems || []).filter(i => {
+    const threshold = i?.max_stock ? Math.ceil(i.max_stock * 0.2) : 20;
+    return (i?.quantity || 0) > 0 && (i?.quantity || 0) <= threshold;
+  }).length;
   const outOfStockCount = (currentItems || []).filter(i => (i?.quantity || 0) <= 0).length;
 
   const handleAddSubmit = async e => {
@@ -134,12 +144,13 @@ const Inventory = () => {
       const payload = {
         item_name: form.item_name,
         quantity: Number(form.quantity),
+        unit: form.unit,
       };
 
       await inventoryService.addInventoryItem(table, payload);
 
       setShowAddModal(false);
-      setForm({ item_name: '', quantity: '', unit: '' });
+      setForm({ item_name: '', quantity: '', unit: activeTab === 'vaccines' ? 'vials' : 'pcs' });
     } catch (error) {
       alert('Failed to add item: ' + error.message);
     } finally {
@@ -209,7 +220,10 @@ const Inventory = () => {
         <div className="header-actions">
           <button
             className="btn btn-primary"
-            onClick={() => setShowAddModal(true)}
+            onClick={() => {
+              setForm({ item_name: '', quantity: '', unit: activeTab === 'vaccines' ? 'vials' : 'pcs' });
+              setShowAddModal(true);
+            }}
           >
             <Plus size={16} /> Add Item
           </button>
@@ -349,7 +363,7 @@ const Inventory = () => {
                 </tr>
               ) : filteredItems.length > 0 ? (
                 filteredItems.map(item => {
-                  const status = getStatus(item.quantity);
+                  const status = getStatus(item.quantity, item.max_stock);
                   const percentage = getStockPercentage(item.quantity || 0, item.max_stock || 500);
                   return (
                     <tr key={item.id} className="inv-row">
@@ -519,7 +533,14 @@ const Inventory = () => {
                   <label>Item Category</label>
                   <select
                     value={activeTab}
-                    onChange={e => setActiveTab(e.target.value)}
+                    onChange={e => {
+                      const nextTab = e.target.value;
+                      setActiveTab(nextTab);
+                      setForm(prev => ({
+                        ...prev,
+                        unit: nextTab === 'vaccines' ? 'vials' : 'pcs',
+                      }));
+                    }}
                     className="form-control"
                   >
                     <option value="vaccines">Vaccine</option>
@@ -554,15 +575,19 @@ const Inventory = () => {
                   </div>
                   <div className="form-group">
                     <label>Unit</label>
-                    <input
-                      type="text"
+                    <select
                       required
                       value={form.unit}
                       onChange={e =>
                         setForm({ ...form, unit: e.target.value })
                       }
-                      placeholder="pcs, vials, etc."
-                    />
+                    >
+                      {unitOptions.map(option => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               </div>

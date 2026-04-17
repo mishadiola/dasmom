@@ -1,68 +1,84 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
     ArrowLeft, Save, X, Activity, Baby, HeartPulse,
     Thermometer, ShieldAlert, AlertTriangle, Calculator,
     Stethoscope, FileText, CheckCircle2, XCircle, CalendarCheck
 } from 'lucide-react';
+import PatientService from '../../services/patientservice';
+import InventoryService from '../../services/inventoryservice';
 import '../../styles/pages/AddPrenatalVisit.css';
 
-// Mock Patient Data for auto-filling the first section
-const MOCK_PATIENT = {
-    id: 'PT-2026105',
-    name: 'Maria Santos',
-    age: 28,
-    station: 'Station 3',
-    gravida: 2,
-    para: 1,
-    lmp: '2025-09-10',
-    baseRisk: 'Normal'
-};
+const patientService = new PatientService();
+const inventoryService = new InventoryService();
 
 const MEDICAL_TESTS = ['Hemoglobin', 'Urinalysis', 'Blood Type', 'Ultrasound'];
-const SUPPLEMENTS = ['Iron', 'Folic Acid', 'Calcium', 'Tetanus Toxoid'];
 const RISK_FACTORS = ['Bleeding', 'Severe Headache', 'Swelling', 'High BP', 'Fever', 'Previous Complications'];
 
 const AddPrenatalVisit = () => {
     const navigate = useNavigate();
+    const { patientId } = useParams();
     const [toast, setToast] = useState(null);
+
+    const currentTime = useMemo(() => {
+        const now = new Date();
+        return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    }, []);
+
+    const [patient, setPatient] = useState(null);
 
     // Form State
     const [formData, setFormData] = useState({
-        // 1. Patient Info (readonly populated)
-        ...MOCK_PATIENT,
-        edd: '',
-        gestationalAge: '',
-
-        // 2. Visit Details
-        visitDate: new Date().toISOString().split('T')[0],
-        visitNumber: 4,
-        trimester: '',
-        attendingMidwife: '',
-        healthFacility: 'Dasma CHO',
-        visitType: 'Facility Visit', // Home or Facility
-
-        // 3. Maternal Vitals
-        bpSystolic: '', bpDiastolic: '', weight: '', temp: '', pulse: '', rr: '',
-
-        // 4. Fetal Assessment
-        fundalHeight: '', fhr: '', fetalMovement: 'Normal', presentation: 'Cephalic',
-
-        // 5. Labs & Supplements
-        testsDone: [], supplementsGiven: [],
-
-        // 6. Risk Assessment
-        riskFactors: [], calculatedRisk: MOCK_PATIENT.baseRisk,
-
-        // 7. Notes
-        clinicalNotes: '', adviceGiven: '',
-
-        // 8. Referral
-        referred: false, referredTo: '', referralReason: '', referralDate: '',
-
-        // 9. Next Appt
-        nextApptDate: '', remiderEnabled: true, nextApptType: 'Routine Checkup'
+        testsDone: [],
+        supplementsGiven: [],
+        riskFactors: []
     });
+
+    const [midwives, setMidwives] = useState([]);
+    const [supplements, setSupplements] = useState([]);
+    const [midwivesLoading, setMidwivesLoading] = useState(false);
+    const [supplementsLoading, setSupplementsLoading] = useState(true);
+    const [isFormInitialized, setIsFormInitialized] = useState(false);
+
+    // Fetch patient data
+    useEffect(() => {
+        if (patientId) {
+            patientService.getPatientById(patientId).then(setPatient).catch(console.error);
+        }
+    }, [patientId]);
+
+    // Set form data when patient loads
+    useEffect(() => {
+        if (patient && !isFormInitialized) {
+            const attendedCount = patient.visits?.filter(v => v.status === 'Attended').length || 0;
+            const scheduledVisits = (patient.visits || []).filter(v => v.status === 'Scheduled').sort((a,b) => new Date(a.visit_date) - new Date(b.visit_date));
+            const nextScheduled = scheduledVisits.find(v => new Date(v.visit_date) > new Date()) || scheduledVisits[0];
+            
+            setFormData(prev => ({
+                ...prev,
+                ...patient,
+                edd: patient.edd || '',
+                gestationalAge: patient.weeks ? `${patient.weeks}w` : '',
+                trimester: patient.trimester || '',
+                visitDate: new Date().toISOString().split('T')[0],
+                visitTime: currentTime,
+                visitNumber: attendedCount + 1,
+                attendingMidwife: '',
+                healthFacility: 'Dasma CHO',
+                visitType: 'Facility Visit',
+                bpSystolic: '', bpDiastolic: '', weight: '', temp: '', pulse: '', rr: '',
+                fundalHeight: '', fhr: '', fetalMovement: 'Normal', presentation: 'Cephalic',
+                testsDone: [], supplementsGiven: [],
+                riskFactors: patient.medicalConditions || [],
+                calculatedRisk: patient.risk || 'Normal',
+                clinicalNotes: '', adviceGiven: '',
+                referred: false, referredTo: '', referralReason: '', referralDate: '',
+                nextApptDate: nextScheduled ? new Date(nextScheduled.visit_date).toISOString().split('T')[0] : '',
+                remiderEnabled: true, nextApptType: 'Routine Checkup'
+            }));
+            setIsFormInitialized(true);
+        }
+    }, [patient, currentTime, isFormInitialized]);
 
     // Smart Calculators: EDD, GA, Trimester
     useEffect(() => {
@@ -99,7 +115,7 @@ const AddPrenatalVisit = () => {
         let isHighRisk = false;
 
         // Risk factor checkboxes
-        if (formData.riskFactors.length > 0) isHighRisk = true;
+        if (formData.riskFactors && formData.riskFactors.length > 0) isHighRisk = true;
 
         // BP check
         const sys = parseInt(formData.bpSystolic);
@@ -113,15 +129,45 @@ const AddPrenatalVisit = () => {
         }
 
         // Base risk inheritance
-        if (MOCK_PATIENT.baseRisk === 'High Risk') isHighRisk = true;
+        if (patient && patient.risk === 'High Risk') isHighRisk = true;
 
         setFormData(prev => ({
             ...prev,
-            calculatedRisk: isHighRisk ? 'High Risk' : prev.riskFactors.length ? 'Monitor' : 'Normal'
+            calculatedRisk: isHighRisk ? 'High Risk' : (prev.riskFactors && prev.riskFactors.length) ? 'Monitor' : 'Normal'
         }));
 
-    }, [formData.riskFactors, formData.bpSystolic, formData.bpDiastolic]);
+    }, [formData.riskFactors, formData.bpSystolic, formData.bpDiastolic, patient]);
 
+    // Fetch midwives based on station
+    useEffect(() => {
+        if (formData.station) {
+            setMidwivesLoading(true);
+            patientService.getMidwivesByStation(formData.station).then(data => {
+                setMidwives(data || []);
+                setMidwivesLoading(false);
+            }).catch(err => {
+                console.error('Failed to fetch midwives:', err);
+                setMidwives([]);
+                setMidwivesLoading(false);
+            });
+        } else {
+            setMidwives([]);
+            setMidwivesLoading(false);
+        }
+    }, [formData.station]);
+
+    // Fetch supplements
+    useEffect(() => {
+        setSupplementsLoading(true);
+        patientService.getSupplementInventory().then(data => {
+            setSupplements(data);
+            setSupplementsLoading(false);
+        }).catch(err => {
+            console.error('Failed to fetch supplements:', err);
+            setSupplements([]);
+            setSupplementsLoading(false);
+        });
+    }, []);
 
     // Handlers
     const handleChange = (e) => {
@@ -145,15 +191,155 @@ const AddPrenatalVisit = () => {
         });
     };
 
-    const handleSave = (e) => {
+    const handleSupplementToggle = (sup) => {
+        setFormData(prev => {
+            const curr = prev.supplementsGiven;
+            const existing = curr.find(s => s.id === sup.id);
+            if (existing) {
+                return { ...prev, supplementsGiven: curr.filter(s => s.id !== sup.id) };
+            } else {
+                return { ...prev, supplementsGiven: [...curr, {id: sup.id, name: sup.name, quantity: 1}] };
+            }
+        });
+    };
+
+    const handleSupplementQuantity = (id, quantity) => {
+        setFormData(prev => {
+            const curr = prev.supplementsGiven;
+            const index = curr.findIndex(s => s.id === id);
+            if (index !== -1) {
+                curr[index].quantity = parseInt(quantity) || 1;
+                return { ...prev, supplementsGiven: [...curr] };
+            }
+            return prev;
+        });
+    };
+
+    const handleSave = async (e) => {
         e.preventDefault();
-        window.scrollTo(0, 0);
-        setToast({ type: 'success', message: 'Prenatal visit successfully recorded!' });
-        setTimeout(() => navigate('/dashboard/prenatal'), 1500);
+        try {
+            const createdBy = await patientService.getCurrentUserId();
+            if (!createdBy) throw new Error('Not authenticated');
+
+            const visitTimestamp = patientService.dateTimeToTimestamp(formData.visitDate, formData.visitTime);
+            const actualVisitTime = new Date(visitTimestamp);
+
+            const { data: visits } = await patientService.supabase
+                .from('prenatal_visits')
+                .select('*')
+                .eq('patient_id', patientId)
+                .order('visit_date', { ascending: true });
+
+            // Find the maximum attended visit number
+            const attendedVisits = (visits || []).filter(v => v.status === 'Attended');
+            const maxAttendedNumber = attendedVisits.length > 0 ? Math.max(...attendedVisits.map(v => v.visit_number || 0)) : 0;
+            const targetVisitNumber = maxAttendedNumber + 1;
+
+            // Target the scheduled or missed visit with the next visit number
+            const targetVisit = (visits || []).find(v => v.visit_number === targetVisitNumber && (v.status === 'Scheduled' || v.status === 'Missed'));
+
+            const rowVisitNumber = targetVisit ? targetVisit.visit_number : targetVisitNumber;
+            const rowVisitDate = visitTimestamp;
+            const rowId = targetVisit ? targetVisit.id : null;
+
+            const visitData = {
+                patient_id: patientId,
+                created_by: createdBy,
+                visit_date: rowVisitDate,
+                visit_number: rowVisitNumber,
+                trimester: formData.trimester,
+                gestational_age: formData.gestationalAge,
+                bp_systolic: formData.bpSystolic ? parseInt(formData.bpSystolic) : null,
+                bp_diastolic: formData.bpDiastolic ? parseInt(formData.bpDiastolic) : null,
+                weight_kg: formData.weight ? parseFloat(formData.weight) : null,
+                temp_c: formData.temp ? parseFloat(formData.temp) : null,
+                pulse_bpm: formData.pulse ? parseInt(formData.pulse) : null,
+                resp_rate_cpm: formData.rr ? parseInt(formData.rr) : null,
+                fundal_height_cm: formData.fundalHeight ? parseFloat(formData.fundalHeight) : null,
+                fhr_bpm: formData.fhr ? parseInt(formData.fhr) : null,
+                fetal_movement: formData.fetalMovement || null,
+                presentation: formData.presentation || null,
+                tests_done: formData.testsDone || [],
+                supplements_given: formData.supplementsGiven || [],
+                clinical_notes: formData.clinicalNotes || null,
+                advice_given: formData.adviceGiven || null,
+                is_referred: formData.referred || false,
+                referred_to: formData.referredTo || null,
+                referral_reason: formData.referralReason || null,
+                next_appt_date: formData.nextApptDate ? patientService.dateTimeToTimestamp(formData.nextApptDate, '09:00') : null,
+                next_appt_type: formData.nextApptType || null,
+                status: 'Attended',
+                attended_date: new Date().toISOString(),
+                assigned_midwife: formData.attendingMidwife || null,
+                bhw_assigned: createdBy,
+            };
+
+            if (rowId) {
+                await patientService.supabase
+                    .from('prenatal_visits')
+                    .update(visitData)
+                    .eq('id', rowId);
+            } else {
+                await patientService.supabase
+                    .from('prenatal_visits')
+                    .insert(visitData);
+            }
+
+            // Handle supplements
+            for (const sup of formData.supplementsGiven) {
+                const inventoryItem = supplements.find(s => s.id === sup.id);
+                if (!inventoryItem) {
+                    throw new Error(`Supplement ${sup.name} not found in inventory`);
+                }
+                if (sup.quantity > inventoryItem.stock) {
+                    throw new Error(`Insufficient stock for ${sup.name}. Available: ${inventoryItem.stock}`);
+                }
+                // Deduct from inventory
+                await inventoryService.updateInventoryQuantity('supplement_inventory', sup.id, inventoryItem.stock - sup.quantity);
+                // Insert record
+                await patientService.supabase
+                    .from('supplements')
+                    .insert({
+                        patient_id: patientId,
+                        supplement_inventory_id: sup.id,
+                        dosage: sup.quantity.toString(),
+                        start_date: formData.visitDate,
+                        status: 'Completed',
+                        created_by: createdBy,
+                        notes: 'Given during visit'
+                    });
+            }
+
+            const remainingScheduled = (visits || [])
+                .filter(v => v.status === 'Scheduled' && v.id !== rowId);
+
+            const scheduledReferenceDate = targetVisit ? new Date(targetVisit.visit_date) : actualVisitTime;
+            const lateAttendance = Math.abs(actualVisitTime - scheduledReferenceDate) > 30 * 60 * 1000;
+
+            if (lateAttendance && remainingScheduled.length > 0) {
+                const patientDataForRebalance = {
+                    assignedMidwife: formData.attendingMidwife,
+                    assignedDoctor: null,
+                    bhw_assigned: createdBy
+                };
+                await patientService.rebalancePrenatalSchedule(patientId, patient.lmp, visitTimestamp, createdBy, patientDataForRebalance);
+            }
+
+            window.scrollTo(0, 0);
+            setToast({ type: 'success', message: 'Prenatal visit successfully recorded!' });
+            setTimeout(() => navigate('/dashboard/prenatal'), 1500);
+        } catch (err) {
+            console.error('Error saving visit:', err);
+            setToast({ type: 'error', message: 'Error recording visit: ' + err.message });
+        }
     };
 
     // Derived flags for UI
     const isHighBP = parseInt(formData.bpSystolic) >= 140 || parseInt(formData.bpDiastolic) >= 90;
+
+    if (!patient) {
+        return <div className="loading">Loading patient data...</div>;
+    }
 
     return (
         <div className="add-pvisit-page">
@@ -309,16 +495,38 @@ const AddPrenatalVisit = () => {
                         <div className="split-half highlight-panel">
                             <h3 className="section-head"><ShieldAlert size={18} /> Supplements Given</h3>
                             <div className="check-list">
-                                {SUPPLEMENTS.map(sup => (
-                                    <label key={sup} className="check-lbl">
-                                        <input
-                                            type="checkbox"
-                                            checked={formData.supplementsGiven.includes(sup)}
-                                            onChange={() => handleArrayToggle('supplementsGiven', sup)}
-                                        />
-                                        <span>{sup}</span>
-                                    </label>
-                                ))}
+                                {supplementsLoading ? (
+                                    <div>Loading supplements...</div>
+                                ) : supplements.length === 0 ? (
+                                    <div>No supplements available</div>
+                                ) : (
+                                    supplements.map(sup => {
+                                        const given = formData.supplementsGiven.find(s => s.id === sup.id);
+                                        return (
+                                            <div key={sup.id} className="supplement-item">
+                                                <label className="check-lbl">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={!!given}
+                                                        onChange={() => handleSupplementToggle(sup)}
+                                                    />
+                                                    <span>{sup.name} (Stock: {sup.stock})</span>
+                                                </label>
+                                                {given && (
+                                                    <input
+                                                        type="number"
+                                                        min="1"
+                                                        max={sup.stock}
+                                                        value={given.quantity}
+                                                        onChange={(e) => handleSupplementQuantity(sup.id, e.target.value)}
+                                                        placeholder="Qty"
+                                                        className="quantity-input"
+                                                    />
+                                                )}
+                                            </div>
+                                        );
+                                    })
+                                )}
                             </div>
                         </div>
                     </section>
@@ -373,8 +581,11 @@ const AddPrenatalVisit = () => {
                     <div className="apv-side-card">
                         <h3 className="side-head">Visit Details</h3>
                         <div className="form-group">
-                            <label>Visit Date</label>
-                            <input type="date" name="visitDate" value={formData.visitDate} onChange={handleChange} required />
+                            <label>Visit Date & Time</label>
+                            <input type="date" name="visitDate" value={formData.visitDate} readOnly className="read-only" />
+                            <small style={{marginTop: '4px', display: 'block', color: '#999'}}>Auto-assigned. Date is fixed for this visit.</small>
+                            <input type="time" name="visitTime" value={formData.visitTime} readOnly className="read-only" style={{marginTop: '8px'}} />
+                            <small style={{marginTop: '4px', display: 'block', color: '#999'}}>Time: {formData.visitTime} (current time)</small>
                         </div>
                         <div className="form-group mt-2">
                             <label>Visit Number</label>
@@ -393,7 +604,16 @@ const AddPrenatalVisit = () => {
                         </div>
                         <div className="form-group mt-2">
                             <label>Attending Midwife / Doctor</label>
-                            <input type="text" name="attendingMidwife" value={formData.attendingMidwife} onChange={handleChange} />
+                            <select name="attendingMidwife" value={formData.attendingMidwife} onChange={handleChange}>
+                                <option value="">Select Midwife</option>
+                                {midwivesLoading ? (
+                                    <option disabled>Loading...</option>
+                                ) : (
+                                    midwives.map(midwife => (
+                                        <option key={midwife.id} value={midwife.id}>{midwife.full_name}</option>
+                                    ))
+                                )}
+                            </select>
                         </div>
                     </div>
 
@@ -430,7 +650,7 @@ const AddPrenatalVisit = () => {
                         <h3 className="side-head text-primary"><CalendarCheck size={18} /> Next Appointment</h3>
                         <div className="form-group mt-2">
                             <label>Next Visit Date</label>
-                            <input type="date" name="nextApptDate" value={formData.nextApptDate} onChange={handleChange} required />
+                            <input type="date" name="nextApptDate" value={formData.nextApptDate} readOnly className="read-only" />
                         </div>
                         <div className="form-group mt-2">
                             <label>Visit Type</label>

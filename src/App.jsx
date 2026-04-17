@@ -26,7 +26,7 @@ import PatientProfile from './pages/Patients/PatientProfile';
 import AddPatient from './pages/Patients/AddPatient';
 import HighRiskCases from './pages/HighRisk/HighRiskCases';
 import Analytics from './pages/Analytics/Analytics';
-import PrenatalVisits from './pages/prenatal/PrenatalVisits';
+import PrenatalVisits from './pages/Prenatal/PrenatalVisits';
 import AddPrenatalVisit from './pages/Prenatal/AddPrenatalVisit';
 import PostpartumRecords from './pages/Postpartum/PostpartumRecords';
 import Vaccinations from './pages/Vaccinations/Vaccinations';
@@ -63,7 +63,7 @@ function App() {
             <Route path="patients/:id" element={<PatientProfile />} />
             <Route path="high-risk" element={<HighRiskCases />} />
             <Route path="prenatal" element={<PrenatalVisits />} />
-            <Route path="prenatal/add" element={<AddPrenatalVisit />} />
+            <Route path="prenatal/add/:patientId" element={<AddPrenatalVisit />} />
             <Route path="postpartum" element={<PostpartumRecords />} />
             <Route path="vaccinations" element={<Vaccinations />} />
             <Route path="inventory" element={<Inventory />} />
