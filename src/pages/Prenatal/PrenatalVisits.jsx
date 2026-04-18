@@ -41,12 +41,6 @@ const formatCalendarDate = (dateString) => {
     return date.toLocaleDateString('en-US', options);
 };
 
-const TIME_SLOTS = [
-    '08:00 AM', '08:30 AM', '09:00 AM', '09:30 AM', '10:00 AM',
-    '10:30 AM', '11:00 AM', '11:30 AM', '01:00 PM', '01:30 PM',
-    '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM', '04:00 PM'
-];
-
 // Helper to convert TIME_SLOTS format (12-hour) to 24-hour format
 const convertTo24Hour = (timeStr) => {
     const [time, period] = timeStr.trim().split(' ');
@@ -203,13 +197,10 @@ const PrenatalVisits = () => {
             ]);
 
             // Ensure visits have consistent local date format for filtering
-            const processedVisits = (visitsData || []).map(v => {
-                const visitDateTime = v.visitDate ? new Date(v.visitDate) : null;
-                return {
-                    ...v,
-                    visitDateOnly: visitDateTime ? toLocalDateStr(visitDateTime) : ''
-                };
-            });
+            const processedVisits = (visitsData || []).map(v => ({
+                ...v,
+                visitDateOnly: v.visit_date || ''
+            }));
 
             setVisitsTable(processedVisits);
             setAppointments(apptsData || []);
@@ -407,8 +398,10 @@ const PrenatalVisits = () => {
                         </div>
                         <div className="legend-pills">
                             <span><i className="dot d-avail"></i> Available</span>
-                            <span><i className="dot d-booked"></i> Booked</span>
-                            <span><i className="dot d-full"></i> Full (30/day max)</span>
+                            <span><i className="dot d-scheduled"></i> Scheduled</span>
+                            <span><i className="dot d-attended"></i> Attended</span>
+                            <span><i className="dot d-missed"></i> Missed</span>
+                            <span><i className="dot d-full"></i> Full (35/day max)</span>
                         </div>
                     </div>
                 </div>
@@ -418,68 +411,49 @@ const PrenatalVisits = () => {
                         <table className="pc-grid">
                             <thead>
                                 <tr>
-                                    <th className="th-time">Time</th>
-                                    {visibleDays.map(day => (
-                                        <th key={day.date} className={day.date === TODAY ? 'th-today' : ''}>
-                                            {formatCalendarDate(day.date)}
-                                            {day.date === TODAY && <span className="today-badge">TODAY</span>}
-                                        </th>
-                                    ))}
+                                    <th className="th-date">Date</th>
+                                    <th className="th-status">Status</th>
+                                    <th className="th-patients">Patients</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {TIME_SLOTS.map(time => (
-                                    <tr key={time}>
-                                        <td className="td-time">{time}</td>
-                                        {visibleDays.map(day => {
-                                            const slotData = getSlotStatus(day.date, time);
-                                            let slotClass = 'slot-avail';
-                                            
-                                            if (slotData.hasVisit) {
-                                                // Status-based coloring for prenatal visits
-                                                if (slotData.status === 'Attended') {
-                                                    slotClass = 'slot-attended'; // Green
-                                                } else if (slotData.status === 'Missed') {
-                                                    slotClass = 'slot-missed'; // Red
-                                                } else if (slotData.status === 'Scheduled') {
-                                                    slotClass = 'slot-scheduled'; // Yellow
-                                                } else if (slotData.status === 'Cancelled') {
-                                                    slotClass = 'slot-cancelled'; // Gray
-                                                }
-                                            } else if (slotData.status === 'FULL_DAY' || slotData.status === 'FULL') {
-                                                slotClass = 'slot-full';
-                                            } else if (slotData.status && slotData.status !== 'AVAILABLE') {
-                                                slotClass = 'slot-booked';
-                                            }
+                                {visibleDays.map(day => {
+                                    const dayVisits = visitsTable.filter(v => v.visit_date === day.date);
+                                    const dayAppts = appointments.filter(a => a.date === day.date);
+                                    const totalVisits = dayVisits.length + dayAppts.length;
+                                    
+                                    let dayStatus = 'Available';
+                                    let statusClass = 'status-avail';
+                                    
+                                    if (totalVisits >= 35) {
+                                        dayStatus = 'Full Day';
+                                        statusClass = 'status-full';
+                                    } else if (dayVisits.some(v => v.status === 'Attended')) {
+                                        dayStatus = 'Visits Attended';
+                                        statusClass = 'status-attended';
+                                    } else if (dayVisits.some(v => v.status === 'Scheduled')) {
+                                        dayStatus = 'Visits Scheduled';
+                                        statusClass = 'status-scheduled';
+                                    } else if (dayVisits.some(v => v.status === 'Missed')) {
+                                        dayStatus = 'Visits Missed';
+                                        statusClass = 'status-missed';
+                                    }
 
-                                            return (
-                                                <td
-                                                    key={day.date}
-                                                    className={`pc-slot ${slotClass}`}
-                                                    onClick={() => slotData.status !== 'AVAILABLE' && handleSlotClick(day.date, time, slotData)}
-                                                >
-                                                    {slotData.hasVisit ? (
-                                                        <div className="booked-card">
-                                                            <span className="bc-name">{slotData.patient}</span>
-                                                            <span className="bc-type">{slotData.status}</span>
-                                                        </div>
-                                                    ) : slotData.label === 'FULL DAY' ? (
-                                                        'FULL DAY'
-                                                    ) : slotData.label === 'FULL' ? (
-                                                        'FULL'
-                                                    ) : slotData.status === 'AVAILABLE' ? (
-                                                        'Available'
-                                                    ) : (
-                                                        <div className="booked-card">
-                                                            <span className="bc-name">{slotData.patient}</span>
-                                                            <span className="bc-type">{slotData.type}</span>
-                                                        </div>
-                                                    )}
-                                                </td>
-                                            );
-                                        })}
-                                    </tr>
-                                ))}
+                                    return (
+                                        <tr key={day.date} className={day.date === TODAY ? 'tr-today' : ''}>
+                                            <td className="td-date">
+                                                {formatCalendarDate(day.date)}
+                                                {day.date === TODAY && <span className="today-badge">TODAY</span>}
+                                            </td>
+                                            <td className={`td-status ${statusClass}`}>
+                                                {dayStatus}
+                                            </td>
+                                            <td className="td-patients">
+                                                {totalVisits > 0 ? `${totalVisits} visit${totalVisits > 1 ? 's' : ''}` : 'No visits'}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     ) : (
@@ -497,7 +471,6 @@ const PrenatalVisits = () => {
                                                     <div key={v.id} className={`visit-item status-${v.status.toLowerCase()}`}>
                                                         <span className="visit-patient">{v.patientName}</span>
                                                         <span className="visit-status">{v.status}</span>
-                                                        <span className="visit-time">{new Date(v.visitDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
                                                     </div>
                                                 ))}
                                                 {visitsTable.filter(v => v.visitDateOnly === day.date).length === 0 && (
@@ -523,13 +496,13 @@ const PrenatalVisits = () => {
                                                         {day.date === TODAY && <span className="today-badge">TODAY</span>}
                                                     </h4>
                                                     <div className="day-visits">
-                                                        {visitsTable.filter(v => v.visitDateOnly === day.date).map(v => (
+                                                        {visitsTable.filter(v => v.visit_date === day.date).map(v => (
                                                             <div key={v.id} className={`visit-item status-${v.status.toLowerCase()}`}>
                                                                 <span className="visit-patient">{v.patientName}</span>
                                                                 <span className="visit-status">{v.status}</span>
                                                             </div>
                                                         ))}
-                                                        {visitsTable.filter(v => v.visitDateOnly === day.date).length === 0 && (
+                                                        {visitsTable.filter(v => v.visit_date === day.date).length === 0 && (
                                                             <div className="no-visits">No visits</div>
                                                         )}
                                                     </div>

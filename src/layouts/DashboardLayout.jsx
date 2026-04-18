@@ -153,21 +153,23 @@ const DashboardLayout = () => {
                 // Fetch low stock inventory items
                 const { data: inventory } = await supabase
                     .from('vaccine_inventory')
-                    .select('vaccine_name, current_stock, minimum_stock')
-                    .lt('current_stock', supabase.raw('minimum_stock * 1.2'))
-                    .limit(5);
+                    .select('vaccine_name, quantity, max_quantity')
+                    .limit(100);
 
                 if (inventory && inventory.length > 0) {
-                    inventory.forEach(item => {
-                        const percentage = (item.current_stock / item.minimum_stock) * 100;
-                        const severity = percentage < 50 ? 'critical' : 'low';
-                        notifList.push({
-                            category: 'inventory',
-                            type: severity === 'critical' ? 'alert' : 'warning',
-                            text: `${item.vaccine_name} stock ${severity} (${item.current_stock} units)`,
-                            time: 'Inventory'
+                    inventory
+                        .filter(item => item.quantity < (item.max_quantity * 0.2))
+                        .slice(0, 5)
+                        .forEach(item => {
+                            const percentage = (item.quantity / item.max_quantity) * 100;
+                            const severity = percentage < 50 ? 'critical' : 'low';
+                            notifList.push({
+                                category: 'inventory',
+                                type: severity === 'critical' ? 'alert' : 'warning',
+                                text: `${item.vaccine_name} stock ${severity} (${item.quantity} units)`,
+                                time: 'Inventory'
+                            });
                         });
-                    });
                 }
 
                 // Fetch high-risk patients

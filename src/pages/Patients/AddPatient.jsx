@@ -67,9 +67,8 @@ const AddPatient = () => {
     const [doctorList, setDoctorList] = useState([]);
     const [schedulePreview, setSchedulePreview] = useState([]);
     const [loadingSchedule, setLoadingSchedule] = useState(false);
-    const [supplementsInventory, setSupplementsInventory] = useState([]);
-    const [supplementOptions, setSupplementOptions] = useState([]);
     const [otherConditionRisk, setOtherConditionRisk] = useState('Low');
+    const [retainedStaffList, setRetainedStaffList] = useState([]);
 
     const currentStaff = {
         id: user?.id || null,
@@ -85,13 +84,11 @@ const AddPatient = () => {
         lmp: '', edd: '', gestationalAge: '', pregnancyType: 'Singleton',
         plannedDeliveryPlace: 'Hospital',
         conditions: [], otherConditions: '', riskLevel: 'Low Risk',
-        assignedMidwife: '', assignedDoctor: '',
-        bhwAssigned: currentStaff.full_name,
+        retained_staff: '',
         bp: '', weight: '', height: '', bmi: '', temp: '', pulse: '', respRate: '', fundalHeight: '',
-        fetalMovement: '', presentation: '', testsDone: '', supplementsGiven: [], visitNotes: '',
+        fetalMovement: '', presentation: '', testsDone: '', visitNotes: '',
         fhr: '', hgb: '',
         emName: '', emRel: '', emPhone: '', emAddress: '',
-        supplements: []
     });
 
     useEffect(() => {
@@ -106,30 +103,8 @@ const AddPatient = () => {
                 setLoadingStations(false);
             }
         };
-        const loadSupplements = async () => {
-            try {
-                const inventory = await inventoryService.getSupplementInventory();
-                setSupplementsInventory(inventory);
-                console.log('✅ Supplements inventory loaded:', inventory);
-            } catch (err) {
-                console.error('Error loading supplements:', err);
-            }
-        };
         loadStations();
-        loadSupplements();
     }, []);
-
-    useEffect(() => {
-        if (supplementsInventory.length > 0) {
-            const options = supplementsInventory.map(item => ({
-                name: item.supplement_name,
-                defaultAmount: '1 ' + item.unit,
-                id: item.id
-            }));
-            setSupplementOptions(options);
-            setFormData(prev => ({ ...prev, supplements: options.map(o => ({ name: o.name, amount: o.defaultAmount, id: o.id })) }));
-        }
-    }, [supplementsInventory]);
 
     useEffect(() => {
         if (user) {
@@ -143,13 +118,22 @@ const AddPatient = () => {
         const filterStaff = async () => {
             if (!formData.station || loadingStations) return;
             try {
-                const allMidwives = await patientService.getAllMidwives();
-                const filteredMidwives = allMidwives.filter(mw => mw.station_assignment === formData.station);
-                setMidwifeList(filteredMidwives);
+                // Get all staff at the selected station
+                const staffAtStation = await patientService.getDoctorsByStation(formData.station);
+                setDoctorList(staffAtStation);
+                setMidwifeList(staffAtStation);
 
-                const doctors = await patientService.getDoctorsByStation(formData.station);
-                setDoctorList(doctors);
-                console.log(`✅ Staff filtered for ${formData.station}:`, { midwives: filteredMidwives.length, doctors: doctors.length });
+                // For Salawag, get retained staff
+                if (formData.station.toLowerCase() === 'salawag') {
+                    const retainedStaff = await patientService.getRetainedStaff(formData.station);
+                    const staffList = Array.isArray(retainedStaff) ? retainedStaff : (retainedStaff ? [retainedStaff] : []);
+                    setRetainedStaffList(staffList);
+                    setFormData(prev => ({ ...prev, retained_staff: staffList.length > 0 ? staffList[0].id : '' }));
+                } else {
+                    setRetainedStaffList([]);
+                    setFormData(prev => ({ ...prev, retained_staff: '' }));
+                }
+                console.log(`✅ Staff filtered for ${formData.station}:`, { staffCount: staffAtStation.length });
             } catch (err) {
                 console.error(err);
             }
@@ -199,7 +183,10 @@ const AddPatient = () => {
             const preview = patientService.generateSemesterSchedule(formData.lmp, {
                 time: '08:00'
             });
-            const futurePreview = patientService.filterScheduleAfterToday(preview);
+            const normalizedPreview = preview
+                .filter(v => v && v.date && !Number.isNaN(new Date(v.date).getTime()))
+                .map(v => ({ ...v, date: new Date(v.date).toISOString().split('T')[0] }));
+            const futurePreview = patientService.filterScheduleAfterToday(normalizedPreview);
             setSchedulePreview(futurePreview);
         } catch (err) {
             console.error('Error building schedule preview:', err);
@@ -346,27 +333,10 @@ const AddPatient = () => {
             return !Number.isNaN(visitDate.getTime()) && visitDate > firstDate;
         });
 
-        const preparedSupplements = formData.supplementsGiven.map(name => {
-            const supp = formData.supplements.find(s => s.name === name);
-            return `${name} (${supp?.amount || '1'})`;
-        });
-        const supplementRecords = formData.supplementsGiven.map(name => {
-            const supp = formData.supplements.find(s => s.name === name);
-            const inv = supplementsInventory.find(i => i.supplement_name === name);
-            return {
-                supplement_inventory_id: inv?.id,
-                dosage: supp?.amount || '1',
-                start_date: autoFirstVisitDate,
-                status: 'Ongoing',
-                notes: 'Initial distribution at registration'
-            };
-        });
         const patientData = {
             ...formData,
             firstVisitDate: autoFirstVisitDate,
             schedulePreview: filteredSchedulePreview,
-            supplementsGiven: preparedSupplements,
-            supplementRecords
         };
 
         try {
@@ -817,32 +787,17 @@ const AddPatient = () => {
                                         <div className="no-lmp">Enter LMP to see 9-visit calendar</div>
                                     )}
                                 </div>
-                                <div className="form-group">
-                                    <label>BHW Assigned</label>
-                                    <input value={formData.bhwAssigned} readOnly className="computed-field" />
-                                </div>
-                            </div>
-
-                            {}
-                            <div className="form-grid-2">
-                                <div className="form-group">
-                                    <label>Assigned Midwife ({formData.station})</label>
-                                    <select name="assignedMidwife" value={formData.assignedMidwife} onChange={handleChange}>
-                                        <option value="">{midwifeList.length} available in {formData.station}</option>
-                                        {midwifeList.map(mw => (
-                                            <option key={mw.id} value={mw.id}>{mw.full_name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="form-group">
-                                    <label>Assigned Doctor ({formData.station})</label>
-                                    <select name="assignedDoctor" value={formData.assignedDoctor} onChange={handleChange}>
-                                        <option value="">{doctorList.length} available in {formData.station}</option>
-                                        {doctorList.map(doc => (
-                                            <option key={doc.id} value={doc.id}>Dr. {doc.full_name}</option>
-                                        ))}
-                                    </select>
-                                </div>
+                                {formData.station.toLowerCase() === 'salawag' && (
+                                    <div className="form-group">
+                                        <label>Retained Staff</label>
+                                        <select name="retained_staff" value={formData.retained_staff} onChange={handleChange}>
+                                            <option value="">{retainedStaffList.length} available</option>
+                                            {retainedStaffList.map(staff => (
+                                                <option key={staff.id} value={staff.id}>{staff.full_name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
                             </div>
                             <hr className="divider" />
                             <h3 className="section-subtitle">Initial Vital Signs <span className="req">*</span></h3>
@@ -953,64 +908,13 @@ const AddPatient = () => {
                                 </div>
                                 <div className="form-group">
                                     <label>Presentation</label>
-                                    <input
-                                        type="text"
-                                        name="presentation"
-                                        value={formData.presentation}
-                                        onChange={handleChange}
-                                    />
-                                </div>
-                            </div>
-                            <div className="form-grid-2">
-                                <div className="form-group">
-                                    <label>Tests Done</label>
-                                    <input
-                                        type="text"
-                                        name="testsDone"
-                                        value={formData.testsDone}
-                                        onChange={handleChange}
-                                        placeholder="e.g. CBC, Urinalysis"
-                                    />
-                                </div>
-                                <div className="form-group">
-                                    <label>Supplements Given</label>
-                                    <div className="supplements-section">
-                                        {supplementOptions.map(option => {
-                                            const isChecked = formData.supplementsGiven.includes(option.name);
-                                            const supp = formData.supplements.find(s => s.name === option.name);
-                                            return (
-                                                <div key={option.name} className="supplement-item">
-                                                    <label>
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={isChecked}
-                                                            onChange={(e) => {
-                                                                if (e.target.checked) {
-                                                                    setFormData(prev => ({ ...prev, supplementsGiven: [...prev.supplementsGiven, option.name] }));
-                                                                } else {
-                                                                    setFormData(prev => ({ ...prev, supplementsGiven: prev.supplementsGiven.filter(n => n !== option.name) }));
-                                                                }
-                                                            }}
-                                                        />
-                                                        {option.name}
-                                                    </label>
-                                                    {isChecked && (
-                                                        <input
-                                                            type="text"
-                                                            value={supp?.amount || ''}
-                                                            onChange={(e) => {
-                                                                setFormData(prev => ({
-                                                                    ...prev,
-                                                                    supplements: prev.supplements.map(s => s.name === option.name ? { ...s, amount: e.target.value } : s)
-                                                                }));
-                                                            }}
-                                                            placeholder={option.defaultAmount}
-                                                        />
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
+                                    <select name="presentation" value={formData.presentation} onChange={handleChange}>
+                                        <option value="">Select Presentation</option>
+                                        <option value="Cephalic">Cephalic (Head down)</option>
+                                        <option value="Breech">Breech</option>
+                                        <option value="Transverse">Transverse</option>
+                                        <option value="Unknown">Unknown / Too early</option>
+                                    </select>
                                 </div>
                             </div>
                             <div className="form-group">

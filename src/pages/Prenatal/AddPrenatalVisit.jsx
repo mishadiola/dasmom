@@ -20,24 +20,16 @@ const AddPrenatalVisit = () => {
     const { patientId } = useParams();
     const [toast, setToast] = useState(null);
 
-    const currentTime = useMemo(() => {
-        const now = new Date();
-        return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    }, []);
-
     const [patient, setPatient] = useState(null);
 
     // Form State
     const [formData, setFormData] = useState({
         testsDone: [],
-        supplementsGiven: [],
         riskFactors: []
     });
 
     const [midwives, setMidwives] = useState([]);
-    const [supplements, setSupplements] = useState([]);
     const [midwivesLoading, setMidwivesLoading] = useState(false);
-    const [supplementsLoading, setSupplementsLoading] = useState(true);
     const [isFormInitialized, setIsFormInitialized] = useState(false);
 
     // Fetch patient data
@@ -61,14 +53,13 @@ const AddPrenatalVisit = () => {
                 gestationalAge: patient.weeks ? `${patient.weeks}w` : '',
                 trimester: patient.trimester || '',
                 visitDate: new Date().toISOString().split('T')[0],
-                visitTime: currentTime,
                 visitNumber: attendedCount + 1,
                 attendingMidwife: '',
                 healthFacility: 'Dasma CHO',
                 visitType: 'Facility Visit',
                 bpSystolic: '', bpDiastolic: '', weight: '', temp: '', pulse: '', rr: '',
                 fundalHeight: '', fhr: '', fetalMovement: 'Normal', presentation: 'Cephalic',
-                testsDone: [], supplementsGiven: [],
+                testsDone: [], 
                 riskFactors: patient.medicalConditions || [],
                 calculatedRisk: patient.risk || 'Normal',
                 clinicalNotes: '', adviceGiven: '',
@@ -78,7 +69,7 @@ const AddPrenatalVisit = () => {
             }));
             setIsFormInitialized(true);
         }
-    }, [patient, currentTime, isFormInitialized]);
+    }, [patient, isFormInitialized]);
 
     // Smart Calculators: EDD, GA, Trimester
     useEffect(() => {
@@ -156,19 +147,6 @@ const AddPrenatalVisit = () => {
         }
     }, [formData.station]);
 
-    // Fetch supplements
-    useEffect(() => {
-        setSupplementsLoading(true);
-        patientService.getSupplementInventory().then(data => {
-            setSupplements(data);
-            setSupplementsLoading(false);
-        }).catch(err => {
-            console.error('Failed to fetch supplements:', err);
-            setSupplements([]);
-            setSupplementsLoading(false);
-        });
-    }, []);
-
     // Handlers
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -191,38 +169,13 @@ const AddPrenatalVisit = () => {
         });
     };
 
-    const handleSupplementToggle = (sup) => {
-        setFormData(prev => {
-            const curr = prev.supplementsGiven;
-            const existing = curr.find(s => s.id === sup.id);
-            if (existing) {
-                return { ...prev, supplementsGiven: curr.filter(s => s.id !== sup.id) };
-            } else {
-                return { ...prev, supplementsGiven: [...curr, {id: sup.id, name: sup.name, quantity: 1}] };
-            }
-        });
-    };
-
-    const handleSupplementQuantity = (id, quantity) => {
-        setFormData(prev => {
-            const curr = prev.supplementsGiven;
-            const index = curr.findIndex(s => s.id === id);
-            if (index !== -1) {
-                curr[index].quantity = parseInt(quantity) || 1;
-                return { ...prev, supplementsGiven: [...curr] };
-            }
-            return prev;
-        });
-    };
-
     const handleSave = async (e) => {
         e.preventDefault();
         try {
             const createdBy = await patientService.getCurrentUserId();
             if (!createdBy) throw new Error('Not authenticated');
 
-            const visitTimestamp = patientService.dateTimeToTimestamp(formData.visitDate, formData.visitTime);
-            const actualVisitTime = new Date(visitTimestamp);
+            const actualVisitDate = new Date(formData.visitDate);
 
             const { data: visits } = await patientService.supabase
                 .from('prenatal_visits')
@@ -239,7 +192,7 @@ const AddPrenatalVisit = () => {
             const targetVisit = (visits || []).find(v => v.visit_number === targetVisitNumber && (v.status === 'Scheduled' || v.status === 'Missed'));
 
             const rowVisitNumber = targetVisit ? targetVisit.visit_number : targetVisitNumber;
-            const rowVisitDate = visitTimestamp;
+            const rowVisitDate = formData.visitDate;
             const rowId = targetVisit ? targetVisit.id : null;
 
             const visitData = {
@@ -260,13 +213,12 @@ const AddPrenatalVisit = () => {
                 fetal_movement: formData.fetalMovement || null,
                 presentation: formData.presentation || null,
                 tests_done: formData.testsDone || [],
-                supplements_given: formData.supplementsGiven || [],
                 clinical_notes: formData.clinicalNotes || null,
                 advice_given: formData.adviceGiven || null,
                 is_referred: formData.referred || false,
                 referred_to: formData.referredTo || null,
                 referral_reason: formData.referralReason || null,
-                next_appt_date: formData.nextApptDate ? patientService.dateTimeToTimestamp(formData.nextApptDate, '09:00') : null,
+                next_appt_date: formData.nextApptDate || null,
                 next_appt_type: formData.nextApptType || null,
                 status: 'Attended',
                 attended_date: new Date().toISOString(),
@@ -285,42 +237,9 @@ const AddPrenatalVisit = () => {
                     .insert(visitData);
             }
 
-            // Handle supplements
-            for (const sup of formData.supplementsGiven) {
-                const inventoryItem = supplements.find(s => s.id === sup.id);
-                if (!inventoryItem) {
-                    throw new Error(`Supplement ${sup.name} not found in inventory`);
-                }
-                if (sup.quantity > inventoryItem.stock) {
-                    throw new Error(`Insufficient stock for ${sup.name}. Available: ${inventoryItem.stock}`);
-                }
-                // Deduct from inventory
-                await inventoryService.updateInventoryQuantity('supplement_inventory', sup.id, inventoryItem.stock - sup.quantity);
-                // Insert record
-                await patientService.supabase
-                    .from('supplements')
-                    .insert({
-                        patient_id: patientId,
-                        supplement_inventory_id: sup.id,
-                        dosage: sup.quantity.toString(),
-                        start_date: formData.visitDate,
-                        status: 'Completed',
-                        created_by: createdBy,
-                        notes: 'Given during visit'
-                    });
-            }
-
-            const remainingScheduled = (visits || [])
-                .filter(v => v.status === 'Scheduled' && v.id !== rowId);
-
-            const scheduledReferenceDate = targetVisit ? new Date(targetVisit.visit_date) : actualVisitTime;
-            const lateAttendance = Math.abs(actualVisitTime - scheduledReferenceDate) > 30 * 60 * 1000;
-
             if (lateAttendance && remainingScheduled.length > 0) {
                 const patientDataForRebalance = {
-                    assignedMidwife: formData.attendingMidwife,
-                    assignedDoctor: null,
-                    bhw_assigned: createdBy
+                    retained_staff: null
                 };
                 await patientService.rebalancePrenatalSchedule(patientId, patient.lmp, visitTimestamp, createdBy, patientDataForRebalance);
             }
@@ -581,11 +500,9 @@ const AddPrenatalVisit = () => {
                     <div className="apv-side-card">
                         <h3 className="side-head">Visit Details</h3>
                         <div className="form-group">
-                            <label>Visit Date & Time</label>
+                            <label>Visit Date</label>
                             <input type="date" name="visitDate" value={formData.visitDate} readOnly className="read-only" />
                             <small style={{marginTop: '4px', display: 'block', color: '#999'}}>Auto-assigned. Date is fixed for this visit.</small>
-                            <input type="time" name="visitTime" value={formData.visitTime} readOnly className="read-only" style={{marginTop: '8px'}} />
-                            <small style={{marginTop: '4px', display: 'block', color: '#999'}}>Time: {formData.visitTime} (current time)</small>
                         </div>
                         <div className="form-group mt-2">
                             <label>Visit Number</label>
