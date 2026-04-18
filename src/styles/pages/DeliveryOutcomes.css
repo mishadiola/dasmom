@@ -411,19 +411,28 @@
 .do-staff  { font-size: 12px; color: var(--color-text-muted); }
 
 /* Action buttons */
-.row-actions { display: flex; gap: 5px; }
+.row-actions { display: flex; gap: 5px; align-items: center; }
 .action-btn {
-    width: 28px; height: 28px;
-    border: none; border-radius: 7px;
+    width: 32px; height: 32px;
+    border: 1.5px solid transparent; border-radius: 8px;
     display: flex; align-items: center; justify-content: center;
-    cursor: pointer; transition: all 0.15s;
+    cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
 }
-.view-btn { background: rgba(91,174,208,0.1);  color: #2d7fa3; }
-.view-btn:hover { background: rgba(91,174,208,0.2); }
-.edit-btn { background: rgba(109,184,160,0.1); color: #3d8870; }
-.edit-btn:hover { background: rgba(109,184,160,0.2); }
-.pp-btn   { background: rgba(185,129,138,0.1); color: var(--color-rose); }
-.pp-btn:hover { background: rgba(185,129,138,0.2); }
+.action-btn:active { transform: scale(0.95); }
+.action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.view-btn { background: linear-gradient(135deg, #e8f4fd 0%, #d4e8f9 100%); color: #2d7fa3; border-color: rgba(45, 127, 163, 0.2); box-shadow: 0 1px 3px rgba(45, 127, 163, 0.1); }
+.view-btn:hover { background: linear-gradient(135deg, #d4e8f9 0%, #b0d4f7 100%); color: #1e6a8f; border-color: rgba(45, 127, 163, 0.4); box-shadow: 0 4px 12px rgba(45, 127, 163, 0.2); transform: translateY(-1px); }
+.view-btn:active { box-shadow: 0 1px 4px rgba(45, 127, 163, 0.15); }
+
+.edit-btn { background: linear-gradient(135deg, #e8f5e9 0%, #d4efdd 100%); color: #3d8870; border-color: rgba(61, 136, 112, 0.2); box-shadow: 0 1px 3px rgba(61, 136, 112, 0.1); }
+.edit-btn:hover { background: linear-gradient(135deg, #d4efdd 0%, #c0e8c8 100%); color: #2d6856; border-color: rgba(61, 136, 112, 0.4); box-shadow: 0 4px 12px rgba(61, 136, 112, 0.2); transform: translateY(-1px); }
+.edit-btn:active { box-shadow: 0 1px 4px rgba(61, 136, 112, 0.15); }
+
+.pp-btn   { background: linear-gradient(135deg, #fff5f7 0%, #ffe4e9 100%); color: var(--color-rose); border-color: rgba(185, 129, 138, 0.2); box-shadow: 0 1px 3px rgba(185, 129, 138, 0.1); }
+.pp-btn:hover { background: linear-gradient(135deg, #ffe4e9 0%, #ffd4dd 100%); color: #a36a73; border-color: rgba(185, 129, 138, 0.4); box-shadow: 0 4px 12px rgba(185, 129, 138, 0.2); transform: translateY(-1px); }
+.pp-btn:active { box-shadow: 0 1px 4px rgba(185, 129, 138, 0.15); }
 
 /* Empty state */
 .do-empty {

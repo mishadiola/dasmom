@@ -198,6 +198,28 @@ const PatientsList = () => {
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (activePopover) {
+                const popoverElement = document.querySelector('.filter-popover');
+                const buttonElement = event.target.closest('.filter-btn');
+                
+                // Close if click is outside both the popover and its trigger button
+                if (popoverElement && !popoverElement.contains(event.target) && !buttonElement) {
+                    setActivePopover(null);
+                }
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('touchstart', handleClickOutside);
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('touchstart', handleClickOutside);
+        };
+    }, [activePopover]);
+
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
@@ -327,13 +349,13 @@ const PatientsList = () => {
 
     const clearFilters = () => {
         setFilters({ trimesters: [], risks: [], stations: [], sortBy: 'newest' });
+        setArchiveFilter('active');
         setSearchTerm('');
         setCurrentPage(1);
         setActivePopover(null);
     };
 
-    const hasActiveFilters = filters.trimesters.length > 0 || filters.risks.length > 0 || filters.stations.length > 0 || filters.sortBy !== 'newest';
-
+    const hasActiveFilters = filters.trimesters.length > 0 || filters.risks.length > 0 || filters.stations.length > 0 || filters.sortBy !== 'newest' || archiveFilter !== 'active';
 
     const handleExport = () => {
         const exportData = sortedPatients.map(p => ({
@@ -510,9 +532,9 @@ const PatientsList = () => {
                                                 <input type="checkbox" checked={filters.stations.includes(station)} onChange={() => toggleArrayFilter('stations', station)} />
                                                 {station}
                                             </label>
-                                    ))}
+                                        ))}
                                     {availableStations.filter(s => s.toLowerCase().includes(stationSearch.toLowerCase())).length === 0 && (
-                                        <div style={{ fontSize: '12px', padding: '8px', color: '#888' }}>No stations found.</div>
+                                        <div className="popover-empty">No stations found</div>
                                     )}
                                 </div>
                             </div>
@@ -520,15 +542,27 @@ const PatientsList = () => {
                     </div>
 
                     {/* Archive Filter */}
-                    <select 
-                        className="filter-select"
-                        value={archiveFilter}
-                        onChange={(e) => { setArchiveFilter(e.target.value); setCurrentPage(1); }}
-                    >
-                        <option value="active">Active</option>
-                        <option value="archived">Archived</option>
-                        <option value="all">All</option>
-                    </select>
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${archiveFilter !== 'active' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'archive' ? null : 'archive')}
+                        >
+                            <Archive size={14} className="filter-btn-icon" />
+                            {archiveFilter === 'active' ? 'Active' : archiveFilter === 'archived' ? 'Archived' : 'All'}
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        
+                        {activePopover === 'archive' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Status</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${archiveFilter === 'active' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('active'); setActivePopover(null); setCurrentPage(1); }}>Active</button>
+                                    <button className={`popover-opt-btn ${archiveFilter === 'archived' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('archived'); setActivePopover(null); setCurrentPage(1); }}>Archived</button>
+                                    <button className={`popover-opt-btn ${archiveFilter === 'all' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('all'); setActivePopover(null); setCurrentPage(1); }}>All</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
 
                     {/* Record Sorting Popover */}
                     <div className="filter-dropdown-container">

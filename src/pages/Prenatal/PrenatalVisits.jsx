@@ -202,7 +202,16 @@ const PrenatalVisits = () => {
                 patientService.getAppointments(startDate, endDate, calendarView)
             ]);
 
-            setVisitsTable(visitsData || []);
+            // Ensure visits have consistent local date format for filtering
+            const processedVisits = (visitsData || []).map(v => {
+                const visitDateTime = v.visitDate ? new Date(v.visitDate) : null;
+                return {
+                    ...v,
+                    visitDateOnly: visitDateTime ? toLocalDateStr(visitDateTime) : ''
+                };
+            });
+
+            setVisitsTable(processedVisits);
             setAppointments(apptsData || []);
 
         } catch (error) {
@@ -281,7 +290,7 @@ const PrenatalVisits = () => {
         const visitsForSlot = visitsTable.filter(v => {
             if (!v.visitDate) return false;
             const visitDateTime = new Date(v.visitDate);
-            const visitDate = visitDateTime.toISOString().split('T')[0];
+            const visitDate = toLocalDateStr(visitDateTime);
             const visitTime24 = visitDateTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
             // Only show visit in the exact time slot it's scheduled for
             return visitDate === date && visitTime24 === time24;

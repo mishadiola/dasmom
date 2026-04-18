@@ -242,7 +242,7 @@ const PatientProfile = () => {
                         </div>
                         <div class="info-item">
                             <span class="info-label">EDD:</span>
-                            <span class="info-value">${p.edd || 'TBD'}</span>
+                            <span class="info-value">${formatReadableDate(p.edd) || 'TBD'}</span>
                         </div>
                         <div class="info-item">
                             <span class="info-label">LMP:</span>
@@ -413,7 +413,7 @@ const PatientProfile = () => {
                     <p><strong>Total Visits:</strong> ${p.visits ? p.visits.length : 0}</p>
                     <p><strong>Current Trimester:</strong> ${p.trimester || 'N/A'}</p>
                     <p><strong>Weeks of Pregnancy:</strong> ${p.weeks || 'N/A'} weeks</p>
-                    <p><strong>Expected Due Date:</strong> ${p.edd || 'N/A'}</p>
+                    <p><strong>Expected Due Date:</strong> ${formatReadableDate(p.edd) || 'N/A'}</p>
                 </div>
 
                 <h2 class="section-title">Prenatal Visits Timeline</h2>
@@ -511,7 +511,7 @@ const PatientProfile = () => {
                         </div>
                         <div className="h-stat">
                             <span className="h-stat-label">EDD</span>
-                            <span className="h-stat-val">{p.edd || 'TBD'}</span>
+                            <span className="h-stat-val">{formatReadableDate(p.edd) || 'TBD'}</span>
                         </div>
                     </div>
                     <div className="header-actions">
@@ -699,8 +699,8 @@ const PatientProfile = () => {
                                 <span className="track-icon-wrap"><CalendarCheck size={24} /></span>
                                 <div className="track-hero-content">
                                     <span className="track-hero-label">Estimated Due Date</span>
-                                    <span className="track-hero-val">{p.edd || 'TBD'}</span>
-                                    <span className="track-hero-sub">Based on LMP: {p.lmp || 'N/A'}</span>
+                                    <span className="track-hero-val">{formatReadableDate(p.edd) || 'TBD'}</span>
+                                    <span className="track-hero-sub">Based on LMP: {formatReadableDate(p.lmp) || 'N/A'}</span>
                                 </div>
                             </div>
                             <div className="tracking-hero-card">

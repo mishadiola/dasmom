@@ -244,49 +244,106 @@
 .action-btns {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: 6px;
+    align-items: center;
 }
 
 .action-btn {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: 1.5px solid transparent;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s ease;
-    color: #fff;
-    background: #f0f2f5;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+}
+
+.action-btn:active {
+    transform: scale(0.95);
+}
+
+.action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .edit-btn {
-    background: #6db8a0;
+    background: linear-gradient(135deg, #e8f5e9 0%, #d4efdd 100%);
+    color: #2e7d32;
+    border-color: rgba(46, 125, 50, 0.2);
+    box-shadow: 0 1px 3px rgba(46, 125, 50, 0.1);
 }
+
 .edit-btn:hover {
-    background: #5aa68a;
+    background: linear-gradient(135deg, #d4efdd 0%, #c0e8c8 100%);
+    color: #1e5e24;
+    border-color: rgba(46, 125, 50, 0.4);
+    box-shadow: 0 4px 12px rgba(46, 125, 50, 0.2);
+    transform: translateY(-1px);
+}
+
+.edit-btn:active {
+    box-shadow: 0 1px 4px rgba(46, 125, 50, 0.15);
 }
 
 .archive-btn {
-    background: #888;
+    background: linear-gradient(135deg, #f5f5f5 0%, #ebebeb 100%);
+    color: #666;
+    border-color: rgba(102, 102, 102, 0.2);
+    box-shadow: 0 1px 3px rgba(102, 102, 102, 0.1);
 }
+
 .archive-btn:hover {
-    background: #777;
+    background: linear-gradient(135deg, #ebebeb 0%, #e0e0e0 100%);
+    color: #555;
+    border-color: rgba(102, 102, 102, 0.4);
+    box-shadow: 0 4px 12px rgba(102, 102, 102, 0.2);
+    transform: translateY(-1px);
+}
+
+.archive-btn:active {
+    box-shadow: 0 1px 4px rgba(102, 102, 102, 0.15);
 }
 
 .restore-btn {
-    background: #6db8a0;
+    background: linear-gradient(135deg, #e8f5e9 0%, #d4efdd 100%);
+    color: #2e7d32;
+    border-color: rgba(46, 125, 50, 0.2);
+    box-shadow: 0 1px 3px rgba(46, 125, 50, 0.1);
 }
+
 .restore-btn:hover {
-    background: #5aa68a;
+    background: linear-gradient(135deg, #d4efdd 0%, #c0e8c8 100%);
+    color: #1e5e24;
+    border-color: rgba(46, 125, 50, 0.4);
+    box-shadow: 0 4px 12px rgba(46, 125, 50, 0.2);
+    transform: translateY(-1px);
+}
+
+.restore-btn:active {
+    box-shadow: 0 1px 4px rgba(46, 125, 50, 0.15);
 }
 
 .delete-btn {
-    background: #e05c73;
+    background: linear-gradient(135deg, #fff0f0 0%, #ffe4e4 100%);
+    color: #e05c73;
+    border-color: rgba(224, 92, 115, 0.2);
+    box-shadow: 0 1px 3px rgba(224, 92, 115, 0.1);
 }
+
 .delete-btn:hover {
-    background: #d94f6a;
+    background: linear-gradient(135deg, #ffe4e4 0%, #ffd4d4 100%);
+    color: #c94d63;
+    border-color: rgba(224, 92, 115, 0.4);
+    box-shadow: 0 4px 12px rgba(224, 92, 115, 0.2);
+    transform: translateY(-1px);
+}
+
+.delete-btn:active {
+    box-shadow: 0 1px 4px rgba(224, 92, 115, 0.15);
 }
 
 /* ── MODAL ── */

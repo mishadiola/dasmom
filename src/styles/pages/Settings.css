@@ -180,21 +180,38 @@
 .last-login  { color: var(--color-text-muted); font-size: 12px; white-space: nowrap; }
 
 /* Action buttons */
-.row-actions { display: flex; gap: 5px; }
-.action-btn { width: 28px; height: 28px; border: none; border-radius: 7px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.15s; }
-.edit-btn  { background: rgba(91,174,208,0.1);  color: #2d7fa3; }
-.edit-btn:hover { background: rgba(91,174,208,0.2); }
-.key-btn   { background: rgba(232,184,75,0.1);  color: #a87c12; }
-.key-btn:hover { background: rgba(232,184,75,0.2); }
-.deact-btn { background: rgba(109,184,160,0.1); color: #3d8870; }
-.deact-btn:hover { background: rgba(109,184,160,0.2); }
-.act-btn   { background: rgba(91,174,208,0.1);  color: #2d7fa3; }
-.archive-btn   { background: rgba(136,136,136,0.1);  color: #666; }
-.archive-btn:hover { background: rgba(136,136,136,0.2); }
-.restore-btn   { background: rgba(109,184,160,0.1);  color: #2e7d32; }
-.restore-btn:hover { background: rgba(109,184,160,0.2); }
-.del-btn   { background: rgba(224,92,115,0.1);  color: #b73a52; }
-.del-btn:hover { background: rgba(224,92,115,0.2); }
+.row-actions { display: flex; gap: 5px; align-items: center; }
+.action-btn { width: 32px; height: 32px; border: 1.5px solid transparent; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); position: relative; }
+.action-btn:active { transform: scale(0.95); }
+.action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.edit-btn  { background: linear-gradient(135deg, #e8f4fd 0%, #d4e8f9 100%); color: #2d7fa3; border-color: rgba(45, 127, 163, 0.2); box-shadow: 0 1px 3px rgba(45, 127, 163, 0.1); }
+.edit-btn:hover { background: linear-gradient(135deg, #d4e8f9 0%, #b0d4f7 100%); color: #1e6a8f; border-color: rgba(45, 127, 163, 0.4); box-shadow: 0 4px 12px rgba(45, 127, 163, 0.2); transform: translateY(-1px); }
+.edit-btn:active { box-shadow: 0 1px 4px rgba(45, 127, 163, 0.15); }
+
+.key-btn   { background: linear-gradient(135deg, #fef8e8 0%, #fdf0d4 100%); color: #a87c12; border-color: rgba(168, 124, 18, 0.2); box-shadow: 0 1px 3px rgba(168, 124, 18, 0.1); }
+.key-btn:hover { background: linear-gradient(135deg, #fdf0d4 0%, #fce8b8 100%); color: #8a640e; border-color: rgba(168, 124, 18, 0.4); box-shadow: 0 4px 12px rgba(168, 124, 18, 0.2); transform: translateY(-1px); }
+.key-btn:active { box-shadow: 0 1px 4px rgba(168, 124, 18, 0.15); }
+
+.deact-btn { background: linear-gradient(135deg, #e8f5e9 0%, #d4efdd 100%); color: #3d8870; border-color: rgba(61, 136, 112, 0.2); box-shadow: 0 1px 3px rgba(61, 136, 112, 0.1); }
+.deact-btn:hover { background: linear-gradient(135deg, #d4efdd 0%, #c0e8c8 100%); color: #2d6856; border-color: rgba(61, 136, 112, 0.4); box-shadow: 0 4px 12px rgba(61, 136, 112, 0.2); transform: translateY(-1px); }
+.deact-btn:active { box-shadow: 0 1px 4px rgba(61, 136, 112, 0.15); }
+
+.act-btn   { background: linear-gradient(135deg, #e8f4fd 0%, #d4e8f9 100%); color: #2d7fa3; border-color: rgba(45, 127, 163, 0.2); box-shadow: 0 1px 3px rgba(45, 127, 163, 0.1); }
+.act-btn:hover { background: linear-gradient(135deg, #d4e8f9 0%, #b0d4f7 100%); color: #1e6a8f; border-color: rgba(45, 127, 163, 0.4); box-shadow: 0 4px 12px rgba(45, 127, 163, 0.2); transform: translateY(-1px); }
+.act-btn:active { box-shadow: 0 1px 4px rgba(45, 127, 163, 0.15); }
+
+.archive-btn   { background: linear-gradient(135deg, #f5f5f5 0%, #ebebeb 100%); color: #666; border-color: rgba(102, 102, 102, 0.2); box-shadow: 0 1px 3px rgba(102, 102, 102, 0.1); }
+.archive-btn:hover { background: linear-gradient(135deg, #ebebeb 0%, #e0e0e0 100%); color: #555; border-color: rgba(102, 102, 102, 0.4); box-shadow: 0 4px 12px rgba(102, 102, 102, 0.2); transform: translateY(-1px); }
+.archive-btn:active { box-shadow: 0 1px 4px rgba(102, 102, 102, 0.15); }
+
+.restore-btn   { background: linear-gradient(135deg, #e8f5e9 0%, #d4efdd 100%); color: #2e7d32; border-color: rgba(46, 125, 50, 0.2); box-shadow: 0 1px 3px rgba(46, 125, 50, 0.1); }
+.restore-btn:hover { background: linear-gradient(135deg, #d4efdd 0%, #c0e8c8 100%); color: #1e5e24; border-color: rgba(46, 125, 50, 0.4); box-shadow: 0 4px 12px rgba(46, 125, 50, 0.2); transform: translateY(-1px); }
+.restore-btn:active { box-shadow: 0 1px 4px rgba(46, 125, 50, 0.15); }
+
+.del-btn   { background: linear-gradient(135deg, #fff0f0 0%, #ffe4e4 100%); color: #b73a52; border-color: rgba(183, 58, 82, 0.2); box-shadow: 0 1px 3px rgba(183, 58, 82, 0.1); }
+.del-btn:hover { background: linear-gradient(135deg, #ffe4e4 0%, #ffd4d4 100%); color: #973040; border-color: rgba(183, 58, 82, 0.4); box-shadow: 0 4px 12px rgba(183, 58, 82, 0.2); transform: translateY(-1px); }
+.del-btn:active { box-shadow: 0 1px 4px rgba(183, 58, 82, 0.15); }
 
 /* ════════════════════════════
    ROLES & PERMISSIONS
