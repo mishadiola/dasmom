@@ -404,7 +404,7 @@ const PatientProfile = () => {
             <body>
                 <div class="header">
                     <h1 class="patient-name">${p.name}</h1>
-                    <p class="patient-info">Patient ID: ${p.id} | Age: ${p.age} years | Station: ${p.station}</p>
+                    <p class="patient-info">Patient ID: ${p.id} | Age: ${p.age} years | Station: ${p.station} | Risk: ${p.risk}</p>
                     <p class="patient-info">Prenatal Visits Schedule</p>
                     <p class="patient-info">Generated on: ${new Date().toLocaleDateString()}</p>
                 </div>

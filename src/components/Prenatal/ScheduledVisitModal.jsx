@@ -24,7 +24,11 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
     };
 
     const handleSave = async () => {
-    const updates = { status, clinical_notes: notes.trim() || null, attended_date: status === 'Attended' ? new Date().toISOString() : visit.attended_date };
+    const updates = {
+        status,
+        clinical_notes: notes.trim() || null,
+        attended_date: status === 'Attended' ? new Date().toISOString().split('T')[0] : null
+    };
     
     setIsSaving(true);
     try {

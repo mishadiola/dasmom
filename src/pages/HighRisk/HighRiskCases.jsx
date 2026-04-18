@@ -102,16 +102,17 @@ const HighRiskCases = () => {
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); // Newest first
 
       const uniquePatients = Array.from(new Map(enriched.map((item) => [item.id, item])).values());
+      const highRiskOnly = uniquePatients.filter((item) => item.riskLevel === 'High Risk');
 
       setStats({
         ...statsData,
-        totalHighRisk: statsData.highRiskCount || 0,
+        totalHighRisk: highRiskOnly.length,
         criticalToday: 0,
         missedFollowups: 0,
         needsImmediate: 0,
       });
-      setPatients(enriched);
-      console.log('Loaded high‑risk:', enriched.length, 'patients');
+      setPatients(highRiskOnly);
+      console.log('Loaded high‑risk:', highRiskOnly.length, 'patients');
     } catch (err) {
       console.error('Error loading high risk data:', err);
     } finally {

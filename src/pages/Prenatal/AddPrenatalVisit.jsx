@@ -2,15 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
     ArrowLeft, Save, X, Activity, Baby, HeartPulse,
-    Thermometer, ShieldAlert, AlertTriangle, Calculator,
+    Thermometer, AlertTriangle, Calculator,
     Stethoscope, FileText, CheckCircle2, XCircle, CalendarCheck
 } from 'lucide-react';
 import PatientService from '../../services/patientservice';
-import InventoryService from '../../services/inventoryservice';
 import '../../styles/pages/AddPrenatalVisit.css';
 
 const patientService = new PatientService();
-const inventoryService = new InventoryService();
 
 const MEDICAL_TESTS = ['Hemoglobin', 'Urinalysis', 'Blood Type', 'Ultrasound'];
 const RISK_FACTORS = ['Bleeding', 'Severe Headache', 'Swelling', 'High BP', 'Fever', 'Previous Complications'];
@@ -133,7 +131,7 @@ const AddPrenatalVisit = () => {
     useEffect(() => {
         if (formData.station) {
             setMidwivesLoading(true);
-            patientService.getMidwivesByStation(formData.station).then(data => {
+            patientService.getDoctorsByStation(formData.station).then(data => {
                 setMidwives(data || []);
                 setMidwivesLoading(false);
             }).catch(err => {
@@ -174,8 +172,6 @@ const AddPrenatalVisit = () => {
         try {
             const createdBy = await patientService.getCurrentUserId();
             if (!createdBy) throw new Error('Not authenticated');
-
-            const actualVisitDate = new Date(formData.visitDate);
 
             const { data: visits } = await patientService.supabase
                 .from('prenatal_visits')
@@ -221,9 +217,8 @@ const AddPrenatalVisit = () => {
                 next_appt_date: formData.nextApptDate || null,
                 next_appt_type: formData.nextApptType || null,
                 status: 'Attended',
-                attended_date: new Date().toISOString(),
-                assigned_midwife: formData.attendingMidwife || null,
-                bhw_assigned: createdBy,
+                attended_date: formData.visitDate || new Date().toISOString().split('T')[0],
+                assigned_staff: formData.attendingMidwife || null,
             };
 
             if (rowId) {
@@ -237,12 +232,17 @@ const AddPrenatalVisit = () => {
                     .insert(visitData);
             }
 
-            if (lateAttendance && remainingScheduled.length > 0) {
-                const patientDataForRebalance = {
-                    retained_staff: null
-                };
-                await patientService.rebalancePrenatalSchedule(patientId, patient.lmp, visitTimestamp, createdBy, patientDataForRebalance);
-            }
+            await patientService.rebalancePrenatalSchedule(
+                patientId,
+                formData.lmp,
+                rowVisitNumber,
+                rowVisitDate,
+                createdBy,
+                { retained_staff: formData.attendingMidwife || null },
+                35
+            );
+
+            console.log(`✅ Patient ${patientId} visit ${rowVisitNumber} marked attended; remaining schedule rebalanced starting from ${rowVisitDate}.`);
 
             window.scrollTo(0, 0);
             setToast({ type: 'success', message: 'Prenatal visit successfully recorded!' });
@@ -394,59 +394,20 @@ const AddPrenatalVisit = () => {
                         </div>
                     </section>
 
-                    {/* SECTION 5: Labs & Supplements */}
-                    <section className="apv-section split-section">
-                        <div className="split-half">
-                            <h3 className="section-head"><Thermometer size={18} /> Laboratory Tests</h3>
-                            <div className="check-list">
-                                {MEDICAL_TESTS.map(test => (
-                                    <label key={test} className="check-lbl">
-                                        <input
-                                            type="checkbox"
-                                            checked={formData.testsDone.includes(test)}
-                                            onChange={() => handleArrayToggle('testsDone', test)}
-                                        />
-                                        <span>{test}</span>
-                                    </label>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="split-half highlight-panel">
-                            <h3 className="section-head"><ShieldAlert size={18} /> Supplements Given</h3>
-                            <div className="check-list">
-                                {supplementsLoading ? (
-                                    <div>Loading supplements...</div>
-                                ) : supplements.length === 0 ? (
-                                    <div>No supplements available</div>
-                                ) : (
-                                    supplements.map(sup => {
-                                        const given = formData.supplementsGiven.find(s => s.id === sup.id);
-                                        return (
-                                            <div key={sup.id} className="supplement-item">
-                                                <label className="check-lbl">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={!!given}
-                                                        onChange={() => handleSupplementToggle(sup)}
-                                                    />
-                                                    <span>{sup.name} (Stock: {sup.stock})</span>
-                                                </label>
-                                                {given && (
-                                                    <input
-                                                        type="number"
-                                                        min="1"
-                                                        max={sup.stock}
-                                                        value={given.quantity}
-                                                        onChange={(e) => handleSupplementQuantity(sup.id, e.target.value)}
-                                                        placeholder="Qty"
-                                                        className="quantity-input"
-                                                    />
-                                                )}
-                                            </div>
-                                        );
-                                    })
-                                )}
-                            </div>
+                    {/* SECTION 5: Laboratory Tests */}
+                    <section className="apv-section">
+                        <h3 className="section-head"><Thermometer size={18} /> Laboratory Tests</h3>
+                        <div className="check-list">
+                            {MEDICAL_TESTS.map(test => (
+                                <label key={test} className="check-lbl">
+                                    <input
+                                        type="checkbox"
+                                        checked={formData.testsDone.includes(test)}
+                                        onChange={() => handleArrayToggle('testsDone', test)}
+                                    />
+                                    <span>{test}</span>
+                                </label>
+                            ))}
                         </div>
                     </section>
 

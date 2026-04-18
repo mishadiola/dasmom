@@ -60,13 +60,8 @@ const DeliveryOutcomes = () => {
             const stationsData = await babyservices.getStations();
             setStations(stationsData);
             
-            const { data: allStaff } = await supabase
-                .from('staff_profiles')
-                .select('id, full_name, role, barangay_assignment')
-                .in('role', ['Midwife', 'Doctor'])
-                .or('role.eq.Midwife,role.ilike.%OB%')
-                .order('full_name');
-            setStaffList(allStaff || []);
+            const allStaff = await babyservices.getAllStaff();
+            setStaffList(allStaff);
         } catch (err) {
             console.error('Config load error:', err);
         }
@@ -410,9 +405,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
             try {
                 const { data, error } = await supabase
                     .from('staff_profiles')
-                    .select('id, full_name, role, barangay_assignment')
-                    .in('role', ['Midwife', 'Doctor', 'Nurse'])
-                    .or('role.eq.Midwife,role.ilike.%OB%,role.eq.Nurse')
+                    .select('id, full_name, barangay_assignment')
                     .order('full_name');
                 
                 if (error) throw error;
@@ -434,14 +427,16 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
         }
     }, [show]);
     const filteredStaffList = useMemo(() => {
-        if (!form.station || !staffList.length) return [];
-        
-        return staffList.filter(staff => {
-            return staff.barangay_assignment?.includes(form.station.split(',')[0]) || 
-                staff.barangay_assignment === form.station.split(',')[0] ||
-                staff.role === 'Mobile'; 
+        const targetBarangay = form.station?.split(',')[0]?.trim().toLowerCase();
+        if (!targetBarangay) return [];
+
+        const sourceStaff = localStaff.length ? localStaff : staffList;
+        return sourceStaff.filter(staff => {
+            const barangay = staff.barangay_assignment?.toLowerCase() || '';
+            return barangay.includes(targetBarangay);
         });
-    }, [form.station, staffList]);
+    }, [form.station, localStaff, staffList]);
+
     const updateForm = (key, value) => {
         setForm(prev => ({ ...prev, [key]: value }));
         if (key === 'patientName' && value.length > 2) {
@@ -472,7 +467,9 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
             patientId: patient.id,
             patientName: patient.name,
             station: patient.station,
-            riskLevel: patient.riskLevel
+            riskLevel: patient.riskLevel,
+            attendingStaffId: '',
+            attendingStaffName: ''
         }));
         setSearchResults([]);
     };
@@ -642,15 +639,16 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
                                 <select 
                                     value={form.attendingStaffId} 
                                     onChange={e => {
-                                        const staff = staffList.find(s => s.id === e.target.value);
+                                        const staff = filteredStaffList.find(s => s.id === e.target.value);
                                         updateForm('attendingStaffId', e.target.value);
                                         updateForm('attendingStaffName', staff?.full_name || '');
                                     }}
+                                    disabled={!form.station}
                                 >
                                     <option value="">Select Staff</option>
-                                    {staffList.map(s => (
+                                    {filteredStaffList.map(s => (
                                         <option key={s.id} value={s.id}>
-                                            {s.full_name} ({s.role}) - {s.barangay_assignment || 'Main'}
+                                            {s.full_name} - {s.barangay_assignment || 'N/A'}
                                         </option>
                                     ))}
                                 </select>

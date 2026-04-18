@@ -190,16 +190,14 @@ const PrenatalVisits = () => {
             const startDate = vDays[0].date;
             const endDate = vDays[vDays.length - 1].date;
 
-            const [, visitsData, apptsData] = await Promise.all([
-                patientService.getAllPatients(),
+            const [visitsData, apptsData] = await Promise.all([
                 patientService.getPrenatalVisits(),
                 patientService.getAppointments(startDate, endDate, calendarView)
             ]);
 
-            // Ensure visits have consistent local date format for filtering
             const processedVisits = (visitsData || []).map(v => ({
                 ...v,
-                visitDateOnly: v.visit_date || ''
+                visitDateOnly: v.visit_date || v.visitDateOnly || ''
             }));
 
             setVisitsTable(processedVisits);
@@ -275,16 +273,8 @@ const PrenatalVisits = () => {
     };
 
     const getSlotStatus = useCallback((date, time) => {
-        const time24 = convertTo24Hour(time);
-        
-        // Filter visits for this EXACT date and time slot (not >= range)
         const visitsForSlot = visitsTable.filter(v => {
-            if (!v.visitDate) return false;
-            const visitDateTime = new Date(v.visitDate);
-            const visitDate = toLocalDateStr(visitDateTime);
-            const visitTime24 = visitDateTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-            // Only show visit in the exact time slot it's scheduled for
-            return visitDate === date && visitTime24 === time24;
+            return v.visitDateOnly === date && v.visitTime === time;
         });
 
         // Deduplicate by patient ID per time slot per day
@@ -331,6 +321,7 @@ const PrenatalVisits = () => {
         (filterStatus === 'All' || v.status === filterStatus)
     );
 
+    const todayOnly = new Date().toISOString().split('T')[0];
     // Group visits by patient
     const uniquePatients = Array.from(
         new Map(filteredVisits.map(visit => [visit.patientId, {
@@ -338,8 +329,8 @@ const PrenatalVisits = () => {
             name: visit.patientName,
             risk: visit.risk,
             nextVisit: (() => {
-                const nextScheduled = filteredVisits.filter(v => v.patientId === visit.patientId && v.status === 'Scheduled' && new Date(v.visitDate) >= new Date()).sort((a, b) => new Date(a.visitDate) - new Date(b.visitDate))[0];
-                return nextScheduled ? formatReadableDate(nextScheduled.visitDate) : 'No upcoming';
+                const nextScheduled = filteredVisits.filter(v => v.patientId === visit.patientId && v.status === 'Scheduled' && v.visitDateOnly >= todayOnly).sort((a, b) => a.visitDateOnly.localeCompare(b.visitDateOnly))[0];
+                return nextScheduled ? nextScheduled.visitDateOnly : 'No upcoming';
             })(),
             // Show last ATTENDED visit (not just any visit)
             lastVisit: (() => {
@@ -418,7 +409,7 @@ const PrenatalVisits = () => {
                             </thead>
                             <tbody>
                                 {visibleDays.map(day => {
-                                    const dayVisits = visitsTable.filter(v => v.visit_date === day.date);
+                                    const dayVisits = visitsTable.filter(v => v.visitDateOnly === day.date);
                                     const dayAppts = appointments.filter(a => a.date === day.date);
                                     const totalVisits = dayVisits.length + dayAppts.length;
                                     
@@ -496,13 +487,13 @@ const PrenatalVisits = () => {
                                                         {day.date === TODAY && <span className="today-badge">TODAY</span>}
                                                     </h4>
                                                     <div className="day-visits">
-                                                        {visitsTable.filter(v => v.visit_date === day.date).map(v => (
+                                                        {visitsTable.filter(v => v.visitDateOnly === day.date).map(v => (
                                                             <div key={v.id} className={`visit-item status-${v.status.toLowerCase()}`}>
                                                                 <span className="visit-patient">{v.patientName}</span>
                                                                 <span className="visit-status">{v.status}</span>
                                                             </div>
                                                         ))}
-                                                        {visitsTable.filter(v => v.visit_date === day.date).length === 0 && (
+                                                        {visitsTable.filter(v => v.visitDateOnly === day.date).length === 0 && (
                                                             <div className="no-visits">No visits</div>
                                                         )}
                                                     </div>

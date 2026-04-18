@@ -427,7 +427,17 @@
     color: #3d8870;
 }
 
+.risk-low {
+    background: rgba(109, 184, 160, 0.15);
+    color: #3d8870;
+}
+
 .risk-monitor {
+    background: rgba(249, 162, 108, 0.15);
+    color: #9a5a20;
+}
+
+.risk-medium {
     background: rgba(249, 162, 108, 0.15);
     color: #9a5a20;
 }
@@ -435,6 +445,13 @@
 .risk-high {
     background: rgba(224, 92, 115, 0.12);
     color: #b73a52;
+}
+
+.risk-factors {
+    font-size: 10px;
+    color: var(--color-text-light);
+    margin-top: 2px;
+    line-height: 1.2;
 }
 
 /* Appt Cell */

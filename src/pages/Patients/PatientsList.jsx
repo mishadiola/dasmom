@@ -648,9 +648,16 @@ const PatientsList = () => {
                                         </td>
 
                                         <td>
-                                            <span className={`risk-badge risk-${(p.risk || 'normal').toLowerCase()}`}>
-                                                {p.risk || 'Normal'}
-                                            </span>
+                                            <div>
+                                                <span className={`risk-badge risk-${(p.risk || 'Low Risk').toLowerCase().split(' ')[0]}`}>
+                                                    {p.risk || 'Low Risk'}
+                                                </span>
+                                                {p.riskFactors && p.riskFactors.length > 0 && (
+                                                    <div className="risk-factors">
+                                                        {p.riskFactors.join(', ')}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </td>
 
                                         <td>

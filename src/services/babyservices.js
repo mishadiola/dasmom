@@ -237,6 +237,34 @@ class BabyService {
 
     if (newbornError) throw newbornError;
 
+    // Update pregnancy status to postpartum
+    const { data: currentPregnancy } = await supabase
+      .from('pregnancy_info')
+      .select('*')
+      .eq('patient_id', deliveryData.mother_id)
+      .eq('pregn_postp', 'Pregnant')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (currentPregnancy) {
+      await supabase
+        .from('pregnancy_info')
+        .insert({
+          patient_id: deliveryData.mother_id,
+          created_by: createdBy,
+          pregn_postp: 'Postpartum',
+          lmd: currentPregnancy.lmd,
+          edd: currentPregnancy.edd,
+          pregnancy_type: currentPregnancy.pregnancy_type,
+          place_of_delivery: deliveryData.facility || currentPregnancy.place_of_delivery,
+          calculated_risk: currentPregnancy.calculated_risk,
+          gravida: currentPregnancy.gravida,
+          para: (currentPregnancy.para || 0) + 1,
+          risk_factors: currentPregnancy.risk_factors
+        });
+    }
+
     // Schedule newborn vaccinations
     const birthDate = new Date(deliveryData.delivery_date);
     const vaccineSchedule = [
@@ -344,18 +372,26 @@ async getStaffForStation(station) {
     try {
         const { data, error } = await supabase
             .from('staff_profiles')
-            .select('id, full_name, role, barangay_assignment')
-            .in('role', ['Midwife', 'Doctor'])
-            .or(`role.eq.Midwife,role.ilike.%OB%`)
-            .or(
-                `barangay_assignment.ilike.%${station.split(',')[0]}%,
-                 barangay_assignment.eq.${station.split(',')[0]}`
-            )
+            .select('id, full_name, barangay_assignment')
             .order('full_name');
         if (error) throw error;
         return data || [];
     } catch (error) {
         console.error('Error getting staff for station:', error);
+        return [];
+    }
+}
+
+async getAllStaff() {
+    try {
+        const { data, error } = await supabase
+            .from('staff_profiles')
+            .select('id, full_name, barangay_assignment')
+            .order('full_name');
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error('Error getting all staff:', error);
         return [];
     }
 }

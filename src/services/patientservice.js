@@ -80,7 +80,8 @@ export default class PatientService {
     // 2. Get all pregnancies
     const { data: pregnancies, error: err2 } = await this.supabase
       .from('pregnancy_info')
-      .select('patient_id, lmd, edd, calculated_risk, risk_factors');
+      .select('patient_id, lmd, edd, calculated_risk, risk_factors, pregn_postp')
+      .eq('pregn_postp', 'Pregnant');
     if (err2) throw err2;
 
     // 3. Get latest attended prenatal visits and use their recorded next_appt_date
@@ -116,12 +117,7 @@ export default class PatientService {
       const weeks = lmp ? this.calculateWeeks(lmp) : 0;
       const trimester = lmp ? this.getTrimesterFromWeek(weeks) : 1;
 
-      const risk = (() => {
-        const r = (pgi.calculated_risk || '').toLowerCase();
-        if (r.includes('high')) return 'High';
-        if (r.includes('monitor')) return 'Monitor';
-        return 'Normal';
-      })();
+      const risk = pgi.calculated_risk || 'Low Risk';
 
       // Format next appointment date, only show current or future appointments
       const rawNextAppt = nextApptMap.get(p.id) || null;
@@ -148,12 +144,13 @@ export default class PatientService {
         edd: pgi.edd || null,
         createdAt: p.created_at,
         nextAppt,
+        riskFactors: pgi.risk_factors ? pgi.risk_factors.split(',').map(s => s.trim()).filter(Boolean) : []
       };
     };
 
     return patients
       .map(mapPatient)
-      .filter(p => p.id && p.name !== 'Unknown Patient');
+      .filter(p => p.id && p.name !== 'Unknown Patient' && pgiMap.has(p.id));
   } catch (error) {
     console.error('❌ getAllPatients:', error);
     return [];
@@ -305,7 +302,7 @@ export default class PatientService {
     return (count || 0) >= maxPerDay;
   }
 
-  async insertPrenatalSchedule(patientId, schedulePreview, createdBy, patientData = {}, maxPerDay = 30) {
+  async insertPrenatalSchedule(patientId, schedulePreview, createdBy, patientData = {}, maxPerDay = 35) {
     const validSchedule = Array.isArray(schedulePreview)
       ? schedulePreview
           .filter(v => v && v.date && !Number.isNaN(new Date(v.date).getTime()))
@@ -350,98 +347,69 @@ export default class PatientService {
     console.log('✅ Inserted prenatal schedule:', rows);
   }
 
-  async rebalancePrenatalSchedule(patientId, lmp, newVisitDate, createdBy, patientData = {}) {
+  async rebalancePrenatalSchedule(patientId, lmp, currentVisitNumber, attendedDate, createdBy, patientData = {}, maxPerDay = 35) {
     try {
       const lmpDate = new Date(lmp);
       if (Number.isNaN(lmpDate.getTime())) {
         throw new Error('Invalid LMP date for schedule rebalance');
       }
 
-      const { data: scheduledVisits, error: scheduledError } = await this.supabase
+      const attendedDateOnly = attendedDate
+        ? new Date(attendedDate).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0];
+
+      const { data: futureVisits, error: scheduledError } = await this.supabase
         .from('prenatal_visits')
-        .select('id')
+        .select('id, visit_number, visit_date')
         .eq('patient_id', patientId)
-        .eq('status', 'Scheduled');
+        .eq('status', 'Scheduled')
+        .gt('visit_number', currentVisitNumber)
+        .order('visit_number', { ascending: true });
 
       if (scheduledError) throw scheduledError;
-      const remainingCount = Array.isArray(scheduledVisits) ? scheduledVisits.length : 0;
-      if (remainingCount === 0) {
+      const futureVisitNumbers = Array.isArray(futureVisits)
+        ? futureVisits.map(v => v.visit_number).filter(Boolean).sort((a, b) => a - b)
+        : [];
+      if (futureVisitNumbers.length === 0) {
         return;
       }
 
-      // Generate schedule with 3 visits per semester, evenly spaced, starting from current date
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const currentWeek = Math.max(0, Math.floor((today - lmpDate) / (1000 * 60 * 60 * 24 * 7)));
+      const masterWeeks = [2, 6, 10, 14, 18, 22, 27, 31, 35];
+      let previousDate = attendedDateOnly;
+      const schedule = [];
 
-      const semesters = [
-        { startWeek: Math.max(2, currentWeek), endWeek: 13, visits: 3 },
-        { startWeek: Math.max(14, currentWeek), endWeek: 26, visits: 3 },
-        { startWeek: Math.max(27, currentWeek), endWeek: 40, visits: 3 }
-      ];
+      for (const visitNumber of futureVisitNumbers) {
+        const idealWeek = masterWeeks[visitNumber - 1] !== undefined
+          ? masterWeeks[visitNumber - 1]
+          : masterWeeks[masterWeeks.length - 1] + 4 * (visitNumber - masterWeeks.length);
 
-      const minGapWeeks = 2;
-      let schedule = [];
-      for (const semester of semesters) {
-        if (semester.startWeek <= semester.endWeek) {
-          const span = semester.endWeek - semester.startWeek;
-          const idealInterval = span / (semester.visits - 1);
-          let previousWeek = -Infinity;
+        const idealDate = this.addWeeksToDate(lmpDate, idealWeek);
+        const earliestDate = this.addDaysToDate(previousDate, 7);
+        let scheduledDate = idealDate >= earliestDate ? idealDate : earliestDate;
 
-          for (let i = 0; i < semester.visits; i++) {
-            let week = Math.round(semester.startWeek + i * idealInterval);
-
-            if (i > 0) {
-              const minTarget = previousWeek + minGapWeeks;
-              if (week < minTarget) {
-                week = minTarget;
-              }
-              if (week > semester.endWeek) {
-                week = Math.max(previousWeek + 1, semester.endWeek);
-              }
-            }
-
-            if (week > semester.endWeek) {
-              week = semester.endWeek;
-            }
-
-            previousWeek = week;
-            const visitDate = this.addWeeksToDate(lmpDate, week);
-            if (visitDate >= today) {
-              schedule.push({
-                date: visitDate,
-                week,
-                trimester: this.getTrimesterFromWeek(week),
-                type: 'Routine Prenatal'
-              });
-            }
-          }
+        while (await this.checkScheduleOverlap(scheduledDate, patientId, maxPerDay)) {
+          scheduledDate = this.addDaysToDate(scheduledDate, 1);
         }
-      }
 
-      // Take only the remaining count
-      schedule = schedule.slice(0, remainingCount);
+        schedule.push({
+          visitNumber,
+          date: scheduledDate,
+          week: idealWeek,
+          trimester: this.getTrimesterFromWeek(idealWeek),
+          type: 'Routine Prenatal'
+        });
+
+        previousDate = scheduledDate;
+      }
 
       const { error: deleteError } = await this.supabase
         .from('prenatal_visits')
         .delete()
         .eq('patient_id', patientId)
-        .eq('status', 'Scheduled');
+        .eq('status', 'Scheduled')
+        .gt('visit_number', currentVisitNumber);
 
       if (deleteError) throw deleteError;
-
-      const { data: attendedVisits, error: attendedError } = await this.supabase
-        .from('prenatal_visits')
-        .select('visit_number')
-        .eq('patient_id', patientId)
-        .eq('status', 'Attended');
-
-      if (attendedError) throw attendedError;
-
-      const maxAttendedNumber = Array.isArray(attendedVisits)
-        ? attendedVisits.reduce((max, visit) => Math.max(max, visit.visit_number || 0), 0)
-        : 0;
-      const nextVisitNumber = maxAttendedNumber + 1;
 
       const rowsToInsert = schedule.map((visit, index) => {
         const nextVisit = schedule[index + 1];
@@ -451,7 +419,7 @@ export default class PatientService {
           patient_id: patientId,
           created_by: createdBy,
           visit_date: visit.date,
-          visit_number: nextVisitNumber + index,
+          visit_number: visit.visitNumber,
           trimester: visit.trimester,
           gestational_age: `${visit.week}w`,
           next_appt_type: visit.type,
@@ -461,6 +429,15 @@ export default class PatientService {
           created_at: new Date().toISOString()
         };
       });
+
+      if (schedule.length > 0) {
+        const firstNextDate = schedule[0].date;
+        await this.supabase
+          .from('prenatal_visits')
+          .update({ next_appt_date: firstNextDate })
+          .eq('patient_id', patientId)
+          .eq('visit_number', currentVisitNumber);
+      }
 
       const { error: insertError } = await this.supabase.from('prenatal_visits').insert(rowsToInsert);
       if (insertError) throw insertError;
@@ -496,25 +473,23 @@ export default class PatientService {
 
     if (error) throw error;
 
-    return (data || []).map(visit => {
-      const visitDate = new Date(visit.visit_date);
-      return {
-        id: visit.id,
-        visitDate: visit.visit_date,
-        attendedDate: visit.attended_date,
-        visitDateOnly: visitDate.toISOString().split('T')[0],
-        visitTime: visitDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
-        patientName: `${visit.patient_basic_info?.first_name || ''} ${visit.patient_basic_info?.middle_name ? visit.patient_basic_info.middle_name[0] + '. ' : ''}${visit.patient_basic_info?.last_name || ''}`.trim(),
-        patientId: visit.patient_id,
-        ga: visit.gestational_age || 'N/A',
-        bp: visit.bp_systolic && visit.bp_diastolic ? `${visit.bp_systolic}/${visit.bp_diastolic}` : 'N/A',
-        weight: visit.weight_kg ? `${visit.weight_kg}kg` : 'N/A',
-        status: visit.status || 'Scheduled',
-        nextApptDate: visit.next_appt_date,
-        visitNumber: visit.visit_number,
-        trimester: visit.trimester
-      };
-    });
+    return (data || []).map(visit => ({
+      id: visit.id,
+      visit_date: visit.visit_date,
+      visitDate: visit.visit_date,
+      visitDateOnly: visit.visit_date,
+      visitTime: this.generateTimeSlot(visit.patient_id, visit.visit_date),
+      attendedDate: visit.attended_date,
+      patientName: `${visit.patient_basic_info?.first_name || ''} ${visit.patient_basic_info?.middle_name ? visit.patient_basic_info.middle_name[0] + '. ' : ''}${visit.patient_basic_info?.last_name || ''}`.trim(),
+      patientId: visit.patient_id,
+      ga: visit.gestational_age || 'N/A',
+      bp: visit.bp_systolic && visit.bp_diastolic ? `${visit.bp_systolic}/${visit.bp_diastolic}` : 'N/A',
+      weight: visit.weight_kg ? `${visit.weight_kg}kg` : 'N/A',
+      status: visit.status || 'Scheduled',
+      nextApptDate: visit.next_appt_date,
+      visitNumber: visit.visit_number,
+      trimester: visit.trimester
+    }));
   } catch (error) {
     console.error('Error fetching prenatal visits:', error);
     return [];
@@ -565,6 +540,24 @@ export default class PatientService {
   }
 }
 
+  async updatePrenatalVisitStatus(visitId, updates) {
+    const payload = { ...updates };
+    if (payload.status === 'Attended' && !payload.attended_date) {
+      payload.attended_date = new Date().toISOString().split('T')[0];
+    }
+    if (payload.status !== 'Attended') {
+      payload.attended_date = null;
+    }
+
+    const { data, error } = await this.supabase
+      .from('prenatal_visits')
+      .update(payload)
+      .eq('id', visitId)
+      .select();
+
+    if (error) throw error;
+    return data;
+  }
 
   generateTimeSlot(patientId, visitDate) {
     const timeSlots = ['08:00 AM','08:30 AM','09:00 AM','09:30 AM','10:00 AM','10:30 AM','11:00 AM','11:30 AM','01:00 PM','01:30 PM','02:00 PM','02:30 PM','03:00 PM','03:30 PM','04:00 PM'];
@@ -709,14 +702,14 @@ export default class PatientService {
     } else {
       await this.smartSemesterScheduling({
         patientId, lmp: patientData.lmp, createdBy,
-        maxPerDay: 30, retained_staff: retainedStaff ? retainedStaff.id : null
+        maxPerDay: 35, retained_staff: retainedStaff ? retainedStaff.id : null
       });
     }
 
     return await this.getPatientById(patientId);
   }
 
-async smartSemesterScheduling({ patientId, lmp, createdBy, maxPerDay = 30, retained_staff }) {
+async smartSemesterScheduling({ patientId, lmp, createdBy, maxPerDay = 35, retained_staff }) {
   const lmpDate = new Date(lmp);
   const semesters = [
     { startWeek: 2, endWeek: 13, name: '1st Trimester', visits: [0, 4, 8] },
@@ -773,7 +766,8 @@ async getSlotCount(dateStr, timeSlot) {
       const { count } = await this.supabase
         .from('pregnancy_info')
         .select('*', { count: 'exact', head: true })
-        .ilike('calculated_risk', '%high risk%');
+        .ilike('calculated_risk', '%high risk%')
+        .eq('pregn_postp', 'Pregnant');
         
       return {
         highRiskCount: count || 0
@@ -812,7 +806,8 @@ async getHighRiskPatients() {
         )
       `)
       .neq('pregnancy_info.calculated_risk', 'Normal')
-      .not('pregnancy_info.calculated_risk', 'is', null);
+      .not('pregnancy_info.calculated_risk', 'is', null)
+      .eq('pregnancy_info.pregn_postp', 'Pregnant');
 
     if (error) throw error;
 
@@ -895,6 +890,12 @@ async getHighRiskPatients() {
   addWeeksToDate(date, weeks) {
     const d = new Date(date);
     d.setDate(d.getDate() + weeks * 7);
+    return d.toISOString().split('T')[0];
+  }
+
+  addDaysToDate(date, days) {
+    const d = new Date(date);
+    d.setDate(d.getDate() + days);
     return d.toISOString().split('T')[0];
   }
 
@@ -986,6 +987,7 @@ async getHighRiskPatients() {
       bloodType: data.bloodtype || 'Unknown',
       emergencyContact,
       medicalConditions: preg.risk_factors ? preg.risk_factors.split(',').map(s=>s.trim()).filter(Boolean) : [],
+      risk: preg.calculated_risk || 'Low Risk',
       
       lmp: preg.lmd || null,
       edd: preg.edd || null,
