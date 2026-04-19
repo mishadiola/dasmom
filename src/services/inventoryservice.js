@@ -50,7 +50,7 @@ class InventoryService {
     }));
   }
 
-  async addInventoryItem(table, { item_name, quantity, unit }) {
+  async addInventoryItem(table, { item_name, quantity, max_stock, unit }) {
     await this._ensureAdmin(); // only admins
 
     const currentUser = await this.auth.getAuthUser();
@@ -64,8 +64,10 @@ class InventoryService {
 
     if (table === 'vaccine_inventory') {
       payload.vaccine_name = item_name;
+      payload.max_quantity = Number(max_stock);
     } else if (table === 'supplement_inventory') {
       payload.supplement_name = item_name;
+      payload.max_quant = Number(max_stock);
     } else {
       throw new Error('Unsupported table: ' + table);
     }
@@ -83,12 +85,24 @@ class InventoryService {
     return data;
   }
 
-  async updateInventoryQuantity(table, id, newQuantity) {
+  async updateInventoryQuantity(table, id, newQuantity, newMaxStock) {
     await this._ensureAdmin(); // only admins
+
+    const payload = {
+      quantity: Number(newQuantity),
+    };
+
+    if (newMaxStock !== undefined && newMaxStock !== null) {
+      if (table === 'vaccine_inventory') {
+        payload.max_quantity = Number(newMaxStock);
+      } else if (table === 'supplement_inventory') {
+        payload.max_quant = Number(newMaxStock);
+      }
+    }
 
     const { data, error } = await supabase
       .from(table)
-      .update({ quantity: Number(newQuantity) })
+      .update(payload)
       .eq('id', id)
       .select();
 

@@ -92,14 +92,6 @@ const DetailModal = ({ mother, onClose }) => {
                         <div className="detail-grid">
                             <div className="detail-item"><span>Incision / Wound Condition</span><strong>{detail.woundCondition}</strong></div>
                             <div className="detail-item"><span>Current Complications</span><strong>{mother.complications}</strong></div>
-                            <div className="detail-item"><span>Recovery Progress</span>
-                                <div className="progress-wrap">
-                                    <div className="progress-bar">
-                                        <div className="progress-fill" style={{ width: `${mother.progress}%`, background: mother.progress >= 80 ? '#6db8a0' : mother.progress >= 50 ? '#e8b84b' : '#e05c73' }}></div>
-                                    </div>
-                                    <strong>{mother.progress}%</strong>
-                                </div>
-                            </div>
                         </div>
                     </section>
 
@@ -179,7 +171,6 @@ const PostpartumRecords = () => {
             'Days Postpartum': m.daysPostpartum,
             'Baby Outcome': m.babyOutcome,
             'Recovery Status': m.recoveryStatus,
-            'Recovery Progress': `${m.progress}%`,
             'Last Checkup': m.lastCheckup,
             'Next Follow-up': m.nextFollowUp,
             'Follow-up Status': m.followUpStatus,
@@ -200,7 +191,6 @@ const PostpartumRecords = () => {
             { wch: 18 }, // Days Postpartum
             { wch: 15 }, // Baby Outcome
             { wch: 15 }, // Recovery Status
-            { wch: 18 }, // Recovery Progress
             { wch: 15 }, // Last Checkup
             { wch: 15 }, // Next Follow-up
             { wch: 15 }, // Follow-up Status

@@ -271,8 +271,8 @@ const Dashboard = () => {
                     <div className="welcome-actions">
                         {[
                             { label: 'Add Patient', icon: Users, color: 'rose', path: '/dashboard/patients/add' },
-                            { label: 'Schedule Visit', icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal', state: { openBooking: true } },
-                            { label: 'Record Vitals', icon: Activity, color: 'blue', path: '/dashboard/patients' },
+                            { label: 'View Schedules', icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal', state: { openBooking: true } },
+                            { label: 'High Risk Patients', icon: AlertTriangle, color: 'blue', path: '/dashboard/patients', state: { filterRisk: 'high' } },
                             { label: 'Log Delivery', icon: Baby, color: 'pink', path: '/dashboard/deliveries' },
                             { label: 'Issue Vaccine', icon: Syringe, color: 'orange', path: '/dashboard/vaccinations' },
                             { label: 'Generate Report', icon: FileText, color: 'purple', path: '/dashboard/analytics' },
@@ -395,7 +395,20 @@ const Dashboard = () => {
                             {loadingStock ? (
                                 <div className="stock-loading">Loading inventory...</div>
                             ) : vaccineStock.length > 0 ? (
-                                vaccineStock.map((v) => (
+                                vaccineStock
+                                    .sort((a, b) => {
+                                        // Priority: critical > low > ok
+                                        const statusPriority = { critical: 0, low: 1, ok: 2 };
+                                        const priorityA = statusPriority[a.status] ?? 2;
+                                        const priorityB = statusPriority[b.status] ?? 2;
+                                        if (priorityA !== priorityB) {
+                                            return priorityA - priorityB;
+                                        }
+                                        // If same status, sort by stock level (lowest first)
+                                        return a.stock - b.stock;
+                                    })
+                                    .slice(0, 5)
+                                    .map((v) => (
                                     <div key={v.name} className={`stock-item stock-item--${v.status}`}>
                                         <div className="stock-info">
                                             <span className="stock-name">{v.name}</span>

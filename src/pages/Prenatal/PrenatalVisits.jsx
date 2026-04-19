@@ -399,54 +399,67 @@ const PrenatalVisits = () => {
 
                 <div className="pv-grid-container">
                     {calendarView === 'day' ? (
-                        <table className="pc-grid">
-                            <thead>
-                                <tr>
-                                    <th className="th-date">Date</th>
-                                    <th className="th-status">Status</th>
-                                    <th className="th-patients">Patients</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {visibleDays.map(day => {
-                                    const dayVisits = visitsTable.filter(v => v.visitDateOnly === day.date);
-                                    const dayAppts = appointments.filter(a => a.date === day.date);
-                                    const totalVisits = dayVisits.length + dayAppts.length;
-                                    
-                                    let dayStatus = 'Available';
-                                    let statusClass = 'status-avail';
-                                    
-                                    if (totalVisits >= 35) {
-                                        dayStatus = 'Full Day';
-                                        statusClass = 'status-full';
-                                    } else if (dayVisits.some(v => v.status === 'Attended')) {
-                                        dayStatus = 'Visits Attended';
-                                        statusClass = 'status-attended';
-                                    } else if (dayVisits.some(v => v.status === 'Scheduled')) {
-                                        dayStatus = 'Visits Scheduled';
-                                        statusClass = 'status-scheduled';
-                                    } else if (dayVisits.some(v => v.status === 'Missed')) {
-                                        dayStatus = 'Visits Missed';
-                                        statusClass = 'status-missed';
-                                    }
-
-                                    return (
-                                        <tr key={day.date} className={day.date === TODAY ? 'tr-today' : ''}>
-                                            <td className="td-date">
-                                                {formatCalendarDate(day.date)}
+                        <div className="day-view-container">
+                            {visibleDays.map(day => {
+                                const dayVisits = visitsTable.filter(v => v.visitDateOnly === day.date);
+                                const dayAppts = appointments.filter(a => a.date === day.date);
+                                
+                                return (
+                                    <div key={day.date} className={`day-schedule-card ${day.date === TODAY ? 'day-today' : ''}`}>
+                                        <div className="day-schedule-header">
+                                            <h3 className="day-schedule-title">
+                                                {day.label}
                                                 {day.date === TODAY && <span className="today-badge">TODAY</span>}
-                                            </td>
-                                            <td className={`td-status ${statusClass}`}>
-                                                {dayStatus}
-                                            </td>
-                                            <td className="td-patients">
-                                                {totalVisits > 0 ? `${totalVisits} visit${totalVisits > 1 ? 's' : ''}` : 'No visits'}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                                            </h3>
+                                            <span className="day-schedule-count">
+                                                {dayVisits.length + dayAppts.length} schedule{dayVisits.length + dayAppts.length !== 1 ? 's' : ''}
+                                            </span>
+                                        </div>
+                                        <div className="day-schedule-list">
+                                            {dayVisits.length > 0 ? (
+                                                dayVisits.map(v => (
+                                                    <div 
+                                                        key={v.id} 
+                                                        className={`schedule-item status-${v.status.toLowerCase()} clickable`}
+                                                        onClick={() => setSelectedVisit(v)}
+                                                    >
+                                                        <div className="schedule-time">
+                                                            <Clock size={14} />
+                                                            <span>{v.visitTime || 'TBD'}</span>
+                                                        </div>
+                                                        <div className="schedule-details">
+                                                            <span className="schedule-patient">{v.patientName}</span>
+                                                            <span className="schedule-id">{v.patientId}</span>
+                                                        </div>
+                                                        <span className={`schedule-status status-${v.status.toLowerCase()}`}>
+                                                            {v.status}
+                                                        </span>
+                                                    </div>
+                                                ))
+                                            ) : dayAppts.length > 0 ? (
+                                                dayAppts.map((a, idx) => (
+                                                    <div key={`appt-${idx}`} className={`schedule-item status-${a.status?.toLowerCase() || 'scheduled'}`}>
+                                                        <div className="schedule-time">
+                                                            <Clock size={14} />
+                                                            <span>{a.time || 'TBD'}</span>
+                                                        </div>
+                                                        <div className="schedule-details">
+                                                            <span className="schedule-patient">{a.patientName || 'Appointment'}</span>
+                                                            <span className="schedule-id">{a.patientId || ''}</span>
+                                                        </div>
+                                                        <span className={`schedule-status status-${a.status?.toLowerCase() || 'scheduled'}`}>
+                                                            {a.status || 'Scheduled'}
+                                                        </span>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div className="no-schedules">No schedules for this day</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     ) : (
                         <div className={`day-grid ${calendarView}-grid`}>
                             {calendarView === 'week' ? (
@@ -459,7 +472,11 @@ const PrenatalVisits = () => {
                                             </h4>
                                             <div className="day-visits">
                                                 {visitsTable.filter(v => v.visitDateOnly === day.date).map(v => (
-                                                    <div key={v.id} className={`visit-item status-${v.status.toLowerCase()}`}>
+                                                    <div 
+                                                        key={v.id} 
+                                                        className={`visit-item status-${v.status.toLowerCase()} clickable`}
+                                                        onClick={() => setSelectedVisit(v)}
+                                                    >
                                                         <span className="visit-patient">{v.patientName}</span>
                                                         <span className="visit-status">{v.status}</span>
                                                     </div>
@@ -488,7 +505,11 @@ const PrenatalVisits = () => {
                                                     </h4>
                                                     <div className="day-visits">
                                                         {visitsTable.filter(v => v.visitDateOnly === day.date).map(v => (
-                                                            <div key={v.id} className={`visit-item status-${v.status.toLowerCase()}`}>
+                                                            <div 
+                                                                key={v.id} 
+                                                                className={`visit-item status-${v.status.toLowerCase()} clickable`}
+                                                                onClick={() => setSelectedVisit(v)}
+                                                            >
                                                                 <span className="visit-patient">{v.patientName}</span>
                                                                 <span className="visit-status">{v.status}</span>
                                                             </div>

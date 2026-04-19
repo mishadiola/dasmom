@@ -667,6 +667,17 @@
     gap: 2px;
 }
 
+.visit-item.clickable {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.visit-item.clickable:hover {
+    background: rgba(0, 0, 0, 0.05);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
 .visit-item.status-attended {
     background: rgba(109, 184, 160, 0.1);
     border-left: 3px solid #6db8a0;
@@ -1082,3 +1093,184 @@
     color: #fff;
     box-shadow: 0 4px 10px rgba(185, 129, 138, 0.3);
 }
+
+/* ── Day View Schedule List ── */
+.day-view-container {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.day-schedule-card {
+    background: #ffffff;
+    border: 1px solid #eef0f4;
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+.day-schedule-card.day-today {
+    border-color: var(--color-rose);
+    background: rgba(185, 129, 138, 0.03);
+    box-shadow: 0 2px 8px rgba(185, 129, 138, 0.15);
+}
+
+.day-schedule-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: #fdfdfe;
+    border-bottom: 1px solid #eef0f4;
+}
+
+.day-schedule-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.day-schedule-count {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    background: #f0f2f5;
+    padding: 4px 12px;
+    border-radius: 20px;
+}
+
+.day-schedule-list {
+    padding: 12px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.schedule-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: #fafbfc;
+    border-radius: 8px;
+    border: 1px solid #eef0f4;
+    transition: all 0.2s ease;
+}
+
+.schedule-item.clickable {
+    cursor: pointer;
+}
+
+.schedule-item.clickable:hover {
+    background: #f4f6f9;
+    border-color: #c8d6f0;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.schedule-item:hover {
+    background: #f4f6f9;
+    border-color: #c8d6f0;
+}
+
+.schedule-item.status-attended {
+    background: rgba(109, 184, 160, 0.08);
+    border-color: rgba(109, 184, 160, 0.2);
+    border-left: 4px solid #6db8a0;
+}
+
+.schedule-item.status-scheduled {
+    background: rgba(255, 193, 7, 0.08);
+    border-color: rgba(255, 193, 7, 0.2);
+    border-left: 4px solid #ffc107;
+}
+
+.schedule-item.status-missed {
+    background: rgba(220, 53, 69, 0.08);
+    border-color: rgba(220, 53, 69, 0.2);
+    border-left: 4px solid #dc3545;
+}
+
+.schedule-item.status-cancelled {
+    background: rgba(108, 117, 125, 0.08);
+    border-color: rgba(108, 117, 125, 0.2);
+    border-left: 4px solid #6c757d;
+}
+
+.schedule-time {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+    min-width: 80px;
+}
+
+.schedule-details {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.schedule-patient {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.schedule-id {
+    font-size: 11px;
+    color: var(--color-text-muted);
+}
+
+.schedule-status {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 12px;
+    white-space: nowrap;
+}
+
+.schedule-status.status-attended {
+    background: rgba(109, 184, 160, 0.15);
+    color: #3d8870;
+}
+
+.schedule-status.status-scheduled {
+    background: rgba(255, 193, 7, 0.15);
+    color: #b77f26;
+}
+
+.schedule-status.status-missed {
+    background: rgba(220, 53, 69, 0.15);
+    color: #dc3545;
+}
+
+.schedule-status.status-cancelled {
+    background: rgba(108, 117, 125, 0.15);
+    color: #6c757d;
+}
+
+.no-schedules {
+    text-align: center;
+    padding: 32px;
+    font-size: 14px;
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+/* ── Status Legend Updates ── */
+.d-scheduled { background: #ffc107; }
+.d-attended { background: #6db8a0; }
+.d-missed { background: #dc3545; }
+.d-cancelled { background: #6c757d; }

@@ -16,6 +16,20 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
     const [status, setStatus] = useState(visit.status || 'Upcoming');
     const [notes, setNotes] = useState('');
     const [isSaving, setIsSaving] = useState(false);
+    const [activeTab, setActiveTab] = useState('details');
+    
+    // Vitals state
+    const [systolicBP, setSystolicBP] = useState('');
+    const [diastolicBP, setDiastolicBP] = useState('');
+    const [temperature, setTemperature] = useState('');
+    const [weight, setWeight] = useState('');
+    const [heartRate, setHeartRate] = useState('');
+
+    const tabs = [
+        { id: 'details', label: 'Visit Details', icon: FileText },
+        { id: 'vitals', label: 'Vitals Recording', icon: Activity },
+        { id: 'actions', label: 'Quick Actions', icon: ChevronRight }
+    ];
 
     if (!visit) return null;
 
@@ -27,7 +41,13 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
     const updates = {
         status,
         clinical_notes: notes.trim() || null,
-        attended_date: status === 'Attended' ? new Date().toISOString().split('T')[0] : null
+        attended_date: status === 'Attended' ? new Date().toISOString().split('T')[0] : null,
+        // Vitals data
+        systolic_bp: systolicBP ? parseInt(systolicBP) : null,
+        diastolic_bp: diastolicBP ? parseInt(diastolicBP) : null,
+        temperature: temperature ? parseFloat(temperature) : null,
+        weight: weight ? parseFloat(weight) : null,
+        heart_rate: heartRate ? parseInt(heartRate) : null,
     };
     
     setIsSaving(true);
@@ -88,94 +108,178 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
 
                 {/* ── Scrollable Body ── */}
                 <div className="sv-modal-body">
-                    {/* Visit Details Section */}
-                    <div className="sv-section">
-                        <div className="sv-details-grid">
-                            <div className="sv-field">
-                                <label className="sv-label">Scheduled Date & Time</label>
-                                <div className="sv-value">
-                                    <Calendar size={16} /> {visit.visitDate || visit.date}
-                                    <Clock size={16} className="ml-2" /> {visit.time}
-                                </div>
-                            </div>
-                            <div className="sv-field">
-                                <label className="sv-label">Location / Facility</label>
-                                <div className="sv-value">
-                                    <MapPin size={16} /> {visit.location || 'Station Health Station'}
-                                </div>
-                            </div>
-                            <div className="sv-field">
-                                <label className="sv-label">Staff Assigned</label>
-                                <div className="sv-value">
-                                    <User size={16} /> {visit.midwife || visit.staff || 'Midwife Elena P.'}
-                                </div>
-                            </div>
-                            <div className="sv-field">
-                                <label className="sv-label">Maternal Risk Level</label>
-                                <div className="sv-value">
-                                    <span className={`sv-risk-badge ${getRiskClass(visit.risk)}`}>
-                                        {visit.risk || 'Normal'}
-                                    </span>
-                                </div>
-                            </div>
-                            <div className="sv-field">
-                                <label className="sv-label">Gestational Age</label>
-                                <div className="sv-value">
-                                    {visit.ga || '28w 4d'}
-                                </div>
-                            </div>
-                        </div>
+                    {/* Navigation Tabs */}
+                    <div className="sv-tabs">
+                        {tabs.map(tab => (
+                            <button
+                                key={tab.id}
+                                className={`sv-tab ${activeTab === tab.id ? 'active' : ''}`}
+                                onClick={() => setActiveTab(tab.id)}
+                            >
+                                <tab.icon size={16} />
+                                {tab.label}
+                            </button>
+                        ))}
                     </div>
 
-                    {/* Visit Status Section */}
-                    <div className="sv-section">
-                        <h3 className="sv-section-title">Visit Status & Outcome</h3>
-                        <div className="sv-status-options">
-                            {[
-                                { label: 'Attended', icon: CheckCircle2, value: 'Attended', class: 'completed' },
-                                { label: 'Missed', icon: AlertCircle, value: 'Missed', class: 'missed' },
-                                { label: 'Cancelled', icon: SidebarClose, value: 'Cancelled', class: 'cancelled' }
-                            ].map(opt => (
-                                <button 
-                                    key={opt.value}
-                                    className={`sv-status-btn ${status === opt.value ? `active ${opt.class}` : ''}`}
-                                    onClick={() => handleStatusChange(opt.value)}
-                                >
-                                    <opt.icon size={18} />
-                                    {opt.label}
-                                </button>
-                            ))}
-                        </div>
-                        <div className="sv-notes-field">
-                            <label className="sv-label">Visit Notes / Remarks</label>
-                            <textarea 
-                                className="sv-textarea" 
-                                placeholder="Add reasoning for status or follow-up instructions..."
-                                rows={3}
-                                value={notes}
-                                onChange={(e) => setNotes(e.target.value)}
-                            />
-                        </div>
-                    </div>
+                    {/* Section 1: Visit Details */}
+                    {activeTab === 'details' && (
+                        <div className="sv-section-content sv-section-details">
+                            <div className="sv-section">
+                                <div className="sv-details-grid">
+                                    <div className="sv-field">
+                                        <label className="sv-label">Scheduled Date & Time</label>
+                                        <div className="sv-value">
+                                            <Calendar size={16} /> {visit.visitDate || visit.date}
+                                            <Clock size={16} className="ml-2" /> {visit.time}
+                                        </div>
+                                    </div>
+                                    <div className="sv-field">
+                                        <label className="sv-label">Location / Facility</label>
+                                        <div className="sv-value">
+                                            <MapPin size={16} /> {visit.location || 'Station Health Station'}
+                                        </div>
+                                    </div>
+                                    <div className="sv-field">
+                                        <label className="sv-label">Staff Assigned</label>
+                                        <div className="sv-value">
+                                            <User size={16} /> {visit.midwife || visit.staff || 'Midwife Elena P.'}
+                                        </div>
+                                    </div>
+                                    <div className="sv-field">
+                                        <label className="sv-label">Maternal Risk Level</label>
+                                        <div className="sv-value">
+                                            <span className={`sv-risk-badge ${getRiskClass(visit.risk)}`}>
+                                                {visit.risk || 'Normal'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="sv-field">
+                                        <label className="sv-label">Gestational Age</label>
+                                        <div className="sv-value">
+                                            {visit.ga || '28w 4d'}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
 
-                    {/* Quick Actions Section */}
-                    <div className="sv-section">
-                        <h3 className="sv-section-title">Quick Actions</h3>
-                        <div className="sv-quick-actions">
-                            <button className="sv-action-btn sv-btn-primary" onClick={() => navigate('/dashboard/patients')}>
-                                <Activity size={16} /> Record Vitals
-                            </button>
-                            <button className="sv-action-btn sv-btn-outline">
-                                <Send size={16} /> Send Reminder
-                            </button>
-                            <button className="sv-action-btn sv-btn-outline">
-                                <Printer size={16} /> Print Record
-                            </button>
-                            <button className="sv-action-btn sv-btn-outline" onClick={() => navigate(`/dashboard/patients/${visit.patientId}`)}>
-                                <User size={16} /> View Patient Profile
-                            </button>
+                            <div className="sv-section">
+                                <h3 className="sv-section-title">Visit Status & Outcome</h3>
+                                <div className="sv-status-options">
+                                    {[
+                                        { label: 'Attended', icon: CheckCircle2, value: 'Attended', class: 'completed' },
+                                        { label: 'Missed', icon: AlertCircle, value: 'Missed', class: 'missed' },
+                                        { label: 'Cancelled', icon: SidebarClose, value: 'Cancelled', class: 'cancelled' }
+                                    ].map(opt => (
+                                        <button 
+                                            key={opt.value}
+                                            className={`sv-status-btn ${status === opt.value ? `active ${opt.class}` : ''}`}
+                                            onClick={() => handleStatusChange(opt.value)}
+                                        >
+                                            <opt.icon size={18} />
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="sv-notes-field">
+                                    <label className="sv-label">Visit Notes / Remarks</label>
+                                    <textarea 
+                                        className="sv-textarea" 
+                                        placeholder="Add reasoning for status or follow-up instructions..."
+                                        rows={3}
+                                        value={notes}
+                                        onChange={(e) => setNotes(e.target.value)}
+                                    />
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    )}
+
+                    {/* Section 2: Vitals Recording */}
+                    {activeTab === 'vitals' && (
+                        <div className="sv-section-content sv-section-vitals">
+                            <div className="sv-section">
+                                <h3 className="sv-section-title">Vitals Recording</h3>
+                                <div className="sv-vitals-grid">
+                                    <div className="sv-vital-field">
+                                        <label className="sv-label">Blood Pressure (mmHg)</label>
+                                        <div className="sv-bp-input">
+                                            <input 
+                                                type="number" 
+                                                className="sv-input"
+                                                placeholder="Systolic"
+                                                value={systolicBP}
+                                                onChange={(e) => setSystolicBP(e.target.value)}
+                                            />
+                                            <span className="sv-bp-separator">/</span>
+                                            <input 
+                                                type="number" 
+                                                className="sv-input"
+                                                placeholder="Diastolic"
+                                                value={diastolicBP}
+                                                onChange={(e) => setDiastolicBP(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="sv-vital-field">
+                                        <label className="sv-label">Temperature (°C)</label>
+                                        <input 
+                                            type="number" 
+                                            step="0.1"
+                                            className="sv-input"
+                                            placeholder="36.5"
+                                            value={temperature}
+                                            onChange={(e) => setTemperature(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="sv-vital-field">
+                                        <label className="sv-label">Weight (kg)</label>
+                                        <input 
+                                            type="number" 
+                                            step="0.1"
+                                            className="sv-input"
+                                            placeholder="65.5"
+                                            value={weight}
+                                            onChange={(e) => setWeight(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="sv-vital-field">
+                                        <label className="sv-label">Heart Rate (bpm)</label>
+                                        <input 
+                                            type="number" 
+                                            className="sv-input"
+                                            placeholder="72"
+                                            value={heartRate}
+                                            onChange={(e) => setHeartRate(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Section 3: Quick Actions */}
+                    {activeTab === 'actions' && (
+                        <div className="sv-section-content sv-section-actions">
+                            <div className="sv-section">
+                                <h3 className="sv-section-title">Quick Actions</h3>
+                                <div className="sv-quick-actions">
+                                    <button className="sv-action-btn sv-btn-primary" onClick={() => navigate('/dashboard/patients')}>
+                                        <Activity size={16} /> Record Vitals
+                                    </button>
+                                    <button className="sv-action-btn sv-btn-outline">
+                                        <Send size={16} /> Send Reminder
+                                    </button>
+                                    <button className="sv-action-btn sv-btn-outline">
+                                        <Printer size={16} /> Print Record
+                                    </button>
+                                    <button className="sv-action-btn sv-btn-outline" onClick={() => navigate(`/dashboard/patients/${visit.patientId}`)}>
+                                        <User size={16} /> View Patient Profile
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* ── Footer ── */}

@@ -32,11 +32,14 @@ const Inventory = () => {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(null);
-  const [form, setForm] = useState({ item_name: '', quantity: '', unit: 'vials' });
+  const [form, setForm] = useState({ item_name: '', quantity: '', max_stock: '', unit: 'vials' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const itemsPerPage = 20;
 
   const vaccineUnitOptions = ['vials', 'doses', 'ml'];
-  const supplementUnitOptions = ['pcs', 'tablets', 'bottles', 'capsules'];
+  const supplementUnitOptions = ['tablets', 'capsules', 'sachets', 'bottles'];
   const unitOptions = activeTab === 'vaccines' ? vaccineUnitOptions : supplementUnitOptions;
 
   const fetchData = async () => {
@@ -63,7 +66,7 @@ const Inventory = () => {
         item_name: row?.supplement_name || row?.item_name || 'Unknown',
         quantity: row?.quantity || 0,
         max_stock: row?.max_stock || 1000,
-        unit: row?.unit || 'pcs',
+        unit: row?.unit || 'tablets',
         status: row?.status || 'active',
       }));
 
@@ -135,6 +138,16 @@ const Inventory = () => {
   }).length;
   const outOfStockCount = (currentItems || []).filter(i => (i?.quantity || 0) <= 0).length;
 
+  // Pagination logic
+  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedItems = filteredItems.slice(startIndex, startIndex + itemsPerPage);
+
+  // Reset page when filters or tab change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchTerm, statusFilter, activeSummaryFilter, archiveFilter]);
+
   const handleAddSubmit = async e => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -144,13 +157,14 @@ const Inventory = () => {
       const payload = {
         item_name: form.item_name,
         quantity: Number(form.quantity),
+        max_stock: Number(form.max_stock) || (activeTab === 'vaccines' ? 500 : 1000),
         unit: form.unit,
       };
 
       await inventoryService.addInventoryItem(table, payload);
 
       setShowAddModal(false);
-      setForm({ item_name: '', quantity: '', unit: activeTab === 'vaccines' ? 'vials' : 'pcs' });
+      setForm({ item_name: '', quantity: '', max_stock: '', unit: activeTab === 'vaccines' ? 'vials' : 'tablets' });
     } catch (error) {
       alert('Failed to add item: ' + error.message);
     } finally {
@@ -165,10 +179,11 @@ const Inventory = () => {
       await inventoryService.updateInventoryQuantity(
         showUpdateModal.table,
         showUpdateModal.item.id,
-        Number(form.quantity)
+        Number(form.quantity),
+        Number(form.max_stock)
       );
       setShowUpdateModal(null);
-      setForm({ item_name: '', quantity: '', unit: '' });
+      setForm({ item_name: '', quantity: '', max_stock: '', unit: '' });
     } catch (error) {
       alert('Failed to update quantity: ' + error.message);
     } finally {
@@ -208,6 +223,17 @@ const Inventory = () => {
     }
   };
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await fetchData();
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   return (
     <div className="inventory-page">
       <div className="page-header">
@@ -221,7 +247,7 @@ const Inventory = () => {
           <button
             className="btn btn-primary"
             onClick={() => {
-              setForm({ item_name: '', quantity: '', unit: activeTab === 'vaccines' ? 'vials' : 'pcs' });
+              setForm({ item_name: '', quantity: '', max_stock: activeTab === 'vaccines' ? 500 : 1000, unit: activeTab === 'vaccines' ? 'vials' : 'tablets' });
               setShowAddModal(true);
             }}
           >
@@ -324,6 +350,15 @@ const Inventory = () => {
             <option value="archived">Archived</option>
             <option value="all">All</option>
           </select>
+          <button
+            className="refresh-btn"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            title="Refresh data"
+          >
+            <RefreshCw size={14} className={isRefreshing ? 'spinning' : ''} />
+            <span>Refresh</span>
+          </button>
         </div>
       </div>
 
@@ -347,6 +382,7 @@ const Inventory = () => {
           <table className="inv-table">
             <thead>
               <tr>
+                <th className="row-number-header">#</th>
                 <th>Item Name</th>
                 <th>Stock Level</th>
                 <th>Unit</th>
@@ -357,16 +393,18 @@ const Inventory = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="5" className="text-center py-8">
+                  <td colSpan="6" className="text-center py-8">
                     Loading inventory data...
                   </td>
                 </tr>
-              ) : filteredItems.length > 0 ? (
-                filteredItems.map(item => {
+              ) : paginatedItems.length > 0 ? (
+                paginatedItems.map((item, index) => {
                   const status = getStatus(item.quantity, item.max_stock);
                   const percentage = getStockPercentage(item.quantity || 0, item.max_stock || 500);
+                  const rowNumber = startIndex + index + 1;
                   return (
                     <tr key={item.id} className="inv-row">
+                      <td className="row-number-cell">{rowNumber}</td>
                       <td className="item-name-cell">
                         <strong>{item.item_name}</strong>
                       </td>
@@ -391,7 +429,7 @@ const Inventory = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="unit-cell">{item.unit || 'pcs'}</td>
+                      <td className="unit-cell">{item.unit || 'tablets'}</td>
                       <td>
                         <span className={`status-badge ${status.class}`}>
                           {status.label}
@@ -406,6 +444,7 @@ const Inventory = () => {
                               setForm({
                                 ...form,
                                 quantity: item.quantity,
+                                max_stock: item.max_stock,
                               });
                               setShowUpdateModal({
                                 table:
@@ -456,15 +495,42 @@ const Inventory = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan="5" className="empty-state">
-                    <Package size={40} className="empty-icon" />
-                    <p>No inventory items found.</p>
+                  <td colSpan="6" className="text-center py-8">
+                    No items found
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        
+        {/* Pagination Controls */}
+        {filteredItems.length > itemsPerPage && (
+          <div className="pagination-container">
+            <div className="pagination-info">
+              Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredItems.length)} of {filteredItems.length}
+            </div>
+            <div className="pagination-controls">
+              <button
+                className="pagination-btn"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </button>
+              <span className="pagination-page-info">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                className="pagination-btn"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
 
@@ -574,6 +640,18 @@ const Inventory = () => {
                     />
                   </div>
                   <div className="form-group">
+                    <label>Maximum Stock Capacity</label>
+                    <input
+                      type="number"
+                      required
+                      value={form.max_stock}
+                      onChange={e =>
+                        setForm({ ...form, max_stock: e.target.value })
+                      }
+                      placeholder={activeTab === 'vaccines' ? '500' : '1000'}
+                    />
+                  </div>
+                  <div className="form-group">
                     <label>Unit</label>
                     <select
                       required
@@ -640,6 +718,18 @@ const Inventory = () => {
                       setForm({ ...form, quantity: e.target.value })
                     }
                     placeholder="Enter new quantity"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Maximum Stock Capacity</label>
+                  <input
+                    type="number"
+                    required
+                    value={form.max_stock}
+                    onChange={e =>
+                      setForm({ ...form, max_stock: e.target.value })
+                    }
+                    placeholder="Enter maximum stock capacity"
                   />
                 </div>
               </div>

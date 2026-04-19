@@ -10,6 +10,8 @@
     max-width: 1400px;
     margin: 0 auto;
     padding-bottom: 40px;
+    border: none;
+    border-left: none;
 }
 
 /* ════════════════════════════
@@ -428,6 +430,8 @@
     align-items: center;
     justify-content: center;
     padding: 24px;
+    border: none !important;
+    border-left: none !important;
 }
 
 .pp-modal {
@@ -441,6 +445,8 @@
     overflow: hidden;
     box-shadow: 0 24px 60px rgba(0,0,0,0.12);
     animation: modalIn 0.3s cubic-bezier(0.16,1,0.3,1);
+    border: none !important;
+    border-left: none !important;
 }
 
 @keyframes modalIn {
@@ -454,7 +460,7 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    background: linear-gradient(135deg, rgba(185,129,138,0.06), rgba(232,184,75,0.04));
+    background: #fff;
 }
 
 .modal-header h2 {
@@ -488,12 +494,35 @@
     display: flex;
     flex-direction: column;
     gap: 20px;
+    border: none;
+    border-left: none;
+    scrollbar-width: thin;
+    scrollbar-color: #eef0f4 transparent;
+}
+
+.modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.modal-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+    background: #eef0f4;
+    border-radius: 3px;
+}
+
+.modal-body::-webkit-scrollbar-thumb:hover {
+    background: #d1d5db;
 }
 
 .modal-section {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    border: none;
+    border-left: none;
 }
 
 .modal-section-title {
@@ -515,12 +544,16 @@
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 10px;
+    border: none;
+    border-left: none;
 }
 
 .detail-item {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    border: none;
+    border-left: none;
 }
 
 .detail-item span {
@@ -535,26 +568,6 @@
     font-size: 13px;
     color: var(--color-text);
     font-weight: 700;
-}
-
-/* Recovery progress in detail */
-.progress-wrap {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 4px;
-}
-.progress-bar {
-    flex: 1;
-    height: 8px;
-    background: #f0f2f5;
-    border-radius: 4px;
-    overflow: hidden;
-}
-.progress-fill {
-    height: 100%;
-    border-radius: 4px;
-    transition: width 0.5s ease;
 }
 
 /* Vitals Table */
