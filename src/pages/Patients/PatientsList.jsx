@@ -180,6 +180,7 @@ const PatientsList = () => {
         trimesters: [],
         risks: [],
         stations: [],
+        patientType: 'All',
         sortBy: 'newest'
     });
     
@@ -300,10 +301,11 @@ const PatientsList = () => {
         else derivedRisk = 'Normal';
         
         const matchesRisk = filters.risks.length === 0 || filters.risks.includes(derivedRisk);
+        const matchesType = filters.patientType === 'All' || (p.patientType || p.type) === filters.patientType;
         const matchesStation = filters.stations.length === 0 || filters.stations.includes(p.station);
         const matchesArchive = archiveFilter === 'all' || (p.archiveStatus || 'active') === archiveFilter;
 
-        return matchesSearch && matchesTri && matchesRisk && matchesStation && matchesArchive;
+        return matchesSearch && matchesTri && matchesRisk && matchesType && matchesStation && matchesArchive;
     });
 
     const sortedPatients = [...filteredPatients].sort((a, b) => {
@@ -348,7 +350,7 @@ const PatientsList = () => {
     };
 
     const clearFilters = () => {
-        setFilters({ trimesters: [], risks: [], stations: [], sortBy: 'newest' });
+        setFilters({ trimesters: [], risks: [], stations: [], patientType: 'All', sortBy: 'newest' });
         setArchiveFilter('active');
         setSearchTerm('');
         setCurrentPage(1);
@@ -361,6 +363,7 @@ const PatientsList = () => {
         const exportData = sortedPatients.map(p => ({
             'Patient ID': p.id || '',
             'Name': p.name || '',
+            'Type': p.patientType || p.type || 'Mother',
             'Station': p.station || 'Unassigned',
             'Age': p.age || 'N/A',
             'Gestation': p.weeks ? `${p.weeks} weeks (T${p.trimester || 1})` : 'N/A',
@@ -540,6 +543,18 @@ const PatientsList = () => {
                                 </div>
                             </div>
                         )}
+                    </div>
+
+                    {/* Patient Type Filter */}
+                    <div className="filter-dropdown-container">
+                        <select
+                            className="filter-btn patient-type-filter"
+                            value={filters.patientType}
+                            onChange={(e) => { handleFilterChange('patientType', e.target.value); setActivePopover(null); }}
+                        >
+                            <option value="All">All Types</option>
+                            <option value="Mother">Mother</option>
+                        </select>
                     </div>
 
                     {/* Archive Filter */}

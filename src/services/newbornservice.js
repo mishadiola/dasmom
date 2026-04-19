@@ -112,66 +112,106 @@ export default class NewbornService {
         try {
             const { data: babies, error: babyError } = await this.supabase
                 .from('newborns')
-                .select('*')
-                .order('birth_date', { ascending: false });
+                .select(`
+                    *,
+                    patient_basic_info!mother_id (
+                        id,
+                        first_name,
+                        last_name,
+                        barangay
+                    ),
+                    deliveries!inner (
+                        delivery_date
+                    )
+                `)
+                .order('created_at', { ascending: false });
 
             if (babyError) throw babyError;
             if (!babies || babies.length === 0) return [];
 
-            const motherIds = [...new Set(babies.map(b => b.patient_id).filter(Boolean))];
+            // Fetch vaccinations separately for all newborns
+            const babyIds = babies.map(b => b.id);
+            const { data: allVaccinations = [] } = await this.supabase
+                .from('vaccinations')
+                .select(`
+                    id,
+                    patient_id,
+                    vaccine_inventory_id,
+                    dose_number,
+                    scheduled_vaccination,
+                    vaccinated_date,
+                    status,
+                    vaccine_inventory (
+                        vaccine_name
+                    )
+                `)
+                .in('patient_id', babyIds);
 
-            // Fetch mother basic info
-            const { data: mothers } = await this.supabase
-                .from('patient_basic_info')
-                .select('id, first_name, last_name, barangay')
-                .in('id', motherIds);
-
-            // Fetch pregnancy risk levels
-            const { data: pregnancies } = await this.supabase
-                .from('pregnancy_info')
-                .select('patient_id, risk_level')
-                .in('patient_id', motherIds);
+            // Create a map of newborn_id -> vaccinations
+            const vaccMap = new Map();
+            (allVaccinations || []).forEach(v => {
+                if (!vaccMap.has(v.patient_id)) {
+                    vaccMap.set(v.patient_id, []);
+                }
+                vaccMap.get(v.patient_id).push(v);
+            });
 
             return babies.map(baby => {
-                const mother = mothers?.find(m => m.id === baby.patient_id);
-                const pregnancy = pregnancies?.find(p => p.patient_id === baby.patient_id);
+                const mother = baby.patient_basic_info;
+                const pregnancyRisk = null;
 
-                // Determine risk level for the baby
                 let riskLevel = 'Normal';
-                if (baby.condition === 'NICU' || baby.condition === 'Special Care') {
+                if (baby.condition_at_birth === 'NICU' || baby.condition_at_birth === 'Special Care') {
                     riskLevel = 'High';
-                } else if (pregnancy?.risk_level === 'High Risk') {
+                } else if (baby.risk_level === 'High Risk' || baby.risk_level === 'High') {
                     riskLevel = 'High';
                 } else if (baby.birth_weight && baby.birth_weight < 2.5) {
                     riskLevel = 'Monitor';
-                } else if (pregnancy?.risk_level === 'Monitor') {
-                    riskLevel = 'Monitor';
                 }
+
+                const vaccLog = (vaccMap.get(baby.id) || []).map(v => {
+                    const scheduledDate = v.scheduled_vaccination || null;
+                    const vaccinatedDate = v.vaccinated_date || null;
+                    let status = v.status;
+                    if (!status) {
+                        if (vaccinatedDate) status = 'Completed';
+                        else if (scheduledDate && new Date(scheduledDate) < new Date()) status = 'Overdue';
+                        else status = 'Pending';
+                    }
+
+                    return {
+                        id: v.id,
+                        vaccine: v.vaccine_inventory?.vaccine_name || 'Unknown',
+                        dose: `Dose ${v.dose_number || ''}`.trim(),
+                        status,
+                        nextDue: scheduledDate,
+                        date: vaccinatedDate,
+                        scheduled_vaccination: scheduledDate,
+                        vaccinated_date: vaccinatedDate
+                    };
+                }).sort((a, b) => {
+                    if (!a.nextDue) return 1;
+                    if (!b.nextDue) return -1;
+                    return new Date(a.nextDue) - new Date(b.nextDue);
+                });
 
                 return {
                     id: baby.id,
                     babyName: baby.baby_name || 'Newborn',
-                    motherId: baby.patient_id,
-                    motherName: mother ? `${mother.first_name} ${mother.last_name}` : 'Unknown',
+                    motherId: baby.mother_id,
+                    motherName: mother ? `${mother.first_name} ${mother.last_name}`.trim() : 'Unknown',
                     station: mother?.barangay || 'N/A',
-                    birthDate: baby.birth_date || 'N/A',
+                    birthDate: baby.deliveries?.delivery_date || null,
                     gender: baby.gender || 'Unknown',
                     birthWeight: baby.birth_weight || 0,
                     length: baby.birth_length || 0,
                     headCirc: baby.head_circumference || 0,
-                    gestationalAge: baby.gestational_age || 'N/A',
-                    deliveryType: baby.delivery_type || 'NSD',
-                    condition: baby.condition || 'Healthy',
+                    condition: baby.condition_at_birth || 'Healthy',
                     riskLevel,
                     apgar1: baby.apgar_1min,
                     apgar5: baby.apgar_5min,
-                    complications: baby.complications || 'None',
                     notes: baby.notes || '',
-                    nextAppt: baby.postpartum_scheduled || '—',
-                    vaccStatus: 'Pending',
-                    suppStatus: 'Pending',
-                    // Placeholder sub-records (will be empty until vaccination/supplement tracking is built)
-                    vaccLog: [],
+                    vaccLog,
                     suppLog: [],
                     growthLog: [],
                     checkupLog: [],

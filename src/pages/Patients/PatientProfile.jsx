@@ -854,7 +854,7 @@ const PatientProfile = () => {
                                             <tr key={i}>
                                                 <td>{v.vaccine_name}</td>
                                                 <td>{v.dose_number}</td>
-                                                <td>{v.date_administered}</td>
+                                                <td>{v.vaccinated_date || v.scheduled_vaccination}</td>
                                             </tr>
                                         ))}
                                     </tbody>

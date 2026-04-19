@@ -23,10 +23,87 @@ const RecordModal = ({ mode, onClose, onSave }) => {
         supplement: '', dose: '', date: '', nextDue: '', staff: STAFF_LIST[0], notes: ''
     });
     const [isSaving, setIsSaving] = useState(false);
+    const [selectedPatient, setSelectedPatient] = useState(null);
+    const [pendingVaccines, setPendingVaccines] = useState([]);
+    const [selectedVaccines, setSelectedVaccines] = useState({});
     const updateForm = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
 
+    useEffect(() => {
+        const searchPendingVaccines = async () => {
+            if (!form.patientName || form.patientName.trim().length < 3) {
+                setSelectedPatient(null);
+                setPendingVaccines([]);
+                setSelectedVaccines({});
+                return;
+            }
+
+            try {
+                const patientService = new PatientService();
+                let patientId = null;
+                let patientLabel = null;
+
+                if (form.patientType === 'Mother') {
+                    const mothers = await patientService.searchPatients(form.patientName);
+                    if (mothers.length === 1) {
+                        patientId = mothers[0].id;
+                        patientLabel = mothers[0].name;
+                    }
+                } else {
+                    const newborns = await babyService.searchNewborns(form.patientName);
+                    if (newborns.length === 1) {
+                        patientId = newborns[0].id;
+                        patientLabel = newborns[0].name;
+                    }
+                }
+
+                if (!patientId) {
+                    setSelectedPatient(null);
+                    setPendingVaccines([]);
+                    setSelectedVaccines({});
+                    return;
+                }
+
+                setSelectedPatient({ id: patientId, label: patientLabel, type: form.patientType });
+
+                const { data: pendingRows, error: pendingError } = await supabase
+                    .from('vaccinations')
+                    .select(`id, dose_number, scheduled_vaccination, vaccinated_date, status, vaccine_inventory (vaccine_name)`)
+                    .eq('patient_id', patientId)
+                    .eq('status', 'Pending')
+                    .order('scheduled_vaccination', { ascending: true });
+
+                if (pendingError) {
+                    console.warn('Unable to load pending vaccinations:', pendingError);
+                    setPendingVaccines([]);
+                    setSelectedVaccines({});
+                    return;
+                }
+
+                const pending = (pendingRows || []).map(row => ({
+                    id: row.id,
+                    vaccine: row.vaccine_inventory?.vaccine_name || 'Unknown Vaccine',
+                    dose_number: row.dose_number,
+                    scheduled_vaccination: row.scheduled_vaccination,
+                    status: row.status
+                }));
+
+                setPendingVaccines(pending);
+                setSelectedVaccines({});
+            } catch (err) {
+                console.error('Error loading patient vaccination schedule:', err);
+                setSelectedPatient(null);
+                setPendingVaccines([]);
+                setSelectedVaccines({});
+            }
+        };
+
+        const timer = setTimeout(searchPendingVaccines, 400);
+        return () => clearTimeout(timer);
+    }, [form.patientName, form.patientType]);
+
     const handleSave = async () => {
-        if (!form.patientName || (mode === 'vaccine' && (!form.vaccine || !form.dose)) || (mode === 'supplement' && (!form.supplement || !form.dose)) || !form.date || !form.staff) {
+        const hasPendingSelection = mode === 'vaccine' && Object.values(selectedVaccines).some(Boolean);
+        if (!form.patientName || (mode === 'vaccine' && !hasPendingSelection && (!form.vaccine || !form.dose)) || (mode === 'supplement' && (!form.supplement || !form.dose)) || !form.date || !form.staff) {
             alert('Please fill in all required fields.');
             return;
         }
@@ -50,21 +127,36 @@ const RecordModal = ({ mode, onClose, onSave }) => {
             if (!currentUser) throw new Error('No logged-in user');
 
             if (mode === 'vaccine') {
-                const { data: vaccInv } = await supabase.from('vaccine_inventory').select('id').eq('vaccine_name', form.vaccine).single();
-                if (!vaccInv) throw new Error('Vaccine not found in inventory');
+                const selectedScheduledIds = Object.entries(selectedVaccines)
+                    .filter(([, checked]) => checked)
+                    .map(([id]) => id);
 
-                const doseNumber = form.dose === '1st Dose' ? 1 : form.dose === '2nd Dose' ? 2 : form.dose === '3rd Dose' ? 3 : form.dose === 'Booster' ? 4 : 5;
+                if (selectedScheduledIds.length > 0) {
+                    // Mark existing scheduled vaccine records as completed
+                    for (const scheduledId of selectedScheduledIds) {
+                        await supabase.from('vaccinations').update({
+                            vaccinated_date: form.date,
+                            status: 'Completed',
+                            notes: form.notes || null
+                        }).eq('id', scheduledId);
+                    }
+                } else {
+                    const { data: vaccInv } = await supabase.from('vaccine_inventory').select('id').eq('vaccine_name', form.vaccine).single();
+                    if (!vaccInv) throw new Error('Vaccine not found in inventory');
 
-                await supabase.from('vaccinations').insert({
-                    patient_id: patientId,
-                    vaccine_inventory_id: vaccInv.id,
-                    dose_number: doseNumber,
-                    date_administered: form.date,
-                    next_due_date: form.nextDue || null,
-                    status: 'Completed',
-                    created_by: currentUser,
-                    notes: form.notes
-                });
+                    const doseNumber = form.dose === '1st Dose' ? 1 : form.dose === '2nd Dose' ? 2 : form.dose === '3rd Dose' ? 3 : form.dose === 'Booster' ? 4 : 5;
+
+                    await supabase.from('vaccinations').insert({
+                        patient_id: patientId,
+                        vaccine_inventory_id: vaccInv.id,
+                        dose_number: doseNumber,
+                        vaccinated_date: form.date,
+                        scheduled_vaccination: form.nextDue || null,
+                        status: 'Completed',
+                        created_by: currentUser,
+                        notes: form.notes
+                    });
+                }
             } else {
                 const { data: suppInv } = await supabase.from('supplement_inventory').select('id').eq('supplement_name', form.supplement).single();
                 if (!suppInv) throw new Error('Supplement not found in inventory');
@@ -118,6 +210,22 @@ const RecordModal = ({ mode, onClose, onSave }) => {
                             <input type="text" placeholder="Search patient..." value={form.patientName} onChange={e => updateForm('patientName', e.target.value)} />
                         </div>
                     </div>
+                    {mode === 'vaccine' && pendingVaccines.length > 0 && (
+                        <div className="pending-vaccines-section">
+                            <h3>Pending Scheduled Vaccines</h3>
+                            <p className="pending-vaccines-note">Check any scheduled doses that were administered today to update their records.</p>
+                            {pendingVaccines.map(v => (
+                                <label key={v.id} className="pending-vaccine-item">
+                                    <input
+                                        type="checkbox"
+                                        checked={!!selectedVaccines[v.id]}
+                                        onChange={() => setSelectedVaccines(prev => ({ ...prev, [v.id]: !prev[v.id] }))}
+                                    />
+                                    {v.vaccine} (Dose {v.dose_number}) — {v.scheduled_vaccination}
+                                </label>
+                            ))}
+                        </div>
+                    )}
                     {mode === 'vaccine' ? (
                         <>
                             <div className="form-grid-2">
@@ -272,7 +380,9 @@ const Vaccinations = () => {
 
             // Transform vaccination records
             const transformedVaccRecords = (vaccRecords || []).map(record => {
-                const expirationDate = calculateExpirationDate(record.date_administered, 'vaccine');
+                const vaccinationDate = record.vaccinated_date || null;
+                const scheduledDate = record.scheduled_vaccination || null;
+                const expirationDate = calculateExpirationDate(vaccinationDate, 'vaccine');
                 const expStatus = getExpirationStatus(expirationDate);
                 return {
                     id: record.id,
@@ -282,14 +392,14 @@ const Vaccinations = () => {
                     type: patientMap.get(record.patient_id)?.type || 'Unknown',
                     vaccine: vaccineMap.get(record.vaccine_inventory_id) || 'Unknown',
                     dose: `${record.dose_number}${record.dose_number === 1 ? 'st' : record.dose_number === 2 ? 'nd' : record.dose_number === 3 ? 'rd' : 'th'} Dose`,
-                    date: record.date_administered,
-                nextDue: record.next_due_date,
-                expirationDate: expirationDate,
-                expirationStatus: expStatus.status,
-                expirationClass: expStatus.class,
-                staff: staffMap.get(record.created_by) || 'Unknown',
-                notes: record.notes,
-                status: record.status
+                    date: vaccinationDate,
+                    nextDue: scheduledDate,
+                    expirationDate: expirationDate,
+                    expirationStatus: expStatus.status,
+                    expirationClass: expStatus.class,
+                    staff: staffMap.get(record.created_by) || 'Unknown',
+                    notes: record.notes,
+                    status: record.status || (vaccinationDate ? 'Completed' : 'Pending')
                 };
             });
 

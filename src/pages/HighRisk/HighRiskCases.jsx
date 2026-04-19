@@ -42,6 +42,7 @@ const HighRiskCases = () => {
   const [patients, setPatients] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStation, setFilterStation] = useState('All');
+  const [filterType, setFilterType] = useState('All');
   const [filterRiskLevel, setFilterRiskLevel] = useState('All');
   const [filterTrimester, setFilterTrimester] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -145,6 +146,7 @@ const HighRiskCases = () => {
       (p.name || '').toLowerCase().includes(search) ||
       (p.id || '').toLowerCase().includes(search);
     const matchesStation = filterStation === 'All' || p.station === filterStation;
+    const matchesType = filterType === 'All' || (p.type || 'Mother') === filterType;
     
     // Risk Level Filter
     const matchesRiskLevel = filterRiskLevel === 'All' || p.riskLevel === filterRiskLevel;
@@ -191,7 +193,7 @@ const HighRiskCases = () => {
       }
     }
     
-    return matchesSearch && matchesStation && matchesRiskLevel && matchesTrimester && matchesStatus && matchesDateRange;
+    return matchesSearch && matchesStation && matchesType && matchesRiskLevel && matchesTrimester && matchesStatus && matchesDateRange;
   });
 
   const totalPages = Math.ceil(filteredPatients.length / itemsPerPage);
@@ -298,6 +300,18 @@ const HighRiskCases = () => {
             ))}
           </select>
           
+          {/* Type Filter */}
+          <select
+            value={filterType}
+            onChange={(e) => {
+              setFilterType(e.target.value);
+              setCurrentPage(1);
+            }}
+          >
+            <option value="All">All Types</option>
+            <option value="Mother">Mother</option>
+          </select>
+
           {/* Risk Level Filter */}
           <select
             value={filterRiskLevel}

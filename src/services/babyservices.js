@@ -242,6 +242,7 @@ class BabyService {
       .select('id');
 
     if (newbornError) throw newbornError;
+    console.log('✅ Inserted newborns with IDs:', insertedNewborns);
 
     // Update pregnancy status to postpartum
     const { data: currentPregnancy } = await supabase
@@ -302,28 +303,69 @@ class BabyService {
       { months: 12, vaccines: ['Influenza'], doses: [2] }
     ];
 
+    const computeScheduledDate = (baseDate, monthsOffset) => {
+      const target = new Date(baseDate);
+      const wholeMonths = Math.floor(monthsOffset);
+      target.setMonth(target.getMonth() + wholeMonths);
+      const halfMonth = monthsOffset - wholeMonths;
+      if (halfMonth === 0.5) {
+        target.setDate(target.getDate() + 15);
+      }
+      return target;
+    };
+
     for (const newborn of insertedNewborns) {
+      console.log(`📋 Scheduling vaccines for newborn ID: ${newborn.id}`);
+      
       for (const schedule of vaccineSchedule) {
-        const scheduledDate = new Date(birthDate);
-        scheduledDate.setMonth(scheduledDate.getMonth() + schedule.months);
+        const scheduledDate = computeScheduledDate(birthDate, schedule.months);
         const dateStr = scheduledDate.toISOString().split('T')[0];
 
         for (let i = 0; i < schedule.vaccines.length; i++) {
           const vaccine = schedule.vaccines[i];
           const dose = schedule.doses[i];
           try {
-            const { data: inv } = await supabase.from('vaccine_inventory').select('id').eq('vaccine_name', vaccine).single();
-            if (inv) {
-              await supabase.from('vaccinations').insert({
-                patient_id: newborn.id,
-                vaccine_inventory_id: inv.id,
-                dose_number: dose,
-                scheduled_vaccination: dateStr,
-                created_by: createdBy
-              });
+            // Get vaccine inventory ID
+            const { data: inv, error: invError } = await supabase
+              .from('vaccine_inventory')
+              .select('id')
+              .eq('vaccine_name', vaccine)
+              .maybeSingle();
+
+            if (invError) {
+              console.warn(`⚠️ Vaccine inventory query error for '${vaccine}':`, invError);
+            } else if (inv) {
+              console.log(`✅ Found vaccine '${vaccine}' in inventory with ID: ${inv.id}`);
+            } else {
+              console.warn(`⚠️ Vaccine '${vaccine}' not found in inventory`);
+            }
+
+            // Prepare payload
+            const vaccPayload = {
+              newborn_id: newborn.id,  // Use newborn_id instead of patient_id
+              vaccine_inventory_id: inv?.id || null,
+              dose_number: dose,
+              scheduled_vaccination: dateStr,
+              status: 'Pending',
+              created_by: createdBy,
+              notes: inv ? null : `Vaccine '${vaccine}' not found in inventory`
+            };
+
+            console.log(`💉 Attempting to insert vaccination:`, vaccPayload);
+
+            // Insert vaccination record
+            const { data: vaccData, error: vaccError } = await supabase
+              .from('vaccinations')
+              .insert(vaccPayload)
+              .select('id');
+
+            if (vaccError) {
+              console.error(`❌ Vaccination insert error for '${vaccine}' (${dose}):`, vaccError);
+            } else {
+              console.log(`✅ Vaccine scheduled: ${vaccine} Dose ${dose} on ${dateStr}`, vaccData);
             }
           } catch (err) {
-            console.error('Error scheduling vaccine:', vaccine, err);
+            console.error(`❌ Exception while scheduling '${vaccine}':`, err);
           }
         }
       }

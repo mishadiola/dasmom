@@ -119,14 +119,13 @@ export default class PatientService {
 
     // 6. Map patients + their pregnancy + next appointment
     const mapPatient = (p) => {
+      const patientType = 'Mother';
       const pgi = pgiMap.get(p.id);
-      if (!pgi || pgi.pregn_postp !== 'Pregnant') return null;
-
-      const lmp = pgi.lmd;
+      const lmp = pgi?.lmd;
       const weeks = lmp ? this.calculateWeeks(lmp) : 0;
-      const trimester = lmp ? this.getTrimesterFromWeek(weeks) : 1;
+      const trimester = lmp ? this.getTrimesterFromWeek(weeks) : 0;
 
-      const risk = pgi.calculated_risk || 'Low Risk';
+      const risk = pgi?.calculated_risk || 'Normal';
 
       // Format next appointment date, only show current or future appointments
       const rawNextAppt = nextApptMap.get(p.id) || null;
@@ -150,11 +149,13 @@ export default class PatientService {
         trimester,
         weeks,
         risk,
-        edd: pgi.edd || null,
+        edd: pgi?.edd || null,
         createdAt: p.created_at,
         nextAppt,
         totalVisits: attendedCountMap.get(p.id) || 0,
-        riskFactors: pgi.risk_factors ? pgi.risk_factors.split(',').map(s => s.trim()).filter(Boolean) : []
+        riskFactors: pgi?.risk_factors ? pgi.risk_factors.split(',').map(s => s.trim()).filter(Boolean) : [],
+        patientType,
+        type: patientType
       };
     };
 
@@ -874,12 +875,15 @@ async getHighRiskPatients() {
         }
       }
 
+      const patientType = 'Mother';
+
       return {
         id: p.id,
         first_name: p.first_name,
         last_name: p.last_name,
         barangay: p.barangay,
         municipality: p.municipality,
+        type: patientType,
         created_at: p.created_at,
         pregnancy_info: {
           calculated_risk: preg.calculated_risk || 'Normal',
@@ -1167,8 +1171,8 @@ async getHighRiskPatients() {
           patient_id,
           vaccine_inventory_id,
           dose_number,
-          date_administered,
-          next_due_date,
+          scheduled_vaccination,
+          vaccinated_date,
           status,
           created_by,
           notes,
@@ -1245,7 +1249,7 @@ async getHighRiskPatients() {
       // Get all vaccination records
       const { data: vaccRecords, error: vaccError } = await this.supabase
         .from('vaccinations')
-        .select('patient_id, status, date_administered');
+        .select('patient_id, status, vaccinated_date');
       
       if (vaccError) throw vaccError;
       
@@ -1415,8 +1419,7 @@ async getHighRiskPatients() {
               vaccine_name
             )
           )
-        `)
-        .order('deliveries.delivery_date', { ascending: false });
+        `);
 
       if (error) throw error;
 
@@ -1432,7 +1435,7 @@ async getHighRiskPatients() {
         };
       }).filter(item => item.pendingVaccines); // only show if has pending
 
-      return result;
+      return result.sort((a, b) => new Date(b.birthDate) - new Date(a.birthDate));
     } catch (error) {
       console.error('Error fetching newborn pending vaccinations:', error);
       return [];
