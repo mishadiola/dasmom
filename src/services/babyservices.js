@@ -325,33 +325,22 @@ class BabyService {
           const vaccine = schedule.vaccines[i];
           const dose = schedule.doses[i];
           try {
-            // Get vaccine inventory ID
-            const { data: inv, error: invError } = await supabase
-              .from('vaccine_inventory')
-              .select('id')
-              .eq('vaccine_name', vaccine)
-              .maybeSingle();
+            // Determine dose ordinal
+            const doseOrdinal = dose === 1 ? '1st' : dose === 2 ? '2nd' : dose === 3 ? '3rd' : `${dose}th`;
 
-            if (invError) {
-              console.warn(`⚠️ Vaccine inventory query error for '${vaccine}':`, invError);
-            } else if (inv) {
-              console.log(`✅ Found vaccine '${vaccine}' in inventory with ID: ${inv.id}`);
-            } else {
-              console.warn(`⚠️ Vaccine '${vaccine}' not found in inventory`);
-            }
-
-            // Prepare payload
+            // Prepare payload with null vaccine_inventory_id and notes
             const vaccPayload = {
-              newborn_id: newborn.id,  // Use newborn_id instead of patient_id
-              vaccine_inventory_id: inv?.id || null,
+              newborn_id: newborn.id,
+              vaccine_inventory_id: null,
               dose_number: dose,
               scheduled_vaccination: dateStr,
               status: 'Pending',
+              vaccinated_date: null,
               created_by: createdBy,
-              notes: inv ? null : `Vaccine '${vaccine}' not found in inventory`
+              notes: `${doseOrdinal} dose of ${vaccine}`
             };
 
-            console.log(`💉 Attempting to insert vaccination:`, vaccPayload);
+            console.log(`💉 Attempting to schedule vaccination:`, vaccPayload);
 
             // Insert vaccination record
             const { data: vaccData, error: vaccError } = await supabase
@@ -360,9 +349,9 @@ class BabyService {
               .select('id');
 
             if (vaccError) {
-              console.error(`❌ Vaccination insert error for '${vaccine}' (${dose}):`, vaccError);
+              console.error(`❌ Vaccination schedule error for '${vaccine}' (${dose}):`, vaccError);
             } else {
-              console.log(`✅ Vaccine scheduled: ${vaccine} Dose ${dose} on ${dateStr}`, vaccData);
+              console.log(`✅ Vaccine scheduled: ${vaccine} ${doseOrdinal} dose on ${dateStr}`, vaccData);
             }
           } catch (err) {
             console.error(`❌ Exception while scheduling '${vaccine}':`, err);

@@ -742,6 +742,7 @@
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 14px;
+    overflow: visible;
 }
 
 .form-group {
@@ -771,6 +772,55 @@
 .form-group input:focus,
 .form-group select:focus {
     border-color: var(--color-rose);
+}
+
+/* ════════════════════════════
+   PATIENT SEARCH SUGGESTIONS
+════════════════════════════ */
+.patient-search-wrapper {
+    position: relative;
+    z-index: 100;
+}
+
+.suggestions-dropdown {
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1.5px solid #eef0f4;
+    border-radius: 4px;
+    max-height: 240px;
+    overflow-y: auto;
+    z-index: 10000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.suggestion-item {
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: background-color 0.15s;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.suggestion-item:hover {
+    background-color: #f8f9fb;
+}
+
+.suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.suggestion-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text);
+    margin-bottom: 2px;
+}
+
+.suggestion-station {
+    font-size: 11px;
+    color: var(--color-text-muted);
 }
 
 .req { color: #e05c73; }

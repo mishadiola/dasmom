@@ -161,7 +161,7 @@ export default class PatientService {
 
     return patients
       .map(mapPatient)
-      .filter(p => p && p.id && p.name !== 'Unknown Patient');
+      .filter(p => p && p.id && p.name !== 'Unknown Patient' && pgiMap.get(p.id)?.pregn_postp?.toLowerCase() === 'pregnant');
   } catch (error) {
     console.error('❌ getAllPatients:', error);
     return [];
@@ -860,8 +860,8 @@ async getHighRiskPatients() {
         return rowTime > latestTime ? row : latest;
       }, null);
 
-      if (!latestPreg || latestPreg.pregn_postp !== 'Pregnant') return null;
-      const preg = latestPreg;
+      if (!latestPreg || latestPreg.pregn_postp?.toLowerCase() !== 'pregnant') return null;
+      if (!['high risk', 'medium risk'].includes(preg.calculated_risk?.toLowerCase())) return null;
 
       // Only pick latest ATTENDED visit
       let latestAttended = null;
@@ -1024,6 +1024,11 @@ async getHighRiskPatients() {
 
     if (!data) return null;
 
+    // Sort pregnancy_info by created_at descending to get the latest
+    if (data.pregnancy_info && Array.isArray(data.pregnancy_info)) {
+      data.pregnancy_info.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    }
+
     const preg = Array.isArray(data.pregnancy_info) ? data.pregnancy_info[0] : data.pregnancy_info || {};
     const rawEmergencyContact = data.emergency_contact || {};
     const emergencyContact = {
@@ -1126,16 +1131,26 @@ async getHighRiskPatients() {
   }
 
   async getRetainedStaff(barangay) {
-    // Get first staff member assigned to this barangay (case-insensitive)
-    const { data } = await this.supabase
-      .from('staff_profiles')
-      .select('id, full_name, barangay_assignment')
-      .ilike('barangay_assignment', barangay)
-      .order('full_name')
-      .limit(1);
-    
-    return data && data.length > 0 ? data[0] : null;
-  }
+    try {
+        const { data, error } = await this.supabase
+            .from('staff_profiles')
+            .select(`
+                id,
+                full_name,
+                barangay_assignment,
+                users!inner(usertype),
+                user_type!inner(user_type)
+            `)
+            .ilike('barangay_assignment', barangay)
+            .ilike('user_type.user_type', '%staff%')
+            .order('full_name');
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error('Error getting retained staff:', error);
+        return [];
+    }
+}
 
   /**
    * BRIDGE METHODS FOR INVENTORY & STATS
