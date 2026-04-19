@@ -170,12 +170,20 @@
     font-weight: 600;
     color: var(--color-text-muted);
     transition: all 0.2s;
+    border: 2px solid transparent;
+}
+
+.inv-tab:hover {
+    background: rgba(255, 255, 255, 0.5);
+    color: var(--color-text);
 }
 
 .inv-tab.active {
     background: white;
-    color: var(--color-text);
-    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    color: var(--color-rose);
+    border-color: var(--color-rose);
+    box-shadow: 0 2px 8px rgba(185, 129, 138, 0.2);
+    font-weight: 700;
 }
 
 /* ── TABLE ── */
@@ -571,4 +579,20 @@
     .inv-stats-grid { grid-template-columns: 1fr; }
     .inv-controls { flex-direction: column; align-items: stretch; }
     .form-grid { grid-template-columns: 1fr; }
+    
+    .inv-tabs {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .inv-tab {
+        flex: 1;
+        justify-content: center;
+        padding: 10px 12px;
+        font-size: 12px;
+    }
+    
+    .inv-tab.active {
+        font-weight: 700;
+    }
 }

@@ -126,6 +126,35 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
                     {activeTab === 'details' && (
                         <div className="sv-section-content sv-section-details">
                             <div className="sv-section">
+                                <h3 className="sv-section-title">Visit Status & Outcome</h3>
+                                <div className="sv-status-options">
+                                    {[
+                                        { label: 'Attended', icon: CheckCircle2, value: 'Attended', class: 'completed' },
+                                        { label: 'Missed', icon: AlertCircle, value: 'Missed', class: 'missed' }
+                                    ].map(opt => (
+                                        <button 
+                                            key={opt.value}
+                                            className={`sv-status-btn ${status === opt.value ? `active ${opt.class}` : ''}`}
+                                            onClick={() => handleStatusChange(opt.value)}
+                                        >
+                                            <opt.icon size={18} />
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="sv-notes-field">
+                                    <label className="sv-label">Visit Notes / Remarks</label>
+                                    <textarea 
+                                        className="sv-textarea" 
+                                        placeholder="Add reasoning for status or follow-up instructions..."
+                                        rows={3}
+                                        value={notes}
+                                        onChange={(e) => setNotes(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="sv-section">
                                 <div className="sv-details-grid">
                                     <div className="sv-field">
                                         <label className="sv-label">Scheduled Date & Time</label>
@@ -160,36 +189,6 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
                                             {visit.ga || '28w 4d'}
                                         </div>
                                     </div>
-                                </div>
-                            </div>
-
-                            <div className="sv-section">
-                                <h3 className="sv-section-title">Visit Status & Outcome</h3>
-                                <div className="sv-status-options">
-                                    {[
-                                        { label: 'Attended', icon: CheckCircle2, value: 'Attended', class: 'completed' },
-                                        { label: 'Missed', icon: AlertCircle, value: 'Missed', class: 'missed' },
-                                        { label: 'Cancelled', icon: SidebarClose, value: 'Cancelled', class: 'cancelled' }
-                                    ].map(opt => (
-                                        <button 
-                                            key={opt.value}
-                                            className={`sv-status-btn ${status === opt.value ? `active ${opt.class}` : ''}`}
-                                            onClick={() => handleStatusChange(opt.value)}
-                                        >
-                                            <opt.icon size={18} />
-                                            {opt.label}
-                                        </button>
-                                    ))}
-                                </div>
-                                <div className="sv-notes-field">
-                                    <label className="sv-label">Visit Notes / Remarks</label>
-                                    <textarea 
-                                        className="sv-textarea" 
-                                        placeholder="Add reasoning for status or follow-up instructions..."
-                                        rows={3}
-                                        value={notes}
-                                        onChange={(e) => setNotes(e.target.value)}
-                                    />
                                 </div>
                             </div>
                         </div>
