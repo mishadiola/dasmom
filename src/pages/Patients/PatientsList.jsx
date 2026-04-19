@@ -365,6 +365,7 @@ const PatientsList = () => {
             'Age': p.age || 'N/A',
             'Gestation': p.weeks ? `${p.weeks} weeks (T${p.trimester || 1})` : 'N/A',
             'Risk Level': p.risk || 'Normal',
+            'Total Visits': p.totalVisits || 0,
             'Next Appointment': p.nextAppt || 'No upcoming appt'
         }));
 
@@ -614,6 +615,7 @@ const PatientsList = () => {
                                 <th>Age</th>
                                 <th>Gestation</th>
                                 <th>Risk Level</th>
+                                <th>Visits</th>
                                 <th>Next Appt</th>
                                 <th>Actions</th>
                             </tr>
@@ -659,6 +661,8 @@ const PatientsList = () => {
                                                 )}
                                             </div>
                                         </td>
+
+                                        <td className="cell-bold">{p.totalVisits ?? 0}</td>
 
                                         <td>
                                             <div className="cell-appt">

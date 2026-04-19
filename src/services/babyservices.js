@@ -32,7 +32,8 @@ class BabyService {
           id,
           calculated_risk,
           pregn_postp,
-          edd
+          edd,
+          pregnancy_type
         )
       `)
       .or(
@@ -56,7 +57,8 @@ class BabyService {
         name: `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
         station: `${patient.barangay || 'No Barangay'}, ${patient.province || 'N/A'}`,
         riskLevel: preg?.calculated_risk || 'Normal',
-        isPregnant: !!preg?.id
+        isPregnant: !!preg?.id,
+        pregnancyType: preg?.pregnancy_type || 'Singleton'
       };
     });
   } catch (error) {
@@ -165,6 +167,7 @@ class BabyService {
           gestationalAge: d.gestational_age || 'N/A',
           riskLevel: d.risk_level || 'Normal',
           complications: Array.isArray(d.complications) && d.complications.length ? d.complications.join(', ') : 'None',
+          babyName: newborn?.baby_name || null,
           babyOutcome: newborn?.condition_at_birth || 'Healthy',
           babyGender: newborn?.gender || 'N/A',
           birthWeight: newborn?.birth_weight || null,
@@ -187,6 +190,8 @@ class BabyService {
   async recordDelivery(deliveryData, newbornData) {
     const createdBy = await this.getCurrentUserId();
     if (!createdBy) throw new Error('No logged-in user');
+
+    const newbornArray = Array.isArray(newbornData) ? newbornData : [newbornData];
 
     const complications = Array.isArray(deliveryData.complications)
       ? deliveryData.complications.filter(c => c && c !== 'None')
@@ -216,24 +221,25 @@ class BabyService {
 
     if (deliveryError) throw deliveryError;
 
-    const { data: newborn, error: newbornError } = await supabase
+    const newbornInserts = newbornArray.map(newborn => ({
+      delivery_id: delivery.id,
+      mother_id: deliveryData.mother_id,
+      baby_name: newborn.baby_name || null,
+      gender: newborn.gender,
+      birth_weight: newborn.birth_weight || null,
+      birth_length: newborn.birth_length || null,
+      head_circumference: newborn.head_circumference || null,
+      apgar_1min: newborn.apgar_1min || null,
+      apgar_5min: newborn.apgar_5min || null,
+      condition_at_birth: newborn.condition_at_birth || 'Healthy',
+      risk_level: newborn.risk_level || 'Normal',
+      created_by: createdBy
+    }));
+
+    const { data: insertedNewborns, error: newbornError } = await supabase
       .from('newborns')
-      .insert([{
-        delivery_id: delivery.id,
-        mother_id: deliveryData.mother_id,
-        baby_name: newbornData.baby_name || null,
-        gender: newbornData.gender,
-        birth_weight: newbornData.birth_weight || null,
-        birth_length: newbornData.birth_length || null,
-        head_circumference: newbornData.head_circumference || null,
-        apgar_1min: newbornData.apgar_1min || null,
-        apgar_5min: newbornData.apgar_5min || null,
-        condition_at_birth: newbornData.condition_at_birth || 'Healthy',
-        risk_level: newbornData.risk_level || 'Normal',
-        created_by: createdBy
-      }])
-      .select('id')
-      .single();
+      .insert(newbornInserts)
+      .select('id');
 
     if (newbornError) throw newbornError;
 
@@ -263,6 +269,26 @@ class BabyService {
           para: (currentPregnancy.para || 0) + 1,
           risk_factors: currentPregnancy.risk_factors
         });
+
+      if (deliveryData.postpartum_visit_date) {
+        const postpartumDate = new Date(deliveryData.postpartum_visit_date);
+        if (!Number.isNaN(postpartumDate.getTime())) {
+          await supabase.from('prenatal_visits').insert({
+            patient_id: deliveryData.mother_id,
+            created_by: createdBy,
+            visit_date: deliveryData.postpartum_visit_date,
+            visit_number: 0,
+            trimester: 0,
+            gestational_age: 'Postpartum',
+            next_appt_date: null,
+            next_appt_type: 'Postpartum Visit',
+            status: 'Scheduled',
+            assigned_staff: deliveryData.attending_staff || null,
+            clinical_notes: 'Scheduled postpartum follow-up after delivery',
+            created_at: new Date().toISOString()
+          });
+        }
+      }
     }
 
     // Schedule newborn vaccinations
@@ -276,33 +302,34 @@ class BabyService {
       { months: 12, vaccines: ['Influenza'], doses: [2] }
     ];
 
-    for (const schedule of vaccineSchedule) {
-      const scheduledDate = new Date(birthDate);
-      scheduledDate.setMonth(scheduledDate.getMonth() + schedule.months);
-      const dateStr = scheduledDate.toISOString().split('T')[0];
+    for (const newborn of insertedNewborns) {
+      for (const schedule of vaccineSchedule) {
+        const scheduledDate = new Date(birthDate);
+        scheduledDate.setMonth(scheduledDate.getMonth() + schedule.months);
+        const dateStr = scheduledDate.toISOString().split('T')[0];
 
-      for (let i = 0; i < schedule.vaccines.length; i++) {
-        const vaccine = schedule.vaccines[i];
-        const dose = schedule.doses[i];
-        try {
-          const { data: inv } = await supabase.from('vaccine_inventory').select('id').eq('vaccine_name', vaccine).single();
-          if (inv) {
-            await supabase.from('vaccinations').insert({
-              patient_id: newborn.id,
-              vaccine_inventory_id: inv.id,
-              dose_number: dose,
-              date_administered: dateStr,
-              status: 'Scheduled',
-              created_by: createdBy
-            });
+        for (let i = 0; i < schedule.vaccines.length; i++) {
+          const vaccine = schedule.vaccines[i];
+          const dose = schedule.doses[i];
+          try {
+            const { data: inv } = await supabase.from('vaccine_inventory').select('id').eq('vaccine_name', vaccine).single();
+            if (inv) {
+              await supabase.from('vaccinations').insert({
+                patient_id: newborn.id,
+                vaccine_inventory_id: inv.id,
+                dose_number: dose,
+                scheduled_vaccination: dateStr,
+                created_by: createdBy
+              });
+            }
+          } catch (err) {
+            console.error('Error scheduling vaccine:', vaccine, err);
           }
-        } catch (e) {
-          console.error(`Failed to schedule ${vaccine} for newborn ${newborn.id}:`, e);
         }
       }
     }
 
-    return { delivery_id: delivery.id, newborn_id: newborn.id };
+    return { delivery_id: delivery.id, newborn_ids: insertedNewborns.map(n => n.id) };
   }
 
   async getDeliveryStats() {

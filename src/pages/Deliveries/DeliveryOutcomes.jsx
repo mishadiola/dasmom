@@ -86,6 +86,7 @@ const DeliveryOutcomes = () => {
             'Delivery Type': d.deliveryType,
             'Risk Level': d.riskLevel,
             'Complications': d.complications || 'None',
+            'Baby Name': d.babyName || '',
             'Baby Outcome': d.babyOutcome,
             'Staff': d.staff || '',
         }));
@@ -104,6 +105,7 @@ const DeliveryOutcomes = () => {
             { wch: 15 }, // Delivery Type
             { wch: 15 }, // Risk Level
             { wch: 20 }, // Complications
+            { wch: 20 }, // Baby Name
             { wch: 15 }, // Baby Outcome
             { wch: 20 }, // Staff
         ];
@@ -340,7 +342,10 @@ const DeliveryOutcomes = () => {
                                                     {d.complications || 'None'}
                                                 </span>
                                             </td>
-                                            <td><span className={`baby-badge ${getBabyBadge(d.babyOutcome)}`}>{d.babyOutcome}</span></td>
+                                            <td>
+                                                {d.babyName && <div className="baby-name-summary">{d.babyName}</div>}
+                                                <span className={`baby-badge ${getBabyBadge(d.babyOutcome)}`}>{d.babyOutcome}</span>
+                                            </td>
                                             <td>{d.staff}</td>
                                             <td>
                                                 <div className="row-actions">
@@ -381,6 +386,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
         station: '',
         gestationalAge: '',
         riskLevel: 'Normal',
+        pregnancyType: 'Singleton',
         deliveryDate: new Date().toISOString().split('T')[0],
         deliveryTime: '',
         deliveryType: 'NSD',
@@ -389,13 +395,16 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
         attendingStaffName: '',
         facility: stations?.[0] || '',
         complications: ['None'],
-        babyGender: 'Female',
-        babyWeight: '',
-        babyLength: '',
-        headCircumference: '',
-        apgar1: '',
-        apgar5: '',
-        babyCondition: 'Healthy',
+        newborns: [{
+            babyName: '',
+            babyGender: 'Female',
+            babyWeight: '',
+            babyLength: '',
+            headCircumference: '',
+            apgar1: '',
+            apgar5: '',
+            babyCondition: 'Healthy'
+        }],
         postpartumDate: '',
         notes: ''
     });
@@ -468,10 +477,43 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
             patientName: patient.name,
             station: patient.station,
             riskLevel: patient.riskLevel,
+            pregnancyType: patient.pregnancyType || 'Singleton',
             attendingStaffId: '',
             attendingStaffName: ''
         }));
         setSearchResults([]);
+    };
+
+    const updateNewborn = (index, key, value) => {
+        setForm(prev => ({
+            ...prev,
+            newborns: prev.newborns.map((n, i) => i === index ? { ...n, [key]: value } : n)
+        }));
+    };
+
+    const addNewborn = () => {
+        setForm(prev => ({
+            ...prev,
+            newborns: [...prev.newborns, {
+                babyName: '',
+                babyGender: 'Female',
+                babyWeight: '',
+                babyLength: '',
+                headCircumference: '',
+                apgar1: '',
+                apgar5: '',
+                babyCondition: 'Healthy'
+            }]
+        }));
+    };
+
+    const removeNewborn = (index) => {
+        if (form.newborns.length > 1) {
+            setForm(prev => ({
+                ...prev,
+                newborns: prev.newborns.filter((_, i) => i !== index)
+            }));
+        }
     };
 
     const toggleComplication = (comp) => {
@@ -511,23 +553,19 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
                 notes: form.notes || null
             };
 
-            const newbornData = {
-                baby_name: null,
-                gender: form.babyGender,
-                birth_weight: form.babyWeight ? parseFloat(form.babyWeight) : null,
-                birth_length: form.babyLength ? parseFloat(form.babyLength) : null,
-                head_circumference: form.headCircumference ? parseFloat(form.headCircumference) : null,
-                apgar_1min: form.apgar1 ? parseInt(form.apgar1) : null,
-                apgar_5min: form.apgar5 ? parseInt(form.apgar5) : null,
-                condition_at_birth: form.babyCondition,
+            const newbornData = form.newborns.map(n => ({
+                baby_name: n.babyName?.trim() || null,
+                gender: n.babyGender,
+                birth_weight: n.babyWeight ? parseFloat(n.babyWeight) : null,
+                birth_length: n.babyLength ? parseFloat(n.babyLength) : null,
+                head_circumference: n.headCircumference ? parseFloat(n.headCircumference) : null,
+                apgar_1min: n.apgar1 ? parseInt(n.apgar1) : null,
+                apgar_5min: n.apgar5 ? parseInt(n.apgar5) : null,
+                condition_at_birth: n.babyCondition,
                 risk_level: form.riskLevel || 'Normal'
-            };
+            }));
 
             await babyservices.recordDelivery(deliveryData, newbornData);
-            
-            // Update mother's pregnancy status to Postpartum
-            await patientService.updatePregnancyStatus(form.patientId, 'Postpartum');
-            
             onSuccess();
             onClose();
             alert('✅ Delivery recorded successfully!');
@@ -603,6 +641,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
                             <div className="form-group"><label>Patient ID</label><input value={form.patientId} readOnly className="readonly-field" /></div>
                             <div className="form-group"><label>Station</label><input value={form.station} readOnly className="readonly-field" /></div>
                             <div className="form-group"><label>Risk Level</label><input value={form.riskLevel} readOnly className="readonly-field" /></div>
+                            <div className="form-group"><label>Pregnancy Type</label><input value={form.pregnancyType} readOnly className="readonly-field" /></div>
                             <div className="form-group"><label>Gestational Age</label><input value={form.gestationalAge} onChange={e => updateForm('gestationalAge', e.target.value)} /></div>
                         </div>
                     )}
@@ -678,42 +717,63 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
                     )}
 
                     {section === 'baby' && (
-                        <div className="form-grid-2">
-                            <div className="form-group">
-                                <label>Birth Weight (kg)</label>
-                                <input type="number" step="0.01" value={form.babyWeight} onChange={e => updateForm('babyWeight', e.target.value)} />
-                            </div>
-                            <div className="form-group">
-                                <label>Birth Length (cm)</label>
-                                <input type="number" step="0.1" value={form.babyLength} onChange={e => updateForm('babyLength', e.target.value)} />
-                            </div>
-                            <div className="form-group">
-                                <label>Head Circumference (cm)</label>
-                                <input type="number" step="0.1" value={form.headCircumference} onChange={e => updateForm('headCircumference', e.target.value)} />
-                            </div>
-                            <div className="form-group">
-                                <label>Gender</label>
-                                <select value={form.babyGender} onChange={e => updateForm('babyGender', e.target.value)}>
-                                    <option>Male</option>
-                                    <option>Female</option>
-                                </select>
-                            </div>
-                            <div className="form-group">
-                                <label>APGAR 1min</label>
-                                <input type="number" min="0" max="10" value={form.apgar1} onChange={e => updateForm('apgar1', e.target.value)} />
-                            </div>
-                            <div className="form-group">
-                                <label>APGAR 5min</label>
-                                <input type="number" min="0" max="10" value={form.apgar5} onChange={e => updateForm('apgar5', e.target.value)} />
-                            </div>
-                            <div className="form-group">
-                                <label>Baby Condition</label>
-                                <select value={form.babyCondition} onChange={e => updateForm('babyCondition', e.target.value)}>
-                                    <option>Healthy</option>
-                                    <option>NICU</option>
-                                    <option>Special Care</option>
-                                    <option>Stillbirth</option>
-                                </select>
+                        <div>
+                            {form.newborns.map((newborn, index) => (
+                                <div key={index} className="newborn-section" style={{ marginBottom: '20px', border: '1px solid #ddd', padding: '10px', borderRadius: '5px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                        <h4>Newborn {index + 1}</h4>
+                                        {form.newborns.length > 1 && (
+                                            <button type="button" className="btn btn-outline btn-sm" onClick={() => removeNewborn(index)}>Remove</button>
+                                        )}
+                                    </div>
+                                    <div className="form-grid-2">
+                                        <div className="form-group">
+                                            <label>Baby Name</label>
+                                            <input type="text" value={newborn.babyName} onChange={e => updateNewborn(index, 'babyName', e.target.value)} placeholder="Optional" />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Birth Weight (kg)</label>
+                                            <input type="number" step="0.01" value={newborn.babyWeight} onChange={e => updateNewborn(index, 'babyWeight', e.target.value)} />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Birth Length (cm)</label>
+                                            <input type="number" step="0.1" value={newborn.babyLength} onChange={e => updateNewborn(index, 'babyLength', e.target.value)} />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Head Circumference (cm)</label>
+                                            <input type="number" step="0.1" value={newborn.headCircumference} onChange={e => updateNewborn(index, 'headCircumference', e.target.value)} />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Gender</label>
+                                            <select value={newborn.babyGender} onChange={e => updateNewborn(index, 'babyGender', e.target.value)}>
+                                                <option>Male</option>
+                                                <option>Female</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-group">
+                                            <label>APGAR 1min</label>
+                                            <input type="number" min="0" max="10" value={newborn.apgar1} onChange={e => updateNewborn(index, 'apgar1', e.target.value)} />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>APGAR 5min</label>
+                                            <input type="number" min="0" max="10" value={newborn.apgar5} onChange={e => updateNewborn(index, 'apgar5', e.target.value)} />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Baby Condition</label>
+                                            <select value={newborn.babyCondition} onChange={e => updateNewborn(index, 'babyCondition', e.target.value)}>
+                                                <option>Healthy</option>
+                                                <option>NICU</option>
+                                                <option>Special Care</option>
+                                                <option>Stillbirth</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                            <div style={{ textAlign: 'center', marginTop: '10px' }}>
+                                <button type="button" className="btn btn-outline" onClick={addNewborn} disabled={form.newborns.length >= 5}>
+                                    + Add Another Newborn
+                                </button>
                             </div>
                         </div>
                     )}
@@ -837,6 +897,10 @@ const ViewDeliveryModal = ({ show, onClose, delivery }) => {
                         <div className="view-section">
                             <h3><Baby size={16} /> Baby Information</h3>
                             <div className="view-fields">
+                                <div className="view-field">
+                                    <label>Baby Name:</label>
+                                    <span>{delivery.babyName || 'N/A'}</span>
+                                </div>
                                 <div className="view-field">
                                     <label>Outcome:</label>
                                     <span>{delivery.babyOutcome}</span>

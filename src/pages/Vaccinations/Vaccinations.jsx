@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import {
     Search, Filter, Plus, X, Syringe, Pill, Package,
     AlertTriangle, CheckCircle2, Clock, XCircle,
-    Eye, Edit2, Calendar, Download, RefreshCw, ChevronDown, ChevronUp, AlertCircle
+    Eye, Edit2, Calendar, Download, RefreshCw, ChevronDown, ChevronUp, AlertCircle, Baby
 } from 'lucide-react';
 import '../../styles/pages/Vaccinations.css';
 
@@ -222,9 +222,10 @@ const Vaccinations = () => {
     const [inventory, setInventory] = useState([]);
     const [vaccinationRecords, setVaccinationRecords] = useState([]);
     const [supplementRecords, setSupplementRecords] = useState([]);
+    const [newbornPending, setNewbornPending] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    const [activeTab, setActiveTab] = useState('vaccines');    // 'vaccines' | 'supplements'
+    const [activeTab, setActiveTab] = useState('vaccines');    // 'vaccines' | 'supplements' | 'newborns'
     const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState({ patientType: 'All', status: 'All', item: 'All' });
     const [recordModal, setRecordModal] = useState(null);      // null | 'vaccine' | 'supplement'
@@ -337,6 +338,10 @@ const Vaccinations = () => {
 
             setVaccinationRecords(transformedVaccRecords);
             setSupplementRecords(transformedSuppRecords);
+
+            // Fetch newborn pending vaccinations
+            const newbornData = await patientService.getNewbornPendingVaccinations();
+            setNewbornPending(newbornData);
         } catch (error) {
             console.error('Error loading dashboard data:', error);
         } finally {
@@ -557,11 +562,14 @@ const Vaccinations = () => {
                         <button className={`vacc-tab ${activeTab === 'supplements' ? 'active' : ''}`} onClick={() => setActiveTab('supplements')}>
                             <Pill size={15} /> Supplements
                         </button>
+                        <button className={`vacc-tab ${activeTab === 'newborns' ? 'active' : ''}`} onClick={() => setActiveTab('newborns')}>
+                            <Baby size={15} /> Newborns
+                        </button>
                     </div>
 
                     <div className="vacc-card">
                         <div className="vacc-card-head">
-                            <h2>{activeTab === 'vaccines' ? <><Syringe size={16} /> Vaccination Records</> : <><Pill size={16} /> Supplement Records</>}</h2>
+                            <h2>{activeTab === 'vaccines' ? <><Syringe size={16} /> Vaccination Records</> : activeTab === 'supplements' ? <><Pill size={16} /> Supplement Records</> : <><Baby size={16} /> Newborn Pending Vaccinations</>}</h2>
                             <div className="vacc-legend">
                                 {activeTab === 'vaccines' ? (
                                     <>
@@ -716,6 +724,47 @@ const Vaccinations = () => {
                                         ))}
                                         {filteredSupplements.length === 0 && (
                                             <tr><td colSpan="9" className="vacc-empty"><Pill size={24} /><p>No supplement records match your filters.</p></td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {activeTab === 'newborns' && (
+                            <div className="table-responsive">
+                                <table className="vacc-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Baby Name</th>
+                                            <th>Mother Name</th>
+                                            <th>Birth Date</th>
+                                            <th>Pending Vaccines</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {loading ? (
+                                            <tr><td colSpan="5" className="vacc-loading">Loading...</td></tr>
+                                        ) : newbornPending.map(n => (
+                                            <tr key={n.id}>
+                                                <td className="vacc-patient-name">{n.babyName}</td>
+                                                <td className="vacc-patient-name">{n.motherName}</td>
+                                                <td className="vacc-date">{n.birthDate}</td>
+                                                <td className="vacc-item-name">{n.pendingVaccines}</td>
+                                                <td>
+                                                    <div className="row-actions">
+                                                        <button className="action-btn record-btn" title="Record Vaccination" onClick={() => setRecordModal('vaccine')}><Plus size={13} /></button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {!loading && !newbornPending.length && (
+                                            <tr>
+                                                <td colSpan="5" className="vacc-empty">
+                                                    <Baby size={28} />
+                                                    <p>No newborns with pending vaccinations</p>
+                                                </td>
+                                            </tr>
                                         )}
                                     </tbody>
                                 </table>
