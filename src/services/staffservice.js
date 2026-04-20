@@ -9,6 +9,34 @@ export default class StaffService {
   }
 
   /**
+   * Get user type ID by role name (case-insensitive)
+   */
+  async getUserTypeIdByRole(role) {
+    try {
+      const { data, error } = await this.supabase
+        .from('user_type')
+        .select('id, user_type')
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      // Find user type case-insensitively by role
+      const userType = (data || []).find(
+        ut => ut.user_type?.toLowerCase().trim() === role.toLowerCase().trim()
+      );
+
+      if (!userType) {
+        throw new Error(`User type '${role}' not found in user_type table`);
+      }
+
+      return userType.id;
+    } catch (error) {
+      console.error('❌ getUserTypeIdByRole:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Fetch all staff members with their details
    */
   async getAllStaff() {
@@ -19,11 +47,13 @@ export default class StaffService {
           id,
           full_name,
           employee_id,
-          role,
           barangay_assignment,
           created_at,
           users (
-            email_address
+            email_address,
+            user_type (
+              user_type
+            )
           )
         `)
         .order('created_at', { ascending: false });
@@ -34,11 +64,11 @@ export default class StaffService {
         id: staff.id,
         name: staff.full_name,
         email: staff.users?.email_address || 'N/A',
-        role: staff.role || 'Staff',
+        role: staff.users?.user_type?.user_type || 'Staff',
         station: staff.barangay_assignment || 'No Assignment',
         employeeId: staff.employee_id,
-        status: 'Active', // TODO: Add status field to staff_profiles if needed
-        lastLogin: 'N/A', // TODO: Track last login if needed
+        status: 'Active',
+        lastLogin: 'N/A',
         avatar: staff.full_name
           ?.split(' ')
           .map(n => n[0])
@@ -87,42 +117,28 @@ export default class StaffService {
         throw new Error('Missing required fields');
       }
 
-      // 1. Create user in auth (users table)
+      // 1. Get user type ID by role
+      const userTypeId = await this.getUserTypeIdByRole(role);
+
+      // 2. Create user in auth (users table)
       const staffId = crypto.randomUUID();
-      
-      // Get staff user type id
-      const { data: userTypeData, error: userTypeError } = await this.supabase
-        .from('user_type')
-        .select('id')
-        .ilike('user_type', '%staff%')
-        .maybeSingle();
 
-      if (userTypeError || !userTypeData) {
-        throw new Error('Staff user type not found');
-      }
-
-      // Insert into users table
       const { error: userError } = await this.supabase.from('users').insert({
         id: staffId,
         email_address: email.trim().toLowerCase(),
         password: password, // Note: This should be hashed in production
-        usertype: userTypeData.id,
+        usertype: userTypeId,
       });
 
       if (userError) throw userError;
 
-      // Get current user for created_by
-      const currentUser = await authService.getAuthUser();
-      const createdBy = currentUser?.id;
-
-      // 2. Create staff profile
+      // 3. Create staff profile (barangay_assignment can be new or existing)
       const { data: staffData, error: staffError } = await this.supabase
         .from('staff_profiles')
         .insert({
           id: staffId,
           full_name: fullName,
-          role: role,
-          barangay_assignment: station || null,
+          barangay_assignment: station && station.trim() ? station.trim() : null,
           created_at: new Date().toISOString(),
         })
         .select()
@@ -142,12 +158,22 @@ export default class StaffService {
    */
   async updateStaff(staffId, { fullName, role, station, contactNo }) {
     try {
+      // If role is provided, update the user type
+      if (role) {
+        const userTypeId = await this.getUserTypeIdByRole(role);
+        const { error: userTypeError } = await this.supabase
+          .from('users')
+          .update({ usertype: userTypeId })
+          .eq('id', staffId);
+
+        if (userTypeError) throw userTypeError;
+      }
+
       const { data, error } = await this.supabase
         .from('staff_profiles')
         .update({
           full_name: fullName,
-          role: role,
-          barangay_assignment: station,
+          barangay_assignment: station && station.trim() ? station.trim() : null,
           contact_no: contactNo,
         })
         .eq('id', staffId)
@@ -201,7 +227,10 @@ export default class StaffService {
         .select(`
           *,
           users (
-            email_address
+            email_address,
+            user_type (
+              user_type
+            )
           )
         `)
         .eq('id', staffId)
@@ -224,7 +253,7 @@ export default class StaffService {
       id: data.id,
       name: data.full_name,
       email: data.users?.email_address || 'N/A',
-      role: data.role || 'Staff',
+      role: data.users?.user_type?.user_type || 'Staff',
       station: data.barangay_assignment || 'No Assignment',
       employeeId: data.employee_id,
       status: 'Active',

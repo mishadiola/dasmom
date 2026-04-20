@@ -178,6 +178,70 @@ export default class PatientService {
     return age > 0 ? age.toString() : 'N/A';
   }
 
+  /**
+   * Determine BMI category (underweight, normal, overweight, obese)
+   * BMI = weight(kg) / (height(m))^2
+   */
+  calculateBMICategory(weightKg, heightCm) {
+    if (!weightKg || !heightCm) return null;
+    const heightM = heightCm / 100;
+    const bmi = weightKg / (heightM * heightM);
+    if (bmi < 18.5) return 'Underweight';
+    if (bmi < 25) return 'Normal';
+    if (bmi < 30) return 'Overweight';
+    return 'Obese';
+  }
+
+  /**
+   * Check if BMI category is high-risk
+   */
+  isBMIHighRisk(bmiCategory) {
+    return bmiCategory === 'Underweight' || bmiCategory === 'Overweight' || bmiCategory === 'Obese';
+  }
+
+  /**
+   * Parse blood pressure string and return systolic/diastolic
+   */
+  parseBP(bpString) {
+    if (!bpString) return null;
+    const match = bpString.match(/^(\d+)[/\s](\d+)$/);
+    if (!match) return null;
+    return {
+      systolic: parseInt(match[1]),
+      diastolic: parseInt(match[2])
+    };
+  }
+
+  /**
+   * Check if blood pressure indicates high-risk (hypertension or hypotension)
+   * High-risk ranges for pregnancy:
+   * - Hypertension: >= 140/90 mmHg
+   * - Hypotension: < 90/60 mmHg
+   */
+  isBPHighRisk(systolic, diastolic) {
+    if (!systolic || !diastolic) return false;
+    const sys = parseInt(systolic);
+    const dias = parseInt(diastolic);
+    // Hypertension or Hypotension
+    return (sys >= 140 || dias >= 90) || (sys < 90 || dias < 60);
+  }
+
+  /**
+   * Get BP status description
+   */
+  getBPStatus(systolic, diastolic) {
+    if (!systolic || !diastolic) return 'Unknown';
+    const sys = parseInt(systolic);
+    const dias = parseInt(diastolic);
+    
+    if (sys >= 140 || dias >= 90) {
+      return 'Hypertension (High)';
+    } else if (sys < 90 || dias < 60) {
+      return 'Hypotension (Low)';
+    }
+    return 'Normal';
+  }
+
   async getAllMidwives() {
     // Get all staff members (not specifically filtering by role)
     const { data, error } = await this.supabase
@@ -695,7 +759,7 @@ export default class PatientService {
         next_appt_type: 'Follow-up Checkup',
         status: 'Attended',
         attended_date: new Date().toISOString(),
-        assigned_staff: retainedStaff ? retainedStaff.id : null,
+        assigned_staff: retainedStaff?.[0]?.id || null,
         created_by: createdBy
       };
 
@@ -709,13 +773,13 @@ export default class PatientService {
         patientId,
         safeSchedulePreview,
         createdBy,
-        { retained_staff: retainedStaff ? retainedStaff.id : null },
+        { retained_staff: retainedStaff?.[0]?.id || null },
         30
       );
     } else {
       await this.smartSemesterScheduling({
         patientId, lmp: patientData.lmp, createdBy,
-        maxPerDay: 35, retained_staff: retainedStaff ? retainedStaff.id : null
+        maxPerDay: 35, retained_staff: retainedStaff?.[0]?.id || null
       });
     }
 
@@ -824,6 +888,7 @@ async getHighRiskPatients() {
         last_name,
         barangay,
         municipality,
+        date_of_birth,
         created_at,
         pregnancy_info (
           calculated_risk,
@@ -832,6 +897,7 @@ async getHighRiskPatients() {
           lmd,
           edd,
           pregn_postp,
+          pregnancy_type,
           created_at
         ),
         prenatal_visits (
@@ -840,10 +906,11 @@ async getHighRiskPatients() {
           bp_systolic,
           bp_diastolic,
           next_appt_date,
-          next_appt_type
+          next_appt_type,
+          weight_kg
         )
-      `);
-
+      `)
+      .order('created_at', { ascending: false });
 
     if (error) throw error;
 
@@ -861,7 +928,17 @@ async getHighRiskPatients() {
       }, null);
 
       if (!latestPreg || latestPreg.pregn_postp?.toLowerCase() !== 'pregnant') return null;
-      if (!['high risk', 'medium risk'].includes(preg.calculated_risk?.toLowerCase())) return null;
+
+      // Calculate age
+      const age = p.date_of_birth ? this.calculateAge(p.date_of_birth) : null;
+      const ageNum = age && age !== 'N/A' ? parseInt(age) : null;
+      const isAgeHighRisk = ageNum !== null && (ageNum < 18 || ageNum > 35);
+
+      // Include if already high/medium risk OR age-based high risk
+      const currentRisk = latestPreg.calculated_risk?.toLowerCase() || 'normal';
+      const isHighRisk = currentRisk.includes('high') || isAgeHighRisk;
+      const isMediumRisk = currentRisk.includes('medium');
+      if (!isHighRisk && !isMediumRisk) return null;
 
       // Only pick latest ATTENDED visit
       let latestAttended = null;
@@ -877,26 +954,36 @@ async getHighRiskPatients() {
 
       const patientType = 'Mother';
 
+      // Adjust risk level based on age
+      let finalRisk = latestPreg.calculated_risk || 'Normal';
+      if (isAgeHighRisk && !finalRisk.toLowerCase().includes('high')) {
+        finalRisk = 'High Risk';
+      }
+
       return {
         id: p.id,
         first_name: p.first_name,
         last_name: p.last_name,
         barangay: p.barangay,
         municipality: p.municipality,
+        date_of_birth: p.date_of_birth,
+        age: ageNum,
         type: patientType,
         created_at: p.created_at,
         pregnancy_info: {
-          calculated_risk: preg.calculated_risk || 'Normal',
-          risk_factors: preg.risk_factors || null,
-          gravida: preg.gravida || 0,
-          lmd: preg.lmd || null,
-          edd: preg.edd || null,
+          calculated_risk: finalRisk,
+          risk_factors: latestPreg.risk_factors || null,
+          gravida: latestPreg.gravida || 0,
+          lmd: latestPreg.lmd || null,
+          edd: latestPreg.edd || null,
+          pregnancy_type: latestPreg.pregnancy_type || 'Singleton',
         },
         // Put latest ATTENDED visit fields on the patient
         bp_systolic: latestAttended?.bp_systolic || null,
         bp_diastolic: latestAttended?.bp_diastolic || null,
         next_appt_date: latestAttended?.next_appt_date || null,
         next_appt_type: latestAttended?.next_appt_type || null,
+        weight_kg: latestAttended?.weight_kg || null,
       };
     });
 
@@ -1051,7 +1138,8 @@ async getHighRiskPatients() {
       emergencyContact,
       medicalConditions: preg.risk_factors ? preg.risk_factors.split(',').map(s=>s.trim()).filter(Boolean) : [],
       risk: preg.calculated_risk || 'Low Risk',
-      
+      gravida: preg.gravida || 0,
+      para: preg.para || 0,
       lmp: preg.lmd || null,
       edd: preg.edd || null,
       trimester: this.calculateTrimester(preg.lmd),
@@ -1137,12 +1225,9 @@ async getHighRiskPatients() {
             .select(`
                 id,
                 full_name,
-                barangay_assignment,
-                users!inner(usertype),
-                user_type!inner(user_type)
+                barangay_assignment
             `)
             .ilike('barangay_assignment', barangay)
-            .ilike('user_type.user_type', '%staff%')
             .order('full_name');
         if (error) throw error;
         return data || [];

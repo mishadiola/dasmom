@@ -67,11 +67,62 @@ const HighRiskCases = () => {
           const lmp = preg.lmd;
           const weeks = service.calculateWeeks(lmp);
 
+          // Calculate age and check for age-based risk
+          const age = p.date_of_birth ? service.calculateAge(p.date_of_birth) : null;
+          const ageNum = age && age !== 'N/A' ? parseInt(age) : null;
+          const isAgeHighRisk = ageNum !== null && (ageNum < 18 || ageNum > 35);
+
           const bp = p.bp_systolic && p.bp_diastolic
             ? `${p.bp_systolic}/${p.bp_diastolic}`
             : null;
 
           const nextApptDate = p.next_appt_date || null;
+
+          // Check for multiple births (high-risk indicator)
+          const isMultipleBirth = preg.pregnancy_type && 
+            preg.pregnancy_type.toLowerCase() !== 'singleton';
+
+          // Check Blood Pressure for high-risk (hypertension or hypotension)
+          const isBPHighRisk = p.bp_systolic && p.bp_diastolic ? 
+            service.isBPHighRisk(p.bp_systolic, p.bp_diastolic) : false;
+          
+          const bpStatus = isBPHighRisk && p.bp_systolic && p.bp_diastolic ?
+            service.getBPStatus(p.bp_systolic, p.bp_diastolic) : null;
+
+          // Build risk factors array
+          let riskFactors = [];
+          if (preg.risk_factors) {
+            riskFactors = preg.risk_factors.split(',').map(f => f.trim()).filter(Boolean);
+          }
+
+          // Build comprehensive condition string with high-risk indicators
+          let conditionDisplay = preg.risk_factors || 'High‑risk pregnancy';
+          let isHighRisk = preg.calculated_risk?.toLowerCase().includes('high') || false;
+
+          // Add age-based risk
+          if (isAgeHighRisk) {
+            conditionDisplay = conditionDisplay === 'High‑risk pregnancy' ? 'Age <18 or >35' : `${conditionDisplay}, Age <18 or >35`;
+            isHighRisk = true;
+          }
+
+          // Add multiple births to condition if applicable
+          if (isMultipleBirth) {
+            conditionDisplay = `${preg.pregnancy_type} pregnancy`;
+            isHighRisk = true;
+          }
+
+          // Add BP status if high-risk
+          if (bpStatus) {
+            conditionDisplay = `${conditionDisplay} | ${bpStatus}`;
+            isHighRisk = true;
+          }
+
+          // Add BMI status if weight is available
+          // Note: height would need to be fetched separately
+          if (p.weight_kg) {
+            // Store weight info for potential future BMI checks
+            // When height data is available, BMI can be calculated and checked
+          }
 
           return {
             id: p.id,
@@ -79,16 +130,20 @@ const HighRiskCases = () => {
             first_name: p.first_name,
             last_name: p.last_name,
             station: p.barangay || p.municipality || 'Unassigned',
-            riskLevel: preg.calculated_risk
-              ? preg.calculated_risk.toLowerCase().includes('monitor')
-                ? 'Medium Risk'
-                : preg.calculated_risk
-              : 'High Risk',
-            condition: preg.risk_factors || 'High‑risk pregnancy',
+            age: ageNum,
+            riskLevel: isHighRisk ? 'High Risk' : (preg.calculated_risk?.toLowerCase().includes('monitor') ? 'Medium Risk' : preg.calculated_risk || 'High Risk'),
+            condition: conditionDisplay,
             gravida: preg.gravida || 0,
             lmd: lmp || '',
             edd: preg.edd || null,
-            bp, // latest Attended BP only
+            bp,
+            bpSystolic: p.bp_systolic,
+            bpDiastolic: p.bp_diastolic,
+            isBPHighRisk,
+            bpStatus,
+            weight_kg: p.weight_kg,
+            pregnancyType: preg.pregnancy_type || 'Singleton',
+            isMultipleBirth,
             nextVisit: nextApptDate
               ? new Date(nextApptDate).toLocaleDateString('en-US', {
                   month: 'short',
@@ -97,10 +152,10 @@ const HighRiskCases = () => {
                 })
               : 'Initial',
             weeks,
-            created_at: p.created_at, // for sorting
+            created_at: p.created_at,
           };
         })
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); // Newest first
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
       const uniquePatients = Array.from(new Map(enriched.map((item) => [item.id, item])).values());
       const highRiskOnly = uniquePatients.filter((item) => item.riskLevel === 'High Risk');
@@ -436,7 +491,10 @@ const HighRiskCases = () => {
                         <td>
                           <div className="condition-wrap">
                             <span className="condition-main">{p.condition}</span>
-                            <span className="condition-meta">{p.riskLevel}</span>
+                            <span className="condition-meta">
+                              {p.isMultipleBirth && <span style={{display: 'block', marginTop: '4px'}}>Multiple births</span>}
+                              {p.riskLevel === 'High Risk' && <span style={{display: 'block', color: 'var(--color-rose)', fontWeight: 'bold'}}>High Risk</span>}
+                            </span>
                           </div>
                         </td>
                         <td>
@@ -560,7 +618,11 @@ const HighRiskCases = () => {
                       <p>
                         <strong>{p.name}</strong>
                       </p>
-                      <p className="alert-reason">{p.condition}</p>
+                      <p className="alert-reason">
+                        {p.isMultipleBirth ? `${p.pregnancyType} pregnancy` : p.condition}
+                      </p>
+                      {p.isMultipleBirth && <p style={{fontSize: '12px', color: 'var(--color-rose)', fontWeight: 'bold', marginTop: '4px'}}>Multiple births - High Risk</p>}
+                      {p.isBPHighRisk && p.bpStatus && <p style={{fontSize: '12px', color: 'var(--color-rose)', fontWeight: 'bold', marginTop: '4px'}}>BP: {p.bpStatus}</p>}
                       <div className="alert-footer">
                         <span>Station: {p.station}</span>
                         <ArrowUpRight size={12} />

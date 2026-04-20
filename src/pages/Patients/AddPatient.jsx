@@ -7,7 +7,8 @@ import {
     CheckCircle2, XCircle, Loader2
 } from 'lucide-react';
 import '../../styles/pages/AddPatient.css';
-import PatientService from "../../services/patientservice";import InventoryService from '../../services/inventoryservice';
+import PatientService from "../../services/patientservice";
+import InventoryService from '../../services/inventoryservice';
 const patientService = new PatientService();
 const inventoryService = new InventoryService();
 const TABS = [
@@ -123,16 +124,11 @@ const AddPatient = () => {
                 setDoctorList(staffAtStation);
                 setMidwifeList(staffAtStation);
 
-                // For Salawag, get retained staff
-                if (formData.station.toLowerCase() === 'salawag') {
-                    const retainedStaff = await patientService.getRetainedStaff(formData.station);
-                    const staffList = Array.isArray(retainedStaff) ? retainedStaff : (retainedStaff ? [retainedStaff] : []);
-                    setRetainedStaffList(staffList);
-                    setFormData(prev => ({ ...prev, retained_staff: staffList.length > 0 ? staffList[0].id : '' }));
-                } else {
-                    setRetainedStaffList([]);
-                    setFormData(prev => ({ ...prev, retained_staff: '' }));
-                }
+                // Get retained staff for the selected station
+                const retainedStaff = await patientService.getRetainedStaff(formData.station);
+                const staffList = Array.isArray(retainedStaff) ? retainedStaff : (retainedStaff ? [retainedStaff] : []);
+                setRetainedStaffList(staffList);
+                setFormData(prev => ({ ...prev, retained_staff: staffList.length > 0 ? staffList[0].id : '' }));
                 console.log(`✅ Staff filtered for ${formData.station}:`, { staffCount: staffAtStation.length });
             } catch (err) {
                 console.error(err);
@@ -199,6 +195,9 @@ const AddPatient = () => {
     useEffect(() => {
         let risk = 'Low Risk';
         
+        // Check for multiple pregnancy (high-risk indicator)
+        const isMultipleBirth = formData.pregnancyType && formData.pregnancyType.toLowerCase() !== 'singleton';
+        
         // Check selected conditions from MEDICAL_CONDITIONS
         const selectedConditions = formData.conditions.map(conditionName => {
             return MEDICAL_CONDITIONS.find(c => c.name === conditionName);
@@ -212,15 +211,63 @@ const AddPatient = () => {
         const hasOtherCondition = formData.otherConditions && formData.otherConditions.trim() !== '';
         const otherRisk = hasOtherCondition ? otherConditionRisk : null;
 
-        // Determine overall risk
-        if (hasHighRisk || selectedConditionCount >= 2 || otherRisk === 'High') {
+        // Determine overall risk (multiple pregnancy is high-risk)
+        if (isMultipleBirth || hasHighRisk || selectedConditionCount >= 2 || otherRisk === 'High') {
             risk = 'High Risk';
         } else if (hasMedRisk || otherRisk === 'Medium') {
             risk = 'Medium Risk';
         }
 
+        // Age-based risk: <18 or >35 is high risk
+        const age = parseInt(formData.age);
+        if (!isNaN(age) && (age < 18 || age > 35)) {
+            risk = 'High Risk';
+        }
+
         setFormData(prev => ({ ...prev, riskLevel: risk }));
-    }, [formData.conditions, formData.otherConditions, otherConditionRisk]);
+    }, [formData.conditions, formData.otherConditions, formData.pregnancyType, otherConditionRisk, formData.age]);
+
+    useEffect(() => {
+        // Calculate BMI when weight and height change
+        if (formData.weight && formData.height) {
+            const weightKg = parseFloat(formData.weight);
+            const heightCm = parseFloat(formData.height);
+            if (weightKg > 0 && heightCm > 0) {
+                const heightM = heightCm / 100;
+                const bmi = (weightKg / (heightM * heightM)).toFixed(1);
+                setFormData(prev => ({ ...prev, bmi: bmi.toString() }));
+                
+                // Check if BMI indicates high-risk (underweight < 18.5 or overweight >= 25)
+                const bmiValue = parseFloat(bmi);
+                const isBMIHighRisk = bmiValue < 18.5 || bmiValue >= 25;
+                
+                // Update risk level if BMI is high-risk
+                if (isBMIHighRisk) {
+                    setFormData(prev => ({ ...prev, riskLevel: 'High Risk' }));
+                }
+            }
+        }
+    }, [formData.weight, formData.height]);
+
+    useEffect(() => {
+        // Check BP for high-risk indicators
+        if (formData.bp) {
+            const bpMatch = formData.bp.match(/^(\d+)[/\\s](\d+)$/);
+            if (bpMatch) {
+                const systolic = parseInt(bpMatch[1]);
+                const diastolic = parseInt(bpMatch[2]);
+                
+                // High-risk BP ranges for pregnancy:
+                // Hypertension: >= 140/90
+                // Hypotension: < 90/60
+                const isHighRisk = (systolic >= 140 || diastolic >= 90) || (systolic < 90 || diastolic < 60);
+                
+                if (isHighRisk) {
+                    setFormData(prev => ({ ...prev, riskLevel: 'High Risk' }));
+                }
+            }
+        }
+    }, [formData.bp]);
 
     const handleChange = (e) => {
         const { name, value, type } = e.target;
@@ -787,17 +834,15 @@ const AddPatient = () => {
                                         <div className="no-lmp">Enter LMP to see 9-visit calendar</div>
                                     )}
                                 </div>
-                                {formData.station.toLowerCase() === 'salawag' && (
-                                    <div className="form-group">
-                                        <label>Retained Staff</label>
-                                        <select name="retained_staff" value={formData.retained_staff} onChange={handleChange}>
-                                            <option value="">{retainedStaffList.length} available</option>
-                                            {retainedStaffList.map(staff => (
-                                                <option key={staff.id} value={staff.id}>{staff.full_name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                )}
+                                <div className="form-group">
+                                    <label>Assigned Staff</label>
+                                    <select name="retained_staff" value={formData.retained_staff} onChange={handleChange}>
+                                        <option value="">{retainedStaffList.length} available</option>
+                                        {retainedStaffList.map(staff => (
+                                            <option key={staff.id} value={staff.id}>{staff.full_name}</option>
+                                        ))}
+                                    </select>
+                                </div>
                             </div>
                             <hr className="divider" />
                             <h3 className="section-subtitle">Initial Vital Signs <span className="req">*</span></h3>
@@ -835,6 +880,41 @@ const AddPatient = () => {
                                     />
                                 </div>
                             </div>
+                            {/* BMI Display */}
+                            {formData.weight && formData.height && (
+                                <div className="form-group" style={{marginBottom: '16px'}}>
+                                    <div style={{padding: '12px', backgroundColor: '#f5f5f5', borderRadius: '6px', border: '1px solid #ddd'}}>
+                                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                                            <span style={{fontWeight: 600}}>BMI: <span style={{fontSize: '16px', color: '#333'}}>{formData.bmi}</span></span>
+                                            <span style={{
+                                                padding: '4px 12px', 
+                                                borderRadius: '4px',
+                                                fontSize: '12px',
+                                                fontWeight: 'bold',
+                                                backgroundColor: (() => {
+                                                    const bmi = parseFloat(formData.bmi);
+                                                    if (bmi < 18.5) return '#fff3cd';
+                                                    if (bmi < 25) return '#d4edda';
+                                                    return '#f8d7da';
+                                                })(),
+                                                color: (() => {
+                                                    const bmi = parseFloat(formData.bmi);
+                                                    if (bmi < 18.5) return '#856404';
+                                                    if (bmi < 25) return '#155724';
+                                                    return '#721c24';
+                                                })()
+                                            }}>
+                                                {(() => {
+                                                    const bmi = parseFloat(formData.bmi);
+                                                    if (bmi < 18.5) return '⚠️ Underweight';
+                                                    if (bmi < 25) return '✓ Normal';
+                                                    return '⚠️ Overweight';
+                                                })()}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                             <div className="form-grid-3">
                                 <div className="form-group">
                                     <label>Fetal Heart Rate (bpm)</label>
