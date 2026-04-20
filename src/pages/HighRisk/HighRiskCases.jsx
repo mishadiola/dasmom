@@ -463,7 +463,7 @@ const HighRiskCases = () => {
                         <td>
                           <div
                             className="patient-cell"
-                            onClick={() => navigate(`/dashboard/patients/${p.id}`)}
+                            onClick={() => navigate(`/dashboard/patients/${p.id}?from=high-risk`)}
                             style={{ cursor: 'pointer' }}
                           >
                             <div className="patient-avatar">
@@ -531,7 +531,7 @@ const HighRiskCases = () => {
                             <button
                               className="action-btn view-btn"
                               title="View Profile"
-                              onClick={() => navigate(`/dashboard/patients/${p.id}`)}
+                              onClick={() => navigate(`/dashboard/patients/${p.id}?from=high-risk`)}
                             >
                               <Eye size={14} />
                             </button>
@@ -610,7 +610,7 @@ const HighRiskCases = () => {
                   <div
                     key={p.id}
                     className="alert-item alert-critical"
-                    onClick={() => navigate(`/dashboard/patients/${p.id}`)}
+                    onClick={() => navigate(`/dashboard/patients/${p.id}?from=high-risk`)}
                     style={{ cursor: 'pointer' }}
                   >
                     <div className="alert-dot"></div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
     ArrowLeft, Printer, Download, Edit,
     Activity, Syringe, Baby, HeartPulse,
@@ -54,11 +54,21 @@ const TABS = [
 const PatientProfile = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const from = searchParams.get('from') || 'patients';
 
     const [activeTab, setActiveTab] = useState('info');
     const [p, setP] = useState(null);
     const [loading, setLoading] = useState(true);
     const [editModalOpen, setEditModalOpen] = useState(false);
+
+    const handleBack = () => {
+        if (from === 'high-risk') {
+            navigate('/dashboard/high-risk');
+        } else {
+            navigate('/dashboard/patients');
+        }
+    };
 
     useEffect(() => {
         const fetchPatient = async () => {
@@ -469,7 +479,7 @@ const PatientProfile = () => {
                 <AlertTriangle size={48} />
                 <h2>Patient Not Found</h2>
                 <p>The patient record you are looking for does not exist or has been moved.</p>
-                <button className="btn btn-primary" onClick={() => navigate('/dashboard/patients')}>
+                <button className="btn btn-primary" onClick={handleBack}>
                     Return to List
                 </button>
             </div>
@@ -478,8 +488,8 @@ const PatientProfile = () => {
 
     return (
         <div className="profile-page animate-fade">
-            <button className="back-btn" onClick={() => navigate('/dashboard/patients')}>
-                <ArrowLeft size={16} /> Back to Patients List
+            <button className="back-btn" onClick={handleBack}>
+                <ArrowLeft size={16} /> Back
             </button>
 
             <div className="profile-header-card">

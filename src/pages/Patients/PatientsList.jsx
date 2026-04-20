@@ -644,7 +644,7 @@ const PatientsList = () => {
                                         <td className="cell-id">{p.id}</td>
 
                                         <td>
-                                            <div className="cell-name-wrap" onClick = {() => navigate(`/dashboard/patients/${p.id}`)}>
+                                            <div className="cell-name-wrap" onClick = {() => navigate(`/dashboard/patients/${p.id}?from=patients`)}>
                                                 <div className="avatar-sm">
                                                     {p.name.split(' ').map(n => n[0]).slice(0,2).join('')}
                                                 </div>
@@ -692,7 +692,7 @@ const PatientsList = () => {
 
                                         <td>
                                             <div className="actions-group">
-                                                <button type="button" className="action-btn view-btn" data-tooltip="View Profile" onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/${p.id}`); }}>
+                                                <button type="button" className="action-btn view-btn" data-tooltip="View Profile" onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/${p.id}?from=patients`); }}>
                                                 <Eye size={16} />
                                                 </button>
 

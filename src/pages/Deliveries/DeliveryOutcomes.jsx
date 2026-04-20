@@ -4,7 +4,8 @@ import {
     Search, Filter, Plus, X, Baby, Heart, AlertTriangle,
     CheckCircle2, Clock, AlertCircle, FileText, Download,
     Eye, Edit2, Printer, Activity, User, Calendar,
-    Stethoscope, MapPin, ChevronDown, ChevronUp, TrendingUp
+    Stethoscope, MapPin, ChevronDown, ChevronUp, TrendingUp,
+    RefreshCw
 } from 'lucide-react';
 import '../../styles/pages/DeliveryOutcomes.css';
 import babyservices from '../../services/babyservices';
@@ -194,6 +195,54 @@ const DeliveryOutcomes = () => {
         </button>
     );
 
+    const handleNewPregnancy = async (patientId) => {
+        if (!confirm('Are you sure you want to create a new pregnancy record for this patient? This will mark them as active/pregnant again.')) {
+            return;
+        }
+
+        try {
+            const patientService = new PatientService();
+            
+            // Create new pregnancy record
+            const newPregnancyData = {
+                patient_id: patientId,
+                lmd: new Date().toISOString().split('T')[0], // Set LMP to current date
+                edd: null, // Will be calculated based on LMP
+                gravida: null, // Will be updated from patient history
+                para: null, // Will be updated from patient history
+                risk_factors: '',
+                calculated_risk: 'Normal',
+                pregnancy_type: 'Singleton',
+                status: 'Active'
+            };
+
+            // Insert new pregnancy record
+            const { data: pregnancyData, error: pregnancyError } = await supabase
+                .from('pregnancy_info')
+                .insert([newPregnancyData])
+                .select()
+                .single();
+
+            if (pregnancyError) throw pregnancyError;
+
+            // Update patient basic info to mark as pregnant
+            const { error: updateError } = await supabase
+                .from('patient_basic_info')
+                .update({ is_pregnant: true })
+                .eq('id', patientId);
+
+            if (updateError) throw updateError;
+
+            alert(' New pregnancy record created successfully!');
+            
+            // Navigate to patient profile
+            navigate(`/dashboard/patients/${patientId}?from=deliveries`);
+        } catch (err) {
+            console.error('Error creating new pregnancy:', err);
+            alert(` Failed to create new pregnancy: ${err.message}`);
+        }
+    };
+
     return (
         <div className="do-page">
             <div className="page-header">
@@ -350,6 +399,7 @@ const DeliveryOutcomes = () => {
                                             <td>
                                                 <div className="row-actions">
                                                     <button className="action-btn view-btn" title="View" onClick={() => { setSelectedDelivery(d); setShowViewModal(true); }}><Eye size={13} /></button>
+                                                    <button className="action-btn new-pregnancy-btn" title="New Pregnancy" onClick={() => handleNewPregnancy(d.patientId)}><RefreshCw size={13} /></button>
                                                     <button className="action-btn edit-btn" title="Edit"><Edit2 size={13} /></button>
                                                 </div>
                                             </td>

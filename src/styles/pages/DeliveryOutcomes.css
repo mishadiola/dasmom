@@ -430,6 +430,10 @@
 .edit-btn:hover { background: linear-gradient(135deg, #d4efdd 0%, #c0e8c8 100%); color: #2d6856; border-color: rgba(61, 136, 112, 0.4); box-shadow: 0 4px 12px rgba(61, 136, 112, 0.2); transform: translateY(-1px); }
 .edit-btn:active { box-shadow: 0 1px 4px rgba(61, 136, 112, 0.15); }
 
+.new-pregnancy-btn { background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%); color: #7c3aed; border-color: rgba(124, 58, 237, 0.2); box-shadow: 0 1px 3px rgba(124, 58, 237, 0.1); }
+.new-pregnancy-btn:hover { background: linear-gradient(135deg, #e9d5ff 0%, #d8b4fe 100%); color: #6d28d9; border-color: rgba(124, 58, 237, 0.4); box-shadow: 0 4px 12px rgba(124, 58, 237, 0.2); transform: translateY(-1px); }
+.new-pregnancy-btn:active { box-shadow: 0 1px 4px rgba(124, 58, 237, 0.15); }
+
 .pp-btn   { background: linear-gradient(135deg, #fff5f7 0%, #ffe4e9 100%); color: var(--color-rose); border-color: rgba(185, 129, 138, 0.2); box-shadow: 0 1px 3px rgba(185, 129, 138, 0.1); }
 .pp-btn:hover { background: linear-gradient(135deg, #ffe4e9 0%, #ffd4dd 100%); color: #a36a73; border-color: rgba(185, 129, 138, 0.4); box-shadow: 0 4px 12px rgba(185, 129, 138, 0.2); transform: translateY(-1px); }
 .pp-btn:active { box-shadow: 0 1px 4px rgba(185, 129, 138, 0.15); }

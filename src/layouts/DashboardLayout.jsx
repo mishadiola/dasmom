@@ -25,16 +25,16 @@ const NAV_ITEMS = [
             { label: 'Patient Profiles', icon: Users, path: '/dashboard/patients' },
             { label: 'High Risk Cases', icon: AlertTriangle, path: '/dashboard/high-risk' },
             { label: 'Visits & Scheduling', icon: CalendarCheck, path: '/dashboard/prenatal' },
+            { label: 'Delivery Outcomes', icon: Stethoscope, path: '/dashboard/deliveries' },
             { label: 'Postpartum Records', icon: FileText, path: '/dashboard/postpartum' },
         ],
     },
     {
         section: 'Health Programs',
         items: [
+            { label: 'Newborn Tracking', icon: Baby, path: '/dashboard/newborns' },
             { label: 'Vaccines & Supplements', icon: Syringe, path: '/dashboard/vaccinations' },
             { label: 'Inventory Management', icon: Package, path: '/dashboard/inventory' },
-            { label: 'Delivery Outcomes', icon: Stethoscope, path: '/dashboard/deliveries' },
-            { label: 'Newborn Tracking', icon: Baby, path: '/dashboard/newborns' },
         ],
     },
     {

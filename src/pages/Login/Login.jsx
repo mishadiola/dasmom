@@ -19,7 +19,6 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
 
   const [lastLogin, setLastLogin] = useState({ time: 'Checking...', device: '...' });
 
@@ -311,18 +310,6 @@ export default function Login() {
 
                     {/* Extras */}
                     <div className="login-extras">
-                        <label className="remember-wrap" htmlFor="remember-me">
-                            <input
-                                type="checkbox"
-                                id="remember-me"
-                                className="remember-checkbox"
-                                checked={rememberMe}
-                                onChange={e => setRememberMe(e.target.checked)}
-                                disabled={isLocked}
-                            />
-                            <span className="remember-custom" aria-hidden="true" />
-                            <span className="remember-label">Remember me</span>
-                        </label>
                         <button type="button" ref={forgotBtnRef} className="forgot-btn" onClick={() => setShowForgot(true)} aria-haspopup="dialog">Forgot password?</button>
                     </div>
 

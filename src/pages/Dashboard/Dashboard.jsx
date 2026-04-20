@@ -21,7 +21,7 @@ const authService = new AuthService();
 const STAT_META = [
     { id: 1, label: 'Total Pregnant Patients', key: 'totalPatients', trend: 'up', sub: 'registered in system', icon: HeartPulse, color: 'rose', path: '/dashboard/patients' },
     { id: 2, label: 'High-Risk Pregnancies',   key: 'highRisk',      trend: 'up', sub: 'marked high risk',    icon: AlertTriangle, color: 'orange', path: '/dashboard/high-risk' },
-    { id: 3, label: 'Newborns Registered',      key: 'newborns',      trend: 'up', sub: 'birth records',        icon: Baby, color: 'pink', path: '/dashboard/newborns' },
+    { id: 3, label: 'Delivery Outcomes',        key: 'newborns',      trend: 'up', sub: 'birth records',        icon: Baby, color: 'pink', path: '/dashboard/newborns' },
     { id: 4, label: 'Appointments Today',       key: 'apptToday',     trend: 'neutral', sub: 'scheduled today', icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal' },
 ];
 
@@ -385,7 +385,7 @@ const Dashboard = () => {
                     <div className="card">
                         <div className="card-header">
                             <h2 className="card-title">
-                                <Syringe size={16} />Vaccine &amp; Supply Stock
+                                <Syringe size={16} />Vaccine &amp; Supplement
                                 <span className="card-badge card-badge--red">2 Low</span>
                             </h2>
                             <button className="card-link">Manage <ChevronRight size={13} /></button>
@@ -397,14 +397,7 @@ const Dashboard = () => {
                             ) : vaccineStock.length > 0 ? (
                                 vaccineStock
                                     .sort((a, b) => {
-                                        // Priority: critical > low > ok
-                                        const statusPriority = { critical: 0, low: 1, ok: 2 };
-                                        const priorityA = statusPriority[a.status] ?? 2;
-                                        const priorityB = statusPriority[b.status] ?? 2;
-                                        if (priorityA !== priorityB) {
-                                            return priorityA - priorityB;
-                                        }
-                                        // If same status, sort by stock level (lowest first)
+                                        // Sort by stock level ascending (lowest stock first)
                                         return a.stock - b.stock;
                                     })
                                     .slice(0, 5)

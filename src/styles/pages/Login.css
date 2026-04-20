@@ -674,75 +674,13 @@
 }
 
 /* ══════════════════════════════════════════════════════
-   REMEMBER ME + FORGOT ROW
+   FORGOT PASSWORD BUTTON
 ══════════════════════════════════════════════════════ */
 .login-extras {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+    justify-content: flex-end;
     margin-top: -2px;
-}
-
-/* Custom checkbox */
-.remember-wrap {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    user-select: none;
-}
-
-.remember-checkbox {
-    position: absolute;
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-
-.remember-custom {
-    width: 17px;
-    height: 17px;
-    border-radius: 4px;
-    border: 1.5px solid var(--color-border);
-    background: rgba(255, 255, 255, 0.6);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    transition: var(--t-fast);
-    position: relative;
-}
-
-.remember-custom::after {
-    content: '';
-    width: 5px;
-    height: 9px;
-    border-right: 2px solid #fff;
-    border-bottom: 2px solid #fff;
-    transform: rotate(45deg) translate(-1px, -1px);
-    opacity: 0;
-    transition: opacity 0.15s ease;
-}
-
-.remember-checkbox:checked+.remember-custom {
-    background: var(--color-rose);
-    border-color: var(--color-rose);
-}
-
-.remember-checkbox:checked+.remember-custom::after {
-    opacity: 1;
-}
-
-.remember-checkbox:focus-visible+.remember-custom {
-    outline: 2px solid var(--color-rose);
-    outline-offset: 2px;
-}
-
-.remember-label {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--color-text-muted);
 }
 
 /* Forgot password button (replaces <a>) */
