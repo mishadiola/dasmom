@@ -8,187 +8,17 @@ import {
     AlertTriangle, CheckCircle2, Clock, XCircle,
     Eye, Edit2, Calendar, Download, RefreshCw, ChevronDown, ChevronUp, AlertCircle, Baby
 } from 'lucide-react';
+import NewbornVaccinationModal from '../../components/NewbornVaccinationModal';
 import '../../styles/pages/Vaccinations.css';
 
 const VACCINE_TYPES = ['Tetanus Toxoid (TT)', 'BCG', 'Hepatitis B (HepB)', 'Influenza', 'OPV', 'DPT'];
 const SUPPLEMENT_TYPES = ['Iron', 'Folic Acid', 'Calcium', 'Vitamin D'];
 const STAFF_LIST = ['Nurse Ana', 'Nurse Bea', 'Midwife Elena', 'Midwife Ana', 'Dr. Reyes (OB)'];
 
-/* ════════════════════════════════════
-   NEWBORN VACCINATION MODAL COMPONENT
-════════════════════════════════════ */
-const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
-    const [pendingVaccines, setPendingVaccines] = useState([]);
-    const [selectedVaccines, setSelectedVaccines] = useState({});
-    const [staff, setStaff] = useState('');
-    const [staffList, setStaffList] = useState([]);
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-    const [loading, setLoading] = useState(true);
-    const [isSaving, setIsSaving] = useState(false);
-
-    useEffect(() => {
-        const fetchData = async () => {
-            // Get the mother's barangay from the newborn
-            if (newborn.id) {
-                const { data: motherData } = await supabase
-                    .from('newborns')
-                    .select('mother_id, patient_basic_info!mother_id (barangay)')
-                    .eq('id', newborn.id)
-                    .single();
-                
-                const barangay = motherData?.patient_basic_info?.barangay;
-                console.log('🏥 NewbornVaccinationModal - Barangay:', barangay);
-                
-                if (barangay) {
-                    // Fetch staff with matching barangay_assignment
-                    const { data: staffData, error: staffError } = await supabase
-                        .from('staff_profiles')
-                        .select('full_name')
-                        .eq('barangay_assignment', barangay);
-                    
-                    console.log('👨‍⚕️ NewbornVaccinationModal - Staff Data:', staffData, 'Error:', staffError);
-                    
-                    const staffOptions = staffData ? staffData.map(s => s.full_name) : [];
-                    console.log('📋 NewbornVaccinationModal - Staff Options:', staffOptions);
-                    setStaffList(staffOptions);
-                    if (staffOptions.length > 0) {
-                        setStaff(staffOptions[0]);
-                    }
-                } else {
-                    console.log('⚠️ NewbornVaccinationModal - No barangay found');
-                    setStaffList([]);
-                }
-            }
-
-            const { data: pending, error } = await supabase
-                .from('vaccinations')
-                .select(`id, dose_number, scheduled_vaccination, vaccine_inventory (vaccine_name), notes`)
-                .eq('newborn_id', newborn.id)
-                .eq('status', 'Pending')
-                .order('scheduled_vaccination', { ascending: true });
-
-            if (error) {
-                console.error('Error fetching pending vaccines:', error);
-                setPendingVaccines([]);
-            } else {
-                const vaccines = (pending || []).map(v => ({
-                    id: v.id,
-                    vaccine: v.vaccine_inventory?.vaccine_name || (v.notes ? v.notes.match(/(\d+)(?:st|nd|rd|th) dose of (.+)/)?.[2] : null) || 'Unknown Vaccine',
-                    dose_number: v.dose_number,
-                    scheduled_vaccination: v.scheduled_vaccination
-                }));
-                setPendingVaccines(vaccines);
-            }
-            setLoading(false);
-        };
-
-        fetchData();
-    }, [newborn.id]);
-
-    const handleSave = async () => {
-        const selectedIds = Object.entries(selectedVaccines)
-            .filter(([, checked]) => checked)
-            .map(([id]) => id);
-
-        if (selectedIds.length === 0) {
-            alert('Please select at least one vaccine to mark as administered.');
-            return;
-        }
-
-        setIsSaving(true);
-        try {
-            const patientService = new PatientService();
-            const currentUser = await patientService.getCurrentUserId();
-            if (!currentUser) throw new Error('No logged-in user');
-
-            // Update all selected vaccinations
-            for (const vaccId of selectedIds) {
-                await supabase
-                    .from('vaccinations')
-                    .update({
-                        vaccinated_date: date,
-                        status: 'Completed'
-                    })
-                    .eq('id', vaccId);
-            }
-
-            if (onSave) {
-                onSave();
-            }
-            onClose();
-        } catch (error) {
-            console.error('Error saving vaccinations:', error);
-            alert('Failed to save vaccinations: ' + error.message);
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    return (
-        <div className="modal-backdrop" onClick={onClose}>
-            <div className="vacc-modal" onClick={e => e.stopPropagation()}>
-                <div className="modal-header">
-                    <div>
-                        <h2><Syringe size={20} /> Mark Vaccines as Attended</h2>
-                        <p>{newborn.babyName}</p>
-                    </div>
-                    <button className="modal-close" onClick={onClose}><X size={20} /></button>
-                </div>
-                <div className="modal-body">
-                    {loading ? (
-                        <p>Loading pending vaccinations...</p>
-                    ) : pendingVaccines.length === 0 ? (
-                        <p>No pending vaccinations for this newborn.</p>
-                    ) : (
-                        <>
-                            <div className="pending-vaccines-section">
-                                <h3>Pending Scheduled Vaccines</h3>
-                                <p className="pending-vaccines-note">Check the vaccines that were administered today.</p>
-                                {pendingVaccines.map(v => (
-                                    <label key={v.id} className="pending-vaccine-item">
-                                        <input
-                                            type="checkbox"
-                                            checked={!!selectedVaccines[v.id]}
-                                            onChange={() => setSelectedVaccines(prev => ({ ...prev, [v.id]: !prev[v.id] }))}
-                                        />
-                                        {v.vaccine} (Dose {v.dose_number}) — Scheduled: {v.scheduled_vaccination}
-                                    </label>
-                                ))}
-                            </div>
-                            <div className="form-grid-2">
-                                <div className="form-group">
-                                    <label>Date Administered <span className="req">*</span></label>
-                                    <input type="date" value={date} onChange={e => setDate(e.target.value)} />
-                                </div>
-                                <div className="form-group">
-                                    <label>Administered By <span className="req">*</span></label>
-                                    <select value={staff} onChange={e => setStaff(e.target.value)}>
-                                        {staffList.map(s => <option key={s}>{s}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-                        </>
-                    )}
-                </div>
-                <div className="modal-footer">
-                    <button className="btn btn-outline" onClick={onClose} disabled={isSaving}>Cancel</button>
-                    <button className="btn btn-primary" onClick={handleSave} disabled={isSaving || loading || pendingVaccines.length === 0}>
-                        {isSaving ? <RefreshCw size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-                        {isSaving ? 'Saving...' : 'Confirm & Save'}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-/* ════════════════════════════════════
-   RECORD MODAL COMPONENT
-════════════════════════════════════ */
-const RecordModal = ({ mode, onClose, onSave }) => {
+const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, onSave }) => {
     const [form, setForm] = useState({
-        patientType: 'Mother', patientName: '', vaccine: '',
-        supplement: '', dose: '', date: '', nextDue: '', staff: '', notes: ''
+        patientType: initialPatientType || 'Mother', patientName: initialPatientName || '', vaccine: '',
+        supplement: '', dose: '', date: new Date().toISOString().split('T')[0], nextDue: '', staff: '', notes: ''
     });
     const [isSaving, setIsSaving] = useState(false);
     const [selectedPatient, setSelectedPatient] = useState(null);
@@ -597,7 +427,7 @@ const Vaccinations = () => {
     const [activeTab, setActiveTab] = useState('vaccines');    // 'vaccines' | 'supplements'
     const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState({ patientType: 'All', status: 'All', item: 'All' });
-    const [recordModal, setRecordModal] = useState(null);      // null | 'vaccine' | 'supplement'
+    const [recordModal, setRecordModal] = useState(null);      // null | { mode: 'vaccine' | 'supplement', initialPatientType?, initialPatientName? }
     const [newbornVaccinationModal, setNewbornVaccinationModal] = useState(null);  // null | newborn object
     const [expirationSummaryModal, setExpirationSummaryModal] = useState(null);      // null | 'vaccine' | 'supplement'
     const [expandedRows, setExpandedRows] = useState({});
@@ -642,6 +472,7 @@ const Vaccinations = () => {
             const suppMap = new Map(suppInv.map(s => [s.id, s.supplement_name]));
             const { data: staff } = await supabase.from('staff_profiles').select('id, full_name');
             const staffMap = new Map(staff.map(s => [s.id, s.full_name]));
+            const patientMap = new Map();
 
             // Fetch all newborns with pending vaccinations for the newborns tab - but we'll remove this
             // const { data: allNewborns } = await supabase
@@ -673,8 +504,9 @@ const Vaccinations = () => {
                     patientId = record.patient_id;
                 } else if (record.newborn_id) {
                     // Newborn
-                    patientName = record.newborns?.baby_name || 'Unknown Newborn';
-                    const mother = record.newborns?.patient_basic_info;
+                    const newbornRecord = Array.isArray(record.newborns) ? record.newborns[0] : record.newborns;
+                    const mother = Array.isArray(newbornRecord?.patient_basic_info) ? newbornRecord.patient_basic_info[0] : newbornRecord?.patient_basic_info;
+                    patientName = newbornRecord?.baby_name || 'Unknown Newborn';
                     station = `${mother?.barangay || 'N/A'}, ${mother?.province || 'N/A'}`;
                     type = 'Newborn';
                     patientId = record.newborn_id;
@@ -697,11 +529,15 @@ const Vaccinations = () => {
                 const scheduledDate = record.scheduled_vaccination || null;
                 const expirationDate = calculateExpirationDate(vaccinationDate, 'vaccine');
                 const expStatus = getExpirationStatus(expirationDate);
+                const newbornRelation = Array.isArray(record.newborns) ? record.newborns[0] : record.newborns;
+                const motherInfo = Array.isArray(newbornRelation?.patient_basic_info) ? newbornRelation.patient_basic_info[0] : newbornRelation?.patient_basic_info;
                 return {
                     id: record.id,
                     patientId,
-                    patientName,
-                    station,
+                    newborn_id: record.newborn_id,
+                    babyName: newbornRelation?.baby_name || 'Unknown Newborn',
+                    motherName: motherInfo ? `${motherInfo.first_name || ''} ${motherInfo.last_name || ''}`.trim() : 'Unknown Mother',
+                    station: station,
                     type,
                     vaccine: vaccineName,
                     dose,
@@ -842,10 +678,13 @@ const Vaccinations = () => {
     const filteredVaccines = vaccinationRecords
         .filter(v => {
             const s = searchTerm.toLowerCase();
-            const matchSearch = v.patientName.toLowerCase().includes(s) || v.patientId.toLowerCase().includes(s) || v.station.toLowerCase().includes(s);
-            const matchType = filters.patientType === 'All' || v.type === filters.patientType;
-            const matchStatus = filters.status === 'All' || v.status === filters.status;
-            const matchItem = filters.item === 'All' || v.vaccine === filters.item;
+            const matchSearch = (v.patientName || '').toLowerCase().includes(s) || (v.patientId || '').toLowerCase().includes(s) || (v.station || '').toLowerCase().includes(s);
+            const filterType = (filters.patientType || 'All').toLowerCase();
+            const filterStatus = (filters.status || 'All').toLowerCase();
+            const filterItem = (filters.item || 'All').toLowerCase();
+            const matchType = filterType === 'all' || (v.type || '').toLowerCase() === filterType;
+            const matchStatus = filterStatus === 'all' || (v.status || '').toLowerCase() === filterStatus;
+            const matchItem = filterItem === 'all' || (v.vaccine || '').toLowerCase() === filterItem;
             return matchSearch && matchType && matchStatus && matchItem;
         })
         .sort((a, b) => {
@@ -854,14 +693,61 @@ const Vaccinations = () => {
             return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
         });
 
+    // Group newborns for display
+    const displayList = [];
+    const newbornMap = {};
+    filteredVaccines.forEach(v => {
+        if (v.type === 'Newborn') {
+            const key = v.newborn_id;
+            if (!key) return; // Skip if no newborn_id
+            const babyName = v.babyName || 'Unknown Newborn';
+            const motherName = v.motherName || 'Unknown Mother';
+            const station = v.station || 'Unknown';
+
+            if (!newbornMap[key]) {
+                newbornMap[key] = {
+                    isNewborn: true,
+                    id: key,
+                    babyName,
+                    motherName,
+                    station,
+                    administeredCount: 0,
+                    lastAdministered: null,
+                    records: []
+                };
+            }
+            newbornMap[key].records.push(v);
+            if (v.date) {
+                newbornMap[key].administeredCount++;
+                const date = new Date(v.date);
+                if (!newbornMap[key].lastAdministered || date > new Date(newbornMap[key].lastAdministered)) {
+                    newbornMap[key].lastAdministered = v.date;
+                }
+            }
+        } else {
+            displayList.push(v);
+        }
+    });
+    const newbornEntries = Object.values(newbornMap);
+    console.log('Vaccinations grouping:', {
+        filteredVaccinesCount: filteredVaccines.length,
+        newbornCount: newbornEntries.length,
+        newbornIds: newbornEntries.map(n => n.id),
+        displayListCount: displayList.length + newbornEntries.length
+    });
+    newbornEntries.forEach(n => displayList.push(n));
+
     // ── Filter + sort supplements ──
     const filteredSupplements = supplementRecords
         .filter(s => {
             const q = searchTerm.toLowerCase();
-            const matchSearch = s.patientName.toLowerCase().includes(q) || s.patientId.toLowerCase().includes(q) || s.station.toLowerCase().includes(q);
-            const matchType = filters.patientType === 'All' || s.type === filters.patientType;
-            const matchStatus = filters.status === 'All' || s.status === filters.status;
-            const matchItem = filters.item === 'All' || s.supplement === filters.item;
+            const matchSearch = (s.patientName || '').toLowerCase().includes(q) || (s.patientId || '').toLowerCase().includes(q) || (s.station || '').toLowerCase().includes(q);
+            const filterType = (filters.patientType || 'All').toLowerCase();
+            const filterStatus = (filters.status || 'All').toLowerCase();
+            const filterItem = (filters.item || 'All').toLowerCase();
+            const matchType = filterType === 'all' || (s.type || '').toLowerCase() === filterType;
+            const matchStatus = filterStatus === 'all' || (s.status || '').toLowerCase() === filterStatus;
+            const matchItem = filterItem === 'all' || (s.supplement || '').toLowerCase() === filterItem;
             return matchSearch && matchType && matchStatus && matchItem;
         })
         .sort((a, b) => {
@@ -909,8 +795,8 @@ const Vaccinations = () => {
                 </div>
                 <div className="header-actions">
                     <button className="btn btn-outline"><Download size={16} /> Export Report</button>
-                    <button className="btn btn-outline" onClick={() => setRecordModal('supplement')}><Pill size={16} /> Record Supplement</button>
-                    <button className="btn btn-primary" onClick={() => setRecordModal('vaccine')}><Syringe size={16} /> Record Vaccination</button>
+                    <button className="btn btn-outline" onClick={() => setRecordModal({ mode: 'supplement' })}><Pill size={16} /> Record Supplement</button>
+                    <button className="btn btn-primary" onClick={() => setRecordModal({ mode: 'vaccine' })}><Syringe size={16} /> Record Vaccination</button>
                 </div>
             </div>
 
@@ -1020,61 +906,88 @@ const Vaccinations = () => {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {filteredVaccines.map(v => (
-                                            <React.Fragment key={v.id}>
-                                                <tr className={`vacc-row vacc-row--${v.status.toLowerCase()}`}>
+                                        {displayList.map(item => (
+                                            item.isNewborn ? (
+                                                <tr key={`newborn-${item.id}`}>
                                                     <td>
-                                                        <button className="expand-btn" onClick={() => toggleRow(v.id)}>
-                                                            {expandedRows[v.id] ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                                                        </button>
                                                         <div className="vacc-patient">
-                                                            <div className="vacc-avatar">{v.patientName.split(' ').map(n=>n[0]).slice(0,2).join('')}</div>
+                                                            <div className="vacc-avatar">{item.babyName.split(' ').map(name => name[0]).slice(0,2).join('')}</div>
                                                             <div>
-                                                                <span className="vacc-name">{v.patientName}</span>
-                                                                <span className="vacc-pid">{v.patientId} · {v.station}</span>
+                                                                <span className="vacc-name">{item.babyName}</span>
+                                                                <span className="vacc-pid">Mother: {item.motherName} · {item.station}</span>
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td><span className={`type-badge type-${v.type.toLowerCase()}`}>{v.type}</span></td>
-                                                    <td className="vacc-item-name">{v.vaccine}</td>
-                                                    <td className="vacc-dose">{v.dose}</td>
-                                                    <td className="vacc-date">{v.date || <span className="not-yet">Not given</span>}</td>
-                                                    <td className="vacc-date">
-                                                        {v.expirationDate ? (
-                                                            <>
-                                                                <span className={`exp-status ${v.expirationClass}`}>{v.expirationStatus}</span>
-                                                                <span className="exp-date">{v.expirationDate}</span>
-                                                            </>
-                                                        ) : <span className="not-yet">—</span>}
-                                                    </td>
-                                                    <td className="vacc-date">{v.nextDue || <span className="not-yet">—</span>}</td>
-                                                    <td><span className={`vacc-status ${vaccineStatusClass(v.status)}`}>{v.status}</span></td>
-                                                    <td className="vacc-staff">{v.staff}</td>
+                                                    <td><span className="type-badge type-newborn">Newborn</span></td>
+                                                    <td>{item.administeredCount} vaccines</td>
+                                                    <td>{item.lastAdministered || 'None'}</td>
+                                                    <td>—</td>
+                                                    <td>—</td>
+                                                    <td>—</td>
+                                                    <td>—</td>
                                                     <td>
                                                         <div className="row-actions">
-                                                            <button className="action-btn view-btn" title="View Details" onClick={() => setExpirationSummaryModal({ patientId: v.patientId, patientName: v.patientName, type: 'vaccine' })}><Eye size={13} /></button>
-                                                            <button className="action-btn record-btn" title="Record Dose" onClick={() => setRecordModal('vaccine')}><Plus size={13} /></button>
-                                                            <button className="action-btn edit-btn" title="Edit"><Edit2 size={13} /></button>
+                                                            <button className="action-btn view-btn" title="View Vaccination Schedule" onClick={() => setNewbornVaccinationModal(item)}><Eye size={13} /></button>
+                                                            <button className="action-btn record-btn" title="Record Vaccine" onClick={() => setNewbornVaccinationModal(item)}><Plus size={13} /></button>
                                                         </div>
                                                     </td>
                                                 </tr>
-                                                {expandedRows[v.id] && (
-                                                    <tr className="vacc-expanded-row">
-                                                        <td colSpan="9">
-                                                            <div className="expand-detail">
-                                                                <div><strong>Patient ID:</strong> {v.patientId}</div>
-                                                                <div><strong>Station:</strong> {v.station}</div>
-                                                                <div><strong>Vaccine:</strong> {v.vaccine} — {v.dose}</div>
-                                                                <div><strong>Administered by:</strong> {v.staff}</div>
-                                                                {v.date && <div><strong>Date Given:</strong> {v.date}</div>}
-                                                                {v.nextDue && <div><strong>Next Due:</strong> {v.nextDue}</div>}
+                                            ) : (
+                                                <React.Fragment key={`vaccine-${item.id}`}>
+                                                    <tr className={`vacc-row vacc-row--${item.status.toLowerCase()}`}>
+                                                        <td>
+                                                            <button className="expand-btn" onClick={() => toggleRow(item.id)}>
+                                                                {expandedRows[item.id] ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                                                            </button>
+                                                            <div className="vacc-patient">
+                                                                <div className="vacc-avatar">{item.patientName.split(' ').map(n=>n[0]).slice(0,2).join('')}</div>
+                                                                <div>
+                                                                    <span className="vacc-name">{item.patientName}</span>
+                                                                    <span className="vacc-pid">{item.patientId} · {item.station}</span>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td><span className={`type-badge type-${item.type.toLowerCase()}`}>{item.type}</span></td>
+                                                        <td className="vacc-item-name">{item.vaccine}</td>
+                                                        <td className="vacc-dose">{item.dose}</td>
+                                                        <td className="vacc-date">{item.date || <span className="not-yet">Not given</span>}</td>
+                                                        <td className="vacc-date">
+                                                            {item.expirationDate ? (
+                                                                <>
+                                                                    <span className={`exp-status ${item.expirationClass}`}>{item.expirationStatus}</span>
+                                                                    <span className="exp-date">{item.expirationDate}</span>
+                                                                </>
+                                                            ) : <span className="not-yet">—</span>}
+                                                        </td>
+                                                        <td className="vacc-date">{item.nextDue || <span className="not-yet">—</span>}</td>
+                                                        <td><span className={`vacc-status ${vaccineStatusClass(item.status)}`}>{item.status}</span></td>
+                                                        <td className="vacc-staff">{item.staff}</td>
+                                                        <td>
+                                                            <div className="row-actions">
+                                                                <button className="action-btn view-btn" title="View Details" onClick={() => setExpirationSummaryModal({ patientId: item.patientId, patientName: item.patientName, type: 'vaccine' })}><Eye size={13} /></button>
+                                                                <button className="action-btn record-btn" title="Record Dose" onClick={() => setRecordModal({ mode: 'vaccine' })}><Plus size={13} /></button>
+                                                                <button className="action-btn edit-btn" title="Edit"><Edit2 size={13} /></button>
                                                             </div>
                                                         </td>
                                                     </tr>
-                                                )}
-                                            </React.Fragment>
+                                                    {expandedRows[item.id] && (
+                                                        <tr className="vacc-expanded-row">
+                                                            <td colSpan="9">
+                                                                <div className="expand-detail">
+                                                                    <div><strong>Patient ID:</strong> {item.patientId}</div>
+                                                                    <div><strong>Station:</strong> {item.station}</div>
+                                                                    <div><strong>Vaccine:</strong> {item.vaccine} — {item.dose}</div>
+                                                                    <div><strong>Administered by:</strong> {item.staff}</div>
+                                                                    {item.date && <div><strong>Date Given:</strong> {item.date}</div>}
+                                                                    {item.nextDue && <div><strong>Next Due:</strong> {item.nextDue}</div>}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </React.Fragment>
+                                            )
                                         ))}
-                                        {filteredVaccines.length === 0 && (
+                                        {displayList.length === 0 && (
                                             <tr><td colSpan="9" className="vacc-empty"><Syringe size={24} /><p>No vaccination records match your filters.</p></td></tr>
                                         )}
                                     </tbody>
@@ -1130,7 +1043,7 @@ const Vaccinations = () => {
                                                 <td>
                                                     <div className="row-actions">
                                                         <button className="action-btn view-btn" title="View Details" onClick={() => setExpirationSummaryModal({ patientId: s.patientId, patientName: s.patientName, type: 'supplement' })}><Eye size={13} /></button>
-                                                        <button className="action-btn record-btn" title="Record Intake" onClick={() => setRecordModal('supplement')}><Plus size={13} /></button>
+                                                        <button className="action-btn record-btn" title="Record Intake" onClick={() => setRecordModal({ mode: 'supplement' })}><Plus size={13} /></button>
                                                         <button className="action-btn edit-btn" title="Edit"><Edit2 size={13} /></button>
                                                     </div>
                                                 </td>
@@ -1150,7 +1063,7 @@ const Vaccinations = () => {
 
 
             {/* ── Record Modal ── */}
-            {recordModal && <RecordModal mode={recordModal} onClose={handleModalClose} />}
+            {recordModal && <RecordModal {...recordModal} onClose={() => setRecordModal(null)} onSave={handleModalClose} />}
 
             {/* ── Newborn Vaccination Modal ── */}
             {newbornVaccinationModal && (
