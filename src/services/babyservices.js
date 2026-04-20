@@ -292,73 +292,8 @@ class BabyService {
       }
     }
 
-    // Schedule newborn vaccinations
-    const birthDate = new Date(deliveryData.delivery_date);
-    const vaccineSchedule = [
-      { months: 0, vaccines: ['BCG', 'Hepatitis B (HepB)'], doses: [1, 1] },
-      { months: 1.5, vaccines: ['DPT', 'OPV', 'Hepatitis B (HepB)'], doses: [1, 1, 2] },
-      { months: 2.5, vaccines: ['DPT', 'OPV', 'Hepatitis B (HepB)'], doses: [2, 2, 3] },
-      { months: 3.5, vaccines: ['DPT', 'OPV', 'Hepatitis B (HepB)', 'Tetanus Toxoid (TT)'], doses: [3, 3, 4, 1] },
-      { months: 9, vaccines: ['Tetanus Toxoid (TT)', 'Influenza'], doses: [2, 1] },
-      { months: 12, vaccines: ['Influenza'], doses: [2] }
-    ];
-
-    const computeScheduledDate = (baseDate, monthsOffset) => {
-      const target = new Date(baseDate);
-      const wholeMonths = Math.floor(monthsOffset);
-      target.setMonth(target.getMonth() + wholeMonths);
-      const halfMonth = monthsOffset - wholeMonths;
-      if (halfMonth === 0.5) {
-        target.setDate(target.getDate() + 15);
-      }
-      return target;
-    };
-
-    for (const newborn of insertedNewborns) {
-      console.log(`📋 Scheduling vaccines for newborn ID: ${newborn.id}`);
-      
-      for (const schedule of vaccineSchedule) {
-        const scheduledDate = computeScheduledDate(birthDate, schedule.months);
-        const dateStr = scheduledDate.toISOString().split('T')[0];
-
-        for (let i = 0; i < schedule.vaccines.length; i++) {
-          const vaccine = schedule.vaccines[i];
-          const dose = schedule.doses[i];
-          try {
-            // Determine dose ordinal
-            const doseOrdinal = dose === 1 ? '1st' : dose === 2 ? '2nd' : dose === 3 ? '3rd' : `${dose}th`;
-
-            // Prepare payload with null vaccine_inventory_id and notes
-            const vaccPayload = {
-              newborn_id: newborn.id,
-              vaccine_inventory_id: null,
-              dose_number: dose,
-              scheduled_vaccination: dateStr,
-              status: 'Pending',
-              vaccinated_date: null,
-              created_by: createdBy,
-              notes: `${doseOrdinal} dose of ${vaccine}`
-            };
-
-            console.log(`💉 Attempting to schedule vaccination:`, vaccPayload);
-
-            // Insert vaccination record
-            const { data: vaccData, error: vaccError } = await supabase
-              .from('vaccinations')
-              .insert(vaccPayload)
-              .select('id');
-
-            if (vaccError) {
-              console.error(`❌ Vaccination schedule error for '${vaccine}' (${dose}):`, vaccError);
-            } else {
-              console.log(`✅ Vaccine scheduled: ${vaccine} ${doseOrdinal} dose on ${dateStr}`, vaccData);
-            }
-          } catch (err) {
-            console.error(`❌ Exception while scheduling '${vaccine}':`, err);
-          }
-        }
-      }
-    }
+    // NOTE: Vaccine scheduling is now handled separately by VaccinationService.scheduleNewbornVaccinations()
+    // called from DeliveryOutcomes.jsx handleSave() to keep concerns separated
 
     return { delivery_id: delivery.id, newborn_ids: insertedNewborns.map(n => n.id) };
   }

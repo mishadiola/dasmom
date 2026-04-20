@@ -14,18 +14,83 @@ import '../../styles/pages/PostpartumRecords.css';
    POSTPARTUM DETAIL MODAL
    ════════════════════════════ */
 const DetailModal = ({ mother, onClose }) => {
-    // Basic assessment details - these could eventually be fetched from a specific assessment table
-    const detail = {
-        deliveryFacility: 'Dasmariñas CHO',
-        attendingStaff: 'Midwife Elena P.',
+    const [detail, setDetail] = useState({
+        deliveryFacility: 'N/A',
+        attendingStaff: 'N/A',
         deliveryComplications: mother.complications || 'None',
-        birthWeight: '3.2 kg',
-        breastfeeding: 'Exclusive',
+        birthWeight: 'N/A',
+        breastfeeding: 'N/A',
         mhStatus: 'Normal',
-        woundCondition: mother.deliveryType === 'CS' ? 'Healing Well' : 'N/A (NSD)',
-        followUps: { d1: 'Completed', d7: 'Completed', d14: 'Upcoming', w6: 'Upcoming' },
-        vitals: [{ date: 'Latest', bp: '120/80', temp: '36.6', weight: '65kg' }]
-    };
+        woundCondition: mother.deliveryType === 'CS' ? 'Pending assessment' : 'N/A (NSD)',
+        vitals: [{ date: 'No data', bp: '--', temp: '--', weight: '--' }],
+        assessments: []
+    });
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchDetailData = async () => {
+            try {
+                setLoading(true);
+                // Fetch delivery record with staff info
+                const { data: deliveries } = await babyService.supabase
+                    .from('deliveries')
+                    .select(`
+                        id,
+                        delivery_date,
+                        delivery_type,
+                        complications,
+                        facility,
+                        staff_profiles!deliveries_attending_staff_fkey (full_name),
+                        newborns (birth_weight, condition_at_birth)
+                    `)
+                    .eq('id', mother.id)
+                    .single();
+
+                // Fetch postpartum vitals from prenatal_visits
+                const { data: vitals } = await babyService.supabase
+                    .from('prenatal_visits')
+                    .select('visit_date, clinical_notes')
+                    .eq('patient_id', mother.patientId)
+                    .ilike('gestational_age', 'Postpartum%')
+                    .order('visit_date', { ascending: false })
+                    .limit(5);
+
+                // Fetch assessment notes if available
+                const { data: assessments } = await babyService.supabase
+                    .from('prenatal_visits')
+                    .select('visit_date, clinical_notes')
+                    .eq('patient_id', mother.patientId)
+                    .ilike('gestational_age', 'Postpartum%')
+                    .order('visit_date', { ascending: false });
+
+                const updatedDetail = {
+                    ...detail,
+                    deliveryFacility: deliveries?.facility || 'N/A',
+                    attendingStaff: deliveries?.staff_profiles?.full_name || 'N/A',
+                    birthWeight: deliveries?.newborns?.[0]?.birth_weight ? `${deliveries.newborns[0].birth_weight} kg` : 'N/A',
+                    deliveryComplications: mother.complications || 'None',
+                    woundCondition: mother.deliveryType === 'CS' ? 'Healing Well' : 'N/A (NSD)',
+                    vitals: vitals && vitals.length > 0 ? vitals.map(v => ({
+                        date: v.visit_date,
+                        bp: '--',
+                        temp: '--',
+                        weight: '--',
+                        notes: v.clinical_notes
+                    })) : [{ date: 'No data', bp: '--', temp: '--', weight: '--' }],
+                    assessments: assessments || []
+                };
+                setDetail(updatedDetail);
+            } catch (error) {
+                console.error('Error fetching detail data:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (mother?.id) {
+            fetchDetailData();
+        }
+    }, [mother?.id]);
 
     const followUpStatusClass = (s) => {
         if (s === 'Completed') return 'fu-completed';

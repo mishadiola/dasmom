@@ -5,9 +5,10 @@ import {
     CheckCircle2, Clock, AlertCircle, FileText, Download,
     Eye, Edit2, Printer, Activity, User, Calendar,
     Stethoscope, MapPin, ChevronDown, ChevronUp, TrendingUp,
-    RefreshCw
+    RefreshCw, Syringe
 } from 'lucide-react';
 import '../../styles/pages/DeliveryOutcomes.css';
+import VaccinationService from '../../services/vaccinationservice';
 import babyservices from '../../services/babyservices';
 import PatientService from '../../services/patientservice';
 import supabase from '../../config/supabaseclient';
@@ -615,10 +616,20 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
                 risk_level: form.riskLevel || 'Normal'
             }));
 
-            await babyservices.recordDelivery(deliveryData, newbornData);
+            const result = await babyservices.recordDelivery(deliveryData, newbornData);
+            
+            // Automatically schedule vaccinations for each newborn
+            const vaccService = new VaccinationService();
+            const newbornIds = result.newborn_ids || [];
+            const createdBy = await new PatientService().getCurrentUserId();
+            
+            for (const newbornId of newbornIds) {
+                await vaccService.scheduleNewbornVaccinations(newbornId, form.deliveryDate, createdBy);
+            }
+            
             onSuccess();
             onClose();
-            alert('✅ Delivery recorded successfully!');
+            alert('✅ Delivery recorded and vaccinations scheduled successfully!');
         } catch (err) {
             console.error('Save failed:', err);
             alert(`❌ Save failed: ${err.message}`);
@@ -628,6 +639,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
     };
 
     if (!show) return null;
+
 
     const SECTIONS = [
         { id: 'patient', label: 'Patient Info', icon: User },
