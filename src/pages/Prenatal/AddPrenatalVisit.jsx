@@ -20,10 +20,21 @@ const AddPrenatalVisit = () => {
 
     const [patient, setPatient] = useState(null);
 
-    // Form State
+    // Form State - initialize with empty strings to avoid uncontrolled/controlled warnings
     const [formData, setFormData] = useState({
         testsDone: [],
-        riskFactors: []
+        riskFactors: [],
+        // Initialize all fields with empty strings to ensure controlled inputs
+        name: '', id: '', station: '', age: '', edd: '', lmp: '',
+        gestationalAge: '', trimester: '', gravida: '', para: '',
+        visitDate: '', visitNumber: '',
+        attendingMidwife: '', healthFacility: '', visitType: '',
+        bpSystolic: '', bpDiastolic: '', weight: '', temp: '', pulse: '', rr: '',
+        fundalHeight: '', fhr: '', fetalMovement: 'Normal', presentation: 'Cephalic',
+        clinicalNotes: '', adviceGiven: '',
+        referred: false, referredTo: '', referralReason: '', referralDate: '',
+        nextApptDate: '', remiderEnabled: true, nextApptType: 'Routine Checkup',
+        calculatedRisk: 'Normal'
     });
 
     const [midwives, setMidwives] = useState([]);
@@ -41,8 +52,15 @@ const AddPrenatalVisit = () => {
     useEffect(() => {
         if (patient && !isFormInitialized) {
             const attendedCount = patient.visits?.filter(v => v.status === 'Attended').length || 0;
-            const scheduledVisits = (patient.visits || []).filter(v => v.status === 'Scheduled').sort((a,b) => new Date(a.visit_date) - new Date(b.visit_date));
-            const nextScheduled = scheduledVisits.find(v => new Date(v.visit_date) > new Date()) || scheduledVisits[0];
+            const scheduledVisits = (patient.visits || []).filter(v => v.status === 'Scheduled');
+            
+            // Find the most recent scheduled visit (highest visit_number) to record the current visit
+            // This is the visit where we'll input the records
+            const mostRecentScheduled = scheduledVisits.length > 0 
+                ? scheduledVisits.reduce((prev, current) => {
+                    return (parseInt(prev.visit_number) > parseInt(current.visit_number)) ? prev : current;
+                })
+                : null;
             
             setFormData(prev => ({
                 ...prev,
@@ -62,7 +80,7 @@ const AddPrenatalVisit = () => {
                 calculatedRisk: patient.risk || 'Normal',
                 clinicalNotes: '', adviceGiven: '',
                 referred: false, referredTo: '', referralReason: '', referralDate: '',
-                nextApptDate: nextScheduled ? new Date(nextScheduled.visit_date).toISOString().split('T')[0] : '',
+                nextApptDate: (mostRecentScheduled?.visit_date) ? new Date(mostRecentScheduled.visit_date).toISOString().split('T')[0] : '',
                 remiderEnabled: true, nextApptType: 'Routine Checkup'
             }));
             setIsFormInitialized(true);
@@ -182,12 +200,17 @@ const AddPrenatalVisit = () => {
             // Find the maximum attended visit number
             const attendedVisits = (visits || []).filter(v => v.status === 'Attended');
             const maxAttendedNumber = attendedVisits.length > 0 ? Math.max(...attendedVisits.map(v => v.visit_number || 0)) : 0;
-            const targetVisitNumber = maxAttendedNumber + 1;
+            
+            // Get all scheduled visits and find the most recent one (highest visit_number)
+            // This is the visit where we'll input the records
+            const scheduledVisits = (visits || []).filter(v => v.status === 'Scheduled');
+            const targetVisit = scheduledVisits.length > 0 
+                ? scheduledVisits.reduce((prev, current) => {
+                    return (parseInt(prev.visit_number) > parseInt(current.visit_number)) ? prev : current;
+                })
+                : null;
 
-            // Target the scheduled or missed visit with the next visit number
-            const targetVisit = (visits || []).find(v => v.visit_number === targetVisitNumber && (v.status === 'Scheduled' || v.status === 'Missed'));
-
-            const rowVisitNumber = targetVisit ? targetVisit.visit_number : targetVisitNumber;
+            const rowVisitNumber = targetVisit ? targetVisit.visit_number : (maxAttendedNumber + 1);
             const rowVisitDate = formData.visitDate;
             const rowId = targetVisit ? targetVisit.id : null;
 

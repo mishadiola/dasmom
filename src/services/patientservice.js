@@ -429,6 +429,10 @@ export default class PatientService {
         throw new Error('Invalid LMP date for schedule rebalance');
       }
 
+      // Calculate EDD (LMP + 280 days)
+      const eddDate = new Date(lmpDate);
+      eddDate.setDate(eddDate.getDate() + 280);
+
       const attendedDateOnly = attendedDate
         ? new Date(attendedDate).toISOString().split('T')[0]
         : new Date().toISOString().split('T')[0];
@@ -452,6 +456,7 @@ export default class PatientService {
       const masterWeeks = [2, 6, 10, 14, 18, 22, 27, 31, 35];
       let previousDate = attendedDateOnly;
       const schedule = [];
+      const MIN_MONTHLY_INTERVAL = 28; // Changed from 7 to 28 days (monthly)
 
       for (const visitNumber of futureVisitNumbers) {
         const idealWeek = masterWeeks[visitNumber - 1] !== undefined
@@ -459,18 +464,38 @@ export default class PatientService {
           : masterWeeks[masterWeeks.length - 1] + 4 * (visitNumber - masterWeeks.length);
 
         const idealDate = this.addWeeksToDate(lmpDate, idealWeek);
-        const earliestDate = this.addDaysToDate(previousDate, 7);
+        const earliestDate = this.addDaysToDate(previousDate, MIN_MONTHLY_INTERVAL);
         let scheduledDate = idealDate >= earliestDate ? idealDate : earliestDate;
+
+        // Check if this visit can fit before EDD (at least 7 days before EDD for safety buffer)
+        const safetyBufferDate = new Date(eddDate);
+        safetyBufferDate.setDate(safetyBufferDate.getDate() - 7);
+
+        if (scheduledDate > safetyBufferDate) {
+          // This visit is too close to EDD, skip it
+          console.log(`Skipping visit ${visitNumber} - too close to EDD (${scheduledDate} > ${safetyBufferDate.toISOString().split('T')[0]})`);
+          continue;
+        }
 
         while (await this.checkScheduleOverlap(scheduledDate, patientId, maxPerDay)) {
           scheduledDate = this.addDaysToDate(scheduledDate, 1);
+          // Also check if the rescheduled date is still before EDD
+          if (scheduledDate > safetyBufferDate) {
+            console.log(`Skipping visit ${visitNumber} - rescheduled date ${scheduledDate} is too close to EDD`);
+            break;
+          }
+        }
+
+        // Skip if scheduledDate is past safety buffer
+        if (scheduledDate > safetyBufferDate) {
+          continue;
         }
 
         const actualWeek = this.calculateWeeksAtDate(lmpDate, scheduledDate);
 
         schedule.push({
           visitNumber,
-          date: scheduledDate,
+          date: scheduledDate.toISOString().split('T')[0],
           week: actualWeek,
           trimester: this.getTrimesterFromWeek(actualWeek),
           type: 'Routine Prenatal'
@@ -479,6 +504,7 @@ export default class PatientService {
         previousDate = scheduledDate;
       }
 
+      // Delete ALL future scheduled visits first
       const { error: deleteError } = await this.supabase
         .from('prenatal_visits')
         .delete()
@@ -488,38 +514,49 @@ export default class PatientService {
 
       if (deleteError) throw deleteError;
 
-      const rowsToInsert = schedule.map((visit, index) => {
-        const nextVisit = schedule[index + 1];
-        const nextApptDate = nextVisit ? nextVisit.date : null;
-
-        return {
-          patient_id: patientId,
-          created_by: createdBy,
-          visit_date: visit.date,
-          visit_number: visit.visitNumber,
-          trimester: visit.trimester,
-          gestational_age: `${visit.week}w`,
-          next_appt_type: visit.type,
-          next_appt_date: nextApptDate,
-          status: 'Scheduled',
-          assigned_staff: patientData.retained_staff || null,
-          created_at: new Date().toISOString()
-        };
-      });
-
+      // Insert only the visits that can fit before EDD
       if (schedule.length > 0) {
+        const rowsToInsert = schedule.map((visit, index) => {
+          const nextVisit = schedule[index + 1];
+          const nextApptDate = nextVisit ? nextVisit.date : null;
+
+          return {
+            patient_id: patientId,
+            created_by: createdBy,
+            visit_date: visit.date,
+            visit_number: visit.visitNumber,
+            trimester: visit.trimester,
+            gestational_age: `${visit.week}w`,
+            next_appt_type: visit.type,
+            next_appt_date: nextApptDate,
+            status: 'Scheduled',
+            assigned_staff: patientData.retained_staff || null,
+            created_at: new Date().toISOString()
+          };
+        });
+
+        const { error: insertError } = await this.supabase.from('prenatal_visits').insert(rowsToInsert);
+        if (insertError) throw insertError;
+
+        // Update the current visit's next_appt_date to point to the first remaining scheduled visit
         const firstNextDate = schedule[0].date;
         await this.supabase
           .from('prenatal_visits')
           .update({ next_appt_date: firstNextDate })
           .eq('patient_id', patientId)
           .eq('visit_number', currentVisitNumber);
+
+        console.log(`✅ Rebalanced prenatal schedule for patient ${patientId}, new schedule:`, schedule);
+      } else {
+        // No more visits can fit before EDD - update current visit to have no next appointment
+        await this.supabase
+          .from('prenatal_visits')
+          .update({ next_appt_date: null })
+          .eq('patient_id', patientId)
+          .eq('visit_number', currentVisitNumber);
+
+        console.log(`✅ No more visits can fit before EDD for patient ${patientId}`);
       }
-
-      const { error: insertError } = await this.supabase.from('prenatal_visits').insert(rowsToInsert);
-      if (insertError) throw insertError;
-
-      console.log(`✅ Rebalanced prenatal schedule for patient ${patientId}, new schedule:`, schedule);
     } catch (err) {
       console.error('Error rebalancing prenatal schedule:', err);
       throw err;
@@ -737,12 +774,19 @@ export default class PatientService {
       
       const bpMatch = patientData.bp ? patientData.bp.match(/^(\d+)[/\\s](\d+)$/) : null;
       
+      // Use today's date as the actual visit date (when patient came in)
+      const actualVisitDate = today;
+      
+      // Calculate gestational age based on LMP at today's date
+      const weeksAtVisit = patientData.lmp ? this.calculateWeeks(patientData.lmp) : 0;
+      const gaString = weeksAtVisit > 0 ? `${weeksAtVisit} weeks` : '1st visit';
+      
       const firstVisitRecord = {
         patient_id: patientId,
-        visit_date: firstVisitDate,
+        visit_date: actualVisitDate,
         visit_number: 1,
         trimester: this.calculateTrimester(patientData.lmp),
-        gestational_age: patientData.gestationalAge || (this.calculateWeeks(patientData.lmp) > 0 ? `${this.calculateWeeks(patientData.lmp)} weeks` : '1st visit'),
+        gestational_age: gaString,
         bp_systolic: bpMatch ? parseInt(bpMatch[1]) : null,
         bp_diastolic: bpMatch ? parseInt(bpMatch[2]) : null,
         weight_kg: patientData.weight ? parseFloat(patientData.weight) : null,

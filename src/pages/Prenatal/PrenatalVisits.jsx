@@ -277,7 +277,6 @@ const PrenatalVisits = () => {
             return v.visitDateOnly === date && v.visitTime === time;
         });
 
-        // Deduplicate by patient ID per time slot per day
         const uniqueVisits = [];
         const seenPatients = new Set();
         for (const v of visitsForSlot) {
