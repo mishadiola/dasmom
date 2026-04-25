@@ -904,13 +904,63 @@ const PatientProfile = () => {
                 {/* --- DELIVERY & POSTPARTUM --- */}
                 {activeTab === 'delivery' && (
                     <div className="info-grid animate-fade">
-                        {p.pregnancyStatus === 'Postpartum' ? (
+                        {(p.deliveries && p.deliveries.length > 0) || p.pregnancyStatus === 'Postpartum' ? (
                             <div className="info-card full-width">
-                                <div className="status-banner banner-postpartum">
-                                    <CheckCircle2 size={20} />
-                                    <span>Patient is in Postpartum Recovery</span>
-                                </div>
-                                <p className="mt-4">Loading postpartum records...</p>
+                                {p.pregnancyStatus === 'Postpartum' && (
+                                    <div className="status-banner banner-postpartum">
+                                        <CheckCircle2 size={20} />
+                                        <span>Patient is in Postpartum Recovery</span>
+                                    </div>
+                                )}
+                                {p.deliveries && p.deliveries.length > 0 ? (
+                                    <>
+                                        <h3 style={{ marginBottom: '16px' }}>Delivery Records</h3>
+                                        {p.deliveries.map((delivery, i) => (
+                                            <div key={i} className="delivery-card" style={{ 
+                                                background: '#f8fafc', 
+                                                borderRadius: '12px', 
+                                                padding: '16px', 
+                                                marginBottom: '12px',
+                                                border: '1px solid #e2e8f0'
+                                            }}>
+                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                                                    <div>
+                                                        <label style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Delivery Date</label>
+                                                        <p style={{ fontWeight: '600', margin: '4px 0 0' }}>{delivery.delivery_date || 'N/A'}</p>
+                                                    </div>
+                                                    <div>
+                                                        <label style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Type</label>
+                                                        <p style={{ fontWeight: '600', margin: '4px 0 0' }}>{delivery.delivery_type || 'N/A'}</p>
+                                                    </div>
+                                                    <div>
+                                                        <label style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Mode</label>
+                                                        <p style={{ fontWeight: '600', margin: '4px 0 0' }}>{delivery.delivery_mode || 'N/A'}</p>
+                                                    </div>
+                                                    <div>
+                                                        <label style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Gestational Age</label>
+                                                        <p style={{ fontWeight: '600', margin: '4px 0 0' }}>{delivery.gestational_age || 'N/A'}</p>
+                                                    </div>
+                                                    <div>
+                                                        <label style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Risk Level</label>
+                                                        <p style={{ fontWeight: '600', margin: '4px 0 0' }}>{delivery.risk_level || 'Normal'}</p>
+                                                    </div>
+                                                    <div>
+                                                        <label style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Facility</label>
+                                                        <p style={{ fontWeight: '600', margin: '4px 0 0' }}>{delivery.facility || 'N/A'}</p>
+                                                    </div>
+                                                </div>
+                                                {delivery.complications && delivery.complications.length > 0 && (
+                                                    <div style={{ marginTop: '12px', padding: '8px 12px', background: '#fef2f2', borderRadius: '8px' }}>
+                                                        <label style={{ fontSize: '11px', color: '#dc2626', textTransform: 'uppercase' }}>Complications</label>
+                                                        <p style={{ margin: '4px 0 0', color: '#dc2626' }}>{Array.isArray(delivery.complications) ? delivery.complications.join(', ') : delivery.complications}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </>
+                                ) : (
+                                    <p className="mt-4">Loading delivery records...</p>
+                                )}
                             </div>
                         ) : (
                             <div className="empty-state-card">

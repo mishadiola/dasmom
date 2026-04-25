@@ -206,14 +206,82 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                 if (selectedScheduledIds.length > 0) {
                     // Mark existing scheduled vaccine records as completed
                     for (const scheduledId of selectedScheduledIds) {
-                        await supabase.from('vaccinations').update({
+                        // First get the vaccine record to find the vaccine name
+                        const { data: vaccRecord } = await supabase
+                            .from('vaccinations')
+                            .select('id, notes, vaccine_inventory_id')
+                            .eq('id', scheduledId)
+                            .single();
+
+                        let vaccineInvId = vaccRecord?.vaccine_inventory_id;
+
+                        // If no vaccine_inventory_id, try to find it from notes
+                        if (!vaccineInvId && vaccRecord?.notes) {
+                            const vaccineMatch = vaccRecord.notes.match(/(\d+)(?:st|nd|rd|th) dose of (.+)/);
+                            if (vaccineMatch) {
+                                const vaccineName = vaccineMatch[2].trim();
+                                const { data: vaccInv } = await supabase
+                                    .from('vaccine_inventory')
+                                    .select('id, quantity, vaccine_name')
+                                    .or(`vaccine_name.ilike.%${vaccineName}%,vaccine_name.ilike.%${vaccineName.replace(/ \(.+\)/, '')}%`)
+                                    .limit(1);
+
+                                if (vaccInv && vaccInv.length > 0) {
+                                    vaccineInvId = vaccInv[0].id;
+                                }
+                            }
+                        }
+
+                        // Update the vaccination record with vaccine_inventory_id
+                        const updateData = {
                             vaccinated_date: form.date,
                             status: 'Completed',
                             notes: form.notes || null
-                        }).eq('id', scheduledId);
+                        };
+                        if (vaccineInvId) {
+                            updateData.vaccine_inventory_id = vaccineInvId;
+                        }
+
+                        await supabase.from('vaccinations').update(updateData).eq('id', scheduledId);
+
+                        // Decrement vaccine inventory
+                        if (vaccineInvId) {
+                            const { data: vaccInv } = await supabase
+                                .from('vaccine_inventory')
+                                .select('id, quantity, vaccine_name')
+                                .eq('id', vaccineInvId)
+                                .single();
+
+                            if (vaccInv && vaccInv.quantity > 0) {
+                                await supabase
+                                    .from('vaccine_inventory')
+                                    .update({ quantity: vaccInv.quantity - 1 })
+                                    .eq('id', vaccInv.id);
+                                console.log(`✅ Decremented vaccine: ${vaccInv.vaccine_name}`);
+                            }
+                        } else if (vaccRecord?.notes) {
+                            // Fallback: try to find by name in notes
+                            const vaccineMatch = vaccRecord.notes.match(/(\d+)(?:st|nd|rd|th) dose of (.+)/);
+                            if (vaccineMatch) {
+                                const extractedName = vaccineMatch[2].trim();
+                                const { data: vaccInv } = await supabase
+                                    .from('vaccine_inventory')
+                                    .select('id, quantity, vaccine_name')
+                                    .or(`vaccine_name.ilike.%${extractedName}%,vaccine_name.ilike.%${extractedName.replace(/ \(.+\)/, '')}%`)
+                                    .limit(1);
+
+                                if (vaccInv && vaccInv.length > 0 && vaccInv[0].quantity > 0) {
+                                    await supabase
+                                        .from('vaccine_inventory')
+                                        .update({ quantity: vaccInv[0].quantity - 1 })
+                                        .eq('id', vaccInv[0].id);
+                                    console.log(`✅ Decremented vaccine (by name): ${vaccInv[0].vaccine_name}`);
+                                }
+                            }
+                        }
                     }
                 } else {
-                    const { data: vaccInv } = await supabase.from('vaccine_inventory').select('id').eq('vaccine_name', form.vaccine).single();
+                    const { data: vaccInv } = await supabase.from('vaccine_inventory').select('id, quantity').eq('vaccine_name', form.vaccine).single();
                     if (!vaccInv) throw new Error('Vaccine not found in inventory');
 
                     const doseNumber = form.dose === '1st Dose' ? 1 : form.dose === '2nd Dose' ? 2 : form.dose === '3rd Dose' ? 3 : form.dose === 'Booster' ? 4 : 5;
@@ -227,6 +295,15 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                         created_by: currentUser,
                         notes: form.notes
                     });
+
+                    // Decrement vaccine inventory
+                    if (vaccInv.quantity > 0) {
+                        await supabase
+                            .from('vaccine_inventory')
+                            .update({ quantity: vaccInv.quantity - 1 })
+                            .eq('id', vaccInv.id);
+                        console.log(`✅ Decremented vaccine: ${form.vaccine}`);
+                    }
                 }
             } else {
                 const { data: suppInv } = await supabase.from('supplement_inventory').select('id').eq('supplement_name', form.supplement).single();
@@ -459,6 +536,7 @@ const Vaccinations = () => {
                         id, 
                         baby_name, 
                         mother_id, 
+                        created_at,
                         patient_basic_info!mother_id (first_name, last_name, barangay, province)
                     )
                 `)
@@ -495,7 +573,7 @@ const Vaccinations = () => {
 
             // Transform vaccination records
             const transformedVaccRecords = (vaccRecords || []).map(record => {
-                let patientName, station, type, patientId;
+                let patientName, station, type, patientId, birthDate = null;
                 if (record.patient_id) {
                     // Mother
                     patientName = `${record.patient_basic_info?.first_name || ''} ${record.patient_basic_info?.last_name || ''}`.trim();
@@ -506,6 +584,8 @@ const Vaccinations = () => {
                     // Newborn
                     const newbornRecord = Array.isArray(record.newborns) ? record.newborns[0] : record.newborns;
                     const mother = Array.isArray(newbornRecord?.patient_basic_info) ? newbornRecord.patient_basic_info[0] : newbornRecord?.patient_basic_info;
+                    // Use newborn's created_at as birth date (set when record was created at birth)
+                    birthDate = newbornRecord?.created_at ? new Date(newbornRecord.created_at).toISOString().split('T')[0] : null;
                     patientName = newbornRecord?.baby_name || 'Unknown Newborn';
                     station = `${mother?.barangay || 'N/A'}, ${mother?.province || 'N/A'}`;
                     type = 'Newborn';
@@ -537,6 +617,7 @@ const Vaccinations = () => {
                     newborn_id: record.newborn_id,
                     babyName: newbornRelation?.baby_name || 'Unknown Newborn',
                     motherName: motherInfo ? `${motherInfo.first_name || ''} ${motherInfo.last_name || ''}`.trim() : 'Unknown Mother',
+                    birthDate: birthDate,
                     station: station,
                     type,
                     vaccine: vaccineName,
@@ -703,6 +784,7 @@ const Vaccinations = () => {
             const babyName = v.babyName || 'Unknown Newborn';
             const motherName = v.motherName || 'Unknown Mother';
             const station = v.station || 'Unknown';
+            const birthDate = v.birthDate || null;
 
             if (!newbornMap[key]) {
                 newbornMap[key] = {
@@ -711,6 +793,7 @@ const Vaccinations = () => {
                     babyName,
                     motherName,
                     station,
+                    birthDate,
                     administeredCount: 0,
                     lastAdministered: null,
                     records: []

@@ -33,12 +33,41 @@ class VaccinationService {
   async scheduleNewbornVaccinations(newbornId, birthDate, createdBy) {
     try {
       const vaccineSchedule = [
-        { months: 0, vaccines: ['BCG', 'Hepatitis B (HepB)'], doses: [1, 1] },
-        { months: 1.5, vaccines: ['DPT', 'OPV', 'PCV'], doses: [1, 1, 1] },
-        { months: 2.5, vaccines: ['DPT', 'OPV', 'PCV'], doses: [2, 2, 2] },
-        { months: 3.5, vaccines: ['DPT', 'OPV', 'IPV', 'PCV'], doses: [3, 3, 1, 3] },
-        { months: 9, vaccines: ['IPV', 'MMR'], doses: [2, 1] },
-        { months: 12, vaccines: ['MMR'], doses: [1] }
+        // At Birth (0 months)
+        { months: 0, vaccines: ['BCG Vaccine', 'Hepatitis B Vaccine'], doses: [1, 1] },
+
+        // 1.5 months
+        { months: 1.5, vaccines: [
+            'Pentavalent Vaccine (DPT-Hep B-Hib)',
+            'Oral Polio Vaccine (OPV)',
+            'Pneumococcal Conjugate Vaccine (PCV)'
+          ], doses: [1, 1, 1] },
+
+        // 2.5 months
+        { months: 2.5, vaccines: [
+            'Pentavalent Vaccine (DPT-Hep B-Hib)',
+            'Oral Polio Vaccine (OPV)',
+            'Pneumococcal Conjugate Vaccine (PCV)'
+          ], doses: [2, 2, 2] },
+
+        // 3.5 months
+        { months: 3.5, vaccines: [
+            'Pentavalent Vaccine (DPT-Hep B-Hib)',
+            'Oral Polio Vaccine (OPV)',
+            'Inactivated Polio Vaccine (IPV)',
+            'Pneumococcal Conjugate Vaccine (PCV)'
+          ], doses: [3, 3, 1, 3] },
+
+        // 9 months
+        { months: 9, vaccines: [
+            'Measles, Mumps, Rubella Vaccine (MMR)'
+          ], doses: [1] },
+
+        // 12 months (1 year)
+        { months: 12, vaccines: [
+            'Measles, Mumps, Rubella Vaccine (MMR)',
+            'Inactivated Polio Vaccine (IPV)'
+          ], doses: [2, 2] }
       ];
 
       const birthDateObj = new Date(birthDate);
@@ -81,6 +110,7 @@ class VaccinationService {
 
   /**
    * Record a vaccine dose - fills in vaccine_inventory_id and marks as Completed
+   * Also decrements the vaccine inventory quantity
    */
   async recordVaccine(patientId, patientType, vaccineData) {
     try {
@@ -89,10 +119,10 @@ class VaccinationService {
 
       const { vaccineId, vaccineName, doseNumber, date, staff, notes } = vaccineData;
 
-      // Get vaccine inventory ID
+      // Get vaccine inventory ID and current quantity
       const { data: vaccInv, error: invError } = await this.supabase
         .from('vaccine_inventory')
-        .select('id')
+        .select('id, quantity')
         .eq('vaccine_name', vaccineName)
         .single();
 
@@ -131,6 +161,21 @@ class VaccinationService {
           .insert([payload]);
 
         if (insertError) throw insertError;
+      }
+
+      // Decrement vaccine inventory quantity
+      const newQuantity = (vaccInv.quantity || 1) - 1;
+      if (newQuantity >= 0) {
+        const { error: updateInvError } = await this.supabase
+          .from('vaccine_inventory')
+          .update({ quantity: newQuantity })
+          .eq('id', vaccInv.id);
+
+        if (updateInvError) {
+          console.error('Warning: Failed to update vaccine inventory quantity:', updateInvError);
+        } else {
+          console.log(`✅ Decremented vaccine inventory for ${vaccineName}: ${vaccInv.quantity} -> ${newQuantity}`);
+        }
       }
 
       return { success: true };

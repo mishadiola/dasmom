@@ -33,7 +33,10 @@ class BabyService {
           calculated_risk,
           pregn_postp,
           edd,
-          pregnancy_type
+          pregnancy_type,
+          lmd,
+          gravida,
+          para
         )
       `)
       .or(
@@ -52,13 +55,30 @@ class BabyService {
         ? patient.pregnancy_info[0]
         : patient.pregnancy_info;
 
+      // Calculate gestational age from LMP
+      let gestationalAge = '';
+      if (preg?.lmd) {
+        const lmpDate = new Date(preg.lmd);
+        const today = new Date();
+        const diffTime = today - lmpDate;
+        const diffWeeks = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 7));
+        const days = Math.floor((diffTime % (1000 * 60 * 60 * 24 * 7)) / (1000 * 60 * 60 * 24));
+        if (diffWeeks >= 0) {
+          gestationalAge = `${diffWeeks}${days > 3 ? '+' : ''} weeks`;
+        }
+      }
+
       return {
         id: patient.id,
         name: `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
         station: `${patient.barangay || 'No Barangay'}, ${patient.province || 'N/A'}`,
         riskLevel: preg?.calculated_risk || 'Normal',
         isPregnant: !!preg?.id,
-        pregnancyType: preg?.pregnancy_type || 'Singleton'
+        pregnancyType: preg?.pregnancy_type || 'Singleton',
+        lmp: preg?.lmd || null,
+        gestationalAge: gestationalAge,
+        gravida: preg?.gravida || 1,
+        para: preg?.para || 0
       };
     });
   } catch (error) {
@@ -104,7 +124,8 @@ class BabyService {
         name: newborn.baby_name || `Newborn of ${mother.first_name} ${mother.last_name}`,
         station: `${mother.barangay || 'No Barangay'}, ${mother.province || 'N/A'}`,
         motherName: `${mother.first_name || ''} ${mother.last_name || ''}`.trim(),
-        birthDate: newborn.deliveries.delivery_date
+        birthDate: newborn.deliveries.delivery_date,
+        motherId: newborn.mother_id
       };
     });
   }
@@ -255,6 +276,10 @@ class BabyService {
       .single();
 
     if (currentPregnancy) {
+      // Calculate new gravida and para values
+      const newGravida = (currentPregnancy.gravida || 1) + 1;
+      const newPara = (currentPregnancy.para || 0) + 1;
+      
       await supabase
         .from('pregnancy_info')
         .insert({
@@ -266,8 +291,8 @@ class BabyService {
           pregnancy_type: currentPregnancy.pregnancy_type,
           place_of_delivery: deliveryData.facility || currentPregnancy.place_of_delivery,
           calculated_risk: currentPregnancy.calculated_risk,
-          gravida: currentPregnancy.gravida,
-          para: (currentPregnancy.para || 0) + 1,
+          gravida: newGravida,
+          para: newPara,
           risk_factors: currentPregnancy.risk_factors
         });
 

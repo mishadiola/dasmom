@@ -399,7 +399,7 @@ const DeliveryOutcomes = () => {
                                             <td>{d.staff}</td>
                                             <td>
                                                 <div className="row-actions">
-                                                    <button className="action-btn view-btn" title="View" onClick={() => { setSelectedDelivery(d); setShowViewModal(true); }}><Eye size={13} /></button>
+                                                    <button className="action-btn view-btn" title="View" onClick={() => navigate(`/dashboard/patients/${d.patientId}`)}><Eye size={13} /></button>
                                                     <button className="action-btn new-pregnancy-btn" title="New Pregnancy" onClick={() => handleNewPregnancy(d.patientId)}><RefreshCw size={13} /></button>
                                                     <button className="action-btn edit-btn" title="Edit"><Edit2 size={13} /></button>
                                                 </div>
@@ -529,6 +529,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
             station: patient.station,
             riskLevel: patient.riskLevel,
             pregnancyType: patient.pregnancyType || 'Singleton',
+            gestationalAge: patient.gestationalAge || '',
             attendingStaffId: '',
             attendingStaffName: ''
         }));

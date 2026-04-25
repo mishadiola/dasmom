@@ -1143,25 +1143,46 @@ async getHighRiskPatients() {
   }
 
   async getPatientById(patientId) {
-    const { data } = await this.supabase
+    // Fetch patient basic info
+    const { data: patientData } = await this.supabase
       .from('patient_basic_info')
-      .select(`
-        *,
-        pregnancy_info(*),
-        prenatal_visits(*)
-      `)
+      .select('*')
       .eq('id', patientId)
       .single();
 
-    if (!data) return null;
+    if (!patientData) return null;
 
-    // Sort pregnancy_info by created_at descending to get the latest
-    if (data.pregnancy_info && Array.isArray(data.pregnancy_info)) {
-      data.pregnancy_info.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    }
+    // Fetch pregnancy info
+    const { data: pregnancyData } = await this.supabase
+      .from('pregnancy_info')
+      .select('*')
+      .eq('patient_id', patientId)
+      .order('created_at', { ascending: false })
+      .limit(1);
 
-    const preg = Array.isArray(data.pregnancy_info) ? data.pregnancy_info[0] : data.pregnancy_info || {};
-    const rawEmergencyContact = data.emergency_contact || {};
+    // Fetch prenatal visits
+    const { data: visitsData } = await this.supabase
+      .from('prenatal_visits')
+      .select('*')
+      .eq('patient_id', patientId)
+      .order('visit_date', { ascending: false });
+
+    // Fetch deliveries for this patient (via mother_id relationship)
+    const { data: deliveriesData } = await this.supabase
+      .from('deliveries')
+      .select('*')
+      .eq('mother_id', patientId)
+      .order('delivery_date', { ascending: false });
+
+    // Fetch newborns for this patient (via mother_id relationship)
+    const { data: newbornsData } = await this.supabase
+      .from('newborns')
+      .select('*')
+      .eq('mother_id', patientId)
+      .order('created_at', { ascending: false });
+
+    const preg = pregnancyData?.[0] || {};
+    const rawEmergencyContact = patientData.emergency_contact || {};
     const emergencyContact = {
       name: rawEmergencyContact.name || rawEmergencyContact.full_name || '',
       relationship: rawEmergencyContact.relationship || rawEmergencyContact.relation || '',
@@ -1169,16 +1190,16 @@ async getHighRiskPatients() {
     };
 
     return {
-      ...data,
-      name: `${data.first_name || ''} ${data.last_name || ''}`.trim(),
-      age: this.calculateAge(data.date_of_birth),
-      station: data.barangay,
-      phone: data.contact_no || 'N/A',
-      address: data.house_no,
-      dob: data.date_of_birth,
-      civilStatus: data.civil_status,
-      philhealth: data.philhealthnumber,
-      bloodType: data.bloodtype || 'Unknown',
+      ...patientData,
+      name: `${patientData.first_name || ''} ${patientData.last_name || ''}`.trim(),
+      age: this.calculateAge(patientData.date_of_birth),
+      station: patientData.barangay,
+      phone: patientData.contact_no || 'N/A',
+      address: patientData.house_no,
+      dob: patientData.date_of_birth,
+      civilStatus: patientData.civil_status,
+      philhealth: patientData.philhealthnumber,
+      bloodType: patientData.bloodtype || 'Unknown',
       emergencyContact,
       medicalConditions: preg.risk_factors ? preg.risk_factors.split(',').map(s=>s.trim()).filter(Boolean) : [],
       risk: preg.calculated_risk || 'Low Risk',
@@ -1189,10 +1210,30 @@ async getHighRiskPatients() {
       trimester: this.calculateTrimester(preg.lmd),
       weeks: this.calculateWeeks(preg.lmd),
 
-      visits: data.prenatal_visits || [],
-      vaccines: data.vaccines || [],
-      supplements: data.supplements || [],
-      newborns: data.newborns || []
+      visits: visitsData || [],
+      vaccines: [], // Will be fetched separately if needed
+      supplements: [], // Will be fetched separately if needed
+      newborns: (newbornsData || []).map(n => ({
+        id: n.id,
+        baby_name: n.baby_name,
+        gender: n.gender,
+        birth_date: n.created_at ? new Date(n.created_at).toISOString().split('T')[0] : null,
+        birth_weight: n.birth_weight,
+        birth_length: n.birth_length,
+        condition: n.condition_at_birth
+      })),
+      deliveries: (deliveriesData || []).map(d => ({
+        id: d.id,
+        delivery_date: d.delivery_date,
+        delivery_type: d.delivery_type,
+        delivery_mode: d.delivery_mode,
+        gestational_age: d.gestational_age,
+        risk_level: d.risk_level,
+        complications: d.complications,
+        facility: d.facility,
+        postpartum_visit_date: d.postpartum_visit_date
+      })),
+      pregnancyStatus: preg.pregn_postp || 'Unknown'
     };
   }
 
