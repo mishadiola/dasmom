@@ -1,4 +1,5 @@
 @import '../variables.css';
+@import './RecordSections.css';
 
 /* ════════════════════════════
    TOAST NOTIFICATIONS
@@ -523,10 +524,12 @@
 /* Empty state */
 .do-empty {
     text-align: center;
-    padding: 48px 0 !important;
+    padding: 56px 20px !important;
     color: var(--color-text-muted);
 }
-.do-empty p { margin: 8px 0 0; font-size: 14px; }
+.do-empty svg { color: #d1d5db; }
+.do-empty h4 { font-size: 16px; font-weight: 700; color: var(--color-text); margin: 12px 0 6px; }
+.do-empty p { margin: 0; font-size: 13.5px; color: var(--color-text-muted); }
 
 /* Expanded row */
 .do-expanded-row td { padding: 0 !important; border: none; }

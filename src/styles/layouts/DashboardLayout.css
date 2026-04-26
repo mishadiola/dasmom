@@ -799,6 +799,24 @@
     background: #bcabca;
 }
 
+.stat-card--blue {
+    background: #7ab8d4;
+}
+
+.stat-card--teal {
+    background: #6db8a0;
+}
+
+.stat-icon--blue {
+    background: rgba(255, 255, 255, 0.28);
+    color: #1a3a4a;
+}
+
+.stat-icon--teal {
+    background: rgba(255, 255, 255, 0.28);
+    color: #0f3028;
+}
+
 .stat-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);

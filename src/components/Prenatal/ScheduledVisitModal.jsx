@@ -1,37 +1,46 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
     X, Calendar, Clock, MapPin, User, FileText, 
-    Activity, Send, Printer, CheckCircle2, 
-    AlertCircle, RefreshCcw, SidebarClose,
-    ExternalLink, ChevronRight
+    CheckCircle2, AlertCircle, ExternalLink, Plus, 
+    Activity, Users
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PatientService from '../../services/patientservice';
 import '../../styles/components/ScheduledVisitModal.css';
-import supabase from '../../config/supabaseclient'; 
+import supabase from '../../config/supabaseclient';
+
 const ScheduledVisitModal = ({ visit, onClose }) => {
     const navigate = useNavigate();
-    const patientService = new PatientService();
-    console.log('patientservice instance:', patientService);  // Log the instance to verify it's created
+    const patientService = useMemo(() => new PatientService(), []);
     const [status, setStatus] = useState(visit.status || 'Upcoming');
     const [notes, setNotes] = useState('');
     const [isSaving, setIsSaving] = useState(false);
-    const [activeTab, setActiveTab] = useState('details');
-    
-    // Vitals state
-    const [systolicBP, setSystolicBP] = useState('');
-    const [diastolicBP, setDiastolicBP] = useState('');
-    const [temperature, setTemperature] = useState('');
-    const [weight, setWeight] = useState('');
-    const [heartRate, setHeartRate] = useState('');
-
-    const tabs = [
-        { id: 'details', label: 'Visit Details', icon: FileText },
-        { id: 'vitals', label: 'Vitals Recording', icon: Activity },
-        { id: 'actions', label: 'Quick Actions', icon: ChevronRight }
-    ];
+    const [patientVisits, setPatientVisits] = useState([]);
+    const [loadingVisits, setLoadingVisits] = useState(true);
 
     if (!visit) return null;
+
+    // Fetch patient visit history
+    useEffect(() => {
+        const fetchPatientVisits = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('prenatal_visits')
+                    .select('*')
+                    .eq('patient_id', visit.patientId)
+                    .order('visit_date', { ascending: false });
+                
+                if (error) throw error;
+                setPatientVisits(data || []);
+            } catch (error) {
+                console.error('Error fetching patient visits:', error);
+            } finally {
+                setLoadingVisits(false);
+            }
+        };
+        
+        if (visit.patientId) fetchPatientVisits();
+    }, [visit.patientId]);
 
     const handleStatusChange = (newStatus) => {
         setStatus(newStatus);
@@ -42,12 +51,6 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
         status,
         clinical_notes: notes.trim() || null,
         attended_date: status === 'Attended' ? new Date().toISOString().split('T')[0] : null,
-        // Vitals data
-        systolic_bp: systolicBP ? parseInt(systolicBP) : null,
-        diastolic_bp: diastolicBP ? parseInt(diastolicBP) : null,
-        temperature: temperature ? parseFloat(temperature) : null,
-        weight: weight ? parseFloat(weight) : null,
-        heart_rate: heartRate ? parseInt(heartRate) : null,
     };
     
     setIsSaving(true);
@@ -87,6 +90,30 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
         return 'sv-risk-normal';
     };
 
+    const formatDate = (dateStr) => {
+        if (!dateStr) return 'N/A';
+        return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    };
+
+    const isUpcoming = (visitDate) => {
+        return new Date(visitDate) > new Date();
+    };
+
+    const sortedVisits = [...patientVisits].sort((a, b) => {
+        const aUpcoming = isUpcoming(a.visit_date);
+        const bUpcoming = isUpcoming(b.visit_date);
+        
+        // Upcoming visits first
+        if (aUpcoming && !bUpcoming) return -1;
+        if (!aUpcoming && bUpcoming) return 1;
+        
+        // Within the same category, sort by date (nearest first for upcoming, most recent for past)
+        return new Date(a.visit_date) - new Date(b.visit_date);
+    });
+
+    const upcomingVisits = sortedVisits.filter(v => isUpcoming(v.visit_date));
+    const pastVisits = sortedVisits.filter(v => !isUpcoming(v.visit_date));
+
     return (
         <div className="sv-modal-overlay" onClick={onClose}>
             <div className="sv-modal" onClick={e => e.stopPropagation()}>
@@ -108,177 +135,166 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
 
                 {/* ── Scrollable Body ── */}
                 <div className="sv-modal-body">
-                    {/* Navigation Tabs */}
-                    <div className="sv-tabs">
-                        {tabs.map(tab => (
-                            <button
-                                key={tab.id}
-                                className={`sv-tab ${activeTab === tab.id ? 'active' : ''}`}
-                                onClick={() => setActiveTab(tab.id)}
+                    {/* Action Buttons Section */}
+                    <div className="sv-section">
+                        <h3 className="sv-section-title">Actions</h3>
+                        <div className="sv-action-buttons">
+                            <button 
+                                className="action-btn-text action-btn-primary" 
+                                onClick={() => navigate(`/dashboard/prenatal/add/${visit.patientId}`)}
+                                title="Record Prenatal Visit"
                             >
-                                <tab.icon size={16} />
-                                {tab.label}
+                                <Plus size={14} /> Record Visit
                             </button>
-                        ))}
+                            <button 
+                                className="action-btn-text action-btn-secondary"
+                                onClick={() => document.getElementById('visit-history').scrollIntoView({ behavior: 'smooth' })}
+                                title="View Visit History"
+                            >
+                                <Activity size={14} /> View History
+                            </button>
+                            <button 
+                                className="action-btn-text action-btn-accent"
+                                onClick={() => navigate(`/dashboard/patients/${visit.patientId}`)}
+                                title="View Patient Profile"
+                            >
+                                <Users size={14} /> View Profile
+                            </button>
+                        </div>
                     </div>
 
-                    {/* Section 1: Visit Details */}
-                    {activeTab === 'details' && (
-                        <div className="sv-section-content sv-section-details">
-                            <div className="sv-section">
-                                <h3 className="sv-section-title">Visit Status & Outcome</h3>
-                                <div className="sv-status-options">
-                                    {[
-                                        { label: 'Attended', icon: CheckCircle2, value: 'Attended', class: 'completed' },
-                                        { label: 'Missed', icon: AlertCircle, value: 'Missed', class: 'missed' }
-                                    ].map(opt => (
-                                        <button 
-                                            key={opt.value}
-                                            className={`sv-status-btn ${status === opt.value ? `active ${opt.class}` : ''}`}
-                                            onClick={() => handleStatusChange(opt.value)}
-                                        >
-                                            <opt.icon size={18} />
-                                            {opt.label}
-                                        </button>
-                                    ))}
-                                </div>
-                                <div className="sv-notes-field">
-                                    <label className="sv-label">Visit Notes / Remarks</label>
-                                    <textarea 
-                                        className="sv-textarea" 
-                                        placeholder="Add reasoning for status or follow-up instructions..."
-                                        rows={3}
-                                        value={notes}
-                                        onChange={(e) => setNotes(e.target.value)}
-                                    />
+                    {/* Visit Status & Outcome Section */}
+                    <div className="sv-section">
+                        <h3 className="sv-section-title">Visit Status & Outcome</h3>
+                        <div className="sv-status-options">
+                            {[
+                                { label: 'Attended', icon: CheckCircle2, value: 'Attended', class: 'completed' },
+                                { label: 'Missed', icon: AlertCircle, value: 'Missed', class: 'missed' }
+                            ].map(opt => (
+                                <button 
+                                    key={opt.value}
+                                    className={`sv-status-btn ${status === opt.value ? `active ${opt.class}` : ''}`}
+                                    onClick={() => handleStatusChange(opt.value)}
+                                >
+                                    <opt.icon size={18} />
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="sv-notes-field">
+                            <label className="sv-label">Visit Notes / Remarks</label>
+                            <textarea 
+                                className="sv-textarea" 
+                                placeholder="Add reasoning for status or follow-up instructions..."
+                                rows={3}
+                                value={notes}
+                                onChange={(e) => setNotes(e.target.value)}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Visit Details */}
+                    <div className="sv-section">
+                        <div className="sv-details-grid">
+                            <div className="sv-field">
+                                <label className="sv-label">Scheduled Date & Time</label>
+                                <div className="sv-value">
+                                    <Calendar size={16} /> {visit.visitDate || visit.date}
+                                    <Clock size={16} className="ml-2" /> {visit.time}
                                 </div>
                             </div>
-
-                            <div className="sv-section">
-                                <div className="sv-details-grid">
-                                    <div className="sv-field">
-                                        <label className="sv-label">Scheduled Date & Time</label>
-                                        <div className="sv-value">
-                                            <Calendar size={16} /> {visit.visitDate || visit.date}
-                                            <Clock size={16} className="ml-2" /> {visit.time}
-                                        </div>
-                                    </div>
-                                    <div className="sv-field">
-                                        <label className="sv-label">Location / Facility</label>
-                                        <div className="sv-value">
-                                            <MapPin size={16} /> {visit.location || 'Station Health Station'}
-                                        </div>
-                                    </div>
-                                    <div className="sv-field">
-                                        <label className="sv-label">Staff Assigned</label>
-                                        <div className="sv-value">
-                                            <User size={16} /> {visit.midwife || visit.staff || 'Midwife Elena P.'}
-                                        </div>
-                                    </div>
-                                    <div className="sv-field">
-                                        <label className="sv-label">Maternal Risk Level</label>
-                                        <div className="sv-value">
-                                            <span className={`sv-risk-badge ${getRiskClass(visit.risk)}`}>
-                                                {visit.risk || 'Normal'}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div className="sv-field">
-                                        <label className="sv-label">Gestational Age</label>
-                                        <div className="sv-value">
-                                            {visit.ga || '28w 4d'}
-                                        </div>
-                                    </div>
+                            <div className="sv-field">
+                                <label className="sv-label">Location / Facility</label>
+                                <div className="sv-value">
+                                    <MapPin size={16} /> {visit.location || 'Station Health Station'}
+                                </div>
+                            </div>
+                            <div className="sv-field">
+                                <label className="sv-label">Staff Assigned</label>
+                                <div className="sv-value">
+                                    <User size={16} /> {visit.midwife || visit.staff || 'Midwife Elena P.'}
+                                </div>
+                            </div>
+                            <div className="sv-field">
+                                <label className="sv-label">Maternal Risk Level</label>
+                                <div className="sv-value">
+                                    <span className={`sv-risk-badge ${getRiskClass(visit.risk)}`}>
+                                        {visit.risk || 'Normal'}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="sv-field">
+                                <label className="sv-label">Gestational Age</label>
+                                <div className="sv-value">
+                                    {visit.ga || '28w 4d'}
                                 </div>
                             </div>
                         </div>
-                    )}
+                    </div>
 
-                    {/* Section 2: Vitals Recording */}
-                    {activeTab === 'vitals' && (
-                        <div className="sv-section-content sv-section-vitals">
-                            <div className="sv-section">
-                                <h3 className="sv-section-title">Vitals Recording</h3>
-                                <div className="sv-vitals-grid">
-                                    <div className="sv-vital-field">
-                                        <label className="sv-label">Blood Pressure (mmHg)</label>
-                                        <div className="sv-bp-input">
-                                            <input 
-                                                type="number" 
-                                                className="sv-input"
-                                                placeholder="Systolic"
-                                                value={systolicBP}
-                                                onChange={(e) => setSystolicBP(e.target.value)}
-                                            />
-                                            <span className="sv-bp-separator">/</span>
-                                            <input 
-                                                type="number" 
-                                                className="sv-input"
-                                                placeholder="Diastolic"
-                                                value={diastolicBP}
-                                                onChange={(e) => setDiastolicBP(e.target.value)}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="sv-vital-field">
-                                        <label className="sv-label">Temperature (°C)</label>
-                                        <input 
-                                            type="number" 
-                                            step="0.1"
-                                            className="sv-input"
-                                            placeholder="36.5"
-                                            value={temperature}
-                                            onChange={(e) => setTemperature(e.target.value)}
-                                        />
-                                    </div>
-                                    <div className="sv-vital-field">
-                                        <label className="sv-label">Weight (kg)</label>
-                                        <input 
-                                            type="number" 
-                                            step="0.1"
-                                            className="sv-input"
-                                            placeholder="65.5"
-                                            value={weight}
-                                            onChange={(e) => setWeight(e.target.value)}
-                                        />
-                                    </div>
-                                    <div className="sv-vital-field">
-                                        <label className="sv-label">Heart Rate (bpm)</label>
-                                        <input 
-                                            type="number" 
-                                            className="sv-input"
-                                            placeholder="72"
-                                            value={heartRate}
-                                            onChange={(e) => setHeartRate(e.target.value)}
-                                        />
-                                    </div>
-                                </div>
+                    {/* Visit History Section */}
+                    <div className="sv-section" id="visit-history">
+                        <h3 className="sv-section-title"><Activity size={18} /> Visit History</h3>
+                        {loadingVisits ? (
+                            <div className="loading-visits">Loading visit history...</div>
+                        ) : sortedVisits.length > 0 ? (
+                            <div className="sv-visit-history">
+                                {upcomingVisits.length > 0 && (
+                                    <>
+                                        <div className="visit-section-label">Upcoming Visits</div>
+                                        {upcomingVisits.map(v => (
+                                            <div key={v.id} className={`visit-card visit-${v.status?.toLowerCase()}`}>
+                                                <div className="visit-header">
+                                                    <div className="visit-date">{formatDate(v.visit_date)}</div>
+                                                    <div className={`visit-status status-${v.status?.toLowerCase()}`}>{v.status}</div>
+                                                </div>
+                                                <div className="visit-details">
+                                                    <div className="visit-meta">
+                                                        <span>Visit #{v.visit_number || 'N/A'}</span>
+                                                        <span>{v.gestational_age || 'N/A'}</span>
+                                                    </div>
+                                                    {v.clinical_notes && (
+                                                        <div className="visit-notes">
+                                                            <strong>Notes:</strong> {v.clinical_notes}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </>
+                                )}
+                                {pastVisits.length > 0 && (
+                                    <>
+                                        <div className="visit-section-label">Past Visits</div>
+                                        {pastVisits.map(v => (
+                                            <div key={v.id} className={`visit-card visit-${v.status?.toLowerCase()}`}>
+                                                <div className="visit-header">
+                                                    <div className="visit-date">{formatDate(v.visit_date)}</div>
+                                                    <div className={`visit-status status-${v.status?.toLowerCase()}`}>{v.status}</div>
+                                                </div>
+                                                <div className="visit-details">
+                                                    <div className="visit-meta">
+                                                        <span>Visit #{v.visit_number || 'N/A'}</span>
+                                                        <span>{v.gestational_age || 'N/A'}</span>
+                                                    </div>
+                                                    {v.clinical_notes && (
+                                                        <div className="visit-notes">
+                                                            <strong>Notes:</strong> {v.clinical_notes}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </>
+                                )}
                             </div>
-                        </div>
-                    )}
-
-                    {/* Section 3: Quick Actions */}
-                    {activeTab === 'actions' && (
-                        <div className="sv-section-content sv-section-actions">
-                            <div className="sv-section">
-                                <h3 className="sv-section-title">Quick Actions</h3>
-                                <div className="sv-quick-actions">
-                                    <button className="sv-action-btn sv-btn-primary" onClick={() => navigate('/dashboard/patients')}>
-                                        <Activity size={16} /> Record Vitals
-                                    </button>
-                                    <button className="sv-action-btn sv-btn-outline">
-                                        <Send size={16} /> Send Reminder
-                                    </button>
-                                    <button className="sv-action-btn sv-btn-outline">
-                                        <Printer size={16} /> Print Record
-                                    </button>
-                                    <button className="sv-action-btn sv-btn-outline" onClick={() => navigate(`/dashboard/patients/${visit.patientId}`)}>
-                                        <User size={16} /> View Patient Profile
-                                    </button>
-                                </div>
+                        ) : (
+                            <div className="no-visits">
+                                <Calendar size={48} />
+                                <p>No visits recorded yet.</p>
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
 
                 {/* ── Footer ── */}

@@ -1,4 +1,5 @@
 @import '../variables.css';
+@import './RecordSections.css';
 
 /* ════════════════════════════
    PAGE LAYOUT
@@ -226,10 +227,12 @@
 /* Empty state */
 .nb-empty {
     text-align: center;
-    padding: 40px 0 !important;
+    padding: 56px 20px !important;
     color: var(--color-text-muted);
 }
-.nb-empty p { margin: 8px 0 0; font-size: 14px; }
+.nb-empty svg { color: #d1d5db; }
+.nb-empty h4 { font-size: 16px; font-weight: 700; color: var(--color-text); margin: 12px 0 6px; }
+.nb-empty p { margin: 0; font-size: 13.5px; }
 .nb-empty--ok { color: #3d8870; }
 
 /* Expanded row */

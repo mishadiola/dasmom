@@ -374,23 +374,54 @@
     font-size: 20px;
     font-weight: 700;
     color: var(--color-text);
-    margin: 0 0 8px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid #eef0f4;
+    margin: 0 0 24px 0;
+    padding-left: 16px;
+    border-left: 4px solid var(--color-rose);
+    line-height: 1.4;
 }
 
 .section-desc {
     font-size: 13.5px;
     color: var(--color-text-muted);
-    margin: -4px 0 16px;
+    margin: -16px 0 20px 16px;
 }
 
 .section-subtitle {
     font-size: 16px;
     font-weight: 600;
     color: var(--color-text);
-    margin: 20px 0 12px;
-    padding-top: 8px;
+    margin: 24px 0 12px 0;
+    padding-left: 12px;
+    border-left: 3px solid #eef0f4;
+    line-height: 1.4;
+}
+
+/* Form section containers for visual separation */
+.form-section-container {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid #eef0f4;
+    padding: 24px;
+    margin-bottom: 20px;
+    transition: all 0.2s ease;
+}
+
+.form-section-container:hover {
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+    border-color: #e8ecf0;
+}
+
+/* Background variations for form sections */
+.form-section-container:nth-child(2) {
+    background: #fafbfc;
+}
+
+.form-section-container:nth-child(3) {
+    background: #fdfdfd;
+}
+
+.form-section-container:nth-child(4) {
+    background: #fafbfc;
 }
 
 /* Grids */

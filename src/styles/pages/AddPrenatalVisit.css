@@ -146,8 +146,32 @@
     background: #fff;
     border-radius: 16px;
     border: 1px solid #eef0f4;
-    padding: 24px 30px;
+    padding: 28px 32px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+    margin-bottom: 24px;
+    transition: all 0.2s ease;
+}
+
+/* Section background variations */
+.apv-section:nth-child(2) {
+    background: #fafbfc;
+}
+
+.apv-section:nth-child(3) {
+    background: #fdfdfd;
+}
+
+.apv-section:nth-child(4) {
+    background: #fafbfc;
+}
+
+.apv-section:nth-child(5) {
+    background: #fdfdfd;
+}
+
+.apv-section:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
+    border-color: #e8ecf0;
 }
 
 .section-head {
@@ -157,9 +181,15 @@
     font-size: 16px;
     font-weight: 700;
     color: var(--color-text);
-    margin: 0 0 20px 0;
-    padding-bottom: 12px;
-    border-bottom: 1px solid #eef0f4;
+    margin: 0 0 24px 0;
+    padding-left: 16px;
+    border-left: 4px solid var(--color-rose);
+    line-height: 1.4;
+}
+
+.section-head svg {
+    color: var(--color-rose);
+    flex-shrink: 0;
 }
 
 .section-sub {
@@ -442,18 +472,46 @@
     background: #fff;
     border-radius: 16px;
     border: 1px solid #eef0f4;
-    padding: 20px 24px;
+    padding: 24px 28px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+    margin-bottom: 24px;
+    transition: all 0.2s ease;
+}
+
+.apv-side-card:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
+    border-color: #e8ecf0;
+}
+
+/* Side card background variations */
+.apv-side-col .apv-side-card:nth-child(1) {
+    background: #fafbfc;
+}
+
+.apv-side-col .apv-side-card:nth-child(2) {
+    background: #fdfdfd;
+}
+
+.apv-side-col .apv-side-card:nth-child(3) {
+    background: #fafbfc;
 }
 
 .side-head {
     font-size: 15px;
     font-weight: 700;
     color: var(--color-text);
-    margin: 0 0 16px;
+    margin: 0 0 18px 0;
+    padding-left: 14px;
+    border-left: 4px solid var(--color-rose);
     display: flex;
     align-items: center;
     gap: 8px;
+    line-height: 1.4;
+}
+
+.side-head svg {
+    color: var(--color-rose);
+    flex-shrink: 0;
 }
 
 .text-primary {

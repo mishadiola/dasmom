@@ -420,7 +420,7 @@ const PrenatalVisits = () => {
                                                     <div 
                                                         key={v.id} 
                                                         className={`schedule-item status-${v.status.toLowerCase()} clickable`}
-                                                        onClick={() => setSelectedVisit(v)}
+                                                        onClick={(e) => { e.stopPropagation(); setSelectedVisit(v); }}
                                                     >
                                                         <div className="schedule-time">
                                                             <Clock size={14} />
@@ -464,7 +464,7 @@ const PrenatalVisits = () => {
                             {calendarView === 'week' ? (
                                 <div className="week-row">
                                     {visibleDays.map(day => (
-                                        <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`}>
+                                        <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`} onClick={() => { setCalendarView('day'); setCurrentDate(new Date(day.date)); }}>
                                             <h4 className="day-header">
                                                 {formatCalendarDate(day.date)}
                                                 {day.date === TODAY && <span className="today-badge">TODAY</span>}
@@ -474,7 +474,7 @@ const PrenatalVisits = () => {
                                                     <div 
                                                         key={v.id} 
                                                         className={`visit-item status-${v.status.toLowerCase()} clickable`}
-                                                        onClick={() => setSelectedVisit(v)}
+                                                        onClick={(e) => { e.stopPropagation(); setSelectedVisit(v); }}
                                                     >
                                                         <span className="visit-patient">{v.patientName}</span>
                                                         <span className="visit-status">{v.status}</span>
@@ -497,7 +497,7 @@ const PrenatalVisits = () => {
                                     return weeks.map((week, weekIndex) => (
                                         <div key={weekIndex} className="week-row">
                                             {week.map(day => (
-                                                <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`}>
+                                                <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`} onClick={() => { setCalendarView('day'); setCurrentDate(new Date(day.date)); }}>
                                                     <h4 className="day-header">
                                                         {formatCalendarDate(day.date)}
                                                         {day.date === TODAY && <span className="today-badge">TODAY</span>}
@@ -507,7 +507,7 @@ const PrenatalVisits = () => {
                                                             <div 
                                                                 key={v.id} 
                                                                 className={`visit-item status-${v.status.toLowerCase()} clickable`}
-                                                                onClick={() => setSelectedVisit(v)}
+                                                                onClick={(e) => { e.stopPropagation(); setSelectedVisit(v); }}
                                                             >
                                                                 <span className="visit-patient">{v.patientName}</span>
                                                                 <span className="visit-status">{v.status}</span>
@@ -586,8 +586,15 @@ const PrenatalVisits = () => {
                                     <td>{patient.totalVisits}</td>
                                     <td className="text-right">
                                         <div className="row-actions">
-                                            <button className="icon-btn" onClick={() => navigate(`/dashboard/prenatal/add/${patient.id}`)}><Plus size={14} /></button>
-                                            <button className="icon-btn" onClick={() => setSelectedPatient(patient.id)}><Eye size={14} /></button>
+                                            <button className="action-btn-text action-btn-primary" onClick={() => navigate(`/dashboard/prenatal/add/${patient.id}`)} title="Record Prenatal Visit">
+                                                <Plus size={14} /> Record Visit
+                                            </button>
+                                            <button className="action-btn-text action-btn-secondary" onClick={() => setSelectedPatient(patient.id)} title="View Visit History / Schedules">
+                                                <Clock size={14} /> View Visits
+                                            </button>
+                                            <button className="action-btn-text action-btn-accent" onClick={() => navigate(`/dashboard/patients/${patient.id}`)} title="View Patient Profile">
+                                                <Users size={14} /> View Profile
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
