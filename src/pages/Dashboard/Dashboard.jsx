@@ -272,7 +272,7 @@ const Dashboard = () => {
                         {[
                             { label: 'Add Patient', icon: Users, color: 'rose', path: '/dashboard/patients/add' },
                             { label: 'View Schedules', icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal', state: { openBooking: true } },
-                            { label: 'High Risk Patients', icon: AlertTriangle, color: 'blue', path: '/dashboard/patients', state: { filterRisk: 'high' } },
+                            { label: 'High Risk Patients', icon: AlertTriangle, color: 'blue', path: '/dashboard/high-risk' },
                             { label: 'Log Delivery', icon: Baby, color: 'pink', path: '/dashboard/deliveries' },
                             { label: 'Issue Vaccine', icon: Syringe, color: 'orange', path: '/dashboard/vaccinations' },
                             { label: 'Generate Report', icon: FileText, color: 'purple', path: '/dashboard/analytics' },

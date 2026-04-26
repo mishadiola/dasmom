@@ -1,6 +1,86 @@
 @import '../variables.css';
 
 /* ══════════════════════════════════════════
+   VITAL SIGNS WARNING INDICATORS
+══════════════════════════════════════════ */
+.vital-warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    padding: 8px 12px;
+    background-color: #fff5f5;
+    border-left: 3px solid #b73a52;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #982d42;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.vital-warning svg {
+    flex-shrink: 0;
+    color: #b73a52;
+}
+
+.vital-warning span {
+    line-height: 1.4;
+}
+
+/* Temperature Warning Indicators */
+.temp-warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.temp-warning--low {
+    background-color: #f0f5ff;
+    border-left: 3px solid #3d88a0;
+    color: #2d7fa3;
+}
+
+.temp-warning--low svg {
+    color: #3d88a0;
+}
+
+.temp-warning--high {
+    background-color: #fff5f5;
+    border-left: 3px solid #b73a52;
+    color: #982d42;
+}
+
+.temp-warning--high svg {
+    color: #b73a52;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .vital-warning,
+    .temp-warning {
+        font-size: 11px;
+        padding: 6px 10px;
+    }
+}
+
+/* ══════════════════════════════════════════
    LAYOUT
 ══════════════════════════════════════════ */
 .add-pvisit-page {

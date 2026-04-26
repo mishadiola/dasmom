@@ -1,6 +1,173 @@
 @import '../variables.css';
 
 /* ══════════════════════════════════════════
+   VITAL SIGNS WARNING INDICATORS
+══════════════════════════════════════════ */
+.vital-warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    padding: 8px 12px;
+    background-color: #fff5f5;
+    border-left: 3px solid #b73a52;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #982d42;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.vital-warning svg {
+    flex-shrink: 0;
+    color: #b73a52;
+}
+
+.vital-warning span {
+    line-height: 1.4;
+}
+
+/* Blood Pressure Warning Indicators */
+.bp-warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.bp-warning--elevated {
+    background-color: #fff9f0;
+    border-left: 3px solid #b76326;
+    color: #8a4a1e;
+}
+
+.bp-warning--elevated svg {
+    color: #b76326;
+}
+
+.bp-warning--high {
+    background-color: #fff5f5;
+    border-left: 3px solid #b73a52;
+    color: #982d42;
+}
+
+.bp-warning--high svg {
+    color: #b73a52;
+}
+
+.bp-warning--low {
+    background-color: #f0f5ff;
+    border-left: 3px solid #3d88a0;
+    color: #2d7fa3;
+}
+
+.bp-warning--low svg {
+    color: #3d88a0;
+}
+
+/* Temperature Warning Indicators */
+.temp-warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.temp-warning--low {
+    background-color: #f0f5ff;
+    border-left: 3px solid #3d88a0;
+    color: #2d7fa3;
+}
+
+.temp-warning--low svg {
+    color: #3d88a0;
+}
+
+.temp-warning--high {
+    background-color: #fff5f5;
+    border-left: 3px solid #b73a52;
+    color: #982d42;
+}
+
+.temp-warning--high svg {
+    color: #b73a52;
+}
+
+/* Field Helper Text */
+.field-helper-text {
+    display: block;
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-top: 4px;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .vital-warning,
+    .bp-warning {
+        font-size: 11px;
+        padding: 6px 10px;
+    }
+}
+
+/* ══════════════════════════════════════════
+   EMAIL SUGGESTIONS DROPDOWN
+══════════════════════════════════════════ */
+.email-suggestions-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border: 1px solid #eef0f4;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    margin-top: 4px;
+}
+
+.email-suggestion-item {
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--color-text);
+    transition: background 0.15s ease;
+    border-bottom: 1px solid #f4f6f9;
+}
+
+.email-suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.email-suggestion-item:hover {
+    background: #f8f9fb;
+    color: var(--color-rose);
+}
+
+/* ══════════════════════════════════════════
    BASE LAYOUT
 ══════════════════════════════════════════ */
 .add-patient-page {
@@ -330,9 +497,16 @@
     gap: 10px;
     cursor: pointer;
     font-size: 13.5px;
-    font-weight: 500;
-    color: var(--color-text);
+    padding: 8px 12px;
+    border-radius: 8px;
+    transition: background 0.15s ease;
     user-select: none;
+}
+
+.custom-checkbox.exclusive-option {
+    background-color: rgba(109, 184, 160, 0.08);
+    border: 1px solid rgba(109, 184, 160, 0.2);
+    font-weight: 600;
 }
 
 .custom-checkbox input {

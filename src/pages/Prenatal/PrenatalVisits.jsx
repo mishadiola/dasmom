@@ -534,10 +534,10 @@ const PrenatalVisits = () => {
                     <h2 className="section-title"><Clock size={18} /> Upcoming & Recent Visits</h2>
                     <div className="table-filters">
                         <div className="header-search">
-                            <Search size={14} className="hs-icon" />
+                            <Search size={18} className="hs-icon" />
                             <input 
                                 type="text" 
-                                placeholder="Search patient name…" 
+                                placeholder="Search Patient Name" 
                                 value={searchTerm}
                                 onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                                 className="hs-input"

@@ -12,12 +12,19 @@ body {
   height: 100%;
   width: 100%;
   overflow-x: hidden;
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Poppins', sans-serif;
   line-height: 1.5;
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
 }
 
 a {

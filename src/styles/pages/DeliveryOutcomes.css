@@ -1,6 +1,88 @@
 @import '../variables.css';
 
 /* ════════════════════════════
+   TOAST NOTIFICATIONS
+════════════════════════════ */
+.toast {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    padding: 16px 20px;
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    z-index: 10000;
+    font-weight: 600;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    animation: slide-in 0.3s ease-out forwards;
+    min-width: 300px;
+    max-width: 450px;
+}
+
+.toast--success {
+    border-left: 4px solid #3d8870;
+    color: #2b7a5a;
+}
+
+.toast--success svg {
+    color: #3d8870;
+}
+
+.toast--error {
+    border-left: 4px solid #b73a52;
+    color: #982d42;
+}
+
+.toast--error svg {
+    color: #b73a52;
+}
+
+.toast--warning {
+    border-left: 4px solid #b76326;
+    color: #8a4a1e;
+}
+
+.toast--warning svg {
+    color: #b76326;
+}
+
+@keyframes slide-in {
+    from {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes slide-out {
+    from {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .toast {
+        top: 16px;
+        right: 16px;
+        left: 16px;
+        min-width: auto;
+        max-width: none;
+    }
+}
+
+/* ════════════════════════════
    PAGE LAYOUT
 ════════════════════════════ */
 .do-page {

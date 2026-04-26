@@ -65,10 +65,23 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
+        let finalValue = value;
+
+        // Handle contact number validation (Philippian format)
+        if (name === 'phone' || name === 'emergencyContactPhone') {
+            // Remove non-numeric characters
+            finalValue = finalValue.replace(/\D/g, '').slice(0, 11);
+            
+            // Auto-prefix "09" if user starts with "9" and the value is 10 digits
+            if (finalValue.length === 10 && finalValue.startsWith('9')) {
+                finalValue = '0' + finalValue;
+            }
+        }
+
         setFormData(prev => {
             const nextState = {
                 ...prev,
-                [name]: value
+                [name]: finalValue
             };
             if (name === 'dateOfBirth') {
                 nextState.age = calculateAge(value);
@@ -79,7 +92,7 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
         if (errors[name]) {
             setErrors(prev => ({
                 ...prev,
-                [name]: ''
+                [name]: null
             }));
         }
     };
@@ -98,6 +111,8 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
         }
         if (!formData.phone.trim()) {
             newErrors.phone = 'Phone number is required';
+        } else if (formData.phone.length !== 11 || !formData.phone.startsWith('09')) {
+            newErrors.phone = 'Contact number must start with 09 and be 11 digits long';
         }
         if (!formData.address.trim()) {
             newErrors.address = 'Address is required';
@@ -315,7 +330,12 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
                                         name="phone"
                                         value={formData.phone}
                                         onChange={handleChange}
-                                        placeholder="e.g., 09123456789"
+                                        onBlur={(e) => {
+                                            if (e.target.value && (e.target.value.length !== 11 || !e.target.value.startsWith('09'))) {
+                                                e.target.classList.add('error');
+                                            }
+                                        }}
+                                        placeholder="ex: 09123456789"
                                         className={errors.phone ? 'error' : ''}
                                     />
                                     {errors.phone && <span className="error-text">{errors.phone}</span>}
@@ -390,8 +410,14 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
                                         name="emergencyContactPhone"
                                         value={formData.emergencyContactPhone}
                                         onChange={handleChange}
-                                        placeholder="Contact phone number"
+                                        onBlur={(e) => {
+                                            if (e.target.value && (e.target.value.length !== 11 || !e.target.value.startsWith('09'))) {
+                                                e.target.classList.add('error');
+                                            }
+                                        }}
+                                        placeholder="ex: 09123456789"
                                     />
+                                    {errors.emergencyContactPhone && <span className="error-text">{errors.emergencyContactPhone}</span>}
                                 </div>
                             </div>
                         </div>

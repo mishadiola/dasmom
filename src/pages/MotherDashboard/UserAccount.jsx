@@ -81,7 +81,22 @@ const PartnerModal = ({ initial, onSave, onClose }) => {
                     </div>
                     <div className="ua-field">
                         <label>Phone Number</label>
-                        <input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="+63 9xx xxx xxxx" />
+                        <input 
+                            value={form.phone} 
+                            onChange={e => {
+                                let value = e.target.value.replace(/\D/g, '').slice(0, 11);
+                                if (value.length === 10 && value.startsWith('9')) {
+                                    value = '0' + value;
+                                }
+                                set('phone', value);
+                            }}
+                            onBlur={(e) => {
+                                if (e.target.value && (e.target.value.length !== 11 || !e.target.value.startsWith('09'))) {
+                                    e.target.classList.add('error-field');
+                                }
+                            }}
+                            placeholder="ex: 09123456789"
+                        />
                     </div>
                     <div className="ua-field">
                         <label>Email (optional)</label>
@@ -293,7 +308,21 @@ const UserAccount = () => {
                             <input
                                 type="text"
                                 value={contactInfo.phone}
-                                onChange={e => setContactInfo({ ...contactInfo, phone: e.target.value })}
+                                onChange={e => {
+                                    if (isEditing) {
+                                        let value = e.target.value.replace(/\D/g, '').slice(0, 11);
+                                        if (value.length === 10 && value.startsWith('9')) {
+                                            value = '0' + value;
+                                        }
+                                        setContactInfo({ ...contactInfo, phone: value });
+                                    }
+                                }}
+                                onBlur={(e) => {
+                                    if (isEditing && e.target.value && (e.target.value.length !== 11 || !e.target.value.startsWith('09'))) {
+                                        e.target.classList.add('error-field');
+                                    }
+                                }}
+                                placeholder="ex: 09123456789"
                                 readOnly={!isEditing}
                                 className={!isEditing ? 'read-only-input' : 'editable-input'}
                             />

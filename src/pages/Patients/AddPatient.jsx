@@ -18,6 +18,7 @@ const TABS = [
     { id: 'prenatal', label: 'Prenatal', icon: Calendar },
 ];
 const MEDICAL_CONDITIONS = [
+    { name: 'None', risk: 'None', isExclusive: true },
     { name: 'Hypertension', risk: 'High' },
     { name: 'Diabetes', risk: 'High' },
     { name: 'Heart Disease', risk: 'High' },
@@ -25,6 +26,22 @@ const MEDICAL_CONDITIONS = [
     { name: 'Anemia', risk: 'Medium' },
     { name: 'Previous C-section', risk: 'High' }
 ];
+
+// Normal ranges for vital signs
+const VITAL_RANGES = {
+    fhr: { min: 110, max: 160, label: 'Fetal Heart Rate', unit: 'bpm' },
+    hgb: { min: 11, max: 13, label: 'Hemoglobin', unit: 'g/dL' },
+    temp: { min: 35.1, max: 37.5, label: 'Temperature', unit: '°C' },
+    pulse: { min: 60, max: 100, label: 'Pulse', unit: 'bpm' }
+};
+
+// Blood pressure ranges and classifications
+const BP_RANGES = {
+    normal: { sysMin: 90, sysMax: 120, diaMin: 60, diaMax: 80, label: 'Normal' },
+    elevated: { sysMin: 121, sysMax: 129, diaMax: 79, label: 'Elevated' },
+    high: { sysMin: 130, diaMin: 80, label: 'High (Hypertension)' },
+    low: { sysMax: 89, diaMax: 59, label: 'Low (Hypotension)' }
+};
 
 /* ════════════════════════════
    STATION NAME FORMATTER
@@ -70,6 +87,11 @@ const AddPatient = () => {
     const [loadingSchedule, setLoadingSchedule] = useState(false);
     const [otherConditionRisk, setOtherConditionRisk] = useState('Low');
     const [retainedStaffList, setRetainedStaffList] = useState([]);
+    const [emailSuggestions, setEmailSuggestions] = useState([]);
+    const [showEmailSuggestions, setShowEmailSuggestions] = useState(false);
+    const [vitalWarnings, setVitalWarnings] = useState({});
+    const [bpWarning, setBpWarning] = useState(null);
+    const [tempWarning, setTempWarning] = useState(null);
 
     const currentStaff = {
         id: user?.id || null,
@@ -275,7 +297,13 @@ const AddPatient = () => {
         let finalValue = isText ? value.toUpperCase() : value;
 
         if (name === 'contactNumber' || name === 'emPhone') {
+            // Remove non-numeric characters
             finalValue = finalValue.replace(/\D/g, '').slice(0, 11);
+            
+            // Auto-prefix "09" if user starts with "9" and the value is 10 digits
+            if (finalValue.length === 10 && finalValue.startsWith('9')) {
+                finalValue = '0' + finalValue;
+            }
         }
 
         // Validate name fields (First Name, Middle Name, Last Name)
@@ -301,6 +329,141 @@ const AddPatient = () => {
             }
         }
 
+        // Validate email field
+        if (name === 'email') {
+            // Allow only valid email characters: letters, numbers, dot, underscore, hyphen, @
+            // Disallow: comma, single quote, double quote, and other special characters
+            const emailPattern = /^[a-zA-Z0-9._@-]*$/;
+            
+            if (finalValue && !emailPattern.test(finalValue)) {
+                // Contains invalid characters
+                setNameValidationErrors(prev => ({
+                    ...prev,
+                    [name]: 'Email contains invalid characters. Only letters, numbers, ., _, -, and @ are allowed.'
+                }));
+                // Don't update formData if invalid
+                return;
+            } else {
+                // Clear error if valid or empty
+                setNameValidationErrors(prev => {
+                    const updated = { ...prev };
+                    delete updated[name];
+                    return updated;
+                });
+
+                // Generate domain suggestions if user typed @
+                if (finalValue.includes('@')) {
+                    const [username, domain] = finalValue.split('@');
+                    const commonDomains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'icloud.com'];
+                    
+                    if (domain === '' || domain.length < 3) {
+                        // Show all suggestions when user just typed @ or started typing domain
+                        const suggestions = commonDomains.map(d => `${username}@${d}`);
+                        setEmailSuggestions(suggestions);
+                        setShowEmailSuggestions(true);
+                    } else {
+                        // Filter suggestions based on what user typed
+                        const filtered = commonDomains.filter(d => d.startsWith(domain.toLowerCase()));
+                        const suggestions = filtered.map(d => `${username}@${d}`);
+                        setEmailSuggestions(suggestions);
+                        setShowEmailSuggestions(suggestions.length > 0);
+                    }
+                } else {
+                    setShowEmailSuggestions(false);
+                    setEmailSuggestions([]);
+                }
+            }
+        }
+
+        // Check for abnormal vital sign values
+        if (VITAL_RANGES[name] && value) {
+            const numValue = parseFloat(value);
+            const range = VITAL_RANGES[name];
+            
+            if (name === 'temp') {
+                // Special handling for temperature with classification
+                let classification = null;
+                
+                if (numValue <= 35.0) {
+                    classification = { type: 'low', label: 'Low (Hypothermia)' };
+                } else if (numValue >= 37.6) {
+                    classification = { type: 'high', label: 'High (Fever)' };
+                } else {
+                    classification = null; // Normal
+                }
+                
+                setTempWarning(classification);
+                
+                // Also update vitalWarnings for consistency
+                if (classification) {
+                    setVitalWarnings(prev => ({
+                        ...prev,
+                        [name]: {
+                            isAbnormal: true,
+                            value: numValue,
+                            range: `${range.min}-${range.max} ${range.unit}`
+                        }
+                    }));
+                } else {
+                    setVitalWarnings(prev => {
+                        const updated = { ...prev };
+                        delete updated[name];
+                        return updated;
+                    });
+                }
+            } else {
+                // Default handling for other vitals
+                if (numValue < range.min || numValue > range.max) {
+                    setVitalWarnings(prev => ({
+                        ...prev,
+                        [name]: {
+                            isAbnormal: true,
+                            value: numValue,
+                            range: `${range.min}-${range.max} ${range.unit}`
+                        }
+                    }));
+                } else {
+                    setVitalWarnings(prev => {
+                        const updated = { ...prev };
+                        delete updated[name];
+                        return updated;
+                    });
+                }
+            }
+        } else if (name === 'temp' && !value) {
+            setTempWarning(null);
+        }
+
+        // Validate blood pressure format and classification
+        if (name === 'bp' && value) {
+            const bpMatch = value.match(/^(\d+)[/\s](\d+)$/);
+            if (bpMatch) {
+                const systolic = parseInt(bpMatch[1]);
+                const diastolic = parseInt(bpMatch[2]);
+                
+                let classification = null;
+                
+                // Check BP classification
+                if (systolic >= BP_RANGES.normal.sysMin && systolic <= BP_RANGES.normal.sysMax &&
+                    diastolic >= BP_RANGES.normal.diaMin && diastolic <= BP_RANGES.normal.diaMax) {
+                    classification = null; // Normal, no warning
+                } else if (systolic >= BP_RANGES.elevated.sysMin && systolic <= BP_RANGES.elevated.sysMax &&
+                           diastolic <= BP_RANGES.elevated.diaMax) {
+                    classification = { type: 'elevated', label: BP_RANGES.elevated.label };
+                } else if (systolic >= BP_RANGES.high.sysMin || diastolic >= BP_RANGES.high.diaMin) {
+                    classification = { type: 'high', label: BP_RANGES.high.label };
+                } else if (systolic <= BP_RANGES.low.sysMax || diastolic <= BP_RANGES.low.diaMax) {
+                    classification = { type: 'low', label: BP_RANGES.low.label };
+                }
+                
+                setBpWarning(classification);
+            } else {
+                setBpWarning(null);
+            }
+        } else if (name === 'bp' && !value) {
+            setBpWarning(null);
+        }
+
         setFormData(prev => ({ ...prev, [name]: finalValue }));
 
         if (missingFields.includes(name) || missingFields.includes(name + '-invalid')) {
@@ -311,10 +474,31 @@ const AddPatient = () => {
     const handleCheckbox = (conditionName) => {
         setFormData(prev => {
             const current = [...prev.conditions];
-            if (current.includes(conditionName)) {
-                return { ...prev, conditions: current.filter(c => c !== conditionName) };
+            
+            // Check if this is the "None" option
+            const isNone = conditionName === 'None';
+            
+            if (isNone) {
+                // If "None" is being selected
+                if (current.includes('None')) {
+                    // Deselect "None"
+                    return { ...prev, conditions: current.filter(c => c !== 'None') };
+                } else {
+                    // Select "None" and deselect all other conditions
+                    return { ...prev, conditions: ['None'] };
+                }
+            } else {
+                // If a regular condition is being selected
+                if (current.includes(conditionName)) {
+                    // Deselect this condition
+                    const updated = current.filter(c => c !== conditionName);
+                    return { ...prev, conditions: updated };
+                } else {
+                    // Select this condition and deselect "None" if it's selected
+                    const updated = current.filter(c => c !== 'None');
+                    return { ...prev, conditions: [...updated, conditionName] };
+                }
             }
-            return { ...prev, conditions: [...current, conditionName] };
         });
     };
 
@@ -345,15 +529,20 @@ const AddPatient = () => {
         const requiredPersonal = ['firstName', 'lastName', 'dob', 'email', 'contactNumber', 'address', 'station'];
         const requiredEmergency = ['emName', 'emRel', 'emPhone', 'emAddress'];
         const requiredPregnancy = ['gravida', 'para', 'lmp'];
-        const requiredVitals = ['bp', 'weight', 'height'];
+        
+        // BP is required for pregnant patients
+        const requiredVitals = formData.pregnancyStatus === 'Pregnant' ? ['bp', 'weight', 'height'] : ['weight', 'height'];
 
         const missing = [];
         const checkFields = (fields) => fields.forEach(f => {
             if (!formData[f]) {
                 missing.push(f);
             } 
-            else if ((f === 'contactNumber' || f === 'emPhone') && formData[f].length !== 11) {
-                missing.push(f + '-invalid');
+            else if ((f === 'contactNumber' || f === 'emPhone')) {
+                // Validate Philippine mobile number format: must start with "09" and be exactly 11 digits
+                if (formData[f].length !== 11 || !formData[f].startsWith('09')) {
+                    missing.push(f + '-invalid');
+                }
             }
         });
         checkFields(requiredPersonal);
@@ -558,16 +747,40 @@ const AddPatient = () => {
                                         <option value="Separated">Separated</option>
                                     </select>
                                 </div>
-                                <div className="form-group">
+                                <div className="form-group" style={{ position: 'relative' }}>
                                     <label>Email Address <span className="req">*</span></label>
                                     <input 
                                         type="email" 
                                         name="email" 
                                         value={formData.email} 
                                         onChange={handleChange} 
+                                        onBlur={() => setTimeout(() => setShowEmailSuggestions(false), 200)}
+                                        onFocus={() => formData.email.includes('@') && setShowEmailSuggestions(true)}
                                         required
-                                        className={missingFields.includes('email') ? 'error-field' : ''} 
+                                        className={missingFields.includes('email') || nameValidationErrors.email ? 'error-field' : ''} 
                                     />
+                                    {showEmailSuggestions && emailSuggestions.length > 0 && (
+                                        <div className="email-suggestions-dropdown">
+                                            {emailSuggestions.map((suggestion, index) => (
+                                                <div 
+                                                    key={index}
+                                                    className="email-suggestion-item"
+                                                    onClick={() => {
+                                                        setFormData(prev => ({ ...prev, email: suggestion }));
+                                                        setShowEmailSuggestions(false);
+                                                        setEmailSuggestions([]);
+                                                    }}
+                                                >
+                                                    {suggestion}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {nameValidationErrors.email && (
+                                        <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
+                                            {nameValidationErrors.email}
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="form-group">
                                     <label>Phone Number <span className="req">*</span></label>
@@ -576,12 +789,19 @@ const AddPatient = () => {
                                         name="contactNumber" 
                                         value={formData.contactNumber} 
                                         onChange={handleChange} 
+                                        onBlur={(e) => {
+                                            // Validate on blur for immediate feedback
+                                            if (e.target.value && (e.target.value.length !== 11 || !e.target.value.startsWith('09'))) {
+                                                e.target.classList.add('error-field');
+                                            }
+                                        }}
+                                        placeholder="ex: 09123456789"
                                         required 
                                         className={missingFields.includes('contactNumber') || missingFields.includes('contactNumber-invalid') ? 'error-field' : ''}
                                     />
                                     {missingFields.includes('contactNumber-invalid') && (
                                         <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
-                                            Phone number must be exactly 11 digits
+                                            Contact number must start with 09 and be 11 digits long
                                         </span>
                                     )}
                                 </div>
@@ -724,7 +944,7 @@ const AddPatient = () => {
                             <h3 className="section-subtitle">Pre-existing Conditions</h3>
                             <div className="checkbox-grid">
                                 {MEDICAL_CONDITIONS.map(cond => (
-                                    <label key={cond.name} className="custom-checkbox">
+                                    <label key={cond.name} className={`custom-checkbox ${cond.isExclusive ? 'exclusive-option' : ''}`}>
                                         <input 
                                             type="checkbox" 
                                             checked={formData.conditions.includes(cond.name)}
@@ -732,9 +952,16 @@ const AddPatient = () => {
                                         />
                                         <span className="checkmark"></span> 
                                         <span>{cond.name}</span>
-                                        <span className={`risk-badge risk-badge--${cond.risk.toLowerCase()}`}>
-                                            {cond.risk} Risk
-                                        </span>
+                                        {!cond.isExclusive && (
+                                            <span className={`risk-badge risk-badge--${cond.risk.toLowerCase()}`}>
+                                                {cond.risk} Risk
+                                            </span>
+                                        )}
+                                        {cond.isExclusive && (
+                                            <span className="risk-badge" style={{background: 'rgba(109, 184, 160, 0.15)', color: '#3d8870', border: 'none'}}>
+                                                No risks
+                                            </span>
+                                        )}
                                     </label>
                                 ))}
                             </div>
@@ -852,11 +1079,28 @@ const AddPatient = () => {
                                     <input 
                                         type="text" 
                                         name="bp" 
-                                        placeholder="e.g. 120/80" 
+                                        placeholder="ex: 120/80" 
                                         value={formData.bp} 
                                         onChange={handleChange} 
+                                        onBlur={(e) => {
+                                            if (formData.pregnancyStatus === 'Pregnant' && !e.target.value) {
+                                                e.target.classList.add('error-field');
+                                            }
+                                        }}
                                         className={missingFields.includes('bp') ? 'error-field' : ''}
                                     />
+                                    <span className="field-helper-text">Format: 120/80</span>
+                                    {bpWarning && (
+                                        <div className={`bp-warning bp-warning--${bpWarning.type}`}>
+                                            <AlertTriangle size={14} />
+                                            <span>{bpWarning.label} blood pressure detected. Please double-check.</span>
+                                        </div>
+                                    )}
+                                    {missingFields.includes('bp') && formData.pregnancyStatus === 'Pregnant' && (
+                                        <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
+                                            Blood pressure is required for pregnant patients.
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="form-group">
                                     <label>Weight (kg) <span className="req">*</span></label>
@@ -924,6 +1168,12 @@ const AddPatient = () => {
                                         value={formData.fhr} 
                                         onChange={handleChange} 
                                     />
+                                    {vitalWarnings.fhr && (
+                                        <div className="vital-warning">
+                                            <AlertTriangle size={14} />
+                                            <span>Abnormal: {formData.fhr} bpm (Normal: 110-160 bpm)</span>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="form-group">
                                     <label>Hemoglobin Level (g/dL)</label>
@@ -934,6 +1184,12 @@ const AddPatient = () => {
                                         value={formData.hgb} 
                                         onChange={handleChange} 
                                     />
+                                    {vitalWarnings.hgb && (
+                                        <div className="vital-warning">
+                                            <AlertTriangle size={14} />
+                                            <span>Abnormal: {formData.hgb} g/dL (Normal: 11-13 g/dL)</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                             <div className="form-grid-3">
@@ -945,7 +1201,14 @@ const AddPatient = () => {
                                         name="temp"
                                         value={formData.temp}
                                         onChange={handleChange}
+                                        placeholder="ex: 36.5"
                                     />
+                                    {tempWarning && (
+                                        <div className={`temp-warning temp-warning--${tempWarning.type}`}>
+                                            <AlertTriangle size={14} />
+                                            <span>{tempWarning.label} detected. Please double-check.</span>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="form-group">
                                     <label>Pulse (bpm)</label>
@@ -955,6 +1218,12 @@ const AddPatient = () => {
                                         value={formData.pulse}
                                         onChange={handleChange}
                                     />
+                                    {vitalWarnings.pulse && (
+                                        <div className="vital-warning">
+                                            <AlertTriangle size={14} />
+                                            <span>Abnormal: {formData.pulse} bpm (Normal: 60-100 bpm)</span>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="form-group">
                                     <label>Respiratory Rate (cpm)</label>
@@ -1045,11 +1314,18 @@ const AddPatient = () => {
                                         name="emPhone" 
                                         value={formData.emPhone} 
                                         onChange={handleChange} 
+                                        onBlur={(e) => {
+                                            // Validate on blur for immediate feedback
+                                            if (e.target.value && (e.target.value.length !== 11 || !e.target.value.startsWith('09'))) {
+                                                e.target.classList.add('error-field');
+                                            }
+                                        }}
+                                        placeholder="ex: 09123456789"
                                         className={missingFields.includes('emPhone') || missingFields.includes('emPhone-invalid') ? 'error-field' : ''}
                                     />
                                     {missingFields.includes('emPhone-invalid') && (
                                         <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
-                                            Phone number must be exactly 11 digits
+                                            Contact number must start with 09 and be 11 digits long
                                         </span>
                                     )}
                                 </div>

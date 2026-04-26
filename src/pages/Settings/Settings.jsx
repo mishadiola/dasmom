@@ -843,7 +843,19 @@ const ProfileTab = () => {
                                 <input 
                                     type="tel" 
                                     value={profileForm.contactNo} 
-                                    onChange={e => setProfileForm(p => ({ ...p, contactNo: e.target.value }))}
+                                    onChange={e => {
+                                        let value = e.target.value.replace(/\D/g, '').slice(0, 11);
+                                        if (value.length === 10 && value.startsWith('9')) {
+                                            value = '0' + value;
+                                        }
+                                        setProfileForm(p => ({ ...p, contactNo: value }));
+                                    }}
+                                    onBlur={(e) => {
+                                        if (e.target.value && (e.target.value.length !== 11 || !e.target.value.startsWith('09'))) {
+                                            e.target.classList.add('error-field');
+                                        }
+                                    }}
+                                    placeholder="ex: 09123456789"
                                 />
                             </div>
                             <div className="form-group">

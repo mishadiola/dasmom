@@ -436,16 +436,15 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
         patientName: '',
         station: '',
         gestationalAge: '',
-        riskLevel: 'Normal',
-        pregnancyType: 'Singleton',
-        deliveryDate: new Date().toISOString().split('T')[0],
+        riskLevel: '',
+        pregnancyType: '',
+        deliveryDate: '',
         deliveryTime: '',
-        deliveryType: 'NSD',
-        deliveryMode: '',
+        deliveryType: '',
         attendingStaffId: '',
         attendingStaffName: '',
-        facility: stations?.[0] || '',
-        complications: ['None'],
+        facility: '',
+        complications: [],
         newborns: [{
             babyName: '',
             babyGender: 'Female',
@@ -595,7 +594,6 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
                 delivery_date: form.deliveryDate,
                 delivery_time: form.deliveryTime || '09:00',
                 delivery_type: form.deliveryType,
-                delivery_mode: form.deliveryMode || null,
                 gestational_age: form.gestationalAge || null,
                 risk_level: form.riskLevel || 'Normal',
                 complications: form.complications.filter(c => c !== 'None'),
@@ -725,15 +723,6 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
                                     <option value="NSD">NSD (Normal)</option>
                                     <option value="CS">CS (Cesarean)</option>
                                     <option value="Breech">Breech</option>
-                                </select>
-                            </div>
-                            <div className="form-group">
-                                <label>Mode</label>
-                                <select value={form.deliveryMode} onChange={e => updateForm('deliveryMode', e.target.value)}>
-                                    <option value="">Select</option>
-                                    <option value="Normal Spontaneous Delivery">Normal Spontaneous</option>
-                                    <option value="Cesarean Section">Cesarean Section</option>
-                                    <option value="Assisted Delivery">Assisted</option>
                                 </select>
                             </div>
                             <div className="form-group">
@@ -932,8 +921,6 @@ const ViewDeliveryModal = ({ show, onClose, delivery }) => {
                                     <span>{delivery.deliveryType}</span>
                                 </div>
                                 <div className="view-field">
-                                    <label>Mode:</label>
-                                    <span>{delivery.deliveryMode || 'N/A'}</span>
                                 </div>
                                 <div className="view-field">
                                     <label>Facility:</label>

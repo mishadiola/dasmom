@@ -13,12 +13,21 @@ const patientService = new PatientService();
 const MEDICAL_TESTS = ['Hemoglobin', 'Urinalysis', 'Blood Type', 'Ultrasound'];
 const RISK_FACTORS = ['Bleeding', 'Severe Headache', 'Swelling', 'High BP', 'Fever', 'Previous Complications'];
 
+// Normal ranges for vital signs
+const VITAL_RANGES = {
+    fhr: { min: 110, max: 160, label: 'Fetal Heart Rate', unit: 'bpm' },
+    temp: { min: 35.1, max: 37.5, label: 'Temperature', unit: '°C' },
+    pulse: { min: 60, max: 100, label: 'Pulse', unit: 'bpm' }
+};
+
 const AddPrenatalVisit = () => {
     const navigate = useNavigate();
     const { patientId } = useParams();
     const [toast, setToast] = useState(null);
 
     const [patient, setPatient] = useState(null);
+    const [vitalWarnings, setVitalWarnings] = useState({});
+    const [tempWarning, setTempWarning] = useState(null);
 
     // Form State - initialize with empty strings to avoid uncontrolled/controlled warnings
     const [formData, setFormData] = useState({
@@ -173,6 +182,65 @@ const AddPrenatalVisit = () => {
             ...prev,
             [name]: type === 'checkbox' ? checked : finalValue
         }));
+
+        // Check for abnormal vital sign values
+        if (VITAL_RANGES[name] && value) {
+            const numValue = parseFloat(value);
+            const range = VITAL_RANGES[name];
+            
+            if (name === 'temp') {
+                // Special handling for temperature with classification
+                let classification = null;
+                
+                if (numValue <= 35.0) {
+                    classification = { type: 'low', label: 'Low (Hypothermia)' };
+                } else if (numValue >= 37.6) {
+                    classification = { type: 'high', label: 'High (Fever)' };
+                } else {
+                    classification = null; // Normal
+                }
+                
+                setTempWarning(classification);
+                
+                // Also update vitalWarnings for consistency
+                if (classification) {
+                    setVitalWarnings(prev => ({
+                        ...prev,
+                        [name]: {
+                            isAbnormal: true,
+                            value: numValue,
+                            range: `${range.min}-${range.max} ${range.unit}`
+                        }
+                    }));
+                } else {
+                    setVitalWarnings(prev => {
+                        const updated = { ...prev };
+                        delete updated[name];
+                        return updated;
+                    });
+                }
+            } else {
+                // Default handling for other vitals
+                if (numValue < range.min || numValue > range.max) {
+                    setVitalWarnings(prev => ({
+                        ...prev,
+                        [name]: {
+                            isAbnormal: true,
+                            value: numValue,
+                            range: `${range.min}-${range.max} ${range.unit}`
+                        }
+                    }));
+                } else {
+                    setVitalWarnings(prev => {
+                        const updated = { ...prev };
+                        delete updated[name];
+                        return updated;
+                    });
+                }
+            }
+        } else if (name === 'temp' && !value) {
+            setTempWarning(null);
+        }
     };
 
     const handleArrayToggle = (field, item) => {
@@ -369,12 +437,24 @@ const AddPrenatalVisit = () => {
 
                             <div className="form-group">
                                 <label>Temp (°C)</label>
-                                <input type="number" step="0.1" name="temp" value={formData.temp} onChange={handleChange} required />
+                                <input type="number" step="0.1" name="temp" value={formData.temp} onChange={handleChange} placeholder="ex: 36.5" required />
+                                {tempWarning && (
+                                    <div className={`temp-warning temp-warning--${tempWarning.type}`}>
+                                        <AlertTriangle size={14} />
+                                        <span>{tempWarning.label} detected. Please double-check.</span>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="form-group">
                                 <label>Pulse (bpm)</label>
                                 <input type="number" name="pulse" value={formData.pulse} onChange={handleChange} required />
+                                {vitalWarnings.pulse && (
+                                    <div className="vital-warning">
+                                        <AlertTriangle size={14} />
+                                        <span>Abnormal: {formData.pulse} bpm (Normal: 60-100 bpm)</span>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="form-group">
@@ -396,6 +476,12 @@ const AddPrenatalVisit = () => {
                             <div className="form-group">
                                 <label>Fetal Heart Rate (bpm)</label>
                                 <input type="number" name="fhr" value={formData.fhr} onChange={handleChange} />
+                                {vitalWarnings.fhr && (
+                                    <div className="vital-warning">
+                                        <AlertTriangle size={14} />
+                                        <span>Abnormal: {formData.fhr} bpm (Normal: 110-160 bpm)</span>
+                                    </div>
+                                )}
                             </div>
                             <div className="form-group">
                                 <label>Fetal Movement</label>
