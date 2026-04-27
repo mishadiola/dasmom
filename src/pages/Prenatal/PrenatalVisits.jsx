@@ -137,6 +137,7 @@ const PrenatalVisits = () => {
     const [appointments, setAppointments] = useState([]);
     const [visitsTable, setVisitsTable] = useState([]);
     const [selectedPatient, setSelectedPatient] = useState(null);
+    const [visitTypeTab, setVisitTypeTab] = useState('prenatal'); // 'prenatal' | 'vaccination'
 
     const patientService = useMemo(() => new PatientService(), []);
 
@@ -371,7 +372,23 @@ const PrenatalVisits = () => {
                 </div>
             </div>
 
-            {/* CALENDAR SECTION */}
+            {/* Visit Type Tabs */}
+            <div className="visit-type-tabs">
+                <button
+                    className={`visit-type-tab ${visitTypeTab === 'prenatal' ? 'active' : ''}`}
+                    onClick={() => setVisitTypeTab('prenatal')}
+                >
+                    Prenatal
+                </button>
+                <button
+                    className={`visit-type-tab ${visitTypeTab === 'vaccination' ? 'active' : ''}`}
+                    onClick={() => setVisitTypeTab('vaccination')}
+                >
+                    Vaccination
+                </button>
+            </div>
+
+            {visitTypeTab === 'prenatal' ? (
             <div className="pv-calendar-section">
                 <div className="section-head-bar">
                     <div className="date-nav">
@@ -535,8 +552,19 @@ const PrenatalVisits = () => {
                     )}
                 </div>
             </div>
+            ) : (
+                /* Vaccination Tab - Calendar Empty State */
+                <div className="pv-calendar-section vaccination-empty">
+                    <div className="empty-state">
+                        <CalendarIcon size={48} />
+                        <h3>No vaccination schedules yet.</h3>
+                        <p>Vaccination scheduling will be available soon.</p>
+                    </div>
+                </div>
+            )}
 
             {/* VISITS TABLE */}
+            {visitTypeTab === 'prenatal' ? (
             <div className="pv-table-section">
                 <div className="section-header-row">
                     <h2 className="section-title"><Clock size={18} /> Upcoming & Recent Visits</h2>
@@ -641,6 +669,16 @@ const PrenatalVisits = () => {
                     </div>
                 )}
             </div>
+            ) : (
+                /* Vaccination Tab - Table Empty State */
+                <div className="pv-table-section vaccination-empty">
+                    <div className="empty-state">
+                        <Users size={48} />
+                        <h3>No vaccination schedules found.</h3>
+                        <p>Vaccination patient records will appear here.</p>
+                    </div>
+                </div>
+            )}
 
             {selectedVisit && (
                 <ScheduledVisitModal 

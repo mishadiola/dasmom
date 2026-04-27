@@ -274,6 +274,52 @@ const NewbornTracking = () => {
         return pending ? { vaccine: pending.vaccine, dose: pending.dose, date: pending.nextDue } : null;
     };
 
+    const getLastVaccine = (baby) => {
+        const completed = baby.vaccLog?.filter(v => v.status === 'Completed' && v.date);
+        if (!completed?.length) return null;
+        // Sort by date descending and get the most recent
+        const sorted = completed.sort((a, b) => new Date(b.date) - new Date(a.date));
+        return sorted[0];
+    };
+
+    const calculateAge = (birthDate) => {
+        if (!birthDate) return 'N/A';
+        const birth = new Date(birthDate);
+        const now = new Date();
+        
+        let years = now.getFullYear() - birth.getFullYear();
+        let months = now.getMonth() - birth.getMonth();
+        let days = now.getDate() - birth.getDate();
+        
+        if (days < 0) {
+            months--;
+            days += new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+        }
+        if (months < 0) {
+            years--;
+            months += 12;
+        }
+        
+        if (years > 0) {
+            return `${years}y ${months}m`;
+        } else if (months > 0) {
+            return `${months}m ${days}d`;
+        } else {
+            return `${days}d`;
+        }
+    };
+
+    const getVaccinationStatus = (baby) => {
+        const completed = baby.vaccLog?.filter(v => v.status === 'Completed').length || 0;
+        const total = baby.vaccLog?.length || 0;
+        const hasOverdue = baby.vaccLog?.some(v => v.status === 'Overdue');
+        
+        if (total === 0) return { label: 'No Records', class: 'status-none' };
+        if (completed === total) return { label: 'Fully Vaccinated', class: 'status-completed' };
+        if (hasOverdue) return { label: 'Needs Attention', class: 'status-overdue' };
+        return { label: 'In Progress', class: 'status-progress' };
+    };
+
     const getRowClass = (b) => {
         const progress = getVaccinationProgress(b);
         if (b.vaccLog?.some(v => v.status === 'Overdue')) return 'nb-row--overdue';
@@ -324,11 +370,10 @@ const NewbornTracking = () => {
     };
 
     const SUMMARY_CARDS = [
-        { label: 'Newborns with Vaccines', value: stats.totalWithVaccines, color: 'lilac', icon: Baby },
+        { label: 'Total Newborns', value: newborns.length, color: 'lilac', icon: Baby },
         { label: 'Fully Vaccinated', value: stats.fullyVaccinated, color: 'sage', icon: CheckCircle2 },
         { label: 'In Progress', value: stats.partiallyVaccinated, color: 'blue', icon: Timer },
-        { label: 'Overdue Vaccines', value: stats.overdueVaccines, color: 'rose', icon: AlertTriangle },
-        { label: 'Upcoming Doses', value: stats.upcomingDoses, color: 'orange', icon: Calendar },
+        { label: 'Needs Attention', value: stats.overdueVaccines, color: 'rose', icon: AlertTriangle },
     ];
 
     if (loading) return (
@@ -347,8 +392,8 @@ const NewbornTracking = () => {
             {/* ── Page Header ── */}
             <div className="page-header vacc-header">
                 <div>
-                    <h1 className="page-title"><Syringe size={24} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Newborn Vaccination Tracking</h1>
-                    <p className="page-subtitle">Monitor vaccination schedules, progress, and upcoming doses for newborns</p>
+                    <h1 className="page-title"><Baby size={24} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Newborn Overview / Registry</h1>
+                    <p className="page-subtitle">View all newborn records, vaccination status, and patient information</p>
                 </div>
                 <div className="header-actions">
                     <button className="btn btn-outline" onClick={handleExport}>
@@ -412,12 +457,12 @@ const NewbornTracking = () => {
 
             {/* ── Vaccination Tracking Table ── */}
             <div className="nb-card vacc-table-card">
-                <div className="nb-card-head vacc-table-head">
-                    <h2><Baby size={17} /> Newborns with Vaccination Records</h2>
-                    <div className="nb-legend vacc-legend">
+                <div className="nb-card-head registry-table-head">
+                    <h2><Baby size={17} /> Newborn Registry</h2>
+                    <div className="nb-legend registry-legend">
                         <span className="legend-chip chip-completed"><CheckCircle2 size={11} /> Fully Vaccinated</span>
                         <span className="legend-chip chip-progress"><TrendingUp size={11} /> In Progress</span>
-                        <span className="legend-chip chip-overdue"><AlertTriangle size={11} /> Overdue</span>
+                        <span className="legend-chip chip-overdue"><AlertTriangle size={11} /> Needs Attention</span>
                     </div>
                     <span className="nb-count">{filtered.length} newborns</span>
                 </div>
@@ -426,152 +471,86 @@ const NewbornTracking = () => {
                     <table className="nb-table vacc-table">
                         <thead>
                             <tr>
-                                <th>Baby</th>
-                                <th>Mother</th>
+                                <th>Baby Name</th>
+                                <th>Mother Name</th>
                                 <th>Birth Date</th>
-                                <th>Vaccination Progress</th>
-                                <th>Completed / Total</th>
-                                <th>Next Vaccine</th>
+                                <th>Age</th>
+                                <th>Vaccination Status</th>
+                                <th>Last Vaccine Given</th>
                                 <th>Next Due Date</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filtered.map(b => {
-                                const progress = getVaccinationProgress(b);
                                 const nextVaccine = getNextVaccine(b);
+                                const lastVaccine = getLastVaccine(b);
+                                const vaccStatus = getVaccinationStatus(b);
                                 return (
-                                    <React.Fragment key={b.id}>
-                                        <tr className={`nb-row ${getRowClass(b)}`}>
-                                            <td>
-                                                <button className="expand-btn" onClick={() => setExpandedRow(expandedRow === b.id ? null : b.id)}>
-                                                    {expandedRow === b.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                    <tr key={b.id} className={`nb-row ${getRowClass(b)}`}>
+                                        <td>
+                                            <div className="nb-baby-cell">
+                                                <div className={`nb-avatar nb-avatar--${b.gender?.toLowerCase() || 'unknown'}`}>
+                                                    {b.gender === 'Female' ? '♀' : b.gender === 'Male' ? '♂' : '?'}
+                                                </div>
+                                                <div>
+                                                    <span className="nb-baby-name">{b.babyName}</span>
+                                                    <span className="nb-baby-id" title={b.id}>{b.id?.substring(0, 8)}...</span>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td onClick={() => navigate(`/dashboard/patients/${b.motherId}`)} style={{ cursor: 'pointer' }}>
+                                            <span className="nb-mother-name patient-name-link">{b.motherName}</span>
+                                            <span className="nb-mother-id">{b.station}</span>
+                                        </td>
+                                        <td className="nb-date">{formatDateLong(b.birthDate)}</td>
+                                        <td>
+                                            <span className="nb-age">{calculateAge(b.birthDate)}</span>
+                                        </td>
+                                        <td>
+                                            <span className={`vacc-status-badge ${vaccStatus.class}`}>
+                                                {vaccStatus.label}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {lastVaccine ? (
+                                                <div className="last-vaccine-info">
+                                                    <span className="last-vaccine-name">{lastVaccine.vaccine}</span>
+                                                    <span className="last-vaccine-date">{lastVaccine.date}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="no-vaccine">—</span>
+                                            )}
+                                        </td>
+                                        <td className="nb-date">
+                                            {nextVaccine ? (
+                                                <span className={`next-date ${b.vaccLog?.some(v => v.status === 'Overdue') ? 'date-overdue' : ''}`}>
+                                                    {nextVaccine.date}
+                                                </span>
+                                            ) : (
+                                                <span className="no-date">—</span>
+                                            )}
+                                        </td>
+                                        <td>
+                                            <div className="row-actions registry-actions">
+                                                <button className="action-btn-text action-btn-secondary" title="View Profile" onClick={() => navigate(`/dashboard/patients/${b.motherId}`)}>
+                                                    <Eye size={13} /> View Profile
                                                 </button>
-                                                <div className="nb-baby-cell">
-                                                    <div className={`nb-avatar nb-avatar--${b.gender?.toLowerCase() || 'unknown'}`}>
-                                                        {b.gender === 'Female' ? '♀' : b.gender === 'Male' ? '♂' : '?'}
-                                                    </div>
-                                                    <div>
-                                                        <span className="nb-baby-name">{b.babyName}</span>
-                                                        <span className="nb-baby-id" title={b.id}>{b.id?.substring(0, 8)}...</span>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td onClick={() => navigate(`/dashboard/patients/${b.motherId}`)} style={{ cursor: 'pointer' }}>
-                                                <span className="nb-mother-name patient-name-link">{b.motherName}</span>
-                                                <span className="nb-mother-id">{b.station}</span>
-                                            </td>
-                                            <td className="nb-date">{formatDateLong(b.birthDate)}</td>
-                                            <td>
-                                                <div className="vacc-progress-cell">
-                                                    <div className="vacc-progress-mini">
-                                                        <div className="vacc-progress-track-mini">
-                                                            <div 
-                                                                className={`vacc-progress-fill-mini ${getProgressBadge(progress.percentage)}`}
-                                                                style={{ width: `${progress.percentage}%` }}
-                                                            ></div>
-                                                        </div>
-                                                        <span className="vacc-progress-text">{progress.percentage}%</span>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="vacc-count">
-                                                <span className="vacc-completed">{progress.completed}</span>
-                                                <span className="vacc-separator">/</span>
-                                                <span className="vacc-total">{progress.total}</span>
-                                            </td>
-                                            <td>
-                                                {nextVaccine ? (
-                                                    <span className="next-vaccine-name">
-                                                        {nextVaccine.vaccine} <span className="vaccine-dose">({nextVaccine.dose})</span>
-                                                    </span>
-                                                ) : (
-                                                    <span className="all-completed"><CheckCircle2 size={12} /> All Done</span>
-                                                )}
-                                            </td>
-                                            <td className="nb-date">
-                                                {nextVaccine ? (
-                                                    <span className={`next-date ${b.vaccLog?.some(v => v.status === 'Overdue') ? 'date-overdue' : ''}`}>
-                                                        {nextVaccine.date}
-                                                    </span>
-                                                ) : (
-                                                    <span className="no-date">—</span>
-                                                )}
-                                            </td>
-                                            <td>
-                                                <div className="row-actions vacc-actions">
-                                                    <button className="action-btn view-btn" title="View Vaccination Details" onClick={() => setSelectedBaby(b)}>
-                                                        <Eye size={13} />
-                                                    </button>
-                                                    <button className="action-btn vacc-btn" title="Record Vaccination" onClick={() => navigate('/dashboard/vaccinations')}>
-                                                        <Syringe size={13} />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-
-                                        {/* Expanded vaccination details */}
-                                        {expandedRow === b.id && (
-                                            <tr className="nb-expanded-row">
-                                                <td colSpan="8">
-                                                    <div className="expand-detail vacc-expand">
-                                                        <div className="expand-col vacc-expand-progress">
-                                                            <h4><ShieldCheck size={14} /> Vaccination Progress</h4>
-                                                            <div className="expand-progress-bar">
-                                                                <div className="expand-progress-track">
-                                                                    <div className="expand-progress-fill" style={{ width: `${progress.percentage}%` }}></div>
-                                                                </div>
-                                                                <span>{progress.percentage}% Complete</span>
-                                                            </div>
-                                                            <p className="expand-progress-count">{progress.completed} of {progress.total} vaccines completed</p>
-                                                        </div>
-                                                        <div className="expand-col vacc-expand-list">
-                                                            <h4><Syringe size={14} /> Vaccine Schedule</h4>
-                                                            {b.vaccLog?.length ? (
-                                                                <div className="vacc-mini-list">
-                                                                    {b.vaccLog.slice(0, 5).map((v, i) => (
-                                                                        <div key={i} className={`vacc-mini-item ${v.status.toLowerCase()}`}>
-                                                                            <span className="vacc-mini-name">{v.vaccine}</span>
-                                                                            <span className={`vacc-mini-status ${v.status.toLowerCase()}`}>{v.status}</span>
-                                                                        </div>
-                                                                    ))}
-                                                                    {b.vaccLog.length > 5 && (
-                                                                        <p className="vacc-more">+{b.vaccLog.length - 5} more vaccines...</p>
-                                                                    )}
-                                                                </div>
-                                                            ) : <p>No vaccines scheduled.</p>}
-                                                        </div>
-                                                        <div className="expand-col vacc-expand-next">
-                                                            <h4><Clock size={14} /> Next Upcoming</h4>
-                                                            {nextVaccine ? (
-                                                                <div className="next-vaccine-highlight">
-                                                                    <span className="next-vaccine-label">{nextVaccine.vaccine}</span>
-                                                                    <span className="next-vaccine-dose">{nextVaccine.dose}</span>
-                                                                    <span className="next-vaccine-date">Due: {nextVaccine.date}</span>
-                                                                </div>
-                                                            ) : (
-                                                                <p className="all-done"><CheckCircle2 size={16} /> All vaccinations completed!</p>
-                                                            )}
-                                                        </div>
-                                                        <div className="expand-col vacc-expand-actions">
-                                                            <button className="btn btn-outline" onClick={() => setSelectedBaby(b)}>
-                                                                View Full Details →
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </React.Fragment>
+                                                <button className="action-btn-text action-btn-primary" title="View Vaccination History" onClick={() => setSelectedBaby(b)}>
+                                                    <Syringe size={13} /> View History
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
                                 );
                             })}
 
                             {filtered.length === 0 && (
                                 <tr>
-                                    <td colSpan="8" className="nb-empty vacc-empty">
-                                        <Syringe size={32} />
-                                        <p>No newborns with vaccination records found.</p>
-                                        <small>Newborns without vaccination records do not appear in this page.</small>
+                                    <td colSpan="8" className="nb-empty registry-empty">
+                                        <Baby size={48} />
+                                        <p>No newborn records found.</p>
+                                        <small>Newborn records will appear here when added to the system.</small>
                                     </td>
                                 </tr>
                             )}

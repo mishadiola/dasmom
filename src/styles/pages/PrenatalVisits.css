@@ -1078,6 +1078,68 @@
     }
 }
 
+/* ── Visit Type Tabs ── */
+.visit-type-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.visit-type-tab {
+    padding: 10px 24px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    transition: all 0.2s ease;
+    font-family: var(--font);
+}
+
+.visit-type-tab:hover {
+    color: var(--color-text);
+    background: rgba(185, 129, 138, 0.05);
+    border-radius: 8px 8px 0 0;
+}
+
+.visit-type-tab.active {
+    color: var(--color-rose);
+    border-bottom-color: var(--color-rose);
+}
+
+/* ── Vaccination Empty State ── */
+.vaccination-empty {
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.vaccination-empty .empty-state {
+    text-align: center;
+    color: var(--color-text-muted);
+}
+
+.vaccination-empty .empty-state svg {
+    color: var(--color-rose);
+    opacity: 0.5;
+    margin-bottom: 16px;
+}
+
+.vaccination-empty .empty-state h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--color-text);
+}
+
+.vaccination-empty .empty-state p {
+    font-size: 14px;
+    margin: 0;
+}
+
 /* ── Utility ── */
 .font-bold { font-weight: 700; }
 .ml-2 { margin-left: 12px; }
