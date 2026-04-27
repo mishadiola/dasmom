@@ -64,40 +64,38 @@ const HighRiskCases = () => {
       const enriched = (patientsData || [])
         .map((p) => {
           const preg = p.pregnancy_info || {};
-          const lmp = preg.lmd;
-          const weeks = service.calculateWeeks(lmp);
+          const lmp = p.lmd;
+          const weeks = p.weeks || 0;
+          const edd = p.edd;
 
           // Calculate age and check for age-based risk
           const age = p.date_of_birth ? service.calculateAge(p.date_of_birth) : null;
           const ageNum = age && age !== 'N/A' ? parseInt(age) : null;
           const isAgeHighRisk = ageNum !== null && (ageNum < 18 || ageNum > 35);
 
-          const bp = p.bp_systolic && p.bp_diastolic
-            ? `${p.bp_systolic}/${p.bp_diastolic}`
+          const bp = p.bpSystolic && p.bpDiastolic
+            ? `${p.bpSystolic}/${p.bpDiastolic}`
             : null;
-
+            
           const nextApptDate = p.next_appt_date || null;
 
           // Check for multiple births (high-risk indicator)
-          const isMultipleBirth = preg.pregnancy_type && 
-            preg.pregnancy_type.toLowerCase() !== 'singleton';
+          const isMultipleBirth = p.isMultipleBirth || false;
 
           // Check Blood Pressure for high-risk (hypertension or hypotension)
-          const isBPHighRisk = p.bp_systolic && p.bp_diastolic ? 
-            service.isBPHighRisk(p.bp_systolic, p.bp_diastolic) : false;
+          const isBPHighRisk = p.isBPHighRisk;
           
-          const bpStatus = isBPHighRisk && p.bp_systolic && p.bp_diastolic ?
-            service.getBPStatus(p.bp_systolic, p.bp_diastolic) : null;
+          const bpStatus = p.bpStatus;
 
           // Build risk factors array
           let riskFactors = [];
-          if (preg.risk_factors) {
-            riskFactors = preg.risk_factors.split(',').map(f => f.trim()).filter(Boolean);
+          if (p.condition) {
+            riskFactors = p.condition.split(',').map(f => f.trim()).filter(Boolean);
           }
 
           // Build comprehensive condition string with high-risk indicators
-          let conditionDisplay = preg.risk_factors || 'High‑risk pregnancy';
-          let isHighRisk = preg.calculated_risk?.toLowerCase().includes('high') || false;
+          let conditionDisplay = p.condition || 'High‑risk pregnancy';
+          let isHighRisk = p.riskLevel === 'High Risk';
 
           // Add age-based risk
           if (isAgeHighRisk) {
@@ -107,7 +105,7 @@ const HighRiskCases = () => {
 
           // Add multiple births to condition if applicable
           if (isMultipleBirth) {
-            conditionDisplay = `${preg.pregnancy_type} pregnancy`;
+            conditionDisplay = `${p.pregnancyType} pregnancy`;
             isHighRisk = true;
           }
 
@@ -131,26 +129,20 @@ const HighRiskCases = () => {
             last_name: p.last_name,
             station: p.barangay || p.municipality || 'Unassigned',
             age: ageNum,
-            riskLevel: isHighRisk ? 'High Risk' : (preg.calculated_risk?.toLowerCase().includes('monitor') ? 'Medium Risk' : preg.calculated_risk || 'High Risk'),
+            riskLevel: isHighRisk ? 'High Risk' : (p.riskLevel || 'High Risk'),
             condition: conditionDisplay,
-            gravida: preg.gravida || 0,
+            gravida: p.gravida || 0,
             lmd: lmp || '',
-            edd: preg.edd || null,
+            edd: edd || null,
             bp,
-            bpSystolic: p.bp_systolic,
-            bpDiastolic: p.bp_diastolic,
+            bpSystolic: p.bpSystolic,
+            bpDiastolic: p.bpDiastolic,
             isBPHighRisk,
             bpStatus,
             weight_kg: p.weight_kg,
-            pregnancyType: preg.pregnancy_type || 'Singleton',
+            pregnancyType: p.pregnancyType || 'Singleton',
             isMultipleBirth,
-            nextVisit: nextApptDate
-              ? new Date(nextApptDate).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })
-              : 'Initial',
+            nextVisit: p.nextVisit,
             weeks,
             created_at: p.created_at,
           };

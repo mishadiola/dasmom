@@ -322,28 +322,36 @@ const PrenatalVisits = () => {
 
     const todayOnly = new Date().toISOString().split('T')[0];
     // Group visits by patient
-    const uniquePatients = Array.from(
-        new Map(filteredVisits.map(visit => [visit.patientId, {
-            id: visit.patientId,
-            name: visit.patientName,
-            risk: visit.risk,
-            nextVisit: (() => {
-                const nextScheduled = filteredVisits.filter(v => v.patientId === visit.patientId && v.status === 'Scheduled' && v.visitDateOnly >= todayOnly).sort((a, b) => a.visitDateOnly.localeCompare(b.visitDateOnly))[0];
-                return nextScheduled ? nextScheduled.visitDateOnly : 'No upcoming';
-            })(),
-            // Show last ATTENDED visit (not just any visit)
-            lastVisit: (() => {
-                const attended = filteredVisits.filter(v => v.patientId === visit.patientId && v.status === 'Attended')
-                    .sort((a, b) => {
-                        const dateA = a.attendedDate ? new Date(a.attendedDate) : new Date(a.visitDate);
-                        const dateB = b.attendedDate ? new Date(b.attendedDate) : new Date(b.visitDate);
-                        return dateB - dateA;
-                    })[0];
-                return attended ? (attended.attendedDate || attended.visitDate) : 'No completed visit';
-            })(),
-            totalVisits: filteredVisits.filter(v => v.patientId === visit.patientId).length
-        }])).values()
-    );
+    const latestPatientVisitMap = new Map();
+    filteredVisits
+      .slice()
+      .sort((a, b) => new Date(b.visitDateOnly) - new Date(a.visitDateOnly))
+      .forEach((visit) => {
+        if (!latestPatientVisitMap.has(visit.patientId)) {
+          latestPatientVisitMap.set(visit.patientId, visit);
+        }
+      });
+
+    const uniquePatients = Array.from(latestPatientVisitMap.values()).map((visit) => ({
+      id: visit.patientId,
+      name: visit.patientName,
+      risk: visit.risk || visit.calculated_risk || 'Normal',
+      nextVisit: (() => {
+        const nextScheduled = filteredVisits.filter(v => v.patientId === visit.patientId && v.status === 'Scheduled' && v.visitDateOnly >= todayOnly).sort((a, b) => a.visitDateOnly.localeCompare(b.visitDateOnly))[0];
+        return nextScheduled ? nextScheduled.visitDateOnly : 'No upcoming';
+      })(),
+      // Show last ATTENDED visit (not just any visit)
+      lastVisit: (() => {
+        const attended = filteredVisits.filter(v => v.patientId === visit.patientId && v.status === 'Attended')
+          .sort((a, b) => {
+            const dateA = a.attendedDate ? new Date(a.attendedDate) : new Date(a.visitDate);
+            const dateB = b.attendedDate ? new Date(b.attendedDate) : new Date(b.visitDate);
+            return dateB - dateA;
+          })[0];
+        return attended ? (attended.attendedDate || attended.visitDate) : 'No completed visit';
+      })(),
+      totalVisits: filteredVisits.filter(v => v.patientId === visit.patientId).length
+    }));
 
     const totalPages = Math.ceil(uniquePatients.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;

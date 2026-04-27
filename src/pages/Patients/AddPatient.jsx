@@ -233,8 +233,12 @@ const AddPatient = () => {
         const hasOtherCondition = formData.otherConditions && formData.otherConditions.trim() !== '';
         const otherRisk = hasOtherCondition ? otherConditionRisk : null;
 
+        // Check BMI
+        const bmiCategory = patientService.calculateBMICategory(formData.weight, formData.height);
+        const isBMIHighRisk = bmiCategory && patientService.isBMIHighRisk(bmiCategory);
+
         // Determine overall risk (multiple pregnancy is high-risk)
-        if (isMultipleBirth || hasHighRisk || selectedConditionCount >= 2 || otherRisk === 'High') {
+        if (isMultipleBirth || hasHighRisk || selectedConditionCount >= 2 || otherRisk === 'High' || isBMIHighRisk) {
             risk = 'High Risk';
         } else if (hasMedRisk || otherRisk === 'Medium') {
             risk = 'Medium Risk';
@@ -247,7 +251,7 @@ const AddPatient = () => {
         }
 
         setFormData(prev => ({ ...prev, riskLevel: risk }));
-    }, [formData.conditions, formData.otherConditions, formData.pregnancyType, otherConditionRisk, formData.age]);
+    }, [formData.conditions, formData.otherConditions, formData.pregnancyType, otherConditionRisk, formData.age, formData.weight, formData.height]);
 
     useEffect(() => {
         // Calculate BMI when weight and height change
@@ -569,10 +573,35 @@ const AddPatient = () => {
             return !Number.isNaN(visitDate.getTime()) && visitDate > firstDate;
         });
 
+        const riskFactors = [
+            ...formData.conditions,
+            ...(formData.otherConditions ? [formData.otherConditions] : []),
+            ...(formData.pregnancyType !== 'Singleton' ? [`${formData.pregnancyType} Pregnancy`] : []),
+            ...(formData.age && (formData.age < 18 || formData.age > 35) ? [`Age ${formData.age} (${formData.age < 18 ? 'Teenage' : 'Advanced Maternal Age'})`] : []),
+        ].filter(Boolean);
+
+        const bmiCategory = patientService.calculateBMICategory(formData.weight, formData.height);
+        if (bmiCategory && patientService.isBMIHighRisk(bmiCategory)) {
+            riskFactors.push(`${bmiCategory} BMI`);
+        }
+
+        // Add temperature-based risks
+        if (formData.temp) {
+            const temp = parseFloat(formData.temp);
+            if (!isNaN(temp)) {
+                if (temp < 35.1) {
+                    riskFactors.push('Hypothermia');
+                } else if (temp > 37.5) {
+                    riskFactors.push('Fever');
+                }
+            }
+        }
+
         const patientData = {
             ...formData,
             firstVisitDate: autoFirstVisitDate,
             schedulePreview: filteredSchedulePreview,
+            riskFactors: riskFactors.join(', '),
         };
 
         try {

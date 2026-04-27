@@ -5,7 +5,8 @@ import {
     Activity, Syringe, Baby, HeartPulse,
     CalendarCheck, User, MapPin, Phone,
     AlertTriangle, CheckCircle2, Clock, History,
-    Shield, Mail, Home, FileText, Pill, Scale
+    Shield, Mail, Home, FileText, Pill, Scale,
+    Ruler, Thermometer, Heart, Wind
 } from 'lucide-react';
 import '../../styles/pages/PatientProfile.css';
 import PatientService from '../../services/patientservice';
@@ -661,37 +662,45 @@ const PatientProfile = () => {
                                 </div>
                             </div>
 
-                            {/* Card: Conditions */}
+                            {/* Card: Risk History Timeline */}
                             <div className="modern-card">
                                 <div className="modern-card-header">
                                     <div className="mc-icon orange-gradient"><AlertTriangle size={18} /></div>
-                                    <h3>Pre-existing Conditions</h3>
+                                    <h3>Risk Assessment History</h3>
                                 </div>
                                 <div className="mc-body">
-                                    {p.medicalConditions?.length > 0 ? (
-                                        <div className="modern-condition-tags">
-                                            {p.medicalConditions.map(c => (
-                                                <div key={c} className="modern-tag-pill">
-                                                    <span className="tag-dot"></span>
-                                                    {c}
-                                                </div>
-                                            ))}
+                                    {p.visits && p.visits.length > 0 ? (
+                                        <div className="risk-history-timeline">
+                                            {p.visits
+                                                .filter(v => v.status === 'Attended')
+                                                .sort((a, b) => new Date(a.visit_date) - new Date(b.visit_date))
+                                                .map((visit, index) => (
+                                                    <div key={index} className="risk-history-item">
+                                                        <div className="risk-history-header">
+                                                            <div className="risk-visit-info">
+                                                                <span className="risk-visit-date">{formatReadableDate(visit.visit_date)}</span>
+                                                                <span className="risk-visit-number">Visit #{visit.visit_number}</span>
+                                                            </div>
+                                                            <div className={`risk-badge risk-${(visit.calculated_risk || 'normal').toLowerCase().split(' ')[0]}`}>
+                                                                {visit.calculated_risk || 'Normal'} Risk
+                                                            </div>
+                                                        </div>
+                                                        {visit.risk_factors && visit.risk_factors.split(',').filter(f => f.trim()).length > 0 && (
+                                                            <div className="risk-factors-list">
+                                                                {visit.risk_factors.split(',').map((factor, i) => (
+                                                                    <span key={i} className="risk-factor-tag">
+                                                                        {factor.trim()}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
                                         </div>
                                     ) : (
                                         <div className="empty-box">
-                                            <CheckCircle2 size={24} className="text-success mb-2" />
-                                            <p>No high-risk pre-existing conditions recorded.</p>
-                                        </div>
-                                    )}
-                                    
-                                    {p.otherMedicalNotes && (
-                                        <div className="medical-notes-panel mt-4">
-                                            <div className="notes-header">
-                                                <FileText size={14} /> Additional Clinical Notes
-                                            </div>
-                                            <div className="notes-content">
-                                                {p.otherMedicalNotes}
-                                            </div>
+                                            <History size={24} className="text-muted mb-2" />
+                                            <p>No visit history available yet.</p>
                                         </div>
                                     )}
                                 </div>
@@ -823,14 +832,98 @@ const PatientProfile = () => {
                                                         <span className="timeline-tag">{getOrdinalSuffix(v.trimester)} Trim.</span>
                                                     </div>
                                                 </div>
-                                                { v.bp && (
-                                                    <div className="timeline-vitals">
-                                                        <Shield size={12} /> {v.bp}
-                                                        <Scale size={12} /> {v.weight}kg
-                                                        <Activity size={12} /> {v.fht || 'N/A'} bpm
+                                                {v.status === 'Attended' && (
+                                                    <div className="timeline-vitals-grid">
+                                                        {v.bp_systolic && v.bp_diastolic && (
+                                                            <div className="vital-chip">
+                                                                <Shield size={10} />
+                                                                <span className="vital-label">BP:</span> {v.bp_systolic}/{v.bp_diastolic} mmHg
+                                                            </div>
+                                                        )}
+                                                        {v.weight_kg && (
+                                                            <div className="vital-chip">
+                                                                <Scale size={10} />
+                                                                <span className="vital-label">Weight:</span> {v.weight_kg}kg
+                                                            </div>
+                                                        )}
+                                                        {v.height_cm && (
+                                                            <div className="vital-chip">
+                                                                <Ruler size={10} />
+                                                                <span className="vital-label">Height:</span> {v.height_cm}cm
+                                                            </div>
+                                                        )}
+                                                        {v.temp_c && (
+                                                            <div className="vital-chip">
+                                                                <Thermometer size={10} />
+                                                                <span className="vital-label">Temp:</span> {v.temp_c}°C
+                                                            </div>
+                                                        )}
+                                                        {v.pulse_bpm && (
+                                                            <div className="vital-chip">
+                                                                <Heart size={10} />
+                                                                <span className="vital-label">Pulse:</span> {v.pulse_bpm} bpm
+                                                            </div>
+                                                        )}
+                                                        {v.resp_rate_cpm && (
+                                                            <div className="vital-chip">
+                                                                <Wind size={10} />
+                                                                <span className="vital-label">Resp:</span> {v.resp_rate_cpm} cpm
+                                                            </div>
+                                                        )}
+                                                        {v.fundal_height_cm && (
+                                                            <div className="vital-chip">
+                                                                <Ruler size={10} />
+                                                                <span className="vital-label">FH:</span> {v.fundal_height_cm}cm
+                                                            </div>
+                                                        )}
+                                                        {v.fhr_bpm && (
+                                                            <div className="vital-chip">
+                                                                <Activity size={10} />
+                                                                <span className="vital-label">FHR:</span> {v.fhr_bpm} bpm
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
-                                                {v.notes && <p className="timeline-notes">{v.notes}</p>}
+                                                {(v.fetal_movement || v.presentation || (v.tests_done && v.tests_done.length > 0) || v.clinical_notes || v.advice_given) && (
+                                                    <div className="timeline-details-grid">
+                                                        {v.fetal_movement && (
+                                                            <div className="detail-item">
+                                                                <span className="detail-label">Fetal Movement:</span>
+                                                                <span className="detail-value">{v.fetal_movement}</span>
+                                                            </div>
+                                                        )}
+                                                        {v.presentation && (
+                                                            <div className="detail-item">
+                                                                <span className="detail-label">Presentation:</span>
+                                                                <span className="detail-value">{v.presentation}</span>
+                                                            </div>
+                                                        )}
+                                                        {v.tests_done && v.tests_done.length > 0 && (
+                                                            <div className="detail-item">
+                                                                <span className="detail-label">Tests Done:</span>
+                                                                <span className="detail-value">{v.tests_done.join(', ')}</span>
+                                                            </div>
+                                                        )}
+                                                        {v.clinical_notes && (
+                                                            <div className="detail-item full-width">
+                                                                <span className="detail-label">Clinical Notes:</span>
+                                                                <span className="detail-value">{v.clinical_notes}</span>
+                                                            </div>
+                                                        )}
+                                                        {v.advice_given && (
+                                                            <div className="detail-item full-width">
+                                                                <span className="detail-label">Advice Given:</span>
+                                                                <span className="detail-value">{v.advice_given}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {v.status !== 'Attended' && (
+                                                    <div className="timeline-status">
+                                                        Status: {v.status}
+                                                        {v.missed_reason && <span> - {v.missed_reason}</span>}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     );
@@ -880,16 +973,18 @@ const PatientProfile = () => {
                                     <thead>
                                         <tr>
                                             <th>Supplement</th>
-                                            <th>Quantity</th>
-                                            <th>Date Given</th>
+                                            <th>Dosage</th>
+                                            <th>Start Date</th>
+                                            <th>Status</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {p.supplements.map((s, i) => (
                                             <tr key={i}>
                                                 <td>{s.supplement_name}</td>
-                                                <td>{s.quantity}</td>
-                                                <td>{s.date_given}</td>
+                                                <td>{s.dosage}</td>
+                                                <td>{s.start_date}</td>
+                                                <td>{s.status}</td>
                                             </tr>
                                         ))}
                                     </tbody>

@@ -80,7 +80,7 @@ export default class PatientService {
     // 2. Get all pregnancy history rows so current patient status is based on the latest entry.
     const { data: pregnancies, error: err2 } = await this.supabase
       .from('pregnancy_info')
-      .select('patient_id, lmd, edd, calculated_risk, risk_factors, pregn_postp, gravida, para, created_at');
+      .select('patient_id, lmd, edd, pregn_postp, gravida, para, created_at');
     if (err2) throw err2;
 
     const latestPregMap = new Map();
@@ -97,12 +97,13 @@ export default class PatientService {
     // 3. Get prenatal visits and compute attended visit totals plus the next appointment reference.
     const { data: visits, error: err3 } = await this.supabase
       .from('prenatal_visits')
-      .select('patient_id, visit_date, next_appt_date, status')
+      .select('patient_id, visit_date, next_appt_date, status, risk_factors, calculated_risk')
       .order('visit_date', { ascending: false });
     if (err3) throw err3;
 
     const nextApptMap = new Map();
     const attendedCountMap = new Map();
+    const latestAttendedVisitMap = new Map();
     (visits || []).forEach(v => {
       if (!v.patient_id) return;
       if (v.status === 'Attended') {
@@ -110,6 +111,11 @@ export default class PatientService {
         attendedCountMap.set(v.patient_id, count + 1);
         if (v.next_appt_date && !nextApptMap.has(v.patient_id)) {
           nextApptMap.set(v.patient_id, v.next_appt_date);
+        }
+        // Track latest attended visit
+        const existing = latestAttendedVisitMap.get(v.patient_id);
+        if (!existing || new Date(v.visit_date) > new Date(existing.visit_date)) {
+          latestAttendedVisitMap.set(v.patient_id, v);
         }
       }
     });
@@ -125,7 +131,9 @@ export default class PatientService {
       const weeks = lmp ? this.calculateWeeks(lmp) : 0;
       const trimester = lmp ? this.getTrimesterFromWeek(weeks) : 0;
 
-      const risk = pgi?.calculated_risk || 'Normal';
+      const latestVisit = latestAttendedVisitMap.get(p.id);
+      const risk = latestVisit?.calculated_risk || 'Normal';
+      const riskFactors = latestVisit?.risk_factors ? latestVisit.risk_factors.split(',').map(s => s.trim()).filter(Boolean) : [];
 
       // Format next appointment date, only show current or future appointments
       const rawNextAppt = nextApptMap.get(p.id) || null;
@@ -153,7 +161,7 @@ export default class PatientService {
         createdAt: p.created_at,
         nextAppt,
         totalVisits: attendedCountMap.get(p.id) || 0,
-        riskFactors: pgi?.risk_factors ? pgi.risk_factors.split(',').map(s => s.trim()).filter(Boolean) : [],
+        riskFactors,
         patientType,
         type: patientType
       };
@@ -580,6 +588,8 @@ export default class PatientService {
         next_appt_date,
         visit_number,
         trimester,
+        calculated_risk,
+        risk_factors,
         patient_basic_info!inner(first_name, last_name, middle_name)
       `)
       .order('visit_date', { ascending: false })
@@ -602,7 +612,9 @@ export default class PatientService {
       status: visit.status || 'Scheduled',
       nextApptDate: visit.next_appt_date,
       visitNumber: visit.visit_number,
-      trimester: visit.trimester
+      trimester: visit.trimester,
+      risk: visit.calculated_risk || 'Normal',
+      riskFactors: visit.risk_factors || ''
     }));
   } catch (error) {
     console.error('Error fetching prenatal visits:', error);
@@ -790,6 +802,7 @@ export default class PatientService {
         bp_systolic: bpMatch ? parseInt(bpMatch[1]) : null,
         bp_diastolic: bpMatch ? parseInt(bpMatch[2]) : null,
         weight_kg: patientData.weight ? parseFloat(patientData.weight) : null,
+        height_cm: patientData.height ? parseFloat(patientData.height) : null,
         temp_c: patientData.temp ? parseFloat(patientData.temp) : null,
         pulse_bpm: patientData.pulse ? parseInt(patientData.pulse) : null,
         resp_rate_cpm: patientData.respRate ? parseInt(patientData.respRate) : null,
@@ -804,6 +817,8 @@ export default class PatientService {
         status: 'Attended',
         attended_date: new Date().toISOString(),
         assigned_staff: retainedStaff?.[0]?.id || null,
+        calculated_risk: patientData.riskLevel || 'Normal',
+        risk_factors: patientData.riskFactors || null,
         created_by: createdBy
       };
 
@@ -891,27 +906,50 @@ async getSlotCount(dateStr, timeSlot) {
 
   async getHighRiskStats() {
     try {
-      const { data: rows, error } = await this.supabase
-        .from('pregnancy_info')
-        .select('patient_id, calculated_risk, pregn_postp, created_at');
+      // Get latest attended visits with risk
+      const { data: visits, error } = await this.supabase
+        .from('prenatal_visits')
+        .select('patient_id, calculated_risk, created_at')
+        .eq('status', 'Attended')
+        .order('visit_date', { ascending: false });
+
       if (error) throw error;
 
-      const latestStatus = new Map();
-      (rows || []).forEach(row => {
-        if (!row.patient_id) return;
-        const existing = latestStatus.get(row.patient_id);
-        const currentTime = new Date(row.created_at).getTime() || 0;
+      // Get latest pregnancy status
+      const { data: pregnancies, error: pregError } = await this.supabase
+        .from('pregnancy_info')
+        .select('patient_id, pregn_postp, created_at')
+        .order('created_at', { ascending: false });
+
+      if (pregError) throw pregError;
+
+      const latestPregMap = new Map();
+      (pregnancies || []).forEach(p => {
+        if (!p.patient_id) return;
+        const existing = latestPregMap.get(p.patient_id);
+        const currentTime = new Date(p.created_at).getTime() || 0;
         const existingTime = existing ? new Date(existing.created_at).getTime() || 0 : 0;
         if (!existing || currentTime > existingTime) {
-          latestStatus.set(row.patient_id, row);
+          latestPregMap.set(p.patient_id, p);
         }
       });
 
-      const highRiskCount = Array.from(latestStatus.values()).filter(row =>
-        row.pregn_postp === 'Pregnant' &&
-        row.calculated_risk &&
-        row.calculated_risk.toLowerCase().includes('high')
-      ).length;
+      // Get latest attended visit per patient
+      const latestVisitMap = new Map();
+      (visits || []).forEach(v => {
+        if (!v.patient_id) return;
+        const existing = latestVisitMap.get(v.patient_id);
+        if (!existing || new Date(v.created_at) > new Date(existing.created_at)) {
+          latestVisitMap.set(v.patient_id, v);
+        }
+      });
+
+      const highRiskCount = Array.from(latestVisitMap.values()).filter(visit => {
+        const preg = latestPregMap.get(visit.patient_id);
+        return preg && preg.pregn_postp === 'Pregnant' &&
+               visit.calculated_risk &&
+               visit.calculated_risk.toLowerCase().includes('high');
+      }).length;
 
       return {
         highRiskCount
@@ -925,113 +963,105 @@ async getSlotCount(dateStr, timeSlot) {
 async getHighRiskPatients() {
   try {
     const { data, error } = await this.supabase
-      .from('patient_basic_info')
+      .from('prenatal_visits')
       .select(`
-        id,
-        first_name,
-        last_name,
-        barangay,
-        municipality,
-        date_of_birth,
-        created_at,
-        pregnancy_info (
-          calculated_risk,
-          risk_factors,
-          gravida,
-          lmd,
-          edd,
-          pregn_postp,
-          pregnancy_type,
+        patient_id,
+        visit_date,
+        status,
+        bp_systolic,
+        bp_diastolic,
+        next_appt_date,
+        next_appt_type,
+        weight_kg,
+        calculated_risk,
+        risk_factors,
+        gestational_age,
+        patient_basic_info!inner(
+          id,
+          first_name,
+          last_name,
+          barangay,
+          municipality,
+          date_of_birth,
           created_at
-        ),
-        prenatal_visits (
-          visit_date,
-          status,
-          bp_systolic,
-          bp_diastolic,
-          next_appt_date,
-          next_appt_type,
-          weight_kg
         )
       `)
-      .order('created_at', { ascending: false });
+      .order('visit_date', { ascending: false });
 
     if (error) throw error;
 
-    const result = (data || []).map(p => {
-      const pregnancyRows = Array.isArray(p.pregnancy_info)
-        ? p.pregnancy_info
-        : p.pregnancy_info ? [p.pregnancy_info] : [];
-
-      const latestPreg = pregnancyRows.reduce((latest, row) => {
-        if (!row) return latest;
-        if (!latest) return row;
-        const latestTime = new Date(latest.created_at).getTime() || 0;
-        const rowTime = new Date(row.created_at).getTime() || 0;
-        return rowTime > latestTime ? row : latest;
-      }, null);
-
-      if (!latestPreg || latestPreg.pregn_postp?.toLowerCase() !== 'pregnant') return null;
-
-      // Calculate age
-      const age = p.date_of_birth ? this.calculateAge(p.date_of_birth) : null;
-      const ageNum = age && age !== 'N/A' ? parseInt(age) : null;
-      const isAgeHighRisk = ageNum !== null && (ageNum < 18 || ageNum > 35);
-
-      // Include if already high/medium risk OR age-based high risk
-      const currentRisk = latestPreg.calculated_risk?.toLowerCase() || 'normal';
-      const isHighRisk = currentRisk.includes('high') || isAgeHighRisk;
-      const isMediumRisk = currentRisk.includes('medium');
-      if (!isHighRisk && !isMediumRisk) return null;
-
-      // Only pick latest ATTENDED visit
-      let latestAttended = null;
-      if (p.prenatal_visits && Array.isArray(p.prenatal_visits)) {
-        const attendedVisits = p.prenatal_visits
-          .filter(v => v.status === 'Attended' && v.visit_date);
-
-        if (attendedVisits.length > 0) {
-          attendedVisits.sort((a, b) => new Date(b.visit_date) - new Date(a.visit_date));
-          latestAttended = attendedVisits[0];
-        }
+    const latestAttendedByPatient = new Map();
+    (data || []).forEach((visit) => {
+      if (!visit.patient_id || visit.status !== 'Attended') return;
+      if (!latestAttendedByPatient.has(visit.patient_id)) {
+        latestAttendedByPatient.set(visit.patient_id, visit);
       }
-
-      const patientType = 'Mother';
-
-      // Adjust risk level based on age
-      let finalRisk = latestPreg.calculated_risk || 'Normal';
-      if (isAgeHighRisk && !finalRisk.toLowerCase().includes('high')) {
-        finalRisk = 'High Risk';
-      }
-
-      return {
-        id: p.id,
-        first_name: p.first_name,
-        last_name: p.last_name,
-        barangay: p.barangay,
-        municipality: p.municipality,
-        date_of_birth: p.date_of_birth,
-        age: ageNum,
-        type: patientType,
-        created_at: p.created_at,
-        pregnancy_info: {
-          calculated_risk: finalRisk,
-          risk_factors: latestPreg.risk_factors || null,
-          gravida: latestPreg.gravida || 0,
-          lmd: latestPreg.lmd || null,
-          edd: latestPreg.edd || null,
-          pregnancy_type: latestPreg.pregnancy_type || 'Singleton',
-        },
-        // Put latest ATTENDED visit fields on the patient
-        bp_systolic: latestAttended?.bp_systolic || null,
-        bp_diastolic: latestAttended?.bp_diastolic || null,
-        next_appt_date: latestAttended?.next_appt_date || null,
-        next_appt_type: latestAttended?.next_appt_type || null,
-        weight_kg: latestAttended?.weight_kg || null,
-      };
     });
 
-    return result.filter(Boolean);
+    return Array.from(latestAttendedByPatient.values()).map((visit) => {
+      const patient = visit.patient_basic_info || {};
+      const age = patient.date_of_birth ? this.calculateAge(patient.date_of_birth) : null;
+      const ageNum = age && age !== 'N/A' ? parseInt(age) : null;
+      const isAgeHighRisk = ageNum !== null && (ageNum < 18 || ageNum > 35);
+      const currentRisk = visit.calculated_risk || 'Normal';
+      const isHighRisk = currentRisk.toLowerCase().includes('high') || isAgeHighRisk;
+
+      const finalRisk = isHighRisk
+        ? 'High Risk'
+        : currentRisk.toLowerCase().includes('monitor')
+        ? 'Medium Risk'
+        : currentRisk || 'Normal';
+
+      const gestationalAge = visit.gestational_age ? parseInt(visit.gestational_age) || 0 : 0;
+      const weeks = gestationalAge;
+      let lmd = null;
+      let edd = null;
+      if (weeks > 0 && visit.visit_date) {
+        lmd = new Date(visit.visit_date);
+        lmd.setDate(lmd.getDate() - weeks * 7);
+        edd = new Date(lmd);
+        edd.setDate(edd.getDate() + 280);
+      }
+
+      const conditionDisplay = visit.risk_factors
+        ? visit.risk_factors
+        : 'High‑risk pregnancy';
+
+      return {
+        id: patient.id || visit.patient_id,
+        first_name: patient.first_name,
+        last_name: patient.last_name,
+        barangay: patient.barangay,
+        municipality: patient.municipality,
+        date_of_birth: patient.date_of_birth,
+        age: ageNum,
+        type: 'Mother',
+        created_at: patient.created_at,
+        riskLevel: finalRisk,
+        condition: conditionDisplay,
+        gravida: null,
+        lmd: lmd ? lmd.toISOString().split('T')[0] : null,
+        edd: edd ? edd.toISOString().split('T')[0] : null,
+        bp: visit.bp_systolic && visit.bp_diastolic ? `${visit.bp_systolic}/${visit.bp_diastolic}` : null,
+        bpSystolic: visit.bp_systolic || null,
+        bpDiastolic: visit.bp_diastolic || null,
+        isBPHighRisk: this.isBPHighRisk(visit.bp_systolic, visit.bp_diastolic),
+        bpStatus: this.isBPHighRisk(visit.bp_systolic, visit.bp_diastolic)
+          ? this.getBPStatus(visit.bp_systolic, visit.bp_diastolic)
+          : null,
+        weight_kg: visit.weight_kg || null,
+        pregnancyType: 'Singleton',
+        isMultipleBirth: false,
+        nextVisit: visit.next_appt_date
+          ? new Date(visit.next_appt_date).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            })
+          : 'Initial',
+        weeks,
+      };
+    }).filter(p => p.riskLevel === 'High Risk');
   } catch (err) {
     console.error('Error fetching high risk patients:', err);
     return [];
@@ -1167,6 +1197,33 @@ async getHighRiskPatients() {
       .eq('patient_id', patientId)
       .order('visit_date', { ascending: false });
 
+    // Fetch vaccinations
+    const { data: vaccinesData } = await this.supabase
+      .from('vaccinations')
+      .select(`
+        *,
+        vaccine_inventory (
+          vaccine_name
+        )
+      `)
+      .eq('patient_id', patientId)
+      .order('created_at', { ascending: false });
+
+    // Fetch supplements
+    const { data: supplementsData } = await this.supabase
+      .from('supplements')
+      .select(`
+        *,
+        supplement_inventory (
+          supplement_name
+        )
+      `)
+      .eq('patient_id', patientId)
+      .order('created_at', { ascending: false });
+
+    // Find latest attended visit
+    const latestAttendedVisit = visitsData?.find(v => v.status === 'Attended') || null;
+
     // Fetch deliveries for this patient (via mother_id relationship)
     const { data: deliveriesData } = await this.supabase
       .from('deliveries')
@@ -1201,8 +1258,8 @@ async getHighRiskPatients() {
       philhealth: patientData.philhealthnumber,
       bloodType: patientData.bloodtype || 'Unknown',
       emergencyContact,
-      medicalConditions: preg.risk_factors ? preg.risk_factors.split(',').map(s=>s.trim()).filter(Boolean) : [],
-      risk: preg.calculated_risk || 'Low Risk',
+      medicalConditions: latestAttendedVisit?.risk_factors ? latestAttendedVisit.risk_factors.split(',').map(s=>s.trim()).filter(Boolean) : [],
+      risk: latestAttendedVisit?.calculated_risk || 'Low Risk',
       gravida: preg.gravida || 0,
       para: preg.para || 0,
       lmp: preg.lmd || null,
@@ -1211,8 +1268,21 @@ async getHighRiskPatients() {
       weeks: this.calculateWeeks(preg.lmd),
 
       visits: visitsData || [],
-      vaccines: [], // Will be fetched separately if needed
-      supplements: [], // Will be fetched separately if needed
+      vaccines: (vaccinesData || []).map(v => ({
+        vaccine_name: v.vaccine_inventory?.vaccine_name || 'Unknown',
+        dose_number: v.dose_number,
+        vaccinated_date: v.vaccinated_date,
+        scheduled_vaccination: v.scheduled_vaccination,
+        status: v.status
+      })),
+      supplements: (supplementsData || []).map(s => ({
+        supplement_name: s.supplement_inventory?.supplement_name || 'Unknown',
+        dosage: s.dosage,
+        start_date: s.start_date,
+        end_date: s.end_date,
+        status: s.status,
+        notes: s.notes
+      })),
       newborns: (newbornsData || []).map(n => ({
         id: n.id,
         baby_name: n.baby_name,
