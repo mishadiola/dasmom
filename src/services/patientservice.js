@@ -169,7 +169,7 @@ export default class PatientService {
 
     return patients
       .map(mapPatient)
-      .filter(p => p && p.id && p.name !== 'Unknown Patient' && pgiMap.get(p.id)?.pregn_postp?.toLowerCase() === 'pregnant');
+      .filter(p => p && p.id && p.name !== 'Unknown Patient' && (pgiMap.get(p.id)?.pregn_postp || '').toLowerCase() === 'pregnant');
   } catch (error) {
     console.error('❌ getAllPatients:', error);
     return [];
@@ -749,11 +749,8 @@ export default class PatientService {
       edd: patientData.edd,
       pregnancy_type: patientData.pregnancyType,
       place_of_delivery: patientData.plannedDeliveryPlace,
-      calculated_risk: patientData.riskLevel || 'Normal',
       gravida: parseInt(patientData.gravida) || 1,
-      para: parseInt(patientData.para) || 0,
-      risk_factors: Array.isArray(patientData.conditions) && patientData.conditions.length > 0 
-        ? patientData.conditions.join(', ') : null
+      para: parseInt(patientData.para) || 0
     });
 
     let safeSchedulePreview = Array.isArray(patientData.schedulePreview)
