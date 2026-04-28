@@ -564,7 +564,7 @@ const PatientsList = () => {
                             onClick={() => setActivePopover(activePopover === 'archive' ? null : 'archive')}
                         >
                             <Archive size={14} className="filter-btn-icon" />
-                            {archiveFilter === 'active' ? 'Active' : archiveFilter === 'archived' ? 'Archived' : 'All'}
+                            {archiveFilter === 'active' ? 'Active' : archiveFilter === 'archived' ? 'Archived' : archiveFilter === 'missed_delivery' ? 'Missed Delivery' : archiveFilter === 'postpartum' ? 'Postpartum' : 'All'}
                             <ChevronDown size={14} className="filter-btn-icon" />
                         </button>
                         
@@ -573,6 +573,8 @@ const PatientsList = () => {
                                 <div className="popover-title">Status</div>
                                 <div className="popover-options">
                                     <button className={`popover-opt-btn ${archiveFilter === 'active' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('active'); setActivePopover(null); setCurrentPage(1); }}>Active</button>
+                                    <button className={`popover-opt-btn ${archiveFilter === 'missed_delivery' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('missed_delivery'); setActivePopover(null); setCurrentPage(1); }}>Missed Delivery</button>
+                                    <button className={`popover-opt-btn ${archiveFilter === 'postpartum' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('postpartum'); setActivePopover(null); setCurrentPage(1); }}>Postpartum</button>
                                     <button className={`popover-opt-btn ${archiveFilter === 'archived' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('archived'); setActivePopover(null); setCurrentPage(1); }}>Archived</button>
                                     <button className={`popover-opt-btn ${archiveFilter === 'all' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('all'); setActivePopover(null); setCurrentPage(1); }}>All</button>
                                 </div>

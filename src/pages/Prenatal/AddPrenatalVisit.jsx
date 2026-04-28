@@ -269,18 +269,40 @@ const AddPrenatalVisit = () => {
             const attendedVisits = (visits || []).filter(v => v.status === 'Attended');
             const maxAttendedNumber = attendedVisits.length > 0 ? Math.max(...attendedVisits.map(v => v.visit_number || 0)) : 0;
             
-            // Get all scheduled visits and find the most recent one (highest visit_number)
-            // This is the visit where we'll input the records
-            const scheduledVisits = (visits || []).filter(v => v.status === 'Scheduled');
-            const targetVisit = scheduledVisits.length > 0 
-                ? scheduledVisits.reduce((prev, current) => {
-                    return (parseInt(prev.visit_number) > parseInt(current.visit_number)) ? prev : current;
-                })
-                : null;
+            // Get all scheduled visits sorted by visit_number
+            const scheduledVisits = (visits || []).filter(v => v.status === 'Scheduled').sort((a, b) => a.visit_number - b.visit_number);
+            
+            // Find the target visit to edit:
+            // 1. First, try to find a scheduled visit that matches the actual visit date
+            // 2. If not found, use the NEXT scheduled visit (lowest visit_number among scheduled)
+            // 3. If no scheduled visits, create a new one
+            let targetVisit = null;
+            const visitDateStr = formData.visitDate;
+            
+            if (scheduledVisits.length > 0) {
+                // Try to find a scheduled visit that matches the actual visit date
+                const exactMatch = scheduledVisits.find(v => v.visit_date === visitDateStr);
+                if (exactMatch) {
+                    targetVisit = exactMatch;
+                } else {
+                    // Use the NEXT scheduled visit (lowest visit_number) - this is the one to update
+                    // This should be the first scheduled visit after the last attended visit
+                    targetVisit = scheduledVisits[0];
+                }
+            }
 
             const rowVisitNumber = targetVisit ? targetVisit.visit_number : (maxAttendedNumber + 1);
             const rowVisitDate = formData.visitDate;
             const rowId = targetVisit ? targetVisit.id : null;
+
+            console.log('Target visit info:', { 
+                rowVisitNumber, 
+                rowVisitDate, 
+                rowId, 
+                maxAttendedNumber, 
+                scheduledCount: scheduledVisits.length,
+                scheduledVisits: scheduledVisits.map(v => ({ id: v.id, visit_number: v.visit_number, visit_date: v.visit_date, status: v.status }))
+            });
 
             const visitData = {
                 patient_id: patientId,
@@ -310,17 +332,28 @@ const AddPrenatalVisit = () => {
                 status: 'Attended',
                 attended_date: formData.visitDate || new Date().toISOString().split('T')[0],
                 assigned_staff: formData.attendingMidwife || null,
+                risk_factors: formData.riskFactors.length > 0 ? formData.riskFactors.join(', ') : null,
+                calculated_risk: formData.calculatedRisk,
             };
 
             if (rowId) {
-                await patientService.supabase
+                // Update only the specific visit by ID
+                const { error: updateError } = await patientService.supabase
                     .from('prenatal_visits')
                     .update(visitData)
-                    .eq('id', rowId);
+                    .eq('id', rowId)
+                    .select();
+                
+                if (updateError) throw updateError;
+                console.log(`Updated visit ${rowVisitNumber} with ID ${rowId}`);
             } else {
-                await patientService.supabase
+                const { error: insertError } = await patientService.supabase
                     .from('prenatal_visits')
-                    .insert(visitData);
+                    .insert(visitData)
+                    .select();
+                
+                if (insertError) throw insertError;
+                console.log(`Inserted new visit ${rowVisitNumber}`);
             }
 
             await patientService.rebalancePrenatalSchedule(

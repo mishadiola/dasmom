@@ -530,6 +530,21 @@ const AddPatient = () => {
             return;
         }
 
+        // Validate EDD is not in the past for pregnant patients
+        if (formData.pregnancyStatus === 'Pregnant' && formData.edd) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Set to start of day for fair comparison
+            const eddDate = new Date(formData.edd);
+            
+            if (eddDate < today) {
+                setToast({ 
+                    type: 'error', 
+                    message: `Cannot register patient with past due date. EDD (${eddDate.toLocaleDateString()}) is before today (${today.toLocaleDateString()}).` 
+                });
+                return;
+            }
+        }
+
         const requiredPersonal = ['firstName', 'lastName', 'dob', 'email', 'contactNumber', 'address', 'station'];
         const requiredEmergency = ['emName', 'emRel', 'emPhone', 'emAddress'];
         const requiredPregnancy = ['gravida', 'para', 'lmp'];

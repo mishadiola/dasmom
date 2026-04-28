@@ -32,7 +32,7 @@ const Inventory = () => {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(null);
-  const [form, setForm] = useState({ item_name: '', quantity: '', max_stock: '', unit: 'vials' });
+  const [form, setForm] = useState({ item_name: '', quantity: '', max_stock: '', unit: 'vials', brand: '', expiration_date: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -57,17 +57,22 @@ const Inventory = () => {
         id: row?.id || '',
         item_name: row?.vaccine_name || row?.item_name || 'Unknown',
         quantity: row?.quantity || 0,
-        max_stock: row?.max_stock || 500,
+        max_stock: row?.max_quantity || row?.max_stock || 500,
         unit: row?.unit || 'vials',
         status: row?.status || 'active',
+        brand: row?.brand || '',
+        expiration_date: row?.expiration_date || null,
+        doses: row?.doses || null
       }));
       const mappedSupplements = (suppData || []).map(row => ({
         id: row?.id || '',
         item_name: row?.supplement_name || row?.item_name || 'Unknown',
         quantity: row?.quantity || 0,
-        max_stock: row?.max_stock || 1000,
+        max_stock: row?.max_quantity || row?.max_stock || 1000,
         unit: row?.unit || 'tablets',
         status: row?.status || 'active',
+        brand: row?.brand || '',
+        expiration_date: row?.expiration_date || null
       }));
 
       setVaccines(mappedVaccines);
@@ -93,9 +98,11 @@ const Inventory = () => {
 
   const getStatus = (qty, maxStock) => {
     if (qty <= 0) return { label: 'Out of Stock', class: 'status-out' };
-    // 20% of max stock threshold
-    const threshold = maxStock ? Math.ceil(maxStock * 0.2) : 20;
-    if (qty <= threshold) return { label: 'Low Stock', class: 'status-low' };
+    
+    const percentage = maxStock ? Math.round((qty / maxStock) * 100) : 0;
+    
+    if (percentage <= 20) return { label: 'Low Stock', class: 'status-low' };
+    if (percentage <= 50) return { label: 'Medium Stock', class: 'status-medium' };
     return { label: 'In Stock', class: 'status-ok' };
   };
 
@@ -105,38 +112,116 @@ const Inventory = () => {
     return Math.min(100, Math.max(0, percentage));
   };
 
-  const currentItems = activeTab === 'vaccines' ? vaccines : supplements;
+  // Group vaccines by name and aggregate quantities/brands
+  const groupVaccinesByName = (vaccineList) => {
+    const grouped = {};
+    
+    vaccineList.forEach(vaccine => {
+      const name = vaccine.item_name;
+      if (!grouped[name]) {
+        grouped[name] = {
+          item_name: name,
+          total_quantity: 0,
+          total_max_stock: 0,
+          unit: vaccine.unit,
+          brands: [],
+          status: 'active',
+          items: [] // Keep original items for details
+        };
+      }
+      
+      // Add to totals
+      grouped[name].total_quantity += vaccine.quantity || 0;
+      grouped[name].total_max_stock += vaccine.max_stock || 0;
+      
+      // Add brand if not already present
+      if (vaccine.brand && !grouped[name].brands.includes(vaccine.brand)) {
+        grouped[name].brands.push(vaccine.brand);
+      }
+      
+      // Store original item
+      grouped[name].items.push(vaccine);
+    });
+    
+    return Object.values(grouped);
+  };
+
+  // Group supplements by name (similar logic)
+  const groupSupplementsByName = (supplementList) => {
+    const grouped = {};
+    
+    supplementList.forEach(supplement => {
+      const name = supplement.item_name;
+      if (!grouped[name]) {
+        grouped[name] = {
+          item_name: name,
+          total_quantity: 0,
+          total_max_stock: 0,
+          unit: supplement.unit,
+          brands: [],
+          status: 'active',
+          items: []
+        };
+      }
+      
+      grouped[name].total_quantity += supplement.quantity || 0;
+      grouped[name].total_max_stock += supplement.max_stock || 0;
+      
+      if (supplement.brand && !grouped[name].brands.includes(supplement.brand)) {
+        grouped[name].brands.push(supplement.brand);
+      }
+      
+      grouped[name].items.push(supplement);
+    });
+    
+    return Object.values(grouped);
+  };
+
+  const currentItems = activeTab === 'vaccines' ? groupVaccinesByName(vaccines) : groupSupplementsByName(supplements);
 
   const filteredItems = currentItems
     .filter(item => item && typeof item === 'object')
     .filter(item => {
       const matchesSearch = (item.item_name || '').toLowerCase().includes(searchTerm.toLowerCase());
-      const status = getStatus(item.quantity || 0, item.max_stock).label;
+      const status = getStatus(item.total_quantity || 0, item.total_max_stock).label;
       const matchesStatus = statusFilter === 'All' || status === statusFilter;
       
-      // Apply archive filter
-      const itemStatus = item.status || 'active';
-      const matchesArchive = archiveFilter === 'all' || itemStatus === archiveFilter;
+      // Apply archive filter (check if any items in the group are archived)
+      const hasActiveItems = item.items.some(i => (i.status || 'active') === 'active');
+      const hasArchivedItems = item.items.some(i => i.status === 'archived');
+      let matchesArchive = true;
+      if (archiveFilter === 'active') matchesArchive = hasActiveItems;
+      else if (archiveFilter === 'archived') matchesArchive = hasArchivedItems;
       
       // Apply summary card filter
       let matchesSummary = true;
       if (activeSummaryFilter === 'lowStock') {
-        const threshold = item.max_stock ? Math.ceil(item.max_stock * 0.2) : 20;
-        matchesSummary = (item.quantity || 0) > 0 && (item.quantity || 0) <= threshold;
+        const percentage = item.total_max_stock ? Math.round((item.total_quantity || 0) / item.total_max_stock * 100) : 0;
+        matchesSummary = percentage > 0 && percentage <= 20;
+      } else if (activeSummaryFilter === 'mediumStock') {
+        const percentage = item.total_max_stock ? Math.round((item.total_quantity || 0) / item.total_max_stock * 100) : 0;
+        matchesSummary = percentage > 20 && percentage <= 50;
       } else if (activeSummaryFilter === 'outOfStock') {
-        matchesSummary = (item.quantity || 0) <= 0;
+        matchesSummary = (item.total_quantity || 0) <= 0;
       }
-      // If activeSummaryFilter is 'all' or null, show all items
       
       return matchesSearch && matchesStatus && matchesSummary && matchesArchive;
     });
 
   const totalItems = (currentItems || []).length;
-  const lowStockCount = (currentItems || []).filter(i => {
-    const threshold = i?.max_stock ? Math.ceil(i.max_stock * 0.2) : 20;
-    return (i?.quantity || 0) > 0 && (i?.quantity || 0) <= threshold;
-  }).length;
-  const outOfStockCount = (currentItems || []).filter(i => (i?.quantity || 0) <= 0).length;
+  const getStockCount = (items) => {
+    const lowStockCount = items.filter(i => {
+      const percentage = i?.total_max_stock ? Math.round((i?.total_quantity || 0) / i?.total_max_stock * 100) : 0;
+      return percentage > 0 && percentage <= 20;
+    }).length;
+    const mediumStockCount = items.filter(i => {
+      const percentage = i?.total_max_stock ? Math.round((i?.total_quantity || 0) / i?.total_max_stock * 100) : 0;
+      return percentage > 20 && percentage <= 50;
+    }).length;
+    const outOfStockCount = items.filter(i => (i?.total_quantity || 0) <= 0).length;
+    return { lowStockCount, mediumStockCount, outOfStockCount };
+  };
+  const { lowStockCount, mediumStockCount, outOfStockCount } = getStockCount(currentItems);
 
   // Pagination logic
   const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
@@ -159,12 +244,14 @@ const Inventory = () => {
         quantity: Number(form.quantity),
         max_stock: Number(form.max_stock) || (activeTab === 'vaccines' ? 500 : 1000),
         unit: form.unit,
+        brand: form.brand,
+        expiration_date: form.expiration_date || null
       };
 
       await inventoryService.addInventoryItem(table, payload);
 
       setShowAddModal(false);
-      setForm({ item_name: '', quantity: '', max_stock: '', unit: activeTab === 'vaccines' ? 'vials' : 'tablets' });
+      setForm({ item_name: '', quantity: '', max_stock: '', unit: activeTab === 'vaccines' ? 'vials' : 'tablets', brand: '', expiration_date: '' });
     } catch (error) {
       alert('Failed to add item: ' + error.message);
     } finally {
@@ -183,7 +270,7 @@ const Inventory = () => {
         Number(form.max_stock)
       );
       setShowUpdateModal(null);
-      setForm({ item_name: '', quantity: '', max_stock: '', unit: '' });
+      setForm({ item_name: '', quantity: '', max_stock: '', unit: '', brand: '', expiration_date: '' });
     } catch (error) {
       alert('Failed to update quantity: ' + error.message);
     } finally {
@@ -247,7 +334,7 @@ const Inventory = () => {
           <button
             className="btn btn-primary"
             onClick={() => {
-              setForm({ item_name: '', quantity: '', max_stock: activeTab === 'vaccines' ? 500 : 1000, unit: activeTab === 'vaccines' ? 'vials' : 'tablets' });
+              setForm({ item_name: '', quantity: '', max_stock: activeTab === 'vaccines' ? 500 : 1000, unit: activeTab === 'vaccines' ? 'vials' : 'tablets', brand: '', expiration_date: '' });
               setShowAddModal(true);
             }}
           >
@@ -282,6 +369,19 @@ const Inventory = () => {
           </div>
           <div className="stat-value">{lowStockCount}</div>
           <div className="stat-label">Low Stock</div>
+        </div>
+        <div 
+          className={`stat-card stat-card--yellow ${activeSummaryFilter === 'mediumStock' ? 'stat-card--active' : ''}`}
+          onClick={() => setActiveSummaryFilter('mediumStock')}
+          style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+        >
+          <div className="stat-top">
+            <div className="stat-icon stat-icon--yellow">
+              <Package size={20} />
+            </div>
+          </div>
+          <div className="stat-value">{mediumStockCount}</div>
+          <div className="stat-label">Medium Stock</div>
         </div>
         <div 
           className={`stat-card stat-card--rose ${activeSummaryFilter === 'outOfStock' ? 'stat-card--active' : ''}`}
@@ -338,6 +438,7 @@ const Inventory = () => {
           >
             <option value="All">All Status</option>
             <option value="In Stock">In Stock</option>
+            <option value="Medium Stock">Medium Stock</option>
             <option value="Low Stock">Low Stock</option>
             <option value="Out of Stock">Out of Stock</option>
           </select>
@@ -384,8 +485,10 @@ const Inventory = () => {
               <tr>
                 <th className="row-number-header">#</th>
                 <th>Item Name</th>
+                <th>Brand</th>
                 <th>Stock Level</th>
                 <th>Unit</th>
+                <th>Expiration Date</th>
                 <th>Status</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
@@ -393,29 +496,40 @@ const Inventory = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="text-center py-8">
+                  <td colSpan="8" className="text-center py-8">
                     Loading inventory data...
                   </td>
                 </tr>
               ) : paginatedItems.length > 0 ? (
                 paginatedItems.map((item, index) => {
-                  const status = getStatus(item.quantity, item.max_stock);
-                  const percentage = getStockPercentage(item.quantity || 0, item.max_stock || 500);
+                  const status = getStatus(item.total_quantity, item.total_max_stock);
+                  const percentage = getStockPercentage(item.total_quantity || 0, item.total_max_stock || 500);
                   const rowNumber = startIndex + index + 1;
                   return (
-                    <tr key={item.id} className="inv-row">
+                    <tr key={item.item_name} className="inv-row">
                       <td className="row-number-cell">{rowNumber}</td>
                       <td className="item-name-cell">
                         <strong>{item.item_name}</strong>
+                      </td>
+                      <td className="brand-cell">
+                        {item.brands.length > 0 ? (
+                          <select className="brand-dropdown" title="Available brands">
+                            {item.brands.map(brand => (
+                              <option key={brand} value={brand}>{brand}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          '-'
+                        )}
                       </td>
                       <td className="quantity-cell">
                         <div className="stock-level-display">
                           <div className="stock-text">
                             <span className={`qty-text ${status.class}`}>
-                              {item.quantity}
+                              {item.total_quantity}
                             </span>
                             <span className="stock-separator">/</span>
-                            <span className="stock-max">{item.max_stock}</span>
+                            <span className="stock-max">{item.total_max_stock}</span>
                             <span className="stock-percentage">({percentage}%)</span>
                           </div>
                           <div className="stock-progress-bar">
@@ -430,6 +544,12 @@ const Inventory = () => {
                         </div>
                       </td>
                       <td className="unit-cell">{item.unit || 'tablets'}</td>
+                      <td className="expiration-cell">
+                        {item.items.length > 0 && item.items[0].expiration_date ? 
+                          new Date(item.items[0].expiration_date).toLocaleDateString() : 
+                          '-'
+                        }
+                      </td>
                       <td>
                         <span className={`status-badge ${status.class}`}>
                           {status.label}
@@ -443,47 +563,55 @@ const Inventory = () => {
                             onClick={() => {
                               setForm({
                                 ...form,
-                                quantity: item.quantity,
-                                max_stock: item.max_stock,
+                                quantity: item.total_quantity,
+                                max_stock: item.total_max_stock,
                               });
                               setShowUpdateModal({
                                 table:
                                   activeTab === 'vaccines'
                                     ? 'vaccine_inventory'
                                     : 'supplement_inventory',
-                                item,
+                                item: item.items[0], // Use first item for editing
                               });
                             }}
                           >
                             <Edit2 size={13} />
                           </button>
-                          {item.status === 'archived' ? (
+                          {item.items.some(i => i.status === 'archived') ? (
                             <button
                               className="action-btn restore-btn"
-                              title="Restore Item"
-                              onClick={() =>
-                                handleRestore(
-                                  activeTab === 'vaccines'
-                                    ? 'vaccine_inventory'
-                                    : 'supplement_inventory',
-                                  item.id
-                                )
-                              }
+                              title="Restore All Items"
+                              onClick={() => {
+                                // Restore all archived items in this group
+                                const archivedItems = item.items.filter(i => i.status === 'archived');
+                                archivedItems.forEach(archivedItem => {
+                                  handleRestore(
+                                    activeTab === 'vaccines'
+                                      ? 'vaccine_inventory'
+                                      : 'supplement_inventory',
+                                    archivedItem.id
+                                  );
+                                });
+                              }}
                             >
                               <ArchiveRestore size={13} />
                             </button>
                           ) : (
                             <button
                               className="action-btn archive-btn"
-                              title="Archive Item"
-                              onClick={() =>
-                                handleArchive(
-                                  activeTab === 'vaccines'
-                                    ? 'vaccine_inventory'
-                                    : 'supplement_inventory',
-                                  item.id
-                                )
-                              }
+                              title="Archive All Items"
+                              onClick={() => {
+                                // Archive all active items in this group
+                                const activeItems = item.items.filter(i => (i.status || 'active') === 'active');
+                                activeItems.forEach(activeItem => {
+                                  handleArchive(
+                                    activeTab === 'vaccines'
+                                      ? 'vaccine_inventory'
+                                      : 'supplement_inventory',
+                                    activeItem.id
+                                  );
+                                });
+                              }}
                             >
                               <Archive size={13} />
                             </button>
@@ -495,7 +623,7 @@ const Inventory = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan="6" className="text-center py-8">
+                  <td colSpan="8" className="text-center py-8">
                     No items found
                   </td>
                 </tr>
@@ -605,6 +733,8 @@ const Inventory = () => {
                       setForm(prev => ({
                         ...prev,
                         unit: nextTab === 'vaccines' ? 'vials' : 'pcs',
+                        brand: '',
+                        expiration_date: ''
                       }));
                     }}
                     className="form-control"
@@ -624,6 +754,27 @@ const Inventory = () => {
                       setForm({ ...form, item_name: e.target.value })
                     }
                     placeholder="e.g. Iron Tablets"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Brand</label>
+                  <input
+                    type="text"
+                    value={form.brand}
+                    onChange={e =>
+                      setForm({ ...form, brand: e.target.value })
+                    }
+                    placeholder="e.g. Pfizer"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Expiration Date</label>
+                  <input
+                    type="date"
+                    value={form.expiration_date}
+                    onChange={e =>
+                      setForm({ ...form, expiration_date: e.target.value })
+                    }
                   />
                 </div>
                 <div className="form-grid">

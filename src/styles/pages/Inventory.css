@@ -367,11 +367,13 @@
 }
 
 .status-ok { color: #3d8870; background: rgba(109,184,160,0.12); }
+.status-medium { color: #d69e2e; background: rgba(237,137,54,0.12); }
 .status-low { color: #a87c12; background: rgba(232,184,75,0.12); }
 .status-out { color: #b73a52; background: rgba(224,92,115,0.12); }
 
 .qty-text.status-out { color: #e05c73; }
 .qty-text.status-low { color: #e8b84b; }
+.qty-text.status-medium { color: #ed8936; }
 .qty-text.status-ok  { color: #6db8a0; }
 
 .action-btns {

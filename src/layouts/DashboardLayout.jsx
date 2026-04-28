@@ -150,7 +150,7 @@ const DashboardLayout = () => {
                     });
                 }
 
-                // Fetch low stock inventory items
+                // Fetch low stock inventory items (≤20% = low stock)
                 const { data: inventory } = await supabase
                     .from('vaccine_inventory')
                     .select('vaccine_name, quantity, max_quantity')
@@ -158,15 +158,17 @@ const DashboardLayout = () => {
 
                 if (inventory && inventory.length > 0) {
                     inventory
-                        .filter(item => item.quantity < (item.max_quantity * 0.2))
+                        .filter(item => {
+                            const percentage = (item.quantity / item.max_quantity) * 100;
+                            return percentage > 0 && percentage <= 20; // Low stock: 1-20%
+                        })
                         .slice(0, 5)
                         .forEach(item => {
-                            const percentage = (item.quantity / item.max_quantity) * 100;
-                            const severity = percentage < 50 ? 'critical' : 'low';
+                            const percentage = Math.round((item.quantity / item.max_quantity) * 100);
                             notifList.push({
                                 category: 'inventory',
-                                type: severity === 'critical' ? 'alert' : 'warning',
-                                text: `${item.vaccine_name} stock ${severity} (${item.quantity} units)`,
+                                type: 'warning',
+                                text: `${item.vaccine_name} low stock (${item.quantity}/${item.max_quantity} units - ${percentage}%)`,
                                 time: 'Inventory'
                             });
                         });

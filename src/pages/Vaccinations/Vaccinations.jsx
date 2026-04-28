@@ -11,8 +11,17 @@ import {
 import NewbornVaccinationModal from '../../components/NewbornVaccinationModal';
 import '../../styles/pages/Vaccinations.css';
 
-const VACCINE_TYPES = ['Tetanus Toxoid (TT)', 'BCG', 'Hepatitis B (HepB)', 'Influenza', 'OPV', 'DPT'];
-const SUPPLEMENT_TYPES = ['Iron', 'Folic Acid', 'Calcium', 'Vitamin D'];
+// Constants for vaccine and supplement types
+const VACCINE_TYPES = [
+  'BCG', 'DPT', 'Hepatitis B', 'OPV', 'IPV', 'MMR', 'Hib', 'Rotavirus',
+  'PCV', 'Influenza', 'COVID-19', 'HPV', 'Typhoid', 'Cholera', 'Yellow Fever'
+];
+
+const SUPPLEMENT_TYPES = [
+  'Iron Tablets', 'Folic Acid', 'Vitamin A', 'Vitamin D', 'Vitamin C',
+  'Calcium', 'Zinc', 'Iodine', 'Vitamin B Complex', 'Omega-3'
+];
+
 const STAFF_LIST = ['Nurse Ana', 'Nurse Bea', 'Midwife Elena', 'Midwife Ana', 'Dr. Reyes (OB)'];
 
 const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, onSave }) => {
@@ -27,6 +36,8 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
     const [staffList, setStaffList] = useState([]);
     const [suggestions, setSuggestions] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
+    const [supplementTypes, setSupplementTypes] = useState([]);
+    const [vaccineTypes, setVaccineTypes] = useState([]);
     const updateForm = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
 
     useEffect(() => {
@@ -38,6 +49,47 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    useEffect(() => {
+        // Fetch supplement types from inventory when in supplement mode
+        if (mode === 'supplement') {
+            const fetchSupplementTypes = async () => {
+                try {
+                    const { data, error } = await supabase
+                        .from('supplement_inventory')
+                        .select('supplement_name')
+                        .eq('status', 'active')
+                        .order('supplement_name', { ascending: true });
+                    
+                    if (error) throw error;
+                    setSupplementTypes(data?.map(item => item.supplement_name) || []);
+                } catch (error) {
+                    console.error('Error fetching supplement types:', error);
+                    setSupplementTypes([]);
+                }
+            };
+            fetchSupplementTypes();
+        }
+        // Fetch vaccine types from inventory when in vaccine mode
+        if (mode === 'vaccine') {
+            const fetchVaccineTypes = async () => {
+                try {
+                    const { data, error } = await supabase
+                        .from('vaccine_inventory')
+                        .select('vaccine_name')
+                        .eq('status', 'active')
+                        .order('vaccine_name', { ascending: true });
+                    
+                    if (error) throw error;
+                    setVaccineTypes(data?.map(item => item.vaccine_name) || []);
+                } catch (error) {
+                    console.error('Error fetching vaccine types:', error);
+                    setVaccineTypes([]);
+                }
+            };
+            fetchVaccineTypes();
+        }
+    }, [mode]);
 
     useEffect(() => {
         console.log('✅ RecordModal useEffect triggered!', form.patientName, form.patientType);
@@ -306,8 +358,21 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                     }
                 }
             } else {
-                const { data: suppInv } = await supabase.from('supplement_inventory').select('id').eq('supplement_name', form.supplement).single();
+                const { data: suppInv } = await supabase.from('supplement_inventory').select('id, quantity').eq('supplement_name', form.supplement).single();
                 if (!suppInv) throw new Error('Supplement not found in inventory');
+
+                // Calculate quantity to decrement (assume 1 unit per dose, but could be made configurable)
+                const quantityToDecrement = 1;
+                if (suppInv.quantity >= quantityToDecrement) {
+                    // Decrement supplement inventory
+                    await supabase
+                        .from('supplement_inventory')
+                        .update({ quantity: suppInv.quantity - quantityToDecrement })
+                        .eq('id', suppInv.id);
+                    console.log(`✅ Decremented supplement: ${form.supplement}`);
+                } else {
+                    throw new Error(`Insufficient inventory for ${form.supplement}. Current stock: ${suppInv.quantity}`);
+                }
 
                 await supabase.from('supplements').insert({
                     patient_id: patientId,
@@ -406,7 +471,7 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                                     <label>Vaccine Name <span className="req">*</span></label>
                                     <select value={form.vaccine} onChange={e => updateForm('vaccine', e.target.value)}>
                                         <option value="">Select Vaccine</option>
-                                        {VACCINE_TYPES.map(v => <option key={v}>{v}</option>)}
+                                        {vaccineTypes.map(v => <option key={v}>{v}</option>)}
                                     </select>
                                 </div>
                                 <div className="form-group">
@@ -435,7 +500,7 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                                     <label>Supplement Type <span className="req">*</span></label>
                                     <select value={form.supplement} onChange={e => updateForm('supplement', e.target.value)}>
                                         <option value="">Select Supplement</option>
-                                        {SUPPLEMENT_TYPES.map(s => <option key={s}>{s}</option>)}
+                                        {supplementTypes.map(s => <option key={s}>{s}</option>)}
                                     </select>
                                 </div>
                                 <div className="form-group">

@@ -19,7 +19,7 @@ class InventoryService {
   async getVaccineInventory() {
     const { data, error } = await supabase
       .from('vaccine_inventory')
-      .select('id, vaccine_name, quantity, unit, max_quantity, created_by, created_at');
+      .select('id, vaccine_name, quantity, unit, max_quantity, created_by, created_at, brand, expiration_date, doses');
 
     if (error) throw error;
 
@@ -30,13 +30,16 @@ class InventoryService {
       unit: row.unit || 'vials',
       max_stock: row.max_quantity,
       status: row.status,
+      brand: row.brand,
+      expiration_date: row.expiration_date,
+      doses: row.doses
     }));
   }
 
   async getSupplementInventory() {
     const { data, error } = await supabase
       .from('supplement_inventory')
-      .select('id, supplement_name, quantity, unit, max_quant, created_by, created_at');
+      .select('id, supplement_name, quantity, unit, max_quant, created_by, created_at, brand, expiration_date');
 
     if (error) throw error;
 
@@ -47,19 +50,64 @@ class InventoryService {
       unit: row.unit || 'pcs',
       max_stock: row.max_quant,
       status: row.status,
+      brand: row.brand,
+      expiration_date: row.expiration_date
     }));
   }
 
-  async addInventoryItem(table, { item_name, quantity, max_stock, unit }) {
+  async addInventoryItem(table, { item_name, quantity, max_stock, unit, brand, expiration_date }) {
     await this._ensureAdmin(); // only admins
 
     const currentUser = await this.auth.getAuthUser();
     if (!currentUser) throw new Error('No logged‑in user');
 
+    // Check for existing item with same name, brand, and expiration date
+    const existingQuery = table === 'vaccine_inventory' 
+      ? { vaccine_name: item_name, brand: brand || '', expiration_date: expiration_date || null }
+      : { supplement_name: item_name, brand: brand || '', expiration_date: expiration_date || null };
+    
+    const { data: existingItem, error: checkError } = await supabase
+      .from(table)
+      .select('id, quantity')
+      .match(existingQuery)
+      .single();
+    
+    if (checkError && checkError.code !== 'PGRST116') {
+      throw checkError;
+    }
+    
+    if (existingItem) {
+      // Update existing item by adding to quantity
+      const newQuantity = existingItem.quantity + Number(quantity);
+      const payload = {
+        quantity: newQuantity
+      };
+      
+      // Use correct field name based on table
+      if (table === 'vaccine_inventory') {
+        payload.max_quantity = Number(max_stock);
+      } else {
+        payload.max_quant = Number(max_stock);
+      }
+      
+      const { data, error } = await supabase
+        .from(table)
+        .update(payload)
+        .eq('id', existingItem.id)
+        .select();
+      
+      if (error) throw error;
+      console.log(`Updated existing ${item_name} quantity from ${existingItem.quantity} to ${newQuantity}`);
+      return data;
+    }
+    
+    // Insert new item if no duplicate found
     const payload = {
       quantity: Number(quantity),
       unit: unit || (table === 'vaccine_inventory' ? 'vials' : 'pcs'),
       created_by: currentUser.id,
+      brand: brand,
+      expiration_date: expiration_date
     };
 
     if (table === 'vaccine_inventory') {

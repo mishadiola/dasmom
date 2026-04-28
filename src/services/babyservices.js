@@ -30,7 +30,6 @@ class BabyService {
         province,
         pregnancy_info (
           id,
-          calculated_risk,
           pregn_postp,
           edd,
           pregnancy_type,
@@ -72,7 +71,7 @@ class BabyService {
         id: patient.id,
         name: `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
         station: `${patient.barangay || 'No Barangay'}, ${patient.province || 'N/A'}`,
-        riskLevel: preg?.calculated_risk || 'Normal',
+        riskLevel: 'Normal', // Default risk level since calculated_risk field doesn't exist
         isPregnant: !!preg?.id,
         pregnancyType: preg?.pregnancy_type || 'Singleton',
         lmp: preg?.lmd || null,
