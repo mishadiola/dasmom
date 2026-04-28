@@ -11,7 +11,7 @@ import '../../styles/pages/Analytics.css';
 /* ════════════════════════════
    MOCK DATA ENGINE
 ════════════════════════════ */
-const STATIONS = ['Station 1', 'Station 2', 'Station 3', 'Station 4', 'Station 5', 'Station 6', 'Station 7'];
+const STATIONS = ['Dasma 1', 'Dasma 2', 'Dasma 3', 'Dasma 4', 'Salawag', 'Armstrong'];
 
 const generateMaternalData = () => {
     const conditions = ['Preeclampsia', 'Anemia', 'Gestational Diabetes', 'None'];
@@ -244,7 +244,7 @@ const Analytics = () => {
                         <MiniTrend data={[4, 6, 8, 5, 9, 7, 12, 8]} color="#ac97b4" />
                     </div>
                     <div className="report-footer">
-                        <p>Targeting awareness programs in <strong>Station 3</strong> could reduce these numbers.</p>
+                        <p>Targeting awareness programs in <strong>Dasma 3</strong> could reduce these numbers.</p>
                     </div>
                 </div>
 

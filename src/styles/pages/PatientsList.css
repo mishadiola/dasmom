@@ -28,22 +28,25 @@
 .controls-card {
     background: #fff;
     border-radius: 16px;
-    padding: 16px;
+    padding: 20px;
     border: 1px solid #eef0f4;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 16px;
 }
 
-/* Search */
+/* Row 1: Search */
+.search-row {
+    display: flex;
+    width: 100%;
+}
+
 .search-wrap {
     position: relative;
     flex: 1;
     min-width: 250px;
-    max-width: 400px;
+    max-width: 500px;
 }
 
 .search-icon {
@@ -73,19 +76,28 @@
     outline: none;
 }
 
-/* Filters */
-.filters-wrap {
+/* Row 2: Filters */
+.filters-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.filter-group {
     display: flex;
     align-items: center;
     gap: 12px;
     flex-wrap: wrap;
 }
 
-.filters-label {
-    font-size: 13.5px;
+.filter-label {
+    font-size: 12px;
     font-weight: 600;
     color: var(--color-text-muted);
-    margin-right: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: none;
 }
 
 /* Custom Filter Popover Target Button */
@@ -804,20 +816,20 @@
 ══════════════════════════════════════════ */
 @media (max-width: 900px) {
     .controls-card {
-        flex-direction: column;
-        align-items: stretch;
+        padding: 16px;
     }
 
     .search-wrap {
         max-width: 100%;
     }
 
-    .filters-wrap {
-        width: 100%;
+    .filters-row {
+        gap: 12px;
     }
 
     .filter-group {
-        flex: 1;
+        width: 100%;
+        gap: 10px;
     }
 
     .filter-select {
@@ -825,9 +837,32 @@
     }
 }
 
+@media (max-width: 768px) {
+    .filter-group {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+
+    .filter-dropdown-container {
+        width: 100%;
+    }
+
+    .filter-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .clear-filters-btn {
+        grid-column: 1 / -1;
+        width: 100%;
+        margin-top: 8px;
+    }
+}
+
 @media (max-width: 600px) {
-    .filters-wrap {
-        flex-direction: column;
+    .filter-group {
+        grid-template-columns: 1fr;
     }
 
     .pagination-wrap {

@@ -1136,8 +1136,126 @@
 }
 
 .vaccination-empty .empty-state p {
-    font-size: 14px;
-    margin: 0;
+font-size: 14px;
+margin: 0;
+}
+
+/* ── Visit Category Tabs ── */
+.visit-category-tabs {
+display: flex;
+gap: 8px;
+margin: 0 0 16px;
+border-bottom: 2px solid #eef0f4;
+padding: 0 0 0 4px;
+}
+
+.visit-category-tab {
+padding: 10px 20px;
+background: transparent;
+border: none;
+border-bottom: 2px solid transparent;
+margin-bottom: -2px;
+cursor: pointer;
+font-size: 13px;
+font-weight: 600;
+color: var(--color-text-muted);
+transition: all 0.2s ease;
+font-family: var(--font);
+}
+
+.visit-category-tab:hover {
+color: var(--color-text);
+background: rgba(185, 129, 138, 0.05);
+border-radius: 8px 8px 0 0;
+}
+
+.visit-category-tab.active {
+color: var(--color-rose);
+border-bottom-color: var(--color-rose);
+}
+
+/* ── Visit DateTime Display ── */
+.visit-datetime {
+display: flex;
+flex-direction: column;
+gap: 2px;
+}
+
+.visit-date {
+font-size: 13px;
+font-weight: 600;
+color: var(--color-text);
+}
+
+.visit-time {
+font-size: 12px;
+color: var(--color-text-muted);
+}
+
+/* ── Status Badge ── */
+.status-badge {
+display: inline-flex;
+align-items: center;
+padding: 4px 10px;
+border-radius: 6px;
+font-size: 12px;
+font-weight: 600;
+text-transform: capitalize;
+}
+
+.status-badge.status-scheduled,
+.status-badge.status-pending {
+background: rgba(91, 174, 208, 0.15);
+color: #2d7fa3;
+}
+
+.status-badge.status-attended,
+.status-badge.status-completed {
+background: rgba(109, 184, 160, 0.15);
+color: #3d8870;
+}
+
+.status-badge.status-missed {
+background: rgba(224, 92, 115, 0.15);
+color: #b73a52;
+}
+
+/* ── Empty Tab State ── */
+.empty-tab-state {
+text-align: center;
+padding: 48px 24px;
+}
+
+.empty-state-content {
+display: flex;
+flex-direction: column;
+align-items: center;
+gap: 12px;
+color: var(--color-text-muted);
+}
+
+.empty-state-content svg {
+opacity: 0.4;
+}
+
+.empty-state-content p {
+font-size: 14px;
+margin: 0;
+}
+
+/* ── Responsive for Category Tabs ── */
+@media (max-width: 768px) {
+.visit-category-tabs {
+gap: 4px;
+overflow-x: auto;
+-webkit-overflow-scrolling: touch;
+}
+  
+.visit-category-tab {
+padding: 8px 14px;
+font-size: 12px;
+white-space: nowrap;
+}
 }
 
 /* ── Utility ── */
@@ -1148,8 +1266,8 @@
 .text-right { text-align: right; }
 
 .pv-table th.text-right {
-    text-align: right;
-    padding-right: 16px;
+text-align: right;
+padding-right: 16px;
 }
 
 .pv-table td.text-right {

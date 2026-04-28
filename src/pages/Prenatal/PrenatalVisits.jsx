@@ -137,7 +137,8 @@ const PrenatalVisits = () => {
     const [appointments, setAppointments] = useState([]);
     const [visitsTable, setVisitsTable] = useState([]);
     const [selectedPatient, setSelectedPatient] = useState(null);
-    const [visitTypeTab, setVisitTypeTab] = useState('prenatal'); // 'prenatal' | 'vaccination'
+    const [visitTypeTab, setVisitTypeTab] = useState('prenatal'); // 'prenatal' | 'vaccination' | 'postpartum'
+    const [visitCategoryTab, setVisitCategoryTab] = useState('upcoming'); // 'upcoming' | 'missed' | 'completed'
 
     const patientService = useMemo(() => new PatientService(), []);
 
@@ -360,6 +361,60 @@ const PrenatalVisits = () => {
 
     const TODAY = new Date().toISOString().split('T')[0];
 
+    // Visit category filtering for tabbed table view
+    const categorizeVisits = () => {
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Flatten all visits into individual visit records with status
+        const allVisits = filteredVisits.map(v => ({
+            id: v.id,
+            patientId: v.patientId,
+            patientName: v.patientName,
+            risk: v.risk || v.calculated_risk || 'Normal',
+            visitDate: v.visitDateOnly,
+            visitTime: v.visitTime,
+            status: v.status,
+            attendedDate: v.attendedDate,
+            visitDateTime: new Date(`${v.visitDateOnly}T${v.visitTime || '00:00'}`)
+        }));
+
+        const upcoming = allVisits.filter(v => 
+            (v.status === 'Scheduled' || v.status === 'Pending') && 
+            v.visitDate >= today
+        ).sort((a, b) => a.visitDate.localeCompare(b.visitDate));
+
+        const missed = allVisits.filter(v => 
+            v.status === 'Missed' || 
+            (v.status === 'Scheduled' && v.visitDate < today)
+        ).sort((a, b) => b.visitDate.localeCompare(a.visitDate));
+
+        const completed = allVisits.filter(v => 
+            v.status === 'Attended' || v.status === 'Completed'
+        ).sort((a, b) => {
+            const dateA = a.attendedDate ? new Date(a.attendedDate) : new Date(a.visitDate);
+            const dateB = b.attendedDate ? new Date(b.attendedDate) : new Date(b.visitDate);
+            return dateB - dateA;
+        });
+
+        return { upcoming, missed, completed };
+    };
+
+    const categorizedVisits = categorizeVisits();
+    
+    const getTabVisits = () => {
+        switch(visitCategoryTab) {
+            case 'upcoming': return categorizedVisits.upcoming;
+            case 'missed': return categorizedVisits.missed;
+            case 'completed': return categorizedVisits.completed;
+            default: return categorizedVisits.upcoming;
+        }
+    };
+
+    const tabVisits = getTabVisits();
+    const tabTotalPages = Math.ceil(tabVisits.length / itemsPerPage);
+    const tabStartIndex = (currentPage - 1) * itemsPerPage;
+    const paginatedTabVisits = tabVisits.slice(tabStartIndex, tabStartIndex + itemsPerPage);
+
     return (
         <div className="prenatal-visits-overall">
             {toast && <div className="toast toast--success"><CheckCircle2 size={16} /> {toast}</div>}
@@ -385,6 +440,12 @@ const PrenatalVisits = () => {
                     onClick={() => setVisitTypeTab('vaccination')}
                 >
                     Vaccination
+                </button>
+                <button
+                    className={`visit-type-tab ${visitTypeTab === 'postpartum' ? 'active' : ''}`}
+                    onClick={() => setVisitTypeTab('postpartum')}
+                >
+                    Postpartum
                 </button>
             </div>
 
@@ -552,7 +613,7 @@ const PrenatalVisits = () => {
                     )}
                 </div>
             </div>
-            ) : (
+            ) : visitTypeTab === 'vaccination' ? (
                 /* Vaccination Tab - Calendar Empty State */
                 <div className="pv-calendar-section vaccination-empty">
                     <div className="empty-state">
@@ -561,13 +622,22 @@ const PrenatalVisits = () => {
                         <p>Vaccination scheduling will be available soon.</p>
                     </div>
                 </div>
+            ) : (
+                /* Postpartum Tab - Calendar Empty State */
+                <div className="pv-calendar-section vaccination-empty">
+                    <div className="empty-state">
+                        <CalendarIcon size={48} />
+                        <h3>No postpartum schedules yet.</h3>
+                        <p>Postpartum scheduling will be available soon.</p>
+                    </div>
+                </div>
             )}
 
             {/* VISITS TABLE */}
             {visitTypeTab === 'prenatal' ? (
             <div className="pv-table-section">
                 <div className="section-header-row">
-                    <h2 className="section-title"><Clock size={18} /> Upcoming & Recent Visits</h2>
+                    <h2 className="section-title"><Clock size={18} /> Visit Records</h2>
                     <div className="table-filters">
                         <div className="header-search">
                             <Search size={18} className="hs-icon" />
@@ -579,16 +649,29 @@ const PrenatalVisits = () => {
                                 className="hs-input"
                             />
                         </div>
-                        <select 
-                            className="header-filter-select"
-                            value={filterStatus}
-                            onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}
-                        >
-                            <option value="All">All Statuses</option>
-                            <option value="Completed">Completed</option>
-                            <option value="Upcoming">Upcoming</option>
-                        </select>
                     </div>
+                </div>
+
+                {/* Visit Category Tabs */}
+                <div className="visit-category-tabs">
+                    <button
+                        className={`visit-category-tab ${visitCategoryTab === 'upcoming' ? 'active' : ''}`}
+                        onClick={() => { setVisitCategoryTab('upcoming'); setCurrentPage(1); }}
+                    >
+                        Upcoming
+                    </button>
+                    <button
+                        className={`visit-category-tab ${visitCategoryTab === 'missed' ? 'active' : ''}`}
+                        onClick={() => { setVisitCategoryTab('missed'); setCurrentPage(1); }}
+                    >
+                        Missed
+                    </button>
+                    <button
+                        className={`visit-category-tab ${visitCategoryTab === 'completed' ? 'active' : ''}`}
+                        onClick={() => { setVisitCategoryTab('completed'); setCurrentPage(1); }}
+                    >
+                        Completed
+                    </button>
                 </div>
 
                 <div className="table-responsive">
@@ -597,52 +680,84 @@ const PrenatalVisits = () => {
                             <tr>
                                 <th>Patient Name</th>
                                 <th>Risk Level</th>
-                                <th>Next Visit</th>
-                                <th>Last Visit</th>
-                                <th>Total Visits</th>
+                                <th>Date & Time</th>
+                                <th>Status</th>
                                 <th className="text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {paginatedPatients.map(patient => (
-                                <tr key={patient.id}>
-                                    <td>
-                                        <div className="p-info">
-                                            <span className="p-name">{patient.name}</span>
-                                            <span className="p-id">{patient.id}</span>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <span className={`risk-tag risk-${patient.risk?.replace(' ', '-').toLowerCase() || 'normal'}`}>
-                                            {patient.risk}
-                                        </span>
-                                    </td>
-                                    <td>{patient.nextVisit !== 'No upcoming' ? formatReadableDate(patient.nextVisit) : 'No upcoming'}</td>
-                                    <td>{formatReadableDate(patient.lastVisit)}</td>
-                                    <td>{patient.totalVisits}</td>
-                                    <td className="text-right">
-                                        <div className="row-actions">
-                                            <button className="action-btn-text action-btn-primary" onClick={() => navigate(`/dashboard/prenatal/add/${patient.id}`)} title="Record Prenatal Visit">
-                                                <Plus size={14} /> Record Visit
-                                            </button>
-                                            <button className="action-btn-text action-btn-secondary" onClick={() => setSelectedPatient(patient.id)} title="View Visit History / Schedules">
-                                                <Clock size={14} /> View Visits
-                                            </button>
-                                            <button className="action-btn-text action-btn-accent" onClick={() => navigate(`/dashboard/patients/${patient.id}`)} title="View Patient Profile">
-                                                <Users size={14} /> View Profile
-                                            </button>
-                                        </div>
+                            {paginatedTabVisits.length > 0 ? (
+                                paginatedTabVisits.map(visit => (
+                                    <tr key={visit.id}>
+                                        <td>
+                                            <div className="p-info">
+                                                <span className="p-name">{visit.patientName}</span>
+                                                <span className="p-id">{visit.patientId}</span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span className={`risk-tag risk-${visit.risk?.replace(' ', '-').toLowerCase() || 'normal'}`}>
+                                                {visit.risk}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div className="visit-datetime">
+                                                <span className="visit-date">{formatReadableDate(visit.visitDate)}</span>
+                                                <span className="visit-time">{visit.visitTime || 'TBD'}</span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span className={`status-badge status-${visit.status?.toLowerCase() || 'scheduled'}`}>
+                                                {visit.status}
+                                            </span>
+                                        </td>
+                                        <td className="text-right">
+                                            <div className="row-actions">
+                                                <button className="action-btn-text action-btn-primary" onClick={() => navigate(`/dashboard/prenatal/add/${visit.patientId}`)} title="Record Prenatal Visit">
+                                                    <Plus size={14} /> Record
+                                                </button>
+                                                <button className="action-btn-text action-btn-secondary" onClick={() => setSelectedVisit(visit)} title="View Visit Details">
+                                                    <Eye size={14} /> View
+                                                </button>
+                                                <button className="action-btn-text action-btn-accent" onClick={() => navigate(`/dashboard/patients/${visit.patientId}`)} title="View Patient Profile">
+                                                    <Users size={14} /> Profile
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan="5" className="empty-tab-state">
+                                        {visitCategoryTab === 'upcoming' && (
+                                            <div className="empty-state-content">
+                                                <CalendarCheck size={32} />
+                                                <p>No upcoming visits.</p>
+                                            </div>
+                                        )}
+                                        {visitCategoryTab === 'missed' && (
+                                            <div className="empty-state-content">
+                                                <AlertTriangle size={32} />
+                                                <p>No missed visits.</p>
+                                            </div>
+                                        )}
+                                        {visitCategoryTab === 'completed' && (
+                                            <div className="empty-state-content">
+                                                <CheckCircle2 size={32} />
+                                                <p>No completed visits.</p>
+                                            </div>
+                                        )}
                                     </td>
                                 </tr>
-                            ))}
+                            )}
                         </tbody>
                     </table>
                 </div>
 
-                {totalPages > 1 && (
+                {tabTotalPages > 1 && (
                     <div className="pagination-wrap">
                         <span>
-                            Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, uniquePatients.length)} of {uniquePatients.length}
+                            Showing {tabStartIndex + 1}-{Math.min(tabStartIndex + itemsPerPage, tabVisits.length)} of {tabVisits.length}
                         </span>
 
                         <div className="pagination-controls">
@@ -651,7 +766,7 @@ const PrenatalVisits = () => {
                             </button>
 
                             <div className="page-numbers">
-                                {Array.from({ length: totalPages }, (_, i) => i + 1).map(num => (
+                                {Array.from({ length: tabTotalPages }, (_, i) => i + 1).map(num => (
                                     <button 
                                         key={num}
                                         className={`page-num ${currentPage === num ? 'active' : ''}`}
@@ -662,7 +777,7 @@ const PrenatalVisits = () => {
                                 ))}
                             </div>
 
-                            <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="page-btn">
+                            <button disabled={currentPage === tabTotalPages} onClick={() => setCurrentPage(p => p + 1)} className="page-btn">
                                 <ChevronRight size={16} />
                             </button>
                         </div>
@@ -670,12 +785,12 @@ const PrenatalVisits = () => {
                 )}
             </div>
             ) : (
-                /* Vaccination Tab - Table Empty State */
+                /* Vaccination & Postpartum Tab - Table Empty State */
                 <div className="pv-table-section vaccination-empty">
                     <div className="empty-state">
                         <Users size={48} />
-                        <h3>No vaccination schedules found.</h3>
-                        <p>Vaccination patient records will appear here.</p>
+                        <h3>No {visitTypeTab} schedules found.</h3>
+                        <p>{visitTypeTab.charAt(0).toUpperCase() + visitTypeTab.slice(1)} patient records will appear here.</p>
                     </div>
                 </div>
             )}

@@ -928,6 +928,92 @@
 }
 
 /* ══════════════════════════════════════════
+   STOCK SUMMARY CARDS
+══════════════════════════════════════════ */
+.stock-summary-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin: 0 0 16px;
+}
+
+.stock-summary-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 8px;
+    border-radius: 12px;
+    border: 1.5px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.stock-summary-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.stock-summary--critical {
+    background: rgba(224, 92, 115, 0.08);
+    border-color: rgba(224, 92, 115, 0.25);
+}
+
+.stock-summary--critical .stock-summary-count {
+    color: #b73a52;
+}
+
+.stock-summary--low {
+    background: rgba(249, 162, 108, 0.08);
+    border-color: rgba(249, 162, 108, 0.25);
+}
+
+.stock-summary--low .stock-summary-count {
+    color: #9a5a20;
+}
+
+.stock-summary--ok {
+    background: rgba(109, 184, 160, 0.08);
+    border-color: rgba(109, 184, 160, 0.25);
+}
+
+.stock-summary--ok .stock-summary-count {
+    color: #3d8870;
+}
+
+.stock-summary-count {
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 4px;
+}
+
+.stock-summary-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+}
+
+/* Responsive for stock summary */
+@media (max-width: 768px) {
+    .stock-summary-cards {
+        gap: 8px;
+    }
+    
+    .stock-summary-card {
+        padding: 10px 6px;
+    }
+    
+    .stock-summary-count {
+        font-size: 20px;
+    }
+    
+    .stock-summary-label {
+        font-size: 10px;
+    }
+}
+
+/* ══════════════════════════════════════════
    RECENT DELIVERIES
 ══════════════════════════════════════════ */
 .delivery-list {

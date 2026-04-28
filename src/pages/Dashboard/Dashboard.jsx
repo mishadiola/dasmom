@@ -454,19 +454,38 @@ const Dashboard = () => {
                         <div className="card-header">
                             <h2 className="card-title">
                                 <Syringe size={16} />Vaccine &amp; Supplement
-                                <span className="card-badge card-badge--red">2 Low</span>
                             </h2>
-                            <button className="card-link">Manage <ChevronRight size={13} /></button>
+                            <button className="card-link" onClick={() => navigate('/dashboard/inventory')}>Manage <ChevronRight size={13} /></button>
                         </div>
                         <p className="card-description">Manage real-time inventory levels of vital supplements and vaccines.</p>
+                        
+                        {/* Stock Status Summary Cards */}
+                        {!loadingStock && vaccineStock.length > 0 && (
+                            <div className="stock-summary-cards">
+                                <div className="stock-summary-card stock-summary--critical">
+                                    <span className="stock-summary-count">{vaccineStock.filter(v => v.status === 'critical').length}</span>
+                                    <span className="stock-summary-label">Critical</span>
+                                </div>
+                                <div className="stock-summary-card stock-summary--low">
+                                    <span className="stock-summary-count">{vaccineStock.filter(v => v.status === 'low').length}</span>
+                                    <span className="stock-summary-label">Low Stock</span>
+                                </div>
+                                <div className="stock-summary-card stock-summary--ok">
+                                    <span className="stock-summary-count">{vaccineStock.filter(v => v.status === 'ok').length}</span>
+                                    <span className="stock-summary-label">Normal</span>
+                                </div>
+                            </div>
+                        )}
+                        
                         <div className="stock-list">
                             {loadingStock ? (
                                 <div className="stock-loading">Loading inventory...</div>
                             ) : vaccineStock.length > 0 ? (
                                 vaccineStock
                                     .sort((a, b) => {
-                                        // Sort by stock level ascending (lowest stock first)
-                                        return a.stock - b.stock;
+                                        // Priority sort: Critical (0) → Low (1) → Ok (2)
+                                        const priority = { critical: 0, low: 1, ok: 2 };
+                                        return priority[a.status] - priority[b.status];
                                     })
                                     .slice(0, 5)
                                     .map((v) => (
@@ -484,7 +503,7 @@ const Dashboard = () => {
                                         <div className="stock-meta">
                                             <span className="stock-qty">{v.stock} {v.unit}</span>
                                             <span className={`stock-badge stock-badge--${v.status}`}>
-                                                {v.status === 'ok' ? 'In Stock' : v.status === 'low' ? 'Low' : 'Critical'}
+                                                {v.status === 'ok' ? 'Normal' : v.status === 'low' ? 'Low' : 'Critical'}
                                             </span>
                                         </div>
                                     </div>

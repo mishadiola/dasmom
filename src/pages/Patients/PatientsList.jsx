@@ -451,19 +451,24 @@ const PatientsList = () => {
             </div>
 
             <div className="controls-card">
-                <div className="search-wrap">
-                    <Search className="search-icon" size={18} />
-                    <input
-                        type="text"
-                        placeholder="Search by name, ID, or station..."
-                        value={searchTerm}
-                        onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                        className="search-input"
-                    />
+                {/* Row 1: Search */}
+                <div className="search-row">
+                    <div className="search-wrap">
+                        <Search className="search-icon" size={18} />
+                        <input
+                            type="text"
+                            placeholder="Search by name, ID, or station..."
+                            value={searchTerm}
+                            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                            className="search-input"
+                        />
+                    </div>
                 </div>
 
-                <div className="filters-wrap">
-                    <span className="filters-label">Filters:</span>
+                {/* Row 2: Filters */}
+                <div className="filters-row">
+                    <div className="filter-group">
+                        <span className="filter-label">Pregnancy Details</span>
                     
                     {/* Pregnancy Details Popover */}
                     <div className="filter-dropdown-container">
@@ -617,6 +622,7 @@ const PatientsList = () => {
                     {hasActiveFilters && (
                         <button className="clear-filters-btn" onClick={clearFilters}>Clear All</button>
                     )}
+                </div>
                 </div>
             </div>
 
