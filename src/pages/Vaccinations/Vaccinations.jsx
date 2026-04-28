@@ -58,7 +58,7 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                     const { data, error } = await supabase
                         .from('supplement_inventory')
                         .select('supplement_name')
-                        .eq('status', 'active')
+                        .gt('quantity', 0)
                         .order('supplement_name', { ascending: true });
                     
                     if (error) throw error;
@@ -77,7 +77,7 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                     const { data, error } = await supabase
                         .from('vaccine_inventory')
                         .select('vaccine_name')
-                        .eq('status', 'active')
+                        .gt('quantity', 0)
                         .order('vaccine_name', { ascending: true });
                     
                     if (error) throw error;
@@ -267,15 +267,17 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
 
                         let vaccineInvId = vaccRecord?.vaccine_inventory_id;
 
-                        // If no vaccine_inventory_id, try to find it from notes
+                        // If no vaccine_inventory_id, try to find it from notes using nearest expiration date
                         if (!vaccineInvId && vaccRecord?.notes) {
                             const vaccineMatch = vaccRecord.notes.match(/(\d+)(?:st|nd|rd|th) dose of (.+)/);
                             if (vaccineMatch) {
                                 const vaccineName = vaccineMatch[2].trim();
                                 const { data: vaccInv } = await supabase
                                     .from('vaccine_inventory')
-                                    .select('id, quantity, vaccine_name')
+                                    .select('id, quantity, vaccine_name, expiration_date')
                                     .or(`vaccine_name.ilike.%${vaccineName}%,vaccine_name.ilike.%${vaccineName.replace(/ \(.+\)/, '')}%`)
+                                    .gt('quantity', 0)
+                                    .order('expiration_date', { ascending: true, nullsFirst: false })
                                     .limit(1);
 
                                 if (vaccInv && vaccInv.length > 0) {
@@ -312,14 +314,16 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                                 console.log(`✅ Decremented vaccine: ${vaccInv.vaccine_name}`);
                             }
                         } else if (vaccRecord?.notes) {
-                            // Fallback: try to find by name in notes
+                            // Fallback: try to find by name in notes using nearest expiration date
                             const vaccineMatch = vaccRecord.notes.match(/(\d+)(?:st|nd|rd|th) dose of (.+)/);
                             if (vaccineMatch) {
                                 const extractedName = vaccineMatch[2].trim();
                                 const { data: vaccInv } = await supabase
                                     .from('vaccine_inventory')
-                                    .select('id, quantity, vaccine_name')
+                                    .select('id, quantity, vaccine_name, expiration_date')
                                     .or(`vaccine_name.ilike.%${extractedName}%,vaccine_name.ilike.%${extractedName.replace(/ \(.+\)/, '')}%`)
+                                    .gt('quantity', 0)
+                                    .order('expiration_date', { ascending: true, nullsFirst: false })
                                     .limit(1);
 
                                 if (vaccInv && vaccInv.length > 0 && vaccInv[0].quantity > 0) {
@@ -327,14 +331,25 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                                         .from('vaccine_inventory')
                                         .update({ quantity: vaccInv[0].quantity - 1 })
                                         .eq('id', vaccInv[0].id);
-                                    console.log(`✅ Decremented vaccine (by name): ${vaccInv[0].vaccine_name}`);
+                                    console.log(`✅ Decremented vaccine (by name, nearest exp): ${vaccInv[0].vaccine_name}`);
                                 }
                             }
                         }
                     }
                 } else {
-                    const { data: vaccInv } = await supabase.from('vaccine_inventory').select('id, quantity').eq('vaccine_name', form.vaccine).single();
-                    if (!vaccInv) throw new Error('Vaccine not found in inventory');
+                    // Manual entry: get vaccine with nearest expiration date
+                    const { data: vaccInvItems } = await supabase
+                        .from('vaccine_inventory')
+                        .select('id, quantity, expiration_date')
+                        .eq('vaccine_name', form.vaccine)
+                        .gt('quantity', 0)
+                        .order('expiration_date', { ascending: true, nullsFirst: false })
+                        .limit(1);
+                    
+                    if (!vaccInvItems || vaccInvItems.length === 0) {
+                        throw new Error('Vaccine not found in inventory or out of stock');
+                    }
+                    const vaccInv = vaccInvItems[0];
 
                     const doseNumber = form.dose === '1st Dose' ? 1 : form.dose === '2nd Dose' ? 2 : form.dose === '3rd Dose' ? 3 : form.dose === 'Booster' ? 4 : 5;
 
@@ -358,8 +373,19 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                     }
                 }
             } else {
-                const { data: suppInv } = await supabase.from('supplement_inventory').select('id, quantity').eq('supplement_name', form.supplement).single();
-                if (!suppInv) throw new Error('Supplement not found in inventory');
+                // Get supplement with nearest expiration date
+                const { data: suppInvItems } = await supabase
+                    .from('supplement_inventory')
+                    .select('id, quantity, expiration_date')
+                    .eq('supplement_name', form.supplement)
+                    .gt('quantity', 0)
+                    .order('expiration_date', { ascending: true, nullsFirst: false })
+                    .limit(1);
+                
+                if (!suppInvItems || suppInvItems.length === 0) {
+                    throw new Error('Supplement not found in inventory or out of stock');
+                }
+                const suppInv = suppInvItems[0];
 
                 // Calculate quantity to decrement (assume 1 unit per dose, but could be made configurable)
                 const quantityToDecrement = 1;

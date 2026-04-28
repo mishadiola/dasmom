@@ -499,6 +499,9 @@
     border-radius: 20px;
     width: 100%;
     max-width: 500px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
     box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
     animation: modalScale 0.2s ease-out;
 }
@@ -521,6 +524,8 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+    overflow-y: auto;
+    flex: 1;
 }
 
 .form-grid {

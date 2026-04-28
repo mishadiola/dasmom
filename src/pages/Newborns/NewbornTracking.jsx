@@ -174,33 +174,38 @@ const NewbornTracking = () => {
             const service = new NewbornService();
             const newbornsData = await service.getAllNewborns();
             
-            // Filter only newborns with vaccination records
-            const withVaccines = (newbornsData || []).filter(b => 
-                b.vaccLog && b.vaccLog.length > 0
-            );
+            // Show ALL newborns, not just those with vaccination records
+            const allNewborns = newbornsData || [];
             
-            // Calculate vaccination stats
-            const fullyVaccinated = withVaccines.filter(b => {
+            // Calculate vaccination stats for all newborns
+            const fullyVaccinated = allNewborns.filter(b => {
+                if (!b.vaccLog || b.vaccLog.length === 0) return false;
                 const completed = b.vaccLog.filter(v => v.status === 'Completed').length;
                 return completed === b.vaccLog.length;
             }).length;
 
-            const overdueVaccines = withVaccines.filter(b => 
-                b.vaccLog.some(v => v.status === 'Overdue')
+            const overdueVaccines = allNewborns.filter(b => 
+                b.vaccLog && b.vaccLog.some(v => v.status === 'Overdue')
             ).length;
 
-            const upcomingDoses = withVaccines.reduce((acc, b) => 
-                acc + b.vaccLog.filter(v => v.status === 'Pending').length, 0
+            const upcomingDoses = allNewborns.reduce((acc, b) => 
+                acc + (b.vaccLog ? b.vaccLog.filter(v => v.status === 'Pending').length : 0), 0
             );
+
+            const partiallyVaccinated = allNewborns.filter(b => {
+                if (!b.vaccLog || b.vaccLog.length === 0) return false;
+                const completed = b.vaccLog.filter(v => v.status === 'Completed').length;
+                return completed > 0 && completed < b.vaccLog.length;
+            }).length;
             
             setStats({
-                totalWithVaccines: withVaccines.length,
+                totalWithVaccines: allNewborns.length,
                 fullyVaccinated,
-                partiallyVaccinated: withVaccines.length - fullyVaccinated,
+                partiallyVaccinated,
                 overdueVaccines,
                 upcomingDoses
             });
-            setNewborns(withVaccines);
+            setNewborns(allNewborns);
         } catch (err) {
             console.error('Error loading newborn data:', err);
         } finally {
@@ -314,7 +319,7 @@ const NewbornTracking = () => {
         const total = baby.vaccLog?.length || 0;
         const hasOverdue = baby.vaccLog?.some(v => v.status === 'Overdue');
         
-        if (total === 0) return { label: 'No Records', class: 'status-none' };
+        if (total === 0) return { label: 'Not Started', class: 'status-none' };
         if (completed === total) return { label: 'Fully Vaccinated', class: 'status-completed' };
         if (hasOverdue) return { label: 'Needs Attention', class: 'status-overdue' };
         return { label: 'In Progress', class: 'status-progress' };

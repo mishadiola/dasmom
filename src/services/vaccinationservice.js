@@ -110,7 +110,7 @@ class VaccinationService {
 
   /**
    * Record a vaccine dose - fills in vaccine_inventory_id and marks as Completed
-   * Also decrements the vaccine inventory quantity
+   * Also decrements the vaccine inventory quantity (using nearest expiration date)
    */
   async recordVaccine(patientId, patientType, vaccineData) {
     try {
@@ -119,14 +119,20 @@ class VaccinationService {
 
       const { vaccineId, vaccineName, doseNumber, date, staff, notes } = vaccineData;
 
-      // Get vaccine inventory ID and current quantity
-      const { data: vaccInv, error: invError } = await this.supabase
+      // Get vaccine inventory items with the same name, sorted by expiration date (nearest first)
+      const { data: vaccInvItems, error: invError } = await this.supabase
         .from('vaccine_inventory')
-        .select('id, quantity')
+        .select('id, quantity, expiration_date')
         .eq('vaccine_name', vaccineName)
-        .single();
+        .gt('quantity', 0)
+        .order('expiration_date', { ascending: true, nullsFirst: false });
 
-      if (invError || !vaccInv) throw new Error('Vaccine not found in inventory');
+      if (invError || !vaccInvItems || vaccInvItems.length === 0) {
+        throw new Error('Vaccine not found in inventory or out of stock');
+      }
+
+      // Use the vaccine with the nearest expiration date
+      const vaccInv = vaccInvItems[0];
 
       if (vaccineId) {
         // Update existing scheduled vaccine record

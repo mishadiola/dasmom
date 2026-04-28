@@ -39,11 +39,19 @@ export default class NewbornService {
                 // Also count babies whose mother is high-risk
                 const motherIds = [...new Set(allBabies.map(b => b.patient_id).filter(Boolean))];
                 if (motherIds.length > 0) {
-                    const { data: highRiskMothers } = await this.supabase
+                    let query = this.supabase
                         .from('pregnancy_info')
                         .select('patient_id')
-                        .eq('risk_level', 'High Risk')
-                        .in('patient_id', motherIds);
+                        .eq('risk_level', 'High Risk');
+                    
+                    // Use .in() for multiple IDs, .eq() for single ID to avoid 400 error
+                    if (motherIds.length === 1) {
+                        query = query.eq('patient_id', motherIds[0]);
+                    } else {
+                        query = query.in('patient_id', motherIds);
+                    }
+                    
+                    const { data: highRiskMothers } = await query;
 
                     const hrMotherIds = new Set((highRiskMothers || []).map(m => m.patient_id));
                     // Add babies from high-risk mothers not already counted
@@ -63,10 +71,18 @@ export default class NewbornService {
                 
                 // Count mothers of newborns who have NO vaccine records at all
                 if (babyMotherIds.length > 0) {
-                    const { data: vaccRecords } = await this.supabase
+                    let query = this.supabase
                         .from('vaccine_records')
-                        .select('patient_id')
-                        .in('patient_id', babyMotherIds);
+                        .select('patient_id');
+                    
+                    // Use .in() for multiple IDs, .eq() for single ID to avoid 400 error
+                    if (babyMotherIds.length === 1) {
+                        query = query.eq('patient_id', babyMotherIds[0]);
+                    } else {
+                        query = query.in('patient_id', babyMotherIds);
+                    }
+                    
+                    const { data: vaccRecords } = await query;
 
                     const mothersWithVacc = new Set((vaccRecords || []).map(v => v.patient_id));
                     vaccinationsDue = babyMotherIds.filter(id => !mothersWithVacc.has(id)).length;
@@ -120,7 +136,7 @@ export default class NewbornService {
                         last_name,
                         barangay
                     ),
-                    deliveries!inner (
+                    deliveries (
                         delivery_date
                     )
                 `)
@@ -135,7 +151,7 @@ export default class NewbornService {
                 .from('vaccinations')
                 .select(`
                     id,
-                    patient_id,
+                    newborn_id,
                     vaccine_inventory_id,
                     dose_number,
                     scheduled_vaccination,
@@ -145,15 +161,15 @@ export default class NewbornService {
                         vaccine_name
                     )
                 `)
-                .in('patient_id', babyIds);
+                .in('newborn_id', babyIds);
 
             // Create a map of newborn_id -> vaccinations
             const vaccMap = new Map();
             (allVaccinations || []).forEach(v => {
-                if (!vaccMap.has(v.patient_id)) {
-                    vaccMap.set(v.patient_id, []);
+                if (!vaccMap.has(v.newborn_id)) {
+                    vaccMap.set(v.newborn_id, []);
                 }
-                vaccMap.get(v.patient_id).push(v);
+                vaccMap.get(v.newborn_id).push(v);
             });
 
             return babies.map(baby => {

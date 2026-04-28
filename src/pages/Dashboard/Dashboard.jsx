@@ -80,6 +80,8 @@ const Dashboard = () => {
     const [vaccineStock, setVaccineStock] = useState([]);
     const [loadingStock, setLoadingStock] = useState(true);
     const [todayAppts, setTodayAppts] = useState([]);
+    const [healthSnapshot, setHealthSnapshot] = useState({ conditions: [], trimesterDist: [] });
+    const [loadingHealth, setLoadingHealth] = useState(true);
 
     useEffect(() => {
     const fetchStats = async () => {
@@ -187,9 +189,75 @@ const Dashboard = () => {
             const stockData = await patientService.getVaccineInventory();
             setVaccineStock(stockData);
             setLoadingStock(false);
+
+            // Fetch Health Snapshot Data
+            setLoadingHealth(true);
+            const [{ data: prenatalVisits }, { data: pregnancies }] = await Promise.all([
+                supabase.from('prenatal_visits').select('bp_systolic, bp_diastolic, hemoglobin, blood_sugar, risk_factors, calculated_risk'),
+                supabase.from('pregnancy_info').select('lmd')
+            ]);
+
+            // Calculate health conditions
+            let normalBP = 0, preEclampsia = 0, anaemia = 0, gestationalDiabetes = 0;
+            const totalVisits = prenatalVisits?.length || 0;
+
+            prenatalVisits?.forEach(visit => {
+                const sys = visit.bp_systolic;
+                const dia = visit.bp_diastolic;
+                
+                // BP classification
+                if (sys && dia) {
+                    if (sys >= 140 || dia >= 90) {
+                        preEclampsia++;
+                    } else {
+                        normalBP++;
+                    }
+                }
+
+                // Anaemia (hemoglobin < 11 g/dL)
+                if (visit.hemoglobin && visit.hemoglobin < 11) {
+                    anaemia++;
+                }
+
+                // Gestational diabetes (blood sugar elevated)
+                if (visit.blood_sugar && visit.blood_sugar > 140) {
+                    gestationalDiabetes++;
+                }
+            });
+
+            const conditions = [
+                { label: 'Normal BP', pct: totalVisits > 0 ? Math.round((normalBP / totalVisits) * 100) : 0, color: 'sage' },
+                { label: 'Pre-eclampsia', pct: totalVisits > 0 ? Math.round((preEclampsia / totalVisits) * 100) : 0, color: 'rose' },
+                { label: 'Anaemia', pct: totalVisits > 0 ? Math.round((anaemia / totalVisits) * 100) : 0, color: 'orange' },
+                { label: 'Gestational Diabetes', pct: totalVisits > 0 ? Math.round((gestationalDiabetes / totalVisits) * 100) : 0, color: 'yellow' },
+            ];
+
+            // Calculate trimester distribution
+            let tri1 = 0, tri2 = 0, tri3 = 0;
+            const currentDate = new Date();
+
+            pregnancies?.forEach(preg => {
+                if (preg.lmd) {
+                    const lmpDate = new Date(preg.lmd);
+                    const weeks = Math.floor((currentDate - lmpDate) / (1000 * 60 * 60 * 24 * 7));
+                    if (weeks <= 12) tri1++;
+                    else if (weeks <= 26) tri2++;
+                    else tri3++;
+                }
+            });
+
+            const trimesterDist = [
+                { label: '1st Trimester', count: tri1, color: 'tri1' },
+                { label: '2nd Trimester', count: tri2, color: 'tri2' },
+                { label: '3rd Trimester', count: tri3, color: 'tri3' },
+            ];
+
+            setHealthSnapshot({ conditions, trimesterDist });
+            setLoadingHealth(false);
         } catch (err) {
             console.error('Failed to load dashboard stats:', err);
             setLoadingStock(false);
+            setLoadingHealth(false);
         }
     };
     fetchStats();
@@ -439,36 +507,47 @@ const Dashboard = () => {
                         </div>
                         <p className="card-description">Shows the common pregnancy conditions for easier monitoring.</p>
                         <div className="snapshot-list">
-                            {[
-                                { label: 'Normal BP', pct: 71, color: 'sage' },
-                                { label: 'Pre-eclampsia', pct: 15, color: 'rose' },
-                                { label: 'Anaemia', pct: 9, color: 'orange' },
-                                { label: 'Gestational Diabetes', pct: 5, color: 'yellow' },
-                            ].map((m) => (
-                                <div key={m.label} className="snapshot-item">
-                                    <div className="snapshot-label-row">
-                                        <span className="snapshot-label">{m.label}</span>
-                                        <span className="snapshot-pct">{m.pct}%</span>
-                                    </div>
-                                    <MiniBar value={m.pct} max={100} color={m.color} />
+                            {loadingHealth ? (
+                                <div style={{textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)'}}>
+                                    Loading health data...
                                 </div>
-                            ))}
+                            ) : healthSnapshot.conditions.length > 0 ? (
+                                healthSnapshot.conditions.map((m) => (
+                                    <div key={m.label} className="snapshot-item">
+                                        <div className="snapshot-label-row">
+                                            <span className="snapshot-label">{m.label}</span>
+                                            <span className="snapshot-pct">{m.pct}%</span>
+                                        </div>
+                                        <MiniBar value={m.pct} max={100} color={m.color} />
+                                    </div>
+                                ))
+                            ) : (
+                                <div style={{textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)'}}>
+                                    No health data available.
+                                </div>
+                            )}
                         </div>
 
                         {/* Trimester Distribution */}
                         <div className="section-divider" />
                         <p className="section-sub-title">Trimester Distribution</p>
                         <div className="tri-dist">
-                            {[
-                                { label: '1st Trimester', count: 62, color: 'tri1' },
-                                { label: '2nd Trimester', count: 104, color: 'tri2' },
-                                { label: '3rd Trimester', count: 118, color: 'tri3' },
-                            ].map((t) => (
-                                <div key={t.label} className={`tri-block tri-block--${t.color}`}>
-                                    <span className="tri-count">{t.count}</span>
-                                    <span className="tri-label">{t.label}</span>
+                            {loadingHealth ? (
+                                <div style={{textAlign: 'center', padding: '16px', color: 'var(--color-text-muted)'}}>
+                                    Loading...
                                 </div>
-                            ))}
+                            ) : healthSnapshot.trimesterDist.length > 0 ? (
+                                healthSnapshot.trimesterDist.map((t) => (
+                                    <div key={t.label} className={`tri-block tri-block--${t.color}`}>
+                                        <span className="tri-count">{t.count}</span>
+                                        <span className="tri-label">{t.label}</span>
+                                    </div>
+                                ))
+                            ) : (
+                                <div style={{textAlign: 'center', padding: '16px', color: 'var(--color-text-muted)'}}>
+                                    No data available.
+                                </div>
+                            )}
                         </div>
                     </div>
 
