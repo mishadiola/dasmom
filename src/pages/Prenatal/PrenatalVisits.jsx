@@ -695,7 +695,6 @@ const PrenatalVisits = () => {
                     <table className="pv-table">
                         <thead>
                             <tr>
-                                <th className="row-number-header">#</th>
                                 <th>Patient Name</th>
                                 <th>Risk Level</th>
                                 <th>Date & Time</th>
@@ -705,11 +704,8 @@ const PrenatalVisits = () => {
                         </thead>
                         <tbody>
                             {paginatedTabVisits.length > 0 ? (
-                                paginatedTabVisits.map((visit, index) => {
-                                    const rowNumber = tabStartIndex + index + 1;
-                                    return (
+                                paginatedTabVisits.map(visit => (
                                     <tr key={visit.id}>
-                                        <td className="row-number-cell">{rowNumber}</td>
                                         <td>
                                             <div className="p-info">
                                                 <span className="p-name">{visit.patientName}</span>
@@ -749,8 +745,25 @@ const PrenatalVisits = () => {
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan="6" className="text-center py-8 text-gray-500">
-                                        No {visitCategoryTab} visits found
+                                    <td colSpan="5" className="empty-tab-state">
+                                        {visitCategoryTab === 'upcoming' && (
+                                            <div className="empty-state-content">
+                                                <CalendarCheck size={32} />
+                                                <p>No upcoming visits.</p>
+                                            </div>
+                                        )}
+                                        {visitCategoryTab === 'missed' && (
+                                            <div className="empty-state-content">
+                                                <AlertTriangle size={32} />
+                                                <p>No missed visits.</p>
+                                            </div>
+                                        )}
+                                        {visitCategoryTab === 'completed' && (
+                                            <div className="empty-state-content">
+                                                <CheckCircle2 size={32} />
+                                                <p>No completed visits.</p>
+                                            </div>
+                                        )}
                                     </td>
                                 </tr>
                             )}
