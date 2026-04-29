@@ -128,8 +128,8 @@ const Analytics = () => {
                     initial={{ opacity: 0, y: 10 }} 
                     animate={{ opacity: 1, y: 0 }} 
                     className="a-stat-card lilac a-stat-card--clickable"
-                    onClick={() => navigate('/patients?filter=teenage')}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/patients?filter=teenage'); }}}
+                    onClick={() => navigate('/dashboard/patients?filter=teenage')}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/dashboard/patients?filter=teenage'); }}}
                     role="button"
                     tabIndex={0}
                     aria-label={`${metrics.teenageCount} Teenage Pregnancies (${metrics.teenagePct}%). Click to view patients under 20`}
@@ -149,8 +149,8 @@ const Analytics = () => {
                     animate={{ opacity: 1, y: 0 }} 
                     transition={{ delay: 0.1 }} 
                     className="a-stat-card rose a-stat-card--clickable"
-                    onClick={() => navigate('/patients?filter=critical-risk')}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/patients?filter=critical-risk'); }}}
+                    onClick={() => navigate('/dashboard/high-risk')}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/dashboard/high-risk'); }}}
                     role="button"
                     tabIndex={0}
                     aria-label={`${metrics.highRiskCount} Critical High-Risk Cases. Click to view urgent cases`}
@@ -168,8 +168,8 @@ const Analytics = () => {
                     animate={{ opacity: 1, y: 0 }} 
                     transition={{ delay: 0.2 }} 
                     className="a-stat-card orange a-stat-card--clickable"
-                    onClick={() => navigate('/patients?filter=conditions')}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/patients?filter=conditions'); }}}
+                    onClick={() => navigate('/dashboard/patients?filter=conditions')}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/dashboard/patients?filter=conditions'); }}}
                     role="button"
                     tabIndex={0}
                     aria-label={`${metrics.urgentCount} patients with Underlying Conditions. Click to view`}
@@ -186,8 +186,8 @@ const Analytics = () => {
                     animate={{ opacity: 1, y: 0 }} 
                     transition={{ delay: 0.3 }} 
                     className="a-stat-card sage a-stat-card--clickable"
-                    onClick={() => navigate('/patients')}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/patients'); }}}
+                    onClick={() => navigate('/dashboard/patients')}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/dashboard/patients'); }}}
                     role="button"
                     tabIndex={0}
                     aria-label={`${metrics.total} Total Managed Cases. Click to view all patients`}

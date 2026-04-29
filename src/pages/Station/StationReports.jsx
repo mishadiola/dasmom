@@ -22,11 +22,11 @@ const StationReports = () => {
     const [stations, setStations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [summaryStats, setSummaryStats] = useState([
-        { label: 'Total Pregnant Patients', value: 0, color: 'sage', icon: Users, path: '/patients', filter: null },
-        { label: 'High-Risk Pregnancies', value: 0, color: 'rose', icon: AlertTriangle, path: '/patients', filter: 'high-risk' },
-        { label: 'Total Deliveries (Month)', value: 0, color: 'orange', icon: Heart, path: '/deliveries', filter: null },
-        { label: 'Vaccination Coverage', value: '0%', color: 'lilac', icon: Syringe, path: '/inventory', filter: 'vaccines' },
-        { label: 'Supplements Distributed', value: 0, color: 'pink', icon: Pill, path: '/inventory', filter: 'supplements' },
+        { label: 'Total Pregnant Patients', value: 0, color: 'sage', icon: Users, path: '/dashboard/patients', filter: null },
+        { label: 'High-Risk Pregnancies', value: 0, color: 'rose', icon: AlertTriangle, path: '/dashboard/high-risk', filter: null },
+        { label: 'Total Deliveries (Month)', value: 0, color: 'orange', icon: Heart, path: '/dashboard/deliveries', filter: null },
+        { label: 'Vaccination Coverage', value: '0%', color: 'lilac', icon: Syringe, path: '/dashboard/inventory', filter: 'vaccines' },
+        { label: 'Supplements Distributed', value: 0, color: 'pink', icon: Pill, path: '/dashboard/inventory', filter: 'supplements' },
     ]);
 
     const patientService = new PatientService();
@@ -51,11 +51,11 @@ const StationReports = () => {
             const totalSupplements = data.reduce((sum, s) => sum + s.totalSupplementsGiven, 0);
 
             setSummaryStats([
-                { label: 'Total Pregnant Patients', value: totalPregnant, color: 'sage', icon: Users, path: '/patients', filter: null },
-                { label: 'High-Risk Pregnancies', value: totalHighRisk, color: 'rose', icon: AlertTriangle, path: '/patients', filter: 'high-risk' },
-                { label: 'Total Deliveries (Month)', value: totalDeliveries, color: 'orange', icon: Heart, path: '/deliveries', filter: null },
-                { label: 'Vaccination Coverage', value: `${avgVaccCoverage}%`, color: 'lilac', icon: Syringe, path: '/inventory', filter: 'vaccines' },
-                { label: 'Supplements Distributed', value: totalSupplements, color: 'pink', icon: Pill, path: '/inventory', filter: 'supplements' },
+                { label: 'Total Pregnant Patients', value: totalPregnant, color: 'sage', icon: Users, path: '/dashboard/patients', filter: null },
+                { label: 'High-Risk Pregnancies', value: totalHighRisk, color: 'rose', icon: AlertTriangle, path: '/dashboard/high-risk', filter: null },
+                { label: 'Total Deliveries (Month)', value: totalDeliveries, color: 'orange', icon: Heart, path: '/dashboard/deliveries', filter: null },
+                { label: 'Vaccination Coverage', value: `${avgVaccCoverage}%`, color: 'lilac', icon: Syringe, path: '/dashboard/inventory', filter: 'vaccines' },
+                { label: 'Supplements Distributed', value: totalSupplements, color: 'pink', icon: Pill, path: '/dashboard/inventory', filter: 'supplements' },
             ]);
         } catch (error) {
             console.error('Error fetching station data:', error);
