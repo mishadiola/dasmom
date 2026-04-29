@@ -112,6 +112,10 @@ const AddPatient = () => {
         fetalMovement: '', presentation: '', testsDone: '', visitNotes: '',
         fhr: '', hgb: '',
         emName: '', emRel: '', emPhone: '', emAddress: '',
+        // Postpartum fields
+        babyName: '', birthDate: '', deliveryType: 'NSD', deliveryTime: '', deliveryMode: '',
+        babyGender: 'Female', babyWeight: '', babyLength: '', headCircumference: '',
+        apgar1: '', apgar5: '', babyCondition: 'Healthy',
     });
 
     useEffect(() => {
@@ -547,7 +551,14 @@ const AddPatient = () => {
 
         const requiredPersonal = ['firstName', 'lastName', 'dob', 'email', 'contactNumber', 'address', 'station'];
         const requiredEmergency = ['emName', 'emRel', 'emPhone', 'emAddress'];
-        const requiredPregnancy = ['gravida', 'para', 'lmp'];
+        
+        // Different required fields based on pregnancy status
+        let requiredPregnancy = [];
+        if (formData.pregnancyStatus === 'Pregnant') {
+            requiredPregnancy = ['gravida', 'para', 'lmp'];
+        } else if (formData.pregnancyStatus === 'Postpartum') {
+            requiredPregnancy = ['gravida', 'para', 'babyName', 'birthDate', 'deliveryType', 'babyGender', 'babyWeight'];
+        }
         
         // BP is required for pregnant patients
         const requiredVitals = formData.pregnancyStatus === 'Pregnant' ? ['bp', 'weight', 'height'] : ['weight', 'height'];
@@ -658,7 +669,11 @@ const AddPatient = () => {
                     <button className="back-link" onClick={() => navigate(-1)}>
                         <ArrowLeft size={16} /> Back to Patient List
                     </button>
-                    <h1 className="ap-title">Add New Pregnant Patient</h1>
+                    <h1 className="ap-title">
+                        {formData.pregnancyStatus === 'Postpartum' 
+                            ? 'Add Postpartum Patient' 
+                            : 'Add New Pregnant Patient'}
+                    </h1>
                     <p>BHW: {currentStaff.full_name} | Available Stations: {availableStations.length}</p>
                 </div>
                 <div className="ap-actions">
@@ -683,7 +698,13 @@ const AddPatient = () => {
 
             <div className="ap-container">
                 <aside className="ap-sidebar">
-                    {TABS.map(tab => (
+                    {TABS.filter(tab => {
+                        // Hide prenatal tab for postpartum patients
+                        if (formData.pregnancyStatus === 'Postpartum' && tab.id === 'prenatal') {
+                            return false;
+                        }
+                        return true;
+                    }).map(tab => (
                         <button
                             key={tab.id}
                             className={`ap-tab ${activeTab === tab.id ? 'active' : ''}`}
@@ -939,45 +960,184 @@ const AddPatient = () => {
                                 </div>
                             </div>
 
-                            <div className="form-grid-3">
-                                <div className="form-group">
-                                    <label>Last Menstrual Period Date <span className="req">*</span></label>
-                                    <input 
-                                        type="date" 
-                                        name="lmp" 
-                                        value={formData.lmp} 
-                                        onChange={handleChange} 
-                                        className={missingFields.includes('lmp') ? 'error-field' : ''}
-                                    />
-                                </div>
-                                <div className="form-group">
-                                    <label>Expected Date of Delivery</label>
-                                    <input type="date" readOnly value={formData.edd} className="computed-field" />
-                                </div>
-                                <div className="form-group">
-                                    <label>Gestational Age</label>
-                                    <input type="text" readOnly value={formData.gestationalAge} className="computed-field" />
-                                </div>
-                            </div>
+                            {formData.pregnancyStatus === 'Pregnant' ? (
+                                <>
+                                    <div className="form-grid-3">
+                                        <div className="form-group">
+                                            <label>Last Menstrual Period Date <span className="req">*</span></label>
+                                            <input 
+                                                type="date" 
+                                                name="lmp" 
+                                                value={formData.lmp} 
+                                                onChange={handleChange} 
+                                                className={missingFields.includes('lmp') ? 'error-field' : ''}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Expected Date of Delivery</label>
+                                            <input type="date" readOnly value={formData.edd} className="computed-field" />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Gestational Age</label>
+                                            <input type="text" readOnly value={formData.gestationalAge} className="computed-field" />
+                                        </div>
+                                    </div>
 
-                            <div className="form-grid-2">
-                                <div className="form-group">
-                                    <label>Pregnancy Type</label>
-                                    <select name="pregnancyType" value={formData.pregnancyType} onChange={handleChange}>
-                                        <option value="Singleton">Singleton</option>
-                                        <option value="Twins">Twins</option>
-                                        <option value="Multiple">Multiple</option>
-                                    </select>
-                                </div>
-                                <div className="form-group">
-                                    <label>Planned Place of Delivery</label>
-                                    <select name="plannedDeliveryPlace" value={formData.plannedDeliveryPlace} onChange={handleChange}>
-                                        <option value="Hospital">Hospital</option>
-                                        <option value="Lying-in">Lying-in Clinic</option>
-                                        <option value="Home">Home</option>
-                                    </select>
-                                </div>
-                            </div>
+                                    <div className="form-grid-2">
+                                        <div className="form-group">
+                                            <label>Pregnancy Type</label>
+                                            <select name="pregnancyType" value={formData.pregnancyType} onChange={handleChange}>
+                                                <option value="Singleton">Singleton</option>
+                                                <option value="Twins">Twins</option>
+                                                <option value="Multiple">Multiple</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Planned Place of Delivery</label>
+                                            <select name="plannedDeliveryPlace" value={formData.plannedDeliveryPlace} onChange={handleChange}>
+                                                <option value="Hospital">Hospital</option>
+                                                <option value="Lying-in">Lying-in Clinic</option>
+                                                <option value="Home">Home</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <h3 className="section-subtitle">Delivery Information</h3>
+                                    <div className="form-grid-3">
+                                        <div className="form-group">
+                                            <label>Baby Name <span className="req">*</span></label>
+                                            <input 
+                                                type="text" 
+                                                name="babyName" 
+                                                value={formData.babyName} 
+                                                onChange={handleChange}
+                                                className={missingFields.includes('babyName') ? 'error-field' : ''}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Birth Date <span className="req">*</span></label>
+                                            <input 
+                                                type="date" 
+                                                name="birthDate" 
+                                                value={formData.birthDate} 
+                                                onChange={handleChange}
+                                                className={missingFields.includes('birthDate') ? 'error-field' : ''}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Delivery Time</label>
+                                            <input 
+                                                type="time" 
+                                                name="deliveryTime" 
+                                                value={formData.deliveryTime} 
+                                                onChange={handleChange}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="form-grid-3">
+                                        <div className="form-group">
+                                            <label>Delivery Type <span className="req">*</span></label>
+                                            <select 
+                                                name="deliveryType" 
+                                                value={formData.deliveryType} 
+                                                onChange={handleChange}
+                                                className={missingFields.includes('deliveryType') ? 'error-field' : ''}
+                                            >
+                                                <option value="NSD">NSD (Normal)</option>
+                                                <option value="CS">CS (Cesarean)</option>
+                                                <option value="Breech">Breech</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Baby Gender <span className="req">*</span></label>
+                                            <select 
+                                                name="babyGender" 
+                                                value={formData.babyGender} 
+                                                onChange={handleChange}
+                                                className={missingFields.includes('babyGender') ? 'error-field' : ''}
+                                            >
+                                                <option value="Female">Female</option>
+                                                <option value="Male">Male</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Birth Weight (kg) <span className="req">*</span></label>
+                                            <input 
+                                                type="number" 
+                                                step="0.01"
+                                                name="babyWeight" 
+                                                value={formData.babyWeight} 
+                                                onChange={handleChange}
+                                                className={missingFields.includes('babyWeight') ? 'error-field' : ''}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="form-grid-3">
+                                        <div className="form-group">
+                                            <label>Birth Length (cm)</label>
+                                            <input 
+                                                type="number" 
+                                                step="0.1"
+                                                name="babyLength" 
+                                                value={formData.babyLength} 
+                                                onChange={handleChange}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Head Circumference (cm)</label>
+                                            <input 
+                                                type="number" 
+                                                step="0.1"
+                                                name="headCircumference" 
+                                                value={formData.headCircumference} 
+                                                onChange={handleChange}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>APGAR (1 min)</label>
+                                            <input 
+                                                type="number" 
+                                                min="0" 
+                                                max="10"
+                                                name="apgar1" 
+                                                value={formData.apgar1} 
+                                                onChange={handleChange}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="form-grid-2">
+                                        <div className="form-group">
+                                            <label>APGAR (5 min)</label>
+                                            <input 
+                                                type="number" 
+                                                min="0" 
+                                                max="10"
+                                                name="apgar5" 
+                                                value={formData.apgar5} 
+                                                onChange={handleChange}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Baby Condition at Birth</label>
+                                            <select 
+                                                name="babyCondition" 
+                                                value={formData.babyCondition} 
+                                                onChange={handleChange}
+                                            >
+                                                <option value="Healthy">Healthy</option>
+                                                <option value="NICU">NICU</option>
+                                                <option value="Special Care">Special Care</option>
+                                                <option value="Stillbirth">Stillbirth</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                     {}

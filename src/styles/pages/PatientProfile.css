@@ -432,6 +432,30 @@
     font-weight: 700;
 }
 
+.status-badge.status-completed {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(34, 197, 94, 0.15);
+    color: #16a34a;
+    padding: 4px 10px;
+    border-radius: 99px;
+    font-size: 11.5px;
+    font-weight: 700;
+}
+
+.status-badge.status-pending {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(245, 158, 11, 0.15);
+    color: #d97706;
+    padding: 4px 10px;
+    border-radius: 99px;
+    font-size: 11.5px;
+    font-weight: 700;
+}
+
 /* ══════════════════════════════════════════
    TIMELINE (PRENATAL VISITS)
 ══════════════════════════════════════════ */

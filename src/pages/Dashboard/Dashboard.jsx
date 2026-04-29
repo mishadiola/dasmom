@@ -90,10 +90,11 @@ const Dashboard = () => {
             const now = new Date();
             const todayStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
             
-            const [{ count: totalPatients }, { count: highRisk }, { count: newborns }, { count: apptToday }, { data: apptData }] = await Promise.all([
-                supabase.from('patient_basic_info').select('id', { count: 'exact', head: true }),
+            const [{ count: totalPatients }, { count: highRisk }, { count: newborns }, { count: apptToday }, { data: apptData }, { data: pregnancyData }] = await Promise.all([
+                // Count only pregnant patients (not postpartum)
+                supabase.from('pregnancy_info').select('patient_id', { count: 'exact', head: true }).eq('pregn_postp', 'Pregnant'),
                 // Count only actual high risk pregnancies, not all non-normal risk categories
-                supabase.from('pregnancy_info').select('id', { count: 'exact', head: true }).ilike('calculated_risk', '%high risk%'),
+                supabase.from('pregnancy_info').select('id', { count: 'exact', head: true }).ilike('calculated_risk', '%high risk%').eq('pregn_postp', 'Pregnant'),
                 supabase.from('newborns').select('id', { count: 'exact', head: true }),
                 supabase.from('prenatal_visits').select('id', { count: 'exact', head: true }).eq('visit_date', todayStr),
                 
@@ -101,10 +102,12 @@ const Dashboard = () => {
                 supabase.from('prenatal_visits').select(`
                     id, visit_date, patient_id, created_at,
                     patient_basic_info!inner ( 
-                        first_name, last_name, barangay, date_of_birth,
-                        pregnancy_info ( calculated_risk, lmd ) 
+                        first_name, last_name, barangay, date_of_birth
                     )
-                `).eq('visit_date', todayStr).order('created_at', { ascending: true })
+                `).eq('visit_date', todayStr).order('created_at', { ascending: true }),
+                
+                // Fetch pregnancy info separately to avoid nested relationship error
+                supabase.from('pregnancy_info').select('patient_id, calculated_risk, lmd').eq('pregn_postp', 'Pregnant')
             ]);
 
             setLiveStats({
@@ -116,6 +119,14 @@ const Dashboard = () => {
 
             // Dynamically map schedule data instead of relying on empty mock arrays
             if (apptData) {
+                // Create a map of patient_id to pregnancy info
+                const pregMap = new Map();
+                (pregnancyData || []).forEach(p => {
+                    if (p.patient_id) {
+                        pregMap.set(p.patient_id, p);
+                    }
+                });
+
                 // Additional client-side filtering to ensure only today's appointments
                 const todayFiltered = apptData.filter(v => {
                     if (!v.visit_date) return false;
@@ -127,7 +138,7 @@ const Dashboard = () => {
 
                 const mappedAppts = todayFiltered.map(v => {
                     const info = v.patient_basic_info || {};
-                    const pregInfo = Array.isArray(info.pregnancy_info) ? info.pregnancy_info[0] : info.pregnancy_info || {};
+                    const pregInfo = pregMap.get(v.patient_id) || {};
                     
                     let age = '?';
                     if (info.date_of_birth) {
@@ -192,10 +203,15 @@ const Dashboard = () => {
 
             // Fetch Health Snapshot Data
             setLoadingHealth(true);
-            const [{ data: prenatalVisits }, { data: pregnancies }] = await Promise.all([
-                supabase.from('prenatal_visits').select('bp_systolic, bp_diastolic, hemoglobin, blood_sugar, risk_factors, calculated_risk'),
+            const [{ data: prenatalVisits, error: visitsError }, { data: pregnancies, error: pregError }] = await Promise.all([
+                supabase.from('prenatal_visits').select('bp_systolic, bp_diastolic, risk_factors, calculated_risk'),
                 supabase.from('pregnancy_info').select('lmd')
             ]);
+
+            if (visitsError) console.error('Error fetching prenatal visits for health snapshot:', visitsError);
+            if (pregError) console.error('Error fetching pregnancies for health snapshot:', pregError);
+
+            console.log('Health snapshot data - prenatalVisits:', prenatalVisits?.length || 0, 'pregnancies:', pregnancies?.length || 0);
 
             // Calculate health conditions
             let normalBP = 0, preEclampsia = 0, anaemia = 0, gestationalDiabetes = 0;
@@ -214,14 +230,15 @@ const Dashboard = () => {
                     }
                 }
 
-                // Anaemia (hemoglobin < 11 g/dL)
-                if (visit.hemoglobin && visit.hemoglobin < 11) {
-                    anaemia++;
-                }
-
-                // Gestational diabetes (blood sugar elevated)
-                if (visit.blood_sugar && visit.blood_sugar > 140) {
-                    gestationalDiabetes++;
+                // Check risk factors for other conditions
+                if (visit.risk_factors) {
+                    const riskFactors = Array.isArray(visit.risk_factors) ? visit.risk_factors : visit.risk_factors.split(',').map(s => s.trim());
+                    if (riskFactors.includes('anemia') || riskFactors.includes('anaemia')) {
+                        anaemia++;
+                    }
+                    if (riskFactors.includes('gestational diabetes') || riskFactors.includes('diabetes')) {
+                        gestationalDiabetes++;
+                    }
                 }
             });
 
@@ -483,8 +500,8 @@ const Dashboard = () => {
                             ) : vaccineStock.length > 0 ? (
                                 vaccineStock
                                     .sort((a, b) => {
-                                        // Priority sort: Critical (0) → Low (1) → Ok (2)
-                                        const priority = { critical: 0, low: 1, ok: 2 };
+                                        // Priority sort: Critical (0) → Low (1) → Medium (2) → Ok (3)
+                                        const priority = { critical: 0, low: 1, medium: 2, ok: 3 };
                                         return priority[a.status] - priority[b.status];
                                     })
                                     .slice(0, 5)
@@ -496,14 +513,14 @@ const Dashboard = () => {
                                                 <MiniBar
                                                     value={v.stock}
                                                     max={Math.max(v.stock, v.min) * 1.5}
-                                                    color={v.status === 'ok' ? 'sage' : v.status === 'low' ? 'yellow' : 'rose'}
+                                                    color={v.status === 'ok' ? 'sage' : v.status === 'medium' ? 'blue' : v.status === 'low' ? 'yellow' : 'rose'}
                                                 />
                                             </div>
                                         </div>
                                         <div className="stock-meta">
                                             <span className="stock-qty">{v.stock} {v.unit}</span>
                                             <span className={`stock-badge stock-badge--${v.status}`}>
-                                                {v.status === 'ok' ? 'Normal' : v.status === 'low' ? 'Low' : 'Critical'}
+                                                {v.status === 'ok' ? 'Normal' : v.status === 'medium' ? 'Medium' : v.status === 'low' ? 'Low' : 'Critical'}
                                             </span>
                                         </div>
                                     </div>

@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import '../../styles/pages/DeliveryOutcomes.css';
 import VaccinationService from '../../services/vaccinationservice';
-import babyservices from '../../services/babyservices';
+import BabyService from '../../services/babyservices';
 import PatientService from '../../services/patientservice';
 import supabase from '../../config/supabaseclient';
 import * as XLSX from 'xlsx';
@@ -20,6 +20,7 @@ const DELIVERY_TYPES = ['NSD', 'CS', 'Breech'];
 
 const DeliveryOutcomes = () => {
     const navigate = useNavigate();
+    const babyService = new BabyService();
     const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState({
         type: 'All',
@@ -43,8 +44,8 @@ const DeliveryOutcomes = () => {
         setLoading(true);
         try {
             const [allDeliv, allStats] = await Promise.all([
-                babyservices.getAllDeliveries(),
-                babyservices.getDeliveryStats()
+                babyService.getAllDeliveries(),
+                babyService.getDeliveryStats()
             ]);
             setDeliveries(allDeliv || []);
             setStats(allStats || []);
@@ -59,10 +60,10 @@ const DeliveryOutcomes = () => {
 
     const loadConfigData = async () => {
         try {
-            const stationsData = await babyservices.getStations();
+            const stationsData = await babyService.getStations();
             setStations(stationsData);
             
-            const allStaff = await babyservices.getAllStaff();
+            const allStaff = await babyService.getAllStaff();
             setStaffList(allStaff);
         } catch (err) {
             console.error('Config load error:', err);
@@ -279,10 +280,11 @@ const DeliveryOutcomes = () => {
 
             <AddDeliveryModal
                 show={showModal}
-                onClose={() => setShowModal(false)}
+                onClose={() => { setShowModal(false); setSelectedDelivery(null); }}
                 onSuccess={loadData}
                 stations={stations}
                 staffList={staffList}
+                editDelivery={selectedDelivery}
             />
 
             <ViewDeliveryModal
@@ -401,7 +403,7 @@ const DeliveryOutcomes = () => {
                                                 <div className="row-actions">
                                                     <button className="action-btn view-btn" title="View" onClick={() => navigate(`/dashboard/patients/${d.patientId}`)}><Eye size={13} /></button>
                                                     <button className="action-btn new-pregnancy-btn" title="New Pregnancy" onClick={() => handleNewPregnancy(d.patientId)}><RefreshCw size={13} /></button>
-                                                    <button className="action-btn edit-btn" title="Edit"><Edit2 size={13} /></button>
+                                                    <button className="action-btn edit-btn" title="Edit" onClick={() => { setSelectedDelivery(d); setShowModal(true); }}><Edit2 size={13} /></button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -424,8 +426,9 @@ const DeliveryOutcomes = () => {
     );
 };
 
-const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => {
+const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editDelivery }) => {
     const patientService = new PatientService();
+    const babyService = new BabyService();
     const [section, setSection] = useState('patient');
     const [loading, setLoading] = useState(false);
     const [searchResults, setSearchResults] = useState([]);
@@ -505,15 +508,112 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
             setSearchResults([]);
         }
     };
+    
+    // Auto-calculate postpartum visit date (48 hours after delivery)
+    useEffect(() => {
+        if (form.deliveryDate) {
+            const deliveryDate = new Date(form.deliveryDate);
+            const ppDate = new Date(deliveryDate);
+            ppDate.setDate(ppDate.getDate() + 2); // 48 hours = 2 days
+            setForm(prev => ({ ...prev, postpartumDate: ppDate.toISOString().split('T')[0] }));
+        }
+    }, [form.deliveryDate]);
+    
     useEffect(() => {
         if (show && staffList.length === 0) {
             console.log('Staff list:', staffList);
         }
     }, [show, staffList]);
+
+    // Populate form when editing existing delivery
+    useEffect(() => {
+        if (editDelivery && show) {
+            setForm({
+                patientId: editDelivery.patientId || '',
+                patientName: editDelivery.patientName || '',
+                station: editDelivery.station || '',
+                gestationalAge: editDelivery.gestationalAge || '',
+                riskLevel: editDelivery.riskLevel || '',
+                pregnancyType: editDelivery.pregnancyType || '',
+                deliveryDate: editDelivery.deliveryDate || '',
+                deliveryTime: editDelivery.deliveryTime || '',
+                deliveryType: editDelivery.deliveryType || '',
+                attendingStaffId: editDelivery.attendingStaffId || '',
+                attendingStaffName: editDelivery.staff || '',
+                facility: editDelivery.facility || '',
+                complications: editDelivery.complications ? editDelivery.complications.split(', ') : [],
+                newborns: [{
+                    babyName: editDelivery.babyName || '',
+                    babyGender: editDelivery.babyGender || 'Female',
+                    babyWeight: editDelivery.babyWeight || '',
+                    babyLength: editDelivery.babyLength || '',
+                    headCircumference: editDelivery.headCircumference || '',
+                    apgar1: editDelivery.apgar1 || '',
+                    apgar5: editDelivery.apgar5 || '',
+                    babyCondition: editDelivery.babyOutcome || 'Healthy'
+                }],
+                postpartumDate: editDelivery.postpartum_visit_date || editDelivery.postpartumDate || '',
+                notes: editDelivery.notes || ''
+            });
+            setSection('newborn');
+        } else if (!editDelivery && show) {
+            // Reset form for new delivery
+            setForm({
+                patientId: '',
+                patientName: '',
+                station: '',
+                gestationalAge: '',
+                riskLevel: '',
+                pregnancyType: '',
+                deliveryDate: '',
+                deliveryTime: '',
+                deliveryType: '',
+                attendingStaffId: '',
+                attendingStaffName: '',
+                facility: '',
+                complications: [],
+                newborns: [{
+                    babyName: '',
+                    babyGender: 'Female',
+                    babyWeight: '',
+                    babyLength: '',
+                    headCircumference: '',
+                    apgar1: '',
+                    apgar5: '',
+                    babyCondition: 'Healthy'
+                }],
+                postpartumDate: '',
+                notes: ''
+            });
+            setSection('patient');
+        }
+    }, [editDelivery, show]);
     const handleSearch = async (query) => {
         try {
-            const results = await babyservices.searchPregnantMothers(query);
-            setSearchResults(results);
+            // Search for both pregnant mothers and all patients to handle both scenarios:
+            // 1. Patient who gives birth with existing record (pregnant)
+            // 2. Adding patient that already gave birth (post-delivery recording)
+            const [pregnantMothers, allPatients] = await Promise.all([
+                babyService.searchPregnantMothers(query),
+                patientService.searchPatients(query)
+            ]);
+
+            // Combine results, prioritizing pregnant mothers
+            const patientIds = new Set(pregnantMothers.map(p => p.id));
+            const otherPatients = allPatients.filter(p => !patientIds.has(p.id)).map(p => ({
+                id: p.id,
+                name: p.name,
+                station: p.station,
+                riskLevel: 'Normal', // Default for non-pregnant patients
+                isPregnant: false,
+                pregnancyType: 'Singleton',
+                gestationalAge: '',
+                gravida: null,
+                para: null
+            }));
+
+            const combinedResults = [...pregnantMothers, ...otherPatients];
+            setSearchResults(combinedResults);
         } catch (err) {
             console.error('Search failed:', err);
             setSearchResults([]);
@@ -615,20 +715,24 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
                 risk_level: form.riskLevel || 'Normal'
             }));
 
-            const result = await babyservices.recordDelivery(deliveryData, newbornData);
+            // Pass delivery ID if editing, null if creating new
+            const deliveryId = editDelivery?.id || null;
+            const result = await babyService.recordDelivery(deliveryData, newbornData, deliveryId);
             
-            // Automatically schedule vaccinations for each newborn
-            const vaccService = new VaccinationService();
-            const newbornIds = result.newborn_ids || [];
-            const createdBy = await new PatientService().getCurrentUserId();
-            
-            for (const newbornId of newbornIds) {
-                await vaccService.scheduleNewbornVaccinations(newbornId, form.deliveryDate, createdBy);
+            // Only schedule vaccinations for new deliveries (not edits)
+            if (!deliveryId) {
+                const vaccService = new VaccinationService();
+                const newbornIds = result.newborn_ids || [];
+                const createdBy = await new PatientService().getCurrentUserId();
+                
+                for (const newbornId of newbornIds) {
+                    await vaccService.scheduleNewbornVaccinations(newbornId, form.deliveryDate, createdBy);
+                }
             }
             
             onSuccess();
             onClose();
-            alert('✅ Delivery recorded and vaccinations scheduled successfully!');
+            alert(deliveryId ? '✅ Delivery updated successfully!' : '✅ Delivery recorded and vaccinations scheduled successfully!');
         } catch (err) {
             console.error('Save failed:', err);
             alert(`❌ Save failed: ${err.message}`);
@@ -833,8 +937,17 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList }) => 
                     {section === 'plan' && (
                         <div>
                             <div className="form-group">
-                                <label>Postpartum Visit</label>
-                                <input type="date" value={form.postpartumDate} onChange={e => updateForm('postpartumDate', e.target.value)} />
+                                <label>Postpartum Visit (Auto-scheduled within 48 hours)</label>
+                                <input 
+                                    type="date" 
+                                    value={form.postpartumDate} 
+                                    disabled 
+                                    className="computed-field"
+                                    style={{ backgroundColor: '#f5f5f5', cursor: 'not-allowed' }}
+                                />
+                                <small style={{ color: '#666', fontSize: '12px' }}>
+                                    Automatically calculated: 48 hours after delivery date
+                                </small>
                             </div>
                             <div className="form-group">
                                 <label>Notes</label>

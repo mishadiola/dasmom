@@ -1,6 +1,7 @@
 import supabase from '../config/supabaseclient';
 import AuthService from './authservice';
 import PatientService from './patientservice';
+import VaccinationService from './vaccinationservice';
 
 class BabyService {
   constructor() {
@@ -13,86 +14,87 @@ class BabyService {
     return user?.id || null;
   }
 
- async searchPregnantMothers(query) {
-  try {
-    const term = (query || '').trim();
-    if (!term || term.length < 2) return [];
+  async searchPregnantMothers(query) {
+    try {
+      const term = (query || '').trim();
+      if (!term || term.length < 2) return [];
 
-    const safeTerm = encodeURIComponent(term.trim().replace(/%/g, '\\%'));
+      const safeTerm = encodeURIComponent(term.trim().replace(/%/g, '\\%'));
 
-    const { data: patients, error } = await supabase
-      .from('patient_basic_info')
-      .select(`
-        id,
-        first_name,
-        last_name,
-        barangay,
-        province,
-        pregnancy_info (
+      const { data: patients, error } = await supabase
+        .from('patient_basic_info')
+        .select(`
           id,
-          pregn_postp,
-          edd,
-          pregnancy_type,
-          lmd,
-          gravida,
-          para
+          first_name,
+          last_name,
+          barangay,
+          province,
+          pregnancy_info (
+            id,
+            pregn_postp,
+            edd,
+            pregnancy_type,
+            lmd,
+            gravida,
+            para
+          )
+        `)
+        .or(
+          `first_name.ilike.%${safeTerm}%,
+           last_name.ilike.%${safeTerm}%,
+           barangay.ilike.%${safeTerm}%`
+            .replace(/\s+/g, '')
         )
-      `)
-      .or(
-        `first_name.ilike.%${safeTerm}%,
-         last_name.ilike.%${safeTerm}%,
-         barangay.ilike.%${safeTerm}%`
-          .replace(/\s+/g, '')
-      )
-      .order('created_at', { ascending: false })
-      .limit(10);
+        .order('created_at', { ascending: false })
+        .limit(10);
 
-    if (error) throw error;
+      if (error) throw error;
 
-    return (patients || []).map(patient => {
-      const preg = Array.isArray(patient.pregnancy_info)
-        ? patient.pregnancy_info[0]
-        : patient.pregnancy_info;
+      return (patients || []).map(patient => {
+        const preg = Array.isArray(patient.pregnancy_info)
+          ? patient.pregnancy_info[0]
+          : patient.pregnancy_info;
 
-      // Calculate gestational age from LMP
-      let gestationalAge = '';
-      if (preg?.lmd) {
-        const lmpDate = new Date(preg.lmd);
-        const today = new Date();
-        const diffTime = today - lmpDate;
-        const diffWeeks = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 7));
-        const days = Math.floor((diffTime % (1000 * 60 * 60 * 24 * 7)) / (1000 * 60 * 60 * 24));
-        if (diffWeeks >= 0) {
-          gestationalAge = `${diffWeeks}${days > 3 ? '+' : ''} weeks`;
+        // Calculate gestational age from LMP
+        let gestationalAge = '';
+        if (preg?.lmd) {
+          const lmpDate = new Date(preg.lmd);
+          const today = new Date();
+          const diffTime = today - lmpDate;
+          const diffWeeks = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 7));
+          const days = Math.floor((diffTime % (1000 * 60 * 60 * 24 * 7)) / (1000 * 60 * 60 * 24));
+          if (diffWeeks >= 0) {
+            gestationalAge = `${diffWeeks}${days > 3 ? '+' : ''} weeks`;
+          }
         }
-      }
 
-      return {
-        id: patient.id,
-        name: `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
-        station: `${patient.barangay || 'No Barangay'}, ${patient.province || 'N/A'}`,
-        riskLevel: 'Normal', // Default risk level since calculated_risk field doesn't exist
-        isPregnant: !!preg?.id,
-        pregnancyType: preg?.pregnancy_type || 'Singleton',
-        lmp: preg?.lmd || null,
-        gestationalAge: gestationalAge,
-        gravida: preg?.gravida || 1,
-        para: preg?.para || 0
-      };
-    });
-  } catch (error) {
-    console.error('Error in searchPregnantMothers:', error);
-    return [];
+        return {
+          id: patient.id,
+          name: `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
+          station: `${patient.barangay || 'No Barangay'}, ${patient.province || 'N/A'}`,
+          riskLevel: 'Normal', // Default risk level since calculated_risk field doesn't exist
+          isPregnant: !!preg?.id,
+          pregnancyType: preg?.pregnancy_type || 'Singleton',
+          lmp: preg?.lmd || null,
+          gestationalAge: gestationalAge,
+          gravida: preg?.gravida || 1,
+          para: preg?.para || 0
+        };
+      });
+    } catch (error) {
+      console.error('Error in searchPregnantMothers:', error);
+      return [];
+    }
   }
-}
 
   async searchNewborns(query) {
     const term = (query || '').trim();
     if (!term || term.length < 2) return [];
 
-    const safeTerm = encodeURIComponent(term.trim().replace(/%/g, '\\%'));
+    const safeTerm = term.trim().replace(/%/g, '\\%');
 
-    const { data: newborns, error } = await supabase
+    // Search by baby_name first
+    const { data: newbornsByName, error: nameError } = await supabase
       .from('newborns')
       .select(`
         id,
@@ -106,17 +108,60 @@ class BabyService {
           province
         )
       `)
-      .or(
-        `baby_name.ilike.%${safeTerm}%,
-         patient_basic_info.first_name.ilike.%${safeTerm}%,
-         patient_basic_info.last_name.ilike.%${safeTerm}%`
-      )
+      .ilike('baby_name', `%${safeTerm}%`)
       .order('created_at', { ascending: false })
       .limit(10);
 
-    if (error) throw error;
+    if (nameError) throw nameError;
 
-    return (newborns || []).map(newborn => {
+    // Search by mother's name (need to get patient IDs first)
+    const { data: patients, error: patientError } = await supabase
+      .from('patient_basic_info')
+      .select('id')
+      .or(`first_name.ilike.%${safeTerm}%,last_name.ilike.%${safeTerm}%`)
+      .limit(10);
+
+    if (patientError) throw patientError;
+
+    const motherIds = patients ? patients.map(p => p.id) : [];
+    let newbornsByMother = [];
+
+    if (motherIds.length > 0) {
+      const { data: newbornsByMotherData, error: motherError } = await supabase
+        .from('newborns')
+        .select(`
+          id,
+          baby_name,
+          mother_id,
+          deliveries!inner (delivery_date),
+          patient_basic_info!mother_id (
+            first_name,
+            last_name,
+            barangay,
+            province
+          )
+        `)
+        .in('mother_id', motherIds)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (motherError) throw motherError;
+      newbornsByMother = newbornsByMotherData || [];
+    }
+
+    // Combine and deduplicate results
+    const allNewborns = [...(newbornsByName || []), ...newbornsByMother];
+    const uniqueNewborns = [];
+    const seenIds = new Set();
+
+    for (const newborn of allNewborns) {
+      if (!seenIds.has(newborn.id)) {
+        seenIds.add(newborn.id);
+        uniqueNewborns.push(newborn);
+      }
+    }
+
+    return uniqueNewborns.map(newborn => {
       const mother = newborn.patient_basic_info;
       return {
         id: newborn.id,
@@ -207,7 +252,7 @@ class BabyService {
     }
   }
 
-  async recordDelivery(deliveryData, newbornData) {
+  async recordDelivery(deliveryData, newbornData, deliveryId = null) {
     const createdBy = await this.getCurrentUserId();
     if (!createdBy) throw new Error('No logged-in user');
 
@@ -216,6 +261,15 @@ class BabyService {
     const complications = Array.isArray(deliveryData.complications)
       ? deliveryData.complications.filter(c => c && c !== 'None')
       : [];
+
+    // Auto-schedule postpartum visit within 48 hours if not provided
+    let postpartumVisitDate = deliveryData.postpartum_visit_date;
+    if (!postpartumVisitDate && deliveryData.delivery_date) {
+      const deliveryDate = new Date(deliveryData.delivery_date);
+      const ppDate = new Date(deliveryDate);
+      ppDate.setDate(ppDate.getDate() + 2); // 48 hours after delivery
+      postpartumVisitDate = ppDate.toISOString().split('T')[0];
+    }
 
     const deliveryPayload = {
       mother_id: deliveryData.mother_id,
@@ -228,98 +282,173 @@ class BabyService {
       complications,
       attending_staff: deliveryData.attending_staff || null,
       facility: deliveryData.facility || null,
-      postpartum_visit_date: deliveryData.postpartum_visit_date || null,
+      postpartum_visit_date: postpartumVisitDate,
       notes: deliveryData.notes || null,
       created_by: createdBy
     };
 
-    const { data: delivery, error: deliveryError } = await supabase
-      .from('deliveries')
-      .insert([deliveryPayload])
-      .select('id')
-      .single();
+    let delivery;
+    if (deliveryId) {
+      // Update existing delivery
+      const { data: updatedDelivery, error: deliveryError } = await supabase
+        .from('deliveries')
+        .update(deliveryPayload)
+        .eq('id', deliveryId)
+        .select('id')
+        .single();
 
-    if (deliveryError) throw deliveryError;
+      if (deliveryError) throw deliveryError;
+      delivery = updatedDelivery;
+      console.log('✅ Updated delivery with ID:', deliveryId);
+    } else {
+      // Insert new delivery
+      const { data: newDelivery, error: deliveryError } = await supabase
+        .from('deliveries')
+        .insert([deliveryPayload])
+        .select('id')
+        .single();
 
-    const newbornInserts = newbornArray.map(newborn => ({
-      delivery_id: delivery.id,
-      mother_id: deliveryData.mother_id,
-      baby_name: newborn.baby_name || null,
-      gender: newborn.gender,
-      birth_weight: newborn.birth_weight || null,
-      birth_length: newborn.birth_length || null,
-      head_circumference: newborn.head_circumference || null,
-      apgar_1min: newborn.apgar_1min || null,
-      apgar_5min: newborn.apgar_5min || null,
-      condition_at_birth: newborn.condition_at_birth || 'Healthy',
-      risk_level: newborn.risk_level || 'Normal',
-      created_by: createdBy
-    }));
+      if (deliveryError) throw deliveryError;
+      delivery = newDelivery;
+    }
 
-    const { data: insertedNewborns, error: newbornError } = await supabase
-      .from('newborns')
-      .insert(newbornInserts)
-      .select('id');
+    // Handle newborns
+    let newbornIds = [];
+    if (deliveryId && newbornArray.length > 0) {
+      // Update existing newborns (assuming first newborn for simplicity)
+      const newborn = newbornArray[0];
+      const { data: existingNewborns } = await supabase
+        .from('newborns')
+        .select('id')
+        .eq('delivery_id', deliveryId)
+        .limit(1);
 
-    if (newbornError) throw newbornError;
-    console.log('✅ Inserted newborns with IDs:', insertedNewborns);
+      if (existingNewborns && existingNewborns.length > 0) {
+        const newbornId = existingNewborns[0].id;
+        const newbornUpdate = {
+          baby_name: newborn.baby_name || null,
+          gender: newborn.gender,
+          birth_weight: newborn.birth_weight || null,
+          birth_length: newborn.birth_length || null,
+          head_circumference: newborn.head_circumference || null,
+          apgar_1min: newborn.apgar_1min || null,
+          apgar_5min: newborn.apgar_5min || null,
+          condition_at_birth: newborn.condition_at_birth || 'Healthy',
+          risk_level: newborn.risk_level || 'Normal'
+        };
 
-    // Update pregnancy status to postpartum
-    const { data: currentPregnancy } = await supabase
-      .from('pregnancy_info')
-      .select('*')
-      .eq('patient_id', deliveryData.mother_id)
-      .eq('pregn_postp', 'Pregnant')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+        const { error: updateError } = await supabase
+          .from('newborns')
+          .update(newbornUpdate)
+          .eq('id', newbornId);
 
-    if (currentPregnancy) {
-      // Calculate new gravida and para values
-      const newGravida = (currentPregnancy.gravida || 1) + 1;
-      const newPara = (currentPregnancy.para || 0) + 1;
-      
-      await supabase
+        if (updateError) throw updateError;
+        newbornIds = [newbornId];
+        console.log('✅ Updated newborn with ID:', newbornId);
+      }
+    } else {
+      // Insert new newborns
+      const newbornInserts = newbornArray.map(newborn => ({
+        delivery_id: delivery.id,
+        mother_id: deliveryData.mother_id,
+        baby_name: newborn.baby_name || null,
+        gender: newborn.gender,
+        birth_weight: newborn.birth_weight || null,
+        birth_length: newborn.birth_length || null,
+        head_circumference: newborn.head_circumference || null,
+        apgar_1min: newborn.apgar_1min || null,
+        apgar_5min: newborn.apgar_5min || null,
+        condition_at_birth: newborn.condition_at_birth || 'Healthy',
+        risk_level: newborn.risk_level || 'Normal',
+        created_by: createdBy
+      }));
+
+      const { data: insertedNewborns, error: newbornError } = await supabase
+        .from('newborns')
+        .insert(newbornInserts)
+        .select('id');
+
+      if (newbornError) throw newbornError;
+      newbornIds = insertedNewborns.map(n => n.id);
+      console.log('✅ Inserted newborns with IDs:', newbornIds);
+    }
+
+    // Only run pregnancy status updates for new deliveries (not edits)
+    if (!deliveryId) {
+      // Update pregnancy status to postpartum
+      const { data: currentPregnancy } = await supabase
         .from('pregnancy_info')
-        .insert({
-          patient_id: deliveryData.mother_id,
-          created_by: createdBy,
-          pregn_postp: 'Postpartum',
-          lmd: currentPregnancy.lmd,
-          edd: currentPregnancy.edd,
-          pregnancy_type: currentPregnancy.pregnancy_type,
-          place_of_delivery: deliveryData.facility || currentPregnancy.place_of_delivery,
-          calculated_risk: currentPregnancy.calculated_risk,
-          gravida: newGravida,
-          para: newPara,
-          risk_factors: currentPregnancy.risk_factors
-        });
+        .select('*')
+        .eq('patient_id', deliveryData.mother_id)
+        .eq('pregn_postp', 'Pregnant')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
 
-      if (deliveryData.postpartum_visit_date) {
-        const postpartumDate = new Date(deliveryData.postpartum_visit_date);
-        if (!Number.isNaN(postpartumDate.getTime())) {
-          await supabase.from('prenatal_visits').insert({
+      if (currentPregnancy) {
+        // Calculate new gravida and para values
+        const newGravida = (currentPregnancy.gravida || 1) + 1;
+        const newPara = (currentPregnancy.para || 0) + 1;
+        
+        await supabase
+          .from('pregnancy_info')
+          .insert({
             patient_id: deliveryData.mother_id,
             created_by: createdBy,
-            visit_date: deliveryData.postpartum_visit_date,
-            visit_number: 0,
-            trimester: 0,
-            gestational_age: 'Postpartum',
-            next_appt_date: null,
-            next_appt_type: 'Postpartum Visit',
-            status: 'Scheduled',
-            assigned_staff: deliveryData.attending_staff || null,
-            clinical_notes: 'Scheduled postpartum follow-up after delivery',
-            created_at: new Date().toISOString()
+            pregn_postp: 'Postpartum',
+            lmd: currentPregnancy.lmd,
+            edd: currentPregnancy.edd,
+            pregnancy_type: currentPregnancy.pregnancy_type,
+            place_of_delivery: deliveryData.facility || currentPregnancy.place_of_delivery,
+            calculated_risk: currentPregnancy.calculated_risk,
+            gravida: newGravida,
+            para: newPara,
+            risk_factors: currentPregnancy.risk_factors
           });
+
+        // Schedule postpartum visit
+        if (postpartumVisitDate) {
+          const postpartumDate = new Date(postpartumVisitDate);
+          if (!Number.isNaN(postpartumDate.getTime())) {
+            await supabase.from('prenatal_visits').insert({
+              patient_id: deliveryData.mother_id,
+              created_by: createdBy,
+              visit_date: postpartumVisitDate,
+              visit_number: 0,
+              trimester: 0,
+              gestational_age: 'Postpartum',
+              next_appt_date: null,
+              next_appt_type: 'Postpartum Visit',
+              status: 'Scheduled',
+              assigned_staff: deliveryData.attending_staff || null,
+              clinical_notes: 'Scheduled postpartum follow-up after delivery (within 48 hours)',
+              created_at: new Date().toISOString()
+            });
+            console.log(`✅ Scheduled postpartum visit for ${postpartumVisitDate}`);
+          }
         }
+
+        // Schedule postpartum maternal vaccinations - DISABLED per user request
+        // User only wants Td and Influenza for pregnant mothers, not postpartum vaccines
+        // try {
+        //   const vaccService = new VaccinationService();
+        //   await vaccService.schedulePostpartumMaternalVaccinations(
+        //     deliveryData.mother_id,
+        //     deliveryData.delivery_date,
+        //     createdBy
+        //   );
+        //   console.log(`✅ Scheduled postpartum maternal vaccinations for mother ${deliveryData.mother_id}`);
+        // } catch (vaccError) {
+        //   console.error('Warning: Failed to schedule postpartum maternal vaccinations:', vaccError);
+        //   // Don't throw error - delivery should still succeed
+        // }
       }
     }
 
-    // NOTE: Vaccine scheduling is now handled separately by VaccinationService.scheduleNewbornVaccinations()
+    // NOTE: Newborn vaccine scheduling is handled separately by VaccinationService.scheduleNewbornVaccinations()
     // called from DeliveryOutcomes.jsx handleSave() to keep concerns separated
 
-    return { delivery_id: delivery.id, newborn_ids: insertedNewborns.map(n => n.id) };
+    return { delivery_id: delivery.id, newborn_ids: newbornIds };
   }
 
   async getDeliveryStats() {
@@ -366,8 +495,7 @@ class BabyService {
     }
   }
 
-async getStations() 
-{
+  async getStations() {
     try {
         const { data, error } = await supabase
             .from('staff_profiles')
@@ -382,10 +510,9 @@ async getStations()
         console.error('Error loading stations:', error);
         return ['Main Clinic'];
     }
-}
+  }
 
-
-async getStaffForStation(station) {
+  async getStaffForStation(station) {
     try {
         const { data, error } = await supabase
             .from('staff_profiles')
@@ -397,9 +524,9 @@ async getStaffForStation(station) {
         console.error('Error getting staff for station:', error);
         return [];
     }
-}
+  }
 
-async getAllStaff() {
+  async getAllStaff() {
     try {
         const { data, error } = await supabase
             .from('staff_profiles')
@@ -411,12 +538,12 @@ async getAllStaff() {
         console.error('Error getting all staff:', error);
         return [];
     }
-}
+  }
 
-/**
- * Get detailed postpartum records for mothers
- */
-async getPostpartumRecords() {
+  /**
+   * Get detailed postpartum records for mothers
+   */
+  async getPostpartumRecords() {
     try {
         const { data: deliveries, error } = await supabase
             .from('deliveries')
@@ -494,12 +621,12 @@ async getPostpartumRecords() {
         console.error('Error in getPostpartumRecords:', error);
         return [];
     }
-}
+  }
 
-/**
- * Get summary stats for postpartum dashboard
- */
-async getPostpartumStats() {
+  /**
+   * Get summary stats for postpartum dashboard
+   */
+  async getPostpartumStats() {
     try {
         const records = await this.getPostpartumRecords();
         const today = new Date();
@@ -533,7 +660,7 @@ async getPostpartumStats() {
         console.error('Error in getPostpartumStats:', error);
         return { summary: [], stationRecovery: [] };
     }
-}
+  }
 }
 
-export default new BabyService();
+export default BabyService;

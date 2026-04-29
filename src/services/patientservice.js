@@ -1,6 +1,7 @@
 import supabase from '../config/supabaseclient';
 import AuthService from './authservice';
 import InventoryService from './inventoryservice';
+import VaccinationService from './vaccinationservice';
 
 const inventoryService = new InventoryService();
 const TIME_SLOTS_8TO4 = [
@@ -314,29 +315,51 @@ export default class PatientService {
     const term = (query || '').trim();
     if (!term || term.length < 2) return [];
 
-    const safeTerm = encodeURIComponent(term.trim().replace(/%/g, '\\%'));
+    const safeTerm = term.trim().replace(/%/g, '\\%');
 
-    const { data: patients, error } = await this.supabase
+    // Search by first_name
+    const { data: byFirstName, error: firstNameError } = await this.supabase
       .from('patient_basic_info')
-      .select(`
-        id,
-        first_name,
-        last_name,
-        barangay,
-        province
-      `)
-      .or(
-        `first_name.ilike.%${safeTerm}%,
-         last_name.ilike.%${safeTerm}%,
-         barangay.ilike.%${safeTerm}%`
-          .replace(/\s+/g, '')
-      )
+      .select('id, first_name, last_name, barangay, province')
+      .ilike('first_name', `%${safeTerm}%`)
       .order('created_at', { ascending: false })
       .limit(10);
 
-    if (error) throw error;
+    if (firstNameError) throw firstNameError;
 
-    return (patients || []).map(patient => ({
+    // Search by last_name
+    const { data: byLastName, error: lastNameError } = await this.supabase
+      .from('patient_basic_info')
+      .select('id, first_name, last_name, barangay, province')
+      .ilike('last_name', `%${safeTerm}%`)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (lastNameError) throw lastNameError;
+
+    // Search by barangay
+    const { data: byBarangay, error: barangayError } = await this.supabase
+      .from('patient_basic_info')
+      .select('id, first_name, last_name, barangay, province')
+      .ilike('barangay', `%${safeTerm}%`)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (barangayError) throw barangayError;
+
+    // Combine and deduplicate results
+    const allPatients = [...(byFirstName || []), ...(byLastName || []), ...(byBarangay || [])];
+    const uniquePatients = [];
+    const seenIds = new Set();
+
+    for (const patient of allPatients) {
+      if (!seenIds.has(patient.id)) {
+        seenIds.add(patient.id);
+        uniquePatients.push(patient);
+      }
+    }
+
+    return uniquePatients.map(patient => ({
       id: patient.id,
       name: `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
       station: `${patient.barangay || 'No Barangay'}, ${patient.province || 'N/A'}`
@@ -855,17 +878,83 @@ export default class PatientService {
       }
     });
 
-    await this.supabase.from('pregnancy_info').insert({
-      patient_id: patientId,
-      created_by: createdBy,
-      pregn_postp: patientData.pregnancyStatus,
-      lmd: patientData.lmp,
-      edd: patientData.edd,
-      pregnancy_type: patientData.pregnancyType,
-      place_of_delivery: patientData.plannedDeliveryPlace,
-      gravida: parseInt(patientData.gravida) || 1,
-      para: parseInt(patientData.para) || 0
-    });
+    try {
+      await this.supabase.from('pregnancy_info').insert({
+        patient_id: patientId,
+        created_by: createdBy,
+        pregn_postp: patientData.pregnancyStatus,
+        lmd: patientData.pregnancyStatus === 'Postpartum' ? null : patientData.lmp,
+        edd: patientData.pregnancyStatus === 'Postpartum' ? null : patientData.edd,
+        pregnancy_type: patientData.pregnancyType,
+        place_of_delivery: patientData.plannedDeliveryPlace,
+        gravida: parseInt(patientData.gravida) || 1,
+        para: parseInt(patientData.para) || 0
+      });
+      console.log('✅ Inserted pregnancy_info for patient:', patientId);
+    } catch (error) {
+      console.error('Error inserting pregnancy_info:', error);
+      // Don't throw - patient creation should still succeed
+    }
+
+    // If postpartum, create delivery and newborn records
+    if (patientData.pregnancyStatus === 'Postpartum' && patientData.birthDate) {
+      const { default: BabyService } = await import('./babyservices');
+      const babyService = new BabyService();
+      
+      // Auto-schedule postpartum visit within 48 hours
+      const deliveryDate = new Date(patientData.birthDate);
+      const ppDate = new Date(deliveryDate);
+      ppDate.setDate(ppDate.getDate() + 2); // 48 hours after delivery
+      const postpartumVisitDate = ppDate.toISOString().split('T')[0];
+
+      const deliveryData = {
+        mother_id: patientId,
+        delivery_date: patientData.birthDate,
+        delivery_time: patientData.deliveryTime || '00:00',
+        delivery_type: patientData.deliveryType || 'NSD',
+        delivery_mode: patientData.deliveryMode || null,
+        gestational_age: null,
+        risk_level: 'Normal',
+        complications: [],
+        attending_staff: null,
+        facility: patientData.plannedDeliveryPlace || 'Hospital',
+        postpartum_visit_date: postpartumVisitDate,
+        notes: null
+      };
+
+      const newbornData = {
+        baby_name: patientData.babyName,
+        gender: patientData.babyGender,
+        birth_weight: patientData.babyWeight ? parseFloat(patientData.babyWeight) : null,
+        birth_length: patientData.babyLength ? parseFloat(patientData.babyLength) : null,
+        head_circumference: patientData.headCircumference ? parseFloat(patientData.headCircumference) : null,
+        apgar_1min: patientData.apgar1 ? parseInt(patientData.apgar1) : null,
+        apgar_5min: patientData.apgar5 ? parseInt(patientData.apgar5) : null,
+        condition_at_birth: patientData.babyCondition || 'Healthy',
+        risk_level: 'Normal'
+      };
+
+      try {
+        const result = await babyService.recordDelivery(deliveryData, newbornData);
+        console.log('✅ Created delivery and newborn records for postpartum patient:', result);
+        
+        // Schedule newborn vaccinations
+        const vaccService = new VaccinationService();
+        const newbornIds = result.newborn_ids || [];
+        
+        for (const newbornId of newbornIds) {
+          await vaccService.scheduleNewbornVaccinations(newbornId, patientData.birthDate, createdBy);
+        }
+        
+        // Schedule postpartum maternal vaccinations
+        await vaccService.schedulePostpartumMaternalVaccinations(patientId, patientData.birthDate, createdBy);
+        
+        console.log('✅ Scheduled vaccinations for postpartum mother and newborn');
+      } catch (error) {
+        console.error('Warning: Failed to create delivery/newborn records:', error);
+        // Don't throw - patient creation should still succeed
+      }
+    }
 
     let safeSchedulePreview = Array.isArray(patientData.schedulePreview)
       ? patientData.schedulePreview
@@ -874,6 +963,12 @@ export default class PatientService {
       : [];
 
     const retainedStaff = await this.getRetainedStaff(patientData.station);
+
+    // Skip prenatal visit scheduling for postpartum patients
+    if (patientData.pregnancyStatus === 'Postpartum') {
+      console.log('Skipping prenatal visit scheduling for postpartum patient');
+      return await this.getPatientById(patientId);
+    }
 
     if (patientData.firstVisitDate) {
       const today = new Date().toISOString().split('T')[0];
@@ -963,8 +1058,16 @@ async smartSemesterScheduling({ patientId, lmp, createdBy, maxPerDay = 35, retai
   }
 
   const today = new Date().toISOString().split('T')[0];
+  const todayDate = new Date(today);
+  
+  // Calculate current gestational age in weeks
+  const diffTime = todayDate - lmpDate;
+  const currentWeek = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 7));
+  
+  // Define semesters with adjusted start weeks based on current gestational age
+  // Start from current week to ensure first visit is this month
   const semesters = [
-    { startWeek: 2, endWeek: 13, name: '1st Trimester', visits: [0, 4, 8] },
+    { startWeek: Math.max(2, currentWeek), endWeek: 13, name: '1st Trimester', visits: [0, 4, 8] },
     { startWeek: 14, endWeek: 26, name: '2nd Trimester', visits: [0, 4, 8] },
     { startWeek: 27, endWeek: 40, name: '3rd Trimester', visits: [0, 4, 8] }
   ];
@@ -972,9 +1075,15 @@ async smartSemesterScheduling({ patientId, lmp, createdBy, maxPerDay = 35, retai
   let visitNumber = await this.getNextVisitNumber(patientId);
 
   for (const semester of semesters) {
+    // Skip semester if we're past its end week
+    if (currentWeek > semester.endWeek) continue;
+    
     for (let index = 0; index < semester.visits.length; index++) {
       const offset = semester.visits[index];
-      const visitDateStr = this.addWeeksToDate(lmpDate, semester.startWeek + offset);
+      const actualWeek = semester.startWeek + offset;
+      
+      // Skip if this visit is in the past
+      const visitDateStr = this.addWeeksToDate(lmpDate, actualWeek);
       if (visitDateStr < today) continue;
 
       const { count: dayCount } = await this.supabase
@@ -986,7 +1095,6 @@ async smartSemesterScheduling({ patientId, lmp, createdBy, maxPerDay = 35, retai
 
       const nextOffset = semester.visits[index + 1];
       const nextDateStr = nextOffset !== undefined ? this.addWeeksToDate(lmpDate, semester.startWeek + nextOffset) : null;
-      const actualWeek = semester.startWeek + offset;
 
       await this.supabase.from('prenatal_visits').insert({
         patient_id: patientId,
@@ -1001,7 +1109,7 @@ async smartSemesterScheduling({ patientId, lmp, createdBy, maxPerDay = 35, retai
         created_by: createdBy
       });
 
-      console.log(`✅ Scheduled: ${visitDateStr} → Next: ${nextDateStr}`);
+      console.log(`✅ Scheduled: ${visitDateStr} (Week ${actualWeek}) → Next: ${nextDateStr}`);
     }
   }
 }

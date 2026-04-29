@@ -21,19 +21,37 @@ class InventoryService {
       .from('vaccine_inventory')
       .select('id, vaccine_name, quantity, unit, max_quantity, created_by, created_at, brand, expiration_date, doses');
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error fetching vaccine inventory:', error);
+      throw error;
+    }
 
-    return data.map(row => ({
-      id: row.id,
-      item_name: row.vaccine_name,
-      quantity: row.quantity,
-      unit: row.unit || 'vials',
-      max_stock: row.max_quantity,
-      status: row.status,
-      brand: row.brand,
-      expiration_date: row.expiration_date,
-      doses: row.doses
-    }));
+    console.log('Vaccine inventory raw data:', data?.length || 0, data);
+
+    return (data || []).map(row => {
+      // Calculate status based on stock level
+      const percentage = row.max_quantity ? Math.round((row.quantity / row.max_quantity) * 100) : 0;
+      let status = 'ok';
+      if (row.quantity <= 0) {
+        status = 'critical';
+      } else if (percentage <= 20) {
+        status = 'low';
+      } else if (percentage <= 50) {
+        status = 'medium';
+      }
+      
+      return {
+        id: row.id,
+        item_name: row.vaccine_name,
+        quantity: row.quantity,
+        unit: row.unit || 'vials',
+        max_stock: row.max_quantity,
+        status: status,
+        brand: row.brand,
+        expiration_date: row.expiration_date,
+        doses: row.doses
+      };
+    });
   }
 
   async getSupplementInventory() {
@@ -41,18 +59,36 @@ class InventoryService {
       .from('supplement_inventory')
       .select('id, supplement_name, quantity, unit, max_quant, created_by, created_at, brand, expiration_date');
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error fetching supplement inventory:', error);
+      throw error;
+    }
 
-    return data.map(row => ({
-      id: row.id,
-      item_name: row.supplement_name,
-      quantity: row.quantity,
-      unit: row.unit || 'pcs',
-      max_stock: row.max_quant,
-      status: row.status,
-      brand: row.brand,
-      expiration_date: row.expiration_date
-    }));
+    console.log('Supplement inventory raw data:', data?.length || 0, data);
+
+    return (data || []).map(row => {
+      // Calculate status based on stock level
+      const percentage = row.max_quant ? Math.round((row.quantity / row.max_quant) * 100) : 0;
+      let status = 'ok';
+      if (row.quantity <= 0) {
+        status = 'critical';
+      } else if (percentage <= 20) {
+        status = 'low';
+      } else if (percentage <= 50) {
+        status = 'medium';
+      }
+      
+      return {
+        id: row.id,
+        item_name: row.supplement_name,
+        quantity: row.quantity,
+        unit: row.unit || 'pcs',
+        max_stock: row.max_quant,
+        status: status,
+        brand: row.brand,
+        expiration_date: row.expiration_date
+      };
+    });
   }
 
   async addInventoryItem(table, { item_name, quantity, max_stock, unit, brand, expiration_date }) {

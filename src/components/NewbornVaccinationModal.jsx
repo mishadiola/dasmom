@@ -47,12 +47,26 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
                 console.error('Error fetching pending vaccines:', error);
                 setPendingVaccines([]);
             } else {
-                setPendingVaccines((pending || []).map(v => ({
+                // Deduplicate vaccines by vaccine name and dose number
+                const mappedVaccines = (pending || []).map(v => ({
                     id: v.id,
                     vaccine: v.vaccine_inventory?.vaccine_name || (v.notes ? v.notes.match(/(\d+)(?:st|nd|rd|th) dose of (.+)/)?.[2] : null) || 'Unknown Vaccine',
                     dose_number: v.dose_number,
                     scheduled_vaccination: v.scheduled_vaccination
-                })));
+                }));
+
+                const uniqueVaccines = [];
+                const seenKeys = new Set();
+
+                for (const v of mappedVaccines) {
+                    const key = `${v.vaccine}-${v.dose_number}`;
+                    if (!seenKeys.has(key)) {
+                        seenKeys.add(key);
+                        uniqueVaccines.push(v);
+                    }
+                }
+
+                setPendingVaccines(uniqueVaccines);
             }
 
             setLoading(false);
@@ -238,17 +252,9 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
                                 </div>
                             </div>
                             
-                            <div className="form-grid-2">
-                                <div className="form-group">
-                                    <label>Date Administered <span className="req">*</span></label>
-                                    <input type="date" value={date} onChange={e => setDate(e.target.value)} />
-                                </div>
-                                <div className="form-group">
-                                    <label>Administered By <span className="req">*</span></label>
-                                    <select value={staff} onChange={e => setStaff(e.target.value)}>
-                                        {staffList.map(s => <option key={s}>{s}</option>)}
-                                    </select>
-                                </div>
+                            <div className="form-group">
+                                <label>Date Administered <span className="req">*</span></label>
+                                <input type="date" value={date} onChange={e => setDate(e.target.value)} />
                             </div>
                         </>
                     )}

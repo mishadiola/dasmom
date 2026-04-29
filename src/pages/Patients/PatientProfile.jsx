@@ -535,7 +535,17 @@ const PatientProfile = () => {
 
             <div className="profile-tabs-wrap">
                 <div className="profile-tabs">
-                    {TABS.map(t => (
+                    {TABS.filter(t => {
+                        // Hide prenatal visits for postpartum patients (but keep tracking for postpartum recovery)
+                        if (p?.pregnancyStatus === 'Postpartum' && t.id === 'visits') {
+                            return false;
+                        }
+                        // Hide newborn tab for pregnant patients (only show for postpartum)
+                        if (p?.pregnancyStatus !== 'Postpartum' && t.id === 'newborn') {
+                            return false;
+                        }
+                        return true;
+                    }).map(t => (
                         <button
                             key={t.id}
                             className={`tab-btn ${activeTab === t.id ? 'active' : ''}`}
@@ -712,82 +722,142 @@ const PatientProfile = () => {
                 {/* --- PREGNANCY TRACKING --- */}
                 {activeTab === 'tracking' && (
                     <div className="tracking-container animate-fade">
-                        {/* Hero Stats */}
-                        <div className="tracking-hero-grid">
-                            <div className="tracking-hero-card">
-                                <span className="track-icon-wrap"><CalendarCheck size={24} /></span>
-                                <div className="track-hero-content">
-                                    <span className="track-hero-label">Estimated Due Date</span>
-                                    <span className="track-hero-val">{formatReadableDate(p.edd) || 'TBD'}</span>
-                                    <span className="track-hero-sub">Based on LMP: {formatReadableDate(p.lmp) || 'N/A'}</span>
+                        {p.pregnancyStatus === 'Postpartum' ? (
+                            // Postpartum Recovery View
+                            <>
+                                <div className="tracking-hero-grid">
+                                    <div className="tracking-hero-card">
+                                        <span className="track-icon-wrap"><Activity size={24} /></span>
+                                        <div className="track-hero-content">
+                                            <span className="track-hero-label">Delivery Date</span>
+                                            <span className="track-hero-val">{formatReadableDate(p.deliveryDate) || 'N/A'}</span>
+                                            <span className="track-hero-sub">Type: {p.deliveryType || 'NSD'}</span>
+                                        </div>
+                                    </div>
+                                    <div className="tracking-hero-card">
+                                        <span className="track-icon-wrap"><Baby size={24} /></span>
+                                        <div className="track-hero-content">
+                                            <span className="track-hero-label">Postpartum Status</span>
+                                            <span className="track-hero-val text-rose">Postpartum</span>
+                                            <span className="track-hero-sub">Recovery in progress</span>
+                                        </div>
+                                    </div>
+                                    <div className={`tracking-hero-card risk-card-${(p.risk || 'normal').toLowerCase().split(' ')[0]}`}>
+                                        <span className="track-icon-wrap"><AlertTriangle size={24} /></span>
+                                        <div className="track-hero-content">
+                                            <span className="track-hero-label">Risk Level</span>
+                                            <span className="track-hero-val">{p.risk || 'Normal'}</span>
+                                            <span className="track-hero-sub">Based on delivery outcome</span>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="tracking-hero-card">
-                                <span className="track-icon-wrap"><HeartPulse size={24} /></span>
-                                <div className="track-hero-content">
-                                    <span className="track-hero-label">Current Trimester</span>
-                                    <span className="track-hero-val text-rose">Trimester {p.trimester}</span>
-                                    <span className="track-hero-sub">Week {p.weeks} of Pregnancy</span>
-                                </div>
-                            </div>
-                            <div className={`tracking-hero-card risk-card-${(p.risk || 'normal').toLowerCase().split(' ')[0]}`}>
-                                <span className="track-icon-wrap"><AlertTriangle size={24} /></span>
-                                <div className="track-hero-content">
-                                    <span className="track-hero-label">Assessed Risk Level</span>
-                                    <span className="track-hero-val">{p.risk || 'Normal'}</span>
-                                    <span className="track-hero-sub">{p.medicalConditions?.length || 0} Risk Factors Detected</span>
-                                </div>
-                            </div>
-                        </div>
 
-                        {/* Interactive Progress Bar */}
-                        <div className="tracking-progress-section">
-                            <h3 className="tracking-section-title">Gestation Progress Tracking</h3>
-                            <div className="progress-infographic">
-                                <div className="progress-bar-bg">
-                                    <div className="progress-fill" style={{ width: `${Math.min(100, (p.weeks / 40) * 100)}%` }}>
-                                        <div className="progress-glow"></div>
+                                <div className="tracking-progress-section">
+                                    <h3 className="tracking-section-title">Postpartum Recovery Progress</h3>
+                                    <div className="progress-infographic">
+                                        <div className="progress-bar-bg">
+                                            <div className="progress-fill" style={{ width: '100%', backgroundColor: '#b9818a' }}>
+                                                <div className="progress-glow"></div>
+                                            </div>
+                                        </div>
                                     </div>
-                                    
-                                    {/* Markers */}
-                                    <div className={`progress-marker ${p.weeks >= 0 ? 'reached' : ''}`} style={{ left: '0%' }}>
-                                        <div className="marker-dot"></div>
-                                        <span className="marker-label">T1 (Start)</span>
+                                    <p className="progress-note">
+                                        Patient is in <strong>postpartum recovery</strong> period. Monitor for complications and ensure follow-up visits are completed.
+                                    </p>
+                                </div>
+
+                                <div className="tracking-details-grid">
+                                    <div className="tracking-detail-box">
+                                        <h5>Delivery Type</h5>
+                                        <p>{p.deliveryType || 'N/A'}</p>
                                     </div>
-                                    <div className={`progress-marker ${p.weeks >= 14 ? 'reached' : ''}`} style={{ left: '35%' }}>
-                                        <div className="marker-dot"></div>
-                                        <span className="marker-label">T2 (Week 14)</span>
+                                    <div className="tracking-detail-box">
+                                        <h5>Gravida / Para</h5>
+                                        <p>G{p.gravida || 1} P{p.para || 0}</p>
                                     </div>
-                                    <div className={`progress-marker ${p.weeks >= 28 ? 'reached' : ''}`} style={{ left: '70%' }}>
-                                        <div className="marker-dot"></div>
-                                        <span className="marker-label">T3 (Week 28)</span>
-                                    </div>
-                                    <div className={`progress-marker ${p.weeks >= 40 ? 'reached' : ''}`} style={{ left: '100%' }}>
-                                        <div className="marker-dot"></div>
-                                        <span className="marker-label">Term (Week 40)</span>
+                                    <div className="tracking-detail-box">
+                                        <h5>Postpartum Visit</h5>
+                                        <p>{formatReadableDate(p.postpartumVisitDate) || 'Scheduled'}</p>
                                     </div>
                                 </div>
-                            </div>
-                            <p className="progress-note">
-                                Patient is currently at <strong>{p.weeks} weeks</strong>. Ensure all scheduled prenatal visits for Trimester {p.trimester} are completed on time.
-                            </p>
-                        </div>
+                            </>
+                        ) : (
+                            // Pregnancy Tracking View
+                            <>
+                                <div className="tracking-hero-grid">
+                                    <div className="tracking-hero-card">
+                                        <span className="track-icon-wrap"><CalendarCheck size={24} /></span>
+                                        <div className="track-hero-content">
+                                            <span className="track-hero-label">Estimated Due Date</span>
+                                            <span className="track-hero-val">{formatReadableDate(p.edd) || 'TBD'}</span>
+                                            <span className="track-hero-sub">Based on LMP: {formatReadableDate(p.lmp) || 'N/A'}</span>
+                                        </div>
+                                    </div>
+                                    <div className="tracking-hero-card">
+                                        <span className="track-icon-wrap"><HeartPulse size={24} /></span>
+                                        <div className="track-hero-content">
+                                            <span className="track-hero-label">Current Trimester</span>
+                                            <span className="track-hero-val text-rose">Trimester {p.trimester}</span>
+                                            <span className="track-hero-sub">Week {p.weeks} of Pregnancy</span>
+                                        </div>
+                                    </div>
+                                    <div className={`tracking-hero-card risk-card-${(p.risk || 'normal').toLowerCase().split(' ')[0]}`}>
+                                        <span className="track-icon-wrap"><AlertTriangle size={24} /></span>
+                                        <div className="track-hero-content">
+                                            <span className="track-hero-label">Assessed Risk Level</span>
+                                            <span className="track-hero-val">{p.risk || 'Normal'}</span>
+                                            <span className="track-hero-sub">{p.medicalConditions?.length || 0} Risk Factors Detected</span>
+                                        </div>
+                                    </div>
+                                </div>
 
-                        {/* Additional Details */}
-                        <div className="tracking-details-grid">
-                            <div className="tracking-detail-box">
-                                <h5>Pregnancy Type</h5>
-                                <p>{p.pregnancyType || 'Singleton'}</p>
-                            </div>
-                            <div className="tracking-detail-box">
-                                <h5>Planned Delivery Place</h5>
-                                <p>{p.plannedDeliveryPlace || 'TBD'}</p>
-                            </div>
-                            <div className="tracking-detail-box">
-                                <h5>Gravida / Para</h5>
-                                <p>G{p.gravida || 1} P{p.para || 0}</p>
-                            </div>
-                        </div>
+                                <div className="tracking-progress-section">
+                                    <h3 className="tracking-section-title">Gestation Progress Tracking</h3>
+                                    <div className="progress-infographic">
+                                        <div className="progress-bar-bg">
+                                            <div className="progress-fill" style={{ width: `${Math.min(100, (p.weeks / 40) * 100)}%` }}>
+                                                <div className="progress-glow"></div>
+                                            </div>
+                                            
+                                            <div className={`progress-marker ${p.weeks >= 0 ? 'reached' : ''}`} style={{ left: '0%' }}>
+                                                <div className="marker-dot"></div>
+                                                <span className="marker-label">T1 (Start)</span>
+                                            </div>
+                                            <div className={`progress-marker ${p.weeks >= 14 ? 'reached' : ''}`} style={{ left: '35%' }}>
+                                                <div className="marker-dot"></div>
+                                                <span className="marker-label">T2 (Week 14)</span>
+                                            </div>
+                                            <div className={`progress-marker ${p.weeks >= 28 ? 'reached' : ''}`} style={{ left: '70%' }}>
+                                                <div className="marker-dot"></div>
+                                                <span className="marker-label">T3 (Week 28)</span>
+                                            </div>
+                                            <div className={`progress-marker ${p.weeks >= 40 ? 'reached' : ''}`} style={{ left: '100%' }}>
+                                                <div className="marker-dot"></div>
+                                                <span className="marker-label">Term (Week 40)</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p className="progress-note">
+                                        Patient is currently at <strong>{p.weeks} weeks</strong>. Ensure all scheduled prenatal visits for Trimester {p.trimester} are completed on time.
+                                    </p>
+                                </div>
+
+                                <div className="tracking-details-grid">
+                                    <div className="tracking-detail-box">
+                                        <h5>Pregnancy Type</h5>
+                                        <p>{p.pregnancyType || 'Singleton'}</p>
+                                    </div>
+                                    <div className="tracking-detail-box">
+                                        <h5>Planned Delivery Place</h5>
+                                        <p>{p.plannedDeliveryPlace || 'TBD'}</p>
+                                    </div>
+                                    <div className="tracking-detail-box">
+                                        <h5>Gravida / Para</h5>
+                                        <p>G{p.gravida || 1} P{p.para || 0}</p>
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
                 )}
 
@@ -950,16 +1020,22 @@ const PatientProfile = () => {
                                             <th>Vaccine Name</th>
                                             <th>Dose</th>
                                             <th>Date Given</th>
+                                            <th>Status</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {p.vaccines.map((v, i) => (
-                                            <tr key={i}>
-                                                <td>{v.vaccine_name}</td>
-                                                <td>{v.dose_number}</td>
-                                                <td>{v.vaccinated_date || v.scheduled_vaccination}</td>
-                                            </tr>
-                                        ))}
+                                        {p.vaccines.map((v, i) => {
+                                            const status = v.status || (v.vaccinated_date ? 'Completed' : 'Pending');
+                                            const statusClass = status === 'Completed' ? 'status-completed' : 'status-pending';
+                                            return (
+                                                <tr key={i}>
+                                                    <td>{v.vaccine_name}</td>
+                                                    <td>{v.dose_number}</td>
+                                                    <td>{v.vaccinated_date || v.scheduled_vaccination}</td>
+                                                    <td><span className={`status-badge ${statusClass}`}>{status}</span></td>
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             ) : (
@@ -979,14 +1055,18 @@ const PatientProfile = () => {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {p.supplements.map((s, i) => (
-                                            <tr key={i}>
-                                                <td>{s.supplement_name}</td>
-                                                <td>{s.dosage}</td>
-                                                <td>{s.start_date}</td>
-                                                <td>{s.status}</td>
-                                            </tr>
-                                        ))}
+                                        {p.supplements.map((s, i) => {
+                                            const status = s.status || 'Ongoing';
+                                            const statusClass = status === 'Completed' ? 'status-completed' : 'status-pending';
+                                            return (
+                                                <tr key={i}>
+                                                    <td>{s.supplement_name}</td>
+                                                    <td>{s.dosage}</td>
+                                                    <td>{s.start_date}</td>
+                                                    <td><span className={`status-badge ${statusClass}`}>{status}</span></td>
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             ) : (

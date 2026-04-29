@@ -303,7 +303,15 @@ const PatientsList = () => {
         const matchesRisk = filters.risks.length === 0 || filters.risks.includes(derivedRisk);
         const matchesType = filters.patientType === 'All' || (p.patientType || p.type) === filters.patientType;
         const matchesStation = filters.stations.length === 0 || filters.stations.includes(p.station);
-        const matchesArchive = archiveFilter === 'all' || (p.archiveStatus || 'active') === archiveFilter;
+        
+        // Filter out postpartum patients - they should not appear in patient list
+        // as they are now managed through DeliveryOutcomes
+        const isPostpartum = p.archiveStatus === 'postpartum';
+        const matchesArchive = archiveFilter === 'all' 
+            ? !isPostpartum  // In 'all' mode, exclude postpartum by default
+            : archiveFilter === 'active' 
+                ? !isPostpartum  // In 'active' mode, exclude postpartum
+                : isPostpartum; // In 'archived' mode, only show postpartum
 
         return matchesSearch && matchesTri && matchesRisk && matchesType && matchesStation && matchesArchive;
     });

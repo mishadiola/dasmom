@@ -411,9 +411,26 @@ const PrenatalVisits = () => {
     };
 
     const tabVisits = getTabVisits();
-    const tabTotalPages = Math.ceil(tabVisits.length / itemsPerPage);
+    
+    // Deduplicate visits by patient ID - keep only the most recent visit per patient
+    const deduplicatedVisits = tabVisits.reduce((acc, visit) => {
+        const existingIndex = acc.findIndex(v => v.patientId === visit.patientId);
+        if (existingIndex === -1) {
+            acc.push(visit);
+        } else {
+            // Keep the most recent visit (by date)
+            const existingDate = new Date(acc[existingIndex].visitDate || acc[existingIndex].visitDateTime);
+            const currentDate = new Date(visit.visitDate || visit.visitDateTime);
+            if (currentDate > existingDate) {
+                acc[existingIndex] = visit;
+            }
+        }
+        return acc;
+    }, []);
+    
+    const tabTotalPages = Math.ceil(deduplicatedVisits.length / itemsPerPage);
     const tabStartIndex = (currentPage - 1) * itemsPerPage;
-    const paginatedTabVisits = tabVisits.slice(tabStartIndex, tabStartIndex + itemsPerPage);
+    const paginatedTabVisits = deduplicatedVisits.slice(tabStartIndex, tabStartIndex + itemsPerPage);
 
     return (
         <div className="prenatal-visits-overall">

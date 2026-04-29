@@ -6,7 +6,7 @@ import {
     AlertCircle, FileText, MapPin, Activity, Thermometer,
     Brain, Milk, Calendar, TrendingUp, Download, X
 } from 'lucide-react';
-import babyService from '../../services/babyservices';
+import BabyService from '../../services/babyservices';
 import * as XLSX from 'xlsx';
 import '../../styles/pages/PostpartumRecords.css';
 
@@ -14,6 +14,7 @@ import '../../styles/pages/PostpartumRecords.css';
    POSTPARTUM DETAIL MODAL
    ════════════════════════════ */
 const DetailModal = ({ mother, onClose }) => {
+    const babyService = new BabyService();
     const [detail, setDetail] = useState({
         deliveryFacility: 'N/A',
         attendingStaff: 'N/A',
@@ -22,8 +23,7 @@ const DetailModal = ({ mother, onClose }) => {
         breastfeeding: 'N/A',
         mhStatus: 'Normal',
         woundCondition: mother.deliveryType === 'CS' ? 'Pending assessment' : 'N/A (NSD)',
-        vitals: [{ date: 'No data', bp: '--', temp: '--', weight: '--' }],
-        assessments: []
+        postpartumVisitDate: null
     });
     const [loading, setLoading] = useState(true);
 
@@ -40,44 +40,25 @@ const DetailModal = ({ mother, onClose }) => {
                         delivery_type,
                         complications,
                         facility,
+                        postpartum_visit_date,
                         staff_profiles!deliveries_attending_staff_fkey (full_name),
-                        newborns (birth_weight, condition_at_birth)
+                        newborns (birth_weight, condition_at_birth),
+                        patient_basic_info (barangay, province)
                     `)
                     .eq('id', mother.id)
                     .single();
 
-                // Fetch postpartum vitals from prenatal_visits
-                const { data: vitals } = await babyService.supabase
-                    .from('prenatal_visits')
-                    .select('visit_date, clinical_notes')
-                    .eq('patient_id', mother.patientId)
-                    .ilike('gestational_age', 'Postpartum%')
-                    .order('visit_date', { ascending: false })
-                    .limit(5);
-
-                // Fetch assessment notes if available
-                const { data: assessments } = await babyService.supabase
-                    .from('prenatal_visits')
-                    .select('visit_date, clinical_notes')
-                    .eq('patient_id', mother.patientId)
-                    .ilike('gestational_age', 'Postpartum%')
-                    .order('visit_date', { ascending: false });
+                // Fetch postpartum visit schedule from deliveries
+                const postpartumVisitDate = deliveries?.postpartum_visit_date || null;
 
                 const updatedDetail = {
                     ...detail,
-                    deliveryFacility: deliveries?.facility || 'N/A',
+                    deliveryFacility: deliveries?.patient_basic_info?.barangay || deliveries?.facility || 'N/A',
                     attendingStaff: deliveries?.staff_profiles?.full_name || 'N/A',
                     birthWeight: deliveries?.newborns?.[0]?.birth_weight ? `${deliveries.newborns[0].birth_weight} kg` : 'N/A',
                     deliveryComplications: mother.complications || 'None',
                     woundCondition: mother.deliveryType === 'CS' ? 'Healing Well' : 'N/A (NSD)',
-                    vitals: vitals && vitals.length > 0 ? vitals.map(v => ({
-                        date: v.visit_date,
-                        bp: '--',
-                        temp: '--',
-                        weight: '--',
-                        notes: v.clinical_notes
-                    })) : [{ date: 'No data', bp: '--', temp: '--', weight: '--' }],
-                    assessments: assessments || []
+                    postpartumVisitDate: postpartumVisitDate
                 };
                 setDetail(updatedDetail);
             } catch (error) {
@@ -121,7 +102,7 @@ const DetailModal = ({ mother, onClose }) => {
                         <h3 className="modal-section-title"><Baby size={15} /> Delivery Summary</h3>
                         <div className="detail-grid">
                             <div className="detail-item"><span>Delivery Date</span><strong>{mother.deliveryDate}</strong></div>
-                            <div className="detail-item"><span>Facility</span><strong>{detail.deliveryFacility}</strong></div>
+                            <div className="detail-item"><span>Facility (Barangay)</span><strong>{detail.deliveryFacility}</strong></div>
                             <div className="detail-item"><span>Delivery Type</span><strong>{mother.deliveryType}</strong></div>
                             <div className="detail-item"><span>Attending Staff</span><strong>{detail.attendingStaff}</strong></div>
                             <div className="detail-item"><span>Complications During Delivery</span><strong>{detail.deliveryComplications}</strong></div>
@@ -129,25 +110,11 @@ const DetailModal = ({ mother, onClose }) => {
                         </div>
                     </section>
 
-                    {/* B. Vitals Timeline */}
+                    {/* B. Postpartum Visit Schedule */}
                     <section className="modal-section">
-                        <h3 className="modal-section-title"><Activity size={15} /> Maternal Recovery Vitals</h3>
-                        <div className="vitals-timeline">
-                            <table className="vitals-table">
-                                <thead>
-                                    <tr><th>Date</th><th>Blood Pressure</th><th>Temperature</th><th>Weight</th></tr>
-                                </thead>
-                                <tbody>
-                                    {detail.vitals.map((v, i) => (
-                                        <tr key={i}>
-                                            <td className="vt-date">{v.date}</td>
-                                            <td>{v.bp}</td>
-                                            <td>{v.temp}</td>
-                                            <td>{v.weight}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                        <h3 className="modal-section-title"><Calendar size={15} /> Postpartum Visit Schedule</h3>
+                        <div className="detail-grid">
+                            <div className="detail-item"><span>Scheduled Visit Date</span><strong>{detail.postpartumVisitDate || 'Not scheduled'}</strong></div>
                         </div>
                     </section>
 
@@ -174,7 +141,6 @@ const DetailModal = ({ mother, onClose }) => {
 
                 <div className="modal-footer">
                     <button className="btn btn-outline" onClick={onClose}>Close</button>
-                    <button className="btn btn-outline"><Calendar size={15} /> Schedule Follow-up</button>
                 </div>
             </div>
         </div>
@@ -186,6 +152,7 @@ const DetailModal = ({ mother, onClose }) => {
    ════════════════════════════ */
 const PostpartumRecords = () => {
     const navigate = useNavigate();
+    const babyService = new BabyService();
     const [stats, setStats] = useState([]);
     const [stationStats, setStationStats] = useState([]);
     const [mothers, setMothers] = useState([]);

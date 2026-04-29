@@ -32,7 +32,14 @@ const Inventory = () => {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(null);
-  const [form, setForm] = useState({ item_name: '', quantity: '', max_stock: '', unit: 'vials', brand: '', expiration_date: '' });
+  const [form, setForm] = useState({ 
+    item_name: '', 
+    quantity: '', 
+    max_stock: '', 
+    unit: 'vials', 
+    brand: '', 
+    expiration_date: '' 
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -51,6 +58,8 @@ const Inventory = () => {
         patientService.getVaccinationStats()
       ]);
 
+      console.log('Inventory data fetched - vaccines:', vaxData?.length || 0, 'supplements:', suppData?.length || 0, 'stats:', statsData);
+
       setVaccStats(statsData || { mothersPending: 0, newbornsPending: 0 });
 
       const mappedVaccines = (vaxData || []).map(row => ({
@@ -59,7 +68,7 @@ const Inventory = () => {
         quantity: row?.quantity || 0,
         max_stock: row?.max_quantity || row?.max_stock || 500,
         unit: row?.unit || 'vials',
-        status: row?.status || 'active',
+        status: row?.status || 'active', // Note: This is a custom status field, not from DB
         brand: row?.brand || '',
         expiration_date: row?.expiration_date || null,
         doses: row?.doses || null
@@ -68,12 +77,14 @@ const Inventory = () => {
         id: row?.id || '',
         item_name: row?.supplement_name || row?.item_name || 'Unknown',
         quantity: row?.quantity || 0,
-        max_stock: row?.max_quantity || row?.max_stock || 1000,
+        max_stock: row?.max_quant || row?.max_stock || 1000,
         unit: row?.unit || 'tablets',
-        status: row?.status || 'active',
+        status: row?.status || 'active', // Note: This is a custom status field, not from DB
         brand: row?.brand || '',
         expiration_date: row?.expiration_date || null
       }));
+
+      console.log('Mapped vaccines:', mappedVaccines.length, 'Mapped supplements:', mappedSupplements.length);
 
       setVaccines(mappedVaccines);
       setSupplements(mappedSupplements);
@@ -114,10 +125,17 @@ const Inventory = () => {
 
   // Group vaccines by name and aggregate quantities/brands
   const groupVaccinesByName = (vaccineList) => {
+    if (!vaccineList || vaccineList.length === 0) {
+      console.log('Debug: No vaccines to group');
+      return [];
+    }
+    
     const grouped = {};
     
     vaccineList.forEach(vaccine => {
       const name = vaccine.item_name;
+      if (!name) return; // Skip items without name
+      
       if (!grouped[name]) {
         grouped[name] = {
           item_name: name,
@@ -143,15 +161,24 @@ const Inventory = () => {
       grouped[name].items.push(vaccine);
     });
     
-    return Object.values(grouped);
+    const result = Object.values(grouped);
+    console.log('Debug: Grouped vaccines:', result.length, 'Sample:', result[0]?.item_name);
+    return result;
   };
 
   // Group supplements by name (similar logic)
   const groupSupplementsByName = (supplementList) => {
+    if (!supplementList || supplementList.length === 0) {
+      console.log('Debug: No supplements to group');
+      return [];
+    }
+    
     const grouped = {};
     
     supplementList.forEach(supplement => {
       const name = supplement.item_name;
+      if (!name) return; // Skip items without name
+      
       if (!grouped[name]) {
         grouped[name] = {
           item_name: name,
@@ -174,10 +201,15 @@ const Inventory = () => {
       grouped[name].items.push(supplement);
     });
     
-    return Object.values(grouped);
+    const result = Object.values(grouped);
+    console.log('Debug: Grouped supplements:', result.length, 'Sample:', result[0]?.item_name);
+    return result;
   };
 
   const currentItems = activeTab === 'vaccines' ? groupVaccinesByName(vaccines) : groupSupplementsByName(supplements);
+
+  // Debug: Log data flow
+  console.log('Debug Inventory - vaccines:', vaccines.length, 'supplements:', supplements.length, 'currentItems:', currentItems.length);
 
   const filteredItems = currentItems
     .filter(item => item && typeof item === 'object')
@@ -187,7 +219,8 @@ const Inventory = () => {
       const matchesStatus = statusFilter === 'All' || status === statusFilter;
       
       // Apply archive filter (check if any items in the group are archived)
-      const hasActiveItems = item.items.some(i => (i.status || 'active') === 'active');
+      // Items without a status field are considered active
+      const hasActiveItems = item.items.some(i => !i.status || i.status === 'active' || i.status === 'ok' || i.status === 'low' || i.status === 'medium' || i.status === 'critical');
       const hasArchivedItems = item.items.some(i => i.status === 'archived');
       let matchesArchive = true;
       if (archiveFilter === 'active') matchesArchive = hasActiveItems;
@@ -239,6 +272,7 @@ const Inventory = () => {
     try {
       const table = activeTab === 'vaccines' ? 'vaccine_inventory' : 'supplement_inventory';
 
+      // Map form fields to correct database field names
       const payload = {
         item_name: form.item_name,
         quantity: Number(form.quantity),
@@ -248,6 +282,7 @@ const Inventory = () => {
         expiration_date: form.expiration_date || null
       };
 
+      // Use inventory service which handles upsert logic (same brand + expiration = update)
       await inventoryService.addInventoryItem(table, payload);
 
       setShowAddModal(false);

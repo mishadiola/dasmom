@@ -145,6 +145,7 @@ const HighRiskCases = () => {
             nextVisit: p.nextVisit,
             weeks,
             created_at: p.created_at,
+            pregnancyStatus: p.pregn_postp || 'Pregnant', // Include pregnancy status for filtering
           };
         })
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -216,6 +217,11 @@ const HighRiskCases = () => {
     }
     const matchesStatus = filterStatus === 'All' || status === filterStatus;
     
+    // Exclude postpartum patients - they should not appear in high risk list
+    // as they are now managed through DeliveryOutcomes
+    const isPostpartum = p.pregnancyStatus === 'Postpartum' || p.pregnancyStatus === 'postpartum';
+    const matchesPostpartum = !isPostpartum;
+    
     // Date Range Filter
     let matchesDateRange = filterDateRange === 'All';
     if (filterDateRange !== 'All' && p.nextVisit !== 'Initial') {
@@ -240,7 +246,7 @@ const HighRiskCases = () => {
       }
     }
     
-    return matchesSearch && matchesStation && matchesType && matchesRiskLevel && matchesTrimester && matchesStatus && matchesDateRange;
+    return matchesSearch && matchesStation && matchesType && matchesRiskLevel && matchesTrimester && matchesStatus && matchesDateRange && matchesPostpartum;
   });
 
   const totalPages = Math.ceil(filteredPatients.length / itemsPerPage);
