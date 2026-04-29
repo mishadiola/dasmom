@@ -537,6 +537,51 @@
     color: #888;
 }
 
+.timeline-item--attended {
+    opacity: 1;
+}
+
+.timeline-item--attended .timeline-content {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0.03));
+    border: 2px solid #22c55e;
+    box-shadow: 0 4px 16px rgba(34, 197, 94, 0.15);
+}
+
+.timeline-item--attended .timeline-date {
+    color: #22c55e;
+    font-weight: 800;
+}
+
+.timeline-item--next-after-attended {
+    opacity: 1;
+}
+
+.timeline-item--next-after-attended .timeline-content {
+    background: linear-gradient(135deg, rgba(185, 129, 138, 0.05), rgba(220, 88, 115, 0.02));
+    border: 2px solid var(--color-rose);
+    box-shadow: 0 4px 16px rgba(185, 129, 138, 0.15);
+}
+
+.timeline-item--next-after-attended .timeline-date {
+    color: var(--color-rose);
+    font-weight: 800;
+}
+
+.timeline-item--scheduled {
+    opacity: 1;
+}
+
+.timeline-item--scheduled .timeline-content {
+    background: #f7f7f7;
+    border: 1px solid #e8e8e8;
+    box-shadow: none;
+}
+
+.timeline-item--scheduled .timeline-date {
+    color: #666;
+    font-weight: 600;
+}
+
 .timeline-dot {
     position: absolute;
     left: 4px;

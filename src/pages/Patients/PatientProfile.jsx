@@ -502,7 +502,7 @@ const PatientProfile = () => {
                         <div className="profile-title-row">
                             <h1 className="profile-name">{p.name}</h1>
                             <span className={`risk-badge risk-${p.risk?.toLowerCase().split(' ')[0]}`}>
-                                {p.risk} Risk
+                                {p.risk}
                             </span>
                         </div>
                         <p className="profile-meta">
@@ -876,27 +876,29 @@ const PatientProfile = () => {
                                 // Sort visits by date
                                 const sortedVisits = [...p.visits].sort((a, b) => new Date(a.visit_date) - new Date(b.visit_date));
                                 
-                                // Find the next upcoming appointment
-                                const nextAppointmentIndex = sortedVisits.findIndex(v => new Date(v.visit_date) >= today);
+                                // Find the last attended visit index
+                                const lastAttendedIndex = sortedVisits.findLastIndex(v => v.status === 'Attended');
                                 
                                 return sortedVisits.map((v, i) => {
                                     const visitDate = new Date(v.visit_date);
                                     visitDate.setHours(0, 0, 0, 0);
                                     
                                     let visitStatus = 'future';
-                                    if (visitDate < today) {
-                                        visitStatus = 'past';
-                                    } else if (i === nextAppointmentIndex) {
-                                        visitStatus = 'next';
+                                    if (v.status === 'Attended') {
+                                        visitStatus = 'attended';
+                                    } else if (i === lastAttendedIndex + 1) {
+                                        visitStatus = 'next-after-attended';
+                                    } else {
+                                        visitStatus = 'scheduled';
                                     }
                                     
                                     return (
                                         <div className={`timeline-item timeline-item--${visitStatus}`} key={i}>
-                                            <div className={`timeline-dot ${visitStatus === 'past' ? 'completed' : visitStatus === 'next' ? 'next' : 'upcoming'}`}></div>
+                                            <div className={`timeline-dot ${visitStatus === 'attended' ? 'completed' : visitStatus === 'next-after-attended' ? 'next' : 'upcoming'}`}></div>
                                             <div className="timeline-content">
                                                 <div className="timeline-top">
                                                     <span className="timeline-date">{formatReadableDate(v.visit_date)}</span>
-                                                    {visitStatus === 'next' && <span className="timeline-badge-next">Next Appointment</span>}
+                                                    {visitStatus === 'next-after-attended' && <span className="timeline-badge-next">Next Appointment</span>}
                                                     <div className="timeline-meta-row">
                                                         <span className="timeline-type">Visit #{v.visit_number}</span>
                                                         <span className="timeline-tag">{getOrdinalSuffix(v.trimester)} Trim.</span>
