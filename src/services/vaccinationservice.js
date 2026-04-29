@@ -560,7 +560,7 @@ class VaccinationService {
 
   /**
    * Schedule postpartum vaccinations for mother after delivery
-   * MMR (if not immune), Varicella Dose 1, Varicella Dose 2
+   * MMR (if not immune) only
    * If birth was recent (within 90 days) and vaccinations not given, start from today
    */
   async schedulePostpartumMaternalVaccinations(patientId, deliveryDate, createdBy) {
@@ -575,7 +575,6 @@ class VaccinationService {
       
       // Get vaccine inventory IDs
       const mmrVaccineId = await this.getVaccineInventoryId('MMR (Measles, Mumps, Rubella) Vaccine');
-      const varicellaVaccineId = await this.getVaccineInventoryId('Varicella (Chickenpox) Vaccine');
       
       // MMR - After delivery (if not immune)
       const mmrDate = new Date(baseDate);
@@ -590,36 +589,6 @@ class VaccinationService {
         vaccinated_date: null,
         created_by: createdBy,
         notes: '1st dose of MMR (Measles, Mumps, Rubella) - After delivery if not immune'
-      });
-
-      // Varicella Dose 1 - After delivery
-      const varicella1Date = new Date(baseDate);
-      varicella1Date.setDate(varicella1Date.getDate() + 2); // 2 days after delivery
-      const varicella1DateStr = varicella1Date.toISOString().split('T')[0];
-      schedule.push({
-        patient_id: patientId,
-        vaccine_inventory_id: varicellaVaccineId,
-        dose_number: 1,
-        scheduled_vaccination: varicella1DateStr,
-        status: 'Pending',
-        vaccinated_date: null,
-        created_by: createdBy,
-        notes: '1st dose of Varicella (Chickenpox) - After delivery'
-      });
-
-      // Varicella Dose 2 - 4-8 weeks after Dose 1
-      const varicella2Date = new Date(varicella1Date);
-      varicella2Date.setDate(varicella2Date.getDate() + 35); // 5 weeks (middle of 4-8 week range)
-      const varicella2DateStr = varicella2Date.toISOString().split('T')[0];
-      schedule.push({
-        patient_id: patientId,
-        vaccine_inventory_id: varicellaVaccineId,
-        dose_number: 2,
-        scheduled_vaccination: varicella2DateStr,
-        status: 'Pending',
-        vaccinated_date: null,
-        created_by: createdBy,
-        notes: '2nd dose of Varicella (Chickenpox) - 4-8 weeks after Dose 1'
       });
 
       const { error } = await this.supabase

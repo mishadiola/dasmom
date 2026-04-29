@@ -1,101 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
-    Users, Activity, AlertTriangle, CheckCircle2, 
-    TrendingUp, Calendar, MapPin, Filter, 
+    Users, Activity, AlertTriangle, CheckCircle2,
+    TrendingUp, Calendar, MapPin, Filter,
     ChevronRight, ArrowUpRight, Baby, PieChart,
     BarChart3, AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import '../../styles/pages/Analytics.css';
-
-/* ════════════════════════════
-   MOCK DATA ENGINE
-════════════════════════════ */
-const STATIONS = ['Dasma 1', 'Dasma 2', 'Dasma 3', 'Dasma 4', 'Salawag', 'Armstrong'];
-
-const generateMaternalData = () => {
-    const conditions = ['Preeclampsia', 'Anemia', 'Gestational Diabetes', 'None'];
-    return Array.from({ length: 120 }, (_, i) => {
-        const r = Math.random();
-        
-        // Age Distribution (Teenage pregnancies ~15%)
-        const age = r < 0.15 ? Math.floor(Math.random() * 5) + 14 : Math.floor(Math.random() * 20) + 20;
-        
-        // Risk Levels
-        const riskLevel = r > 0.85 ? 'Critical' : r > 0.65 ? 'Warning' : r > 0.4 ? 'Monitor' : 'Normal';
-        
-        // Trimesters
-        const tri = Math.floor(Math.random() * 3) + 1;
-        
-        // Conditions
-        const condition = r > 0.7 ? conditions[Math.floor(Math.random() * 3)] : 'None';
-
-        return {
-            id: `PT-${2026001 + i}`,
-            name: `Patient ${i + 1}`,
-            age,
-            station: STATIONS[Math.floor(Math.random() * STATIONS.length)],
-            trimester: tri,
-            riskLevel,
-            condition,
-            isTeenage: age < 20,
-            dateAdded: new Date(2025, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28))
-        };
-    });
-};
-
-const MOCK_DATA = generateMaternalData();
-
-/* ════════════════════════════
-   SUB-COMPONENTS
-════════════════════════════ */
-
-const MiniTrend = ({ data, color }) => (
-    <div className="mini-trend">
-        {data.map((v, i) => (
-            <div 
-                key={i} 
-                className="trend-bar" 
-                style={{ 
-                    height: `${(v / Math.max(...data)) * 100}%`,
-                    background: color 
-                }} 
-            />
-        ))}
-    </div>
-);
-
-const DonutChart = ({ data, total, colors }) => {
-    let cumulativePercent = 0;
-    const slices = data.map((d, i) => {
-        const percent = (d.value / total) * 100;
-        const start = cumulativePercent;
-        cumulativePercent += percent;
-        return { ...d, start, end: cumulativePercent, color: colors[i] };
-    });
-
-    const conicGradient = slices.map(s => `${s.color} ${s.start}% ${s.end}%`).join(', ');
-
-    return (
-        <div className="donut-container">
-            <div className="donut-ring" style={{ background: `conic-gradient(${conicGradient})` }}>
-                <div className="donut-center">
-                    <span className="donut-val">{total}</span>
-                    <span className="donut-lbl">Cases</span>
-                </div>
-            </div>
-            <div className="donut-legend-grid">
-                {slices.map((s, i) => (
-                    <div key={i} className="donut-leg-item">
-                        <span className="leg-dot" style={{ background: s.color }} />
-                        <span className="leg-name">{s.label}</span>
-                        <span className="leg-val">{s.value}</span>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
+import PatientService from '../../services/patientservice';
 
 /* ════════════════════════════
    MAIN COMPONENT
@@ -106,15 +18,37 @@ const Analytics = () => {
         trimester: 'All',
         timeframe: 'quarterly'
     });
+    const [loading, setLoading] = useState(true);
+    const [stations, setStations] = useState([]);
+    const [data, setData] = useState([]);
+
+    const patientService = new PatientService();
+
+    useEffect(() => {
+        fetchAnalyticsData();
+    }, []);
+
+    const fetchAnalyticsData = async () => {
+        try {
+            setLoading(true);
+            const result = await patientService.getAnalyticsData();
+            setStations(result.stations || []);
+            setData(result.data || []);
+        } catch (error) {
+            console.error('Error fetching analytics data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     // ── Data Filtering ──
     const filteredData = useMemo(() => {
-        return MOCK_DATA.filter(p => {
+        return data.filter(p => {
             const matchStation = filters.station === 'All' || p.station === filters.station;
             const matchTri = filters.trimester === 'All' || p.trimester.toString() === filters.trimester;
             return matchStation && matchTri;
         });
-    }, [filters]);
+    }, [data, filters]);
 
     // ── Metric Calculations ──
     const metrics = useMemo(() => {
@@ -144,9 +78,13 @@ const Analytics = () => {
 
     const handleFilterChange = (key, val) => setFilters(prev => ({ ...prev, [key]: val }));
 
+    if (loading) {
+        return <div className="analytics-overhaul">Loading...</div>;
+    }
+
     return (
         <div className="analytics-overhaul">
-            
+
             {/* ── Page Header ── */}
             <header className="analytics-header">
                 <div>
@@ -161,7 +99,7 @@ const Analytics = () => {
                     <MapPin size={16} className="filter-icon" />
                     <select value={filters.station} onChange={e => handleFilterChange('station', e.target.value)}>
                         <option value="All">All Stations</option>
-                        {STATIONS.map(b => <option key={b} value={b}>{b}</option>)}
+                        {stations.map(b => <option key={b} value={b}>{b}</option>)}
                     </select>
                 </div>
                 <div className="filter-group">
@@ -223,7 +161,7 @@ const Analytics = () => {
 
             {/* ── Detailed Reports ── */}
             <div className="reports-grid">
-                
+
                 {/* 1. Teenage Pregnancy Trend */}
                 <div className="report-card">
                     <div className="report-head">
@@ -244,7 +182,7 @@ const Analytics = () => {
                         <MiniTrend data={[4, 6, 8, 5, 9, 7, 12, 8]} color="#ac97b4" />
                     </div>
                     <div className="report-footer">
-                        <p>Targeting awareness programs in <strong>Dasma 3</strong> could reduce these numbers.</p>
+                        <p>Targeting awareness programs in <strong>{stations.length > 0 ? stations[0] : 'Dasma 3'}</strong> could reduce these numbers.</p>
                     </div>
                 </div>
 
@@ -257,10 +195,10 @@ const Analytics = () => {
                         </div>
                         <PieChart size={18} className="text-muted" />
                     </div>
-                    <DonutChart 
-                        total={filteredData.length} 
-                        data={metrics.riskBreakdown} 
-                        colors={['#b68191', '#edbd9a', '#a0c282']} 
+                    <DonutChart
+                        total={filteredData.length}
+                        data={metrics.riskBreakdown}
+                        colors={['#b68191', '#edbd9a', '#a0c282']}
                     />
                 </div>
 
@@ -282,8 +220,8 @@ const Analytics = () => {
                                         <span className="cond-val">{c.value} cases</span>
                                     </div>
                                     <div className="cond-bar-track">
-                                        <motion.div 
-                                            initial={{ width: 0 }} 
+                                        <motion.div
+                                            initial={{ width: 0 }}
                                             animate={{ width: `${(c.value / filteredData.length) * 100}%` }}
                                             className="cond-bar-fill"
                                             style={{ background: c.color }}
@@ -295,7 +233,7 @@ const Analytics = () => {
                         <div className="urgent-highlights">
                             <div className="highlight-box red">
                                 <h4>Crucial Alert</h4>
-                                <p><strong>{metrics.conditionStats[0].value}</strong> patients with Pre-eclampsia require weekly BP monitoring.</p>
+                                <p><strong>{metrics.conditionStats[0]?.value || 0}</strong> patients with Pre-eclampsia require weekly BP monitoring.</p>
                                 <button className="btn-tiny">View Cases <ChevronRight size={12} /></button>
                             </div>
                             <div className="highlight-box orange">
@@ -313,3 +251,54 @@ const Analytics = () => {
 };
 
 export default Analytics;
+
+/* ════════════════════════════
+   SUB-COMPONENTS
+════════════════════════════ */
+
+const MiniTrend = ({ data, color }) => (
+    <div className="mini-trend">
+        {data.map((v, i) => (
+            <div 
+                key={i} 
+                className="trend-bar" 
+                style={{ 
+                    height: `${(v / Math.max(...data)) * 100}%`,
+                    background: color 
+                }} 
+            />
+        ))}
+    </div>
+);
+
+const DonutChart = ({ data, total, colors }) => {
+    let cumulativePercent = 0;
+    const slices = data.map((d, i) => {
+        const percent = (d.value / total) * 100;
+        const start = cumulativePercent;
+        cumulativePercent += percent;
+        return { ...d, start, end: cumulativePercent, color: colors[i] };
+    });
+
+    const conicGradient = slices.map(s => `${s.color} ${s.start}% ${s.end}%`).join(', ');
+
+    return (
+        <div className="donut-container">
+            <div className="donut-ring" style={{ background: `conic-gradient(${conicGradient})` }}>
+                <div className="donut-center">
+                    <span className="donut-val">{total}</span>
+                    <span className="donut-lbl">Cases</span>
+                </div>
+            </div>
+            <div className="donut-legend-grid">
+                {slices.map((s, i) => (
+                    <div key={i} className="donut-leg-item">
+                        <span className="leg-dot" style={{ background: s.color }} />
+                        <span className="leg-name">{s.label}</span>
+                        <span className="leg-val">{s.value}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};

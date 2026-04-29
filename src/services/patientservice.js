@@ -1962,6 +1962,414 @@ async getHighRiskPatients() {
     }
   }
 
+  async getStationReports() {
+    try {
+      // 1. Get all stations from staff_profiles
+      const { data: staffProfiles, error: staffError } = await this.supabase
+        .from('staff_profiles')
+        .select('barangay_assignment')
+        .not('barangay_assignment', 'is', null);
+
+      if (staffError) throw staffError;
+
+      // Get unique barangay assignments
+      const allStations = [...new Set(staffProfiles?.map(s => s.barangay_assignment))];
+
+      // 2. Get all patients with barangay
+      const { data: patients, error: patientsError } = await this.supabase
+        .from('patient_basic_info')
+        .select('id, first_name, last_name, barangay, municipality, province')
+        .not('barangay', 'is', null);
+
+      if (patientsError) throw patientsError;
+
+      // 3. Get latest pregnancy_info for each patient (only pregnant, not postpartum)
+      const { data: pregnancies, error: pregError } = await this.supabase
+        .from('pregnancy_info')
+        .select('patient_id, pregn_postp, lmd, edd, created_at')
+        .order('created_at', { ascending: false });
+
+      if (pregError) throw pregError;
+
+      const latestPregMap = new Map();
+      (pregnancies || []).forEach(p => {
+        if (!p.patient_id) return;
+        const existing = latestPregMap.get(p.patient_id);
+        const currentTime = new Date(p.created_at).getTime() || 0;
+        const existingTime = existing ? new Date(existing.created_at).getTime() || 0 : 0;
+        if (!existing || currentTime > existingTime) {
+          latestPregMap.set(p.patient_id, p);
+        }
+      });
+
+      // 3. Get latest attended prenatal visit for each patient (for risk level)
+      const { data: visits, error: visitsError } = await this.supabase
+        .from('prenatal_visits')
+        .select('patient_id, visit_date, status, calculated_risk, risk_factors, trimester')
+        .eq('status', 'Attended')
+        .order('visit_date', { ascending: false });
+
+      if (visitsError) throw visitsError;
+
+      const latestAttendedVisitMap = new Map();
+      (visits || []).forEach(v => {
+        if (!v.patient_id) return;
+        const existing = latestAttendedVisitMap.get(v.patient_id);
+        if (!existing || new Date(v.visit_date) > new Date(existing.visit_date)) {
+          latestAttendedVisitMap.set(v.patient_id, v);
+        }
+      });
+
+      // 4. Get deliveries for current month
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const firstDay = new Date(year, month, 1).toISOString().slice(0, 10);
+      const lastDay = new Date(year, month + 1, 0).toISOString().slice(0, 10);
+      const { data: deliveries, error: deliveriesError } = await this.supabase
+        .from('deliveries')
+        .select('mother_id, delivery_date, delivery_type, complications')
+        .gte('delivery_date', firstDay)
+        .lte('delivery_date', lastDay);
+
+      if (deliveriesError) throw deliveriesError;
+
+      // 5. Get newborns with condition data
+      const { data: newborns, error: newbornsError } = await this.supabase
+        .from('newborns')
+        .select('id, mother_id, birth_weight, condition_at_birth, risk_level');
+
+      if (newbornsError) throw newbornsError;
+
+      // 6. Get vaccination data for coverage calculation
+      const { data: vaccinations, error: vaccError } = await this.supabase
+        .from('vaccinations')
+        .select('patient_id, newborn_id, status');
+
+      if (vaccError) throw vaccError;
+
+      // 7. Get supplements data for coverage calculation
+      const { data: supplements, error: suppError } = await this.supabase
+        .from('supplements')
+        .select('patient_id, status');
+
+      if (suppError) throw suppError;
+
+      // Group patients by barangay (station)
+      const stationMap = new Map();
+
+      // Initialize all stations from staff_profiles with zero values
+      allStations.forEach(stationName => {
+        stationMap.set(stationName, {
+          id: stationName.toLowerCase().replace(/\s+/g, '-'),
+          name: stationName,
+          totalPatients: 0,
+          highRisk: 0,
+          recentDeliveries: 0,
+          vaccCoverage: 0,
+          newborns: 0,
+          suppCoverage: 0,
+          riskStatus: 'Normal',
+          alerts: [],
+          trimester: { first: 0, second: 0, third: 0 },
+          deliveryTypes: { nsd: 0, cs: 0 },
+          complications: 0,
+          lbwBabies: 0,
+          nicuBabies: 0,
+          maternalVaccCoverage: 0,
+          newbornVaccCoverage: 0,
+          totalPregnantPatients: 0,
+          totalMaternalVaccinated: 0,
+          totalNewbornVaccinated: 0,
+          totalSupplementsGiven: 0
+        });
+      });
+
+      (patients || []).forEach(patient => {
+        const barangay = patient.barangay || 'Unknown';
+        if (!stationMap.has(barangay)) {
+          stationMap.set(barangay, {
+            id: barangay.toLowerCase().replace(/\s+/g, '-'),
+            name: barangay,
+            totalPatients: 0,
+            highRisk: 0,
+            recentDeliveries: 0,
+            vaccCoverage: 0,
+            newborns: 0,
+            suppCoverage: 0,
+            riskStatus: 'Normal',
+            alerts: [],
+            trimester: { first: 0, second: 0, third: 0 },
+            deliveryTypes: { nsd: 0, cs: 0 },
+            complications: 0,
+            lbwBabies: 0,
+            nicuBabies: 0,
+            maternalVaccCoverage: 0,
+            newbornVaccCoverage: 0,
+            totalPregnantPatients: 0,
+            totalMaternalVaccinated: 0,
+            totalNewbornVaccinated: 0,
+            totalSupplementsGiven: 0
+          });
+        }
+
+        const station = stationMap.get(barangay);
+        const patientId = patient.id;
+
+        // Check if patient is currently pregnant (not postpartum)
+        const latestPreg = latestPregMap.get(patientId);
+        const isPregnant = latestPreg && latestPreg.pregn_postp?.toLowerCase() === 'pregnant';
+
+        if (isPregnant) {
+          station.totalPregnantPatients++;
+
+          // Get trimester from LMP
+          if (latestPreg.lmd) {
+            const weeks = this.calculateWeeks(latestPreg.lmd);
+            const trimester = this.getTrimesterFromWeek(weeks);
+            if (trimester === 1) station.trimester.first++;
+            else if (trimester === 2) station.trimester.second++;
+            else if (trimester === 3) station.trimester.third++;
+          }
+
+          // Get risk level from latest attended visit
+          const latestVisit = latestAttendedVisitMap.get(patientId);
+          const risk = latestVisit?.calculated_risk || 'Normal';
+          if (risk !== 'Normal') {
+            station.highRisk++;
+          }
+
+          // Count maternal vaccinations
+          const patientVaccinations = (vaccinations || []).filter(v => v.patient_id === patientId && v.status === 'Completed');
+          if (patientVaccinations.length > 0) {
+            station.totalMaternalVaccinated++;
+          }
+
+          // Count supplements
+          const patientSupplements = (supplements || []).filter(s => s.patient_id === patientId && s.status === 'Completed');
+          if (patientSupplements.length > 0) {
+            station.totalSupplementsGiven++;
+          }
+        }
+
+        // Count deliveries for this station
+        const patientDeliveries = (deliveries || []).filter(d => d.mother_id === patientId);
+        station.recentDeliveries += patientDeliveries.length;
+        patientDeliveries.forEach(d => {
+          if (d.delivery_type?.toLowerCase() === 'nsd') station.deliveryTypes.nsd++;
+          else if (d.delivery_type?.toLowerCase() === 'cs' || d.delivery_type?.toLowerCase() === 'cesarean') station.deliveryTypes.cs++;
+          if (d.complications && d.complications.length > 0) station.complications++;
+        });
+
+        // Count newborns
+        const patientNewborns = (newborns || []).filter(n => n.mother_id === patientId);
+        station.newborns += patientNewborns.length;
+        patientNewborns.forEach(n => {
+          // Low birth weight: < 2500g
+          if (n.birth_weight && n.birth_weight < 2500) station.lbwBabies++;
+          // NICU: based on condition or risk level
+          if (n.condition_at_birth?.toLowerCase().includes('nicu') || n.risk_level?.toLowerCase() === 'high') station.nicuBabies++;
+
+          // Count newborn vaccinations
+          const newbornVaccinations = (vaccinations || []).filter(v => v.newborn_id === n.id && v.status === 'Completed');
+          if (newbornVaccinations.length > 0) {
+            station.totalNewbornVaccinated++;
+          }
+        });
+      });
+
+      // Calculate percentages and set risk status
+      const stations = Array.from(stationMap.values()).map(station => {
+        // Total patients = pregnant patients only (not postpartum)
+        station.totalPatients = station.totalPregnantPatients;
+
+        // Vaccination coverage (maternal)
+        station.maternalVaccCoverage = station.totalPregnantPatients > 0
+          ? Math.round((station.totalMaternalVaccinated / station.totalPregnantPatients) * 100)
+          : 0;
+
+        // Vaccination coverage (newborn)
+        station.newbornVaccCoverage = station.newborns > 0
+          ? Math.round((station.totalNewbornVaccinated / station.newborns) * 100)
+          : 0;
+
+        // Overall vaccination coverage (average of maternal and newborn)
+        station.vaccCoverage = station.totalPregnantPatients > 0 && station.newborns > 0
+          ? Math.round((station.maternalVaccCoverage + station.newbornVaccCoverage) / 2)
+          : station.maternalVaccCoverage;
+
+        // Supplement coverage
+        station.suppCoverage = station.totalPregnantPatients > 0
+          ? Math.round((station.totalSupplementsGiven / station.totalPregnantPatients) * 100)
+          : 0;
+
+        // Determine risk status based on high risk percentage
+        const highRiskPercent = station.totalPregnantPatients > 0
+          ? (station.highRisk / station.totalPregnantPatients) * 100
+          : 0;
+
+        if (highRiskPercent >= 30 || station.vaccCoverage < 70) {
+          station.riskStatus = 'Critical';
+          station.alerts = [];
+          if (highRiskPercent >= 30) station.alerts.push(`High risk rate: ${highRiskPercent.toFixed(0)}%`);
+          if (station.vaccCoverage < 70) station.alerts.push(`Vaccination coverage critically low (${station.vaccCoverage}%)`);
+          if (station.suppCoverage < 70) station.alerts.push(`Supplement coverage below 70%`);
+        } else if (highRiskPercent >= 15 || station.vaccCoverage < 80) {
+          station.riskStatus = 'Monitor';
+          station.alerts = [];
+          if (highRiskPercent >= 15) station.alerts.push(`${station.highRisk} high-risk pregnancies`);
+          if (station.vaccCoverage < 80) station.alerts.push(`Vaccination coverage below 80%`);
+        } else {
+          station.riskStatus = 'Normal';
+          station.alerts = [];
+        }
+
+        return station;
+      });
+
+      return stations;
+    } catch (error) {
+      console.error('Error fetching station reports:', error);
+      return [];
+    }
+  }
+
+  async getAnalyticsData() {
+    try {
+      // Get all stations from staff_profiles
+      const { data: staffProfiles, error: staffError } = await this.supabase
+        .from('staff_profiles')
+        .select('barangay_assignment')
+        .not('barangay_assignment', 'is', null);
+
+      if (staffError) throw staffError;
+
+      // Get unique barangay assignments
+      const stations = [...new Set(staffProfiles?.map(s => s.barangay_assignment))];
+
+      // Get all patients with barangay
+      const { data: patients, error: patientsError } = await this.supabase
+        .from('patient_basic_info')
+        .select('id, first_name, last_name, barangay, date_of_birth')
+        .not('barangay', 'is', null);
+
+      if (patientsError) throw patientsError;
+
+      // Get latest pregnancy_info for each patient
+      const { data: pregnancies, error: pregError } = await this.supabase
+        .from('pregnancy_info')
+        .select('patient_id, pregn_postp, lmd, edd, created_at')
+        .order('created_at', { ascending: false });
+
+      if (pregError) throw pregError;
+
+      const latestPregMap = new Map();
+      (pregnancies || []).forEach(p => {
+        if (!p.patient_id) return;
+        const existing = latestPregMap.get(p.patient_id);
+        const currentTime = new Date(p.created_at).getTime() || 0;
+        const existingTime = existing ? new Date(existing.created_at).getTime() || 0 : 0;
+        if (!existing || currentTime > existingTime) {
+          latestPregMap.set(p.patient_id, p);
+        }
+      });
+
+      // Get latest attended prenatal visit for each patient
+      const { data: visits, error: visitsError } = await this.supabase
+        .from('prenatal_visits')
+        .select('patient_id, visit_date, status, calculated_risk, risk_factors, trimester')
+        .eq('status', 'Attended')
+        .order('visit_date', { ascending: false });
+
+      if (visitsError) throw visitsError;
+
+      const latestAttendedVisitMap = new Map();
+      (visits || []).forEach(v => {
+        if (!v.patient_id) return;
+        const existing = latestAttendedVisitMap.get(v.patient_id);
+        if (!existing || new Date(v.visit_date) > new Date(existing.visit_date)) {
+          latestAttendedVisitMap.set(v.patient_id, v);
+        }
+      });
+
+      // Build analytics data
+      const analyticsData = [];
+
+      (patients || []).forEach(patient => {
+        const patientId = patient.id;
+        const barangay = patient.barangay;
+
+        // Check if patient is currently pregnant
+        const latestPreg = latestPregMap.get(patientId);
+        const isPregnant = latestPreg && latestPreg.pregn_postp?.toLowerCase() === 'pregnant';
+
+        if (isPregnant) {
+          // Calculate age
+          let age = 0;
+          if (patient.date_of_birth) {
+            const dob = new Date(patient.date_of_birth);
+            const today = new Date();
+            age = today.getFullYear() - dob.getFullYear();
+            const monthDiff = today.getMonth() - dob.getMonth();
+            if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+              age--;
+            }
+          }
+
+          // Get trimester from LMP
+          let trimester = 1;
+          if (latestPreg.lmd) {
+            const weeks = this.calculateWeeks(latestPreg.lmd);
+            trimester = this.getTrimesterFromWeek(weeks);
+          }
+
+          // Get risk level from latest attended visit
+          const latestVisit = latestAttendedVisitMap.get(patientId);
+          const riskLevel = latestVisit?.calculated_risk || 'Normal';
+
+          // Get risk factors
+          const riskFactors = latestVisit?.risk_factors || '';
+
+          // Determine condition based on risk factors
+          let condition = 'None';
+          if (riskFactors) {
+            const lower = riskFactors.toLowerCase();
+            if (lower.includes('preeclampsia') || lower.includes('pre-eclampsia')) {
+              condition = 'Preeclampsia';
+            } else if (lower.includes('anemia')) {
+              condition = 'Anemia';
+            } else if (lower.includes('diabetes') || lower.includes('gestational')) {
+              condition = 'Gestational Diabetes';
+            }
+          }
+
+          analyticsData.push({
+            id: patientId,
+            name: `${patient.first_name} ${patient.last_name}`,
+            age,
+            station: barangay,
+            trimester,
+            riskLevel,
+            condition,
+            isTeenage: age < 20,
+            dateAdded: new Date(latestPreg.created_at)
+          });
+        }
+      });
+
+      return {
+        stations,
+        data: analyticsData
+      };
+    } catch (error) {
+      console.error('Error fetching analytics data:', error);
+      return {
+        stations: [],
+        data: []
+      };
+    }
+  }
+
   async getNewbornPendingVaccinations() {
     try {
       const { data, error } = await this.supabase
@@ -1977,8 +2385,6 @@ async getHighRiskPatients() {
             last_name
           ),
           vaccinations (
-            id,
-            vaccine_inventory_id,
             dose_number,
             scheduled_vaccination,
             vaccinated_date,

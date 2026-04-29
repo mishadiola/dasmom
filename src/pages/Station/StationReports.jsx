@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Search, Filter, Plus, X, MapPin, Users, AlertTriangle,
@@ -7,92 +7,296 @@ import {
     FileText, Activity, Heart
 } from 'lucide-react';
 import '../../styles/pages/StationReports.css';
+import PatientService from '../../services/patientservice';
 
 /* ════════════════════════════
-   MOCK DATA
+   MAIN COMPONENT
 ════════════════════════════ */
-const SUMMARY_STATS = [
-    { label: 'Total Pregnant Patients', value: 340, color: 'sage', icon: Users },
-    { label: 'High-Risk Pregnancies', value: 43, color: 'rose', icon: AlertTriangle },
-    { label: 'Total Deliveries (Month)', value: 58, color: 'orange', icon: Heart },
-    { label: 'Vaccination Coverage', value: '86%', color: 'lilac', icon: Syringe },
-    { label: 'Supplements Distributed', value: '1,500', color: 'pink', icon: Pill },
-];
+const StationReports = () => {
+    const navigate = useNavigate();
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filters, setFilters] = useState({ risk: 'All', vacc: 'All' });
+    const [selectedStation, setSelectedStation] = useState(null);
+    const [expandedRow, setExpandedRow] = useState(null);
+    const [showCharts, setShowCharts] = useState(true);
+    const [stations, setStations] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [summaryStats, setSummaryStats] = useState([
+        { label: 'Total Pregnant Patients', value: 0, color: 'sage', icon: Users },
+        { label: 'High-Risk Pregnancies', value: 0, color: 'rose', icon: AlertTriangle },
+        { label: 'Total Deliveries (Month)', value: 0, color: 'orange', icon: Heart },
+        { label: 'Vaccination Coverage', value: '0%', color: 'lilac', icon: Syringe },
+        { label: 'Supplements Distributed', value: 0, color: 'pink', icon: Pill },
+    ]);
 
-const stationS = [
-    {
-        id: 'dasma-1',
-        name: 'Dasma 1',
-        totalPatients: 52, highRisk: 8, recentDeliveries: 10,
-        vaccCoverage: 90, newborns: 10, suppCoverage: 92,
-        riskStatus: 'Normal',
-        alerts: [],
-        trimester: { first: 18, second: 22, third: 12 },
-        deliveryTypes: { nsd: 7, cs: 3 },
-        complications: 1, lbwBabies: 0, nicuBabies: 0,
-        maternalVaccCoverage: 92, newbornVaccCoverage: 88,
-    },
-    {
-        id: 'dasma-2',
-        name: 'Dasma 2',
-        totalPatients: 45, highRisk: 5, recentDeliveries: 7,
-        vaccCoverage: 78, newborns: 7, suppCoverage: 80,
-        riskStatus: 'Monitor',
-        alerts: ['Low vaccination coverage (78%)'],
-        trimester: { first: 14, second: 20, third: 11 },
-        deliveryTypes: { nsd: 5, cs: 2 },
-        complications: 0, lbwBabies: 1, nicuBabies: 0,
-        maternalVaccCoverage: 80, newbornVaccCoverage: 75,
-    },
-    {
-        id: 'dasma-3',
-        name: 'Dasma 3',
-        totalPatients: 61, highRisk: 12, recentDeliveries: 11,
-        vaccCoverage: 82, newborns: 11, suppCoverage: 85,
-        riskStatus: 'Monitor',
-        alerts: ['3 missed follow-up visits this month'],
-        trimester: { first: 20, second: 28, third: 13 },
-        deliveryTypes: { nsd: 8, cs: 3 },
-        complications: 2, lbwBabies: 1, nicuBabies: 1,
-        maternalVaccCoverage: 84, newbornVaccCoverage: 79,
-    },
-    {
-        id: 'dasma-4',
-        name: 'Dasma 4',
-        totalPatients: 38, highRisk: 3, recentDeliveries: 6,
-        vaccCoverage: 94, newborns: 6, suppCoverage: 96,
-        riskStatus: 'Normal',
-        alerts: [],
-        trimester: { first: 12, second: 16, third: 10 },
-        deliveryTypes: { nsd: 5, cs: 1 },
-        complications: 0, lbwBabies: 0, nicuBabies: 0,
-        maternalVaccCoverage: 96, newbornVaccCoverage: 92,
-    },
-    {
-        id: 'salawag',
-        name: 'Salawag',
-        totalPatients: 55, highRisk: 6, recentDeliveries: 9,
-        vaccCoverage: 70, newborns: 9, suppCoverage: 68,
-        riskStatus: 'Critical',
-        alerts: ['Vaccination coverage critically low (70%)', 'Supplement coverage below 70%'],
-        trimester: { first: 19, second: 24, third: 12 },
-        deliveryTypes: { nsd: 7, cs: 2 },
-        complications: 2, lbwBabies: 2, nicuBabies: 1,
-        maternalVaccCoverage: 72, newbornVaccCoverage: 67,
-    },
-    {
-        id: 'armstrong',
-        name: 'Armstrong',
-        totalPatients: 45, highRisk: 4, recentDeliveries: 7,
-        vaccCoverage: 86, newborns: 7, suppCoverage: 88,
-        riskStatus: 'Normal',
-        alerts: [],
-        trimester: { first: 15, second: 20, third: 10 },
-        deliveryTypes: { nsd: 5, cs: 2 },
-        complications: 0, lbwBabies: 1, nicuBabies: 0,
-        maternalVaccCoverage: 88, newbornVaccCoverage: 84,
-    },
-];
+    const patientService = new PatientService();
+
+    useEffect(() => {
+        fetchStationData();
+    }, []);
+
+    const fetchStationData = async () => {
+        try {
+            setLoading(true);
+            const data = await patientService.getStationReports();
+            setStations(data);
+
+            // Calculate summary stats from station data
+            const totalPregnant = data.reduce((sum, s) => sum + s.totalPatients, 0);
+            const totalHighRisk = data.reduce((sum, s) => sum + s.highRisk, 0);
+            const totalDeliveries = data.reduce((sum, s) => sum + s.recentDeliveries, 0);
+            const avgVaccCoverage = data.length > 0
+                ? Math.round(data.reduce((sum, s) => sum + s.vaccCoverage, 0) / data.length)
+                : 0;
+            const totalSupplements = data.reduce((sum, s) => sum + s.totalSupplementsGiven, 0);
+
+            setSummaryStats([
+                { label: 'Total Pregnant Patients', value: totalPregnant, color: 'sage', icon: Users },
+                { label: 'High-Risk Pregnancies', value: totalHighRisk, color: 'rose', icon: AlertTriangle },
+                { label: 'Total Deliveries (Month)', value: totalDeliveries, color: 'orange', icon: Heart },
+                { label: 'Vaccination Coverage', value: `${avgVaccCoverage}%`, color: 'lilac', icon: Syringe },
+                { label: 'Supplements Distributed', value: totalSupplements, color: 'pink', icon: Pill },
+            ]);
+        } catch (error) {
+            console.error('Error fetching station data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleFilter = (k, v) => setFilters(prev => ({ ...prev, [k]: v }));
+
+    const filtered = stations.filter(b => {
+        const s = searchTerm.toLowerCase();
+        const matchSearch = b.name.toLowerCase().includes(s);
+        const matchRisk = filters.risk === 'All' || b.riskStatus === filters.risk;
+        const matchVacc = filters.vacc === 'All' ||
+            (filters.vacc === 'High' && b.vaccCoverage >= 90) ||
+            (filters.vacc === 'Low' && b.vaccCoverage < 90);
+        return matchSearch && matchRisk && matchVacc;
+    });
+
+    const getRiskClass = (r) => {
+        if (r === 'Critical') return 'st-row--critical';
+        if (r === 'Monitor') return 'st-row--monitor';
+        return 'st-row--normal';
+    };
+
+    const getRiskBadge = (r) => {
+        if (r === 'Critical') return 'badge-critical';
+        if (r === 'Monitor') return 'badge-monitor';
+        return 'badge-normal';
+    };
+
+    const coverageColor = (v) => v >= 90 ? '#80a06c' : v >= 80 ? '#b08d70' : '#926674';
+    const coverageBg = (v) => v >= 90 ? 'rgba(160,194,130,0.12)' : v >= 80 ? 'rgba(237,189,154,0.12)' : 'rgba(182,129,145,0.12)';
+
+    return (
+        <div className="st-page">
+
+            {/* ── Page Header ── */}
+            <div className="page-header">
+                <div>
+                    <h1 className="page-title"><MapPin size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Station Reports</h1>
+                    <p className="page-subtitle">Community-level health monitoring — patient coverage, risk distribution, and vaccination rates</p>
+                </div>
+                <div className="header-actions">
+                    <button className="btn btn-outline" onClick={() => setShowCharts(v => !v)}>
+                        <Activity size={16} /> {showCharts ? 'Hide Charts' : 'Show Charts'}
+                    </button>
+                    <button className="btn btn-outline"><Download size={16} /> Export All</button>
+                    <button className="btn btn-primary"><FileText size={16} /> Generate Report</button>
+                </div>
+            </div>
+
+            {/* ── Summary Cards ── */}
+            <div className="st-stats-grid">
+                {summaryStats.map(s => {
+                    const Icon = s.icon;
+                    return (
+                        <div key={s.label} className={`stat-card stat-card--${s.color}`}>
+                            <div className="stat-top">
+                                <div className={`stat-icon stat-icon--${s.color}`}>
+                                    <Icon size={20} />
+                                </div>
+                            </div>
+                            <div className="stat-value">{s.value}</div>
+                            <div className="stat-label">{s.label}</div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* ── Chartsection ── */}
+            {showCharts && <ChartsSection stations={stations} />}
+
+            {/* ── Search & Filters ── */}
+            <div className="st-controls">
+                <div className="st-search-wrap">
+                    <Search size={16} className="st-search-icon" />
+                    <input
+                        type="text"
+                        className="st-search-input"
+                        placeholder="Search station name..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                <div className="st-filters-row">
+                    <span className="filters-label"><Filter size={13} /> Filters:</span>
+                    <select value={filters.risk} onChange={e => handleFilter('risk', e.target.value)}>
+                        <option value="All">All Risk Levels</option>
+                        <option value="Normal">Normal</option>
+                        <option value="Monitor">Monitor</option>
+                        <option value="Critical">Critical</option>
+                    </select>
+                    <select value={filters.vacc} onChange={e => handleFilter('vacc', e.target.value)}>
+                        <option value="All">All Coverage Levels</option>
+                        <option value="High">High Coverage (≥90%)</option>
+                        <option value="Low">Low Coverage (&lt;90%)</option>
+                    </select>
+                </div>
+            </div>
+
+            {/* ── Station Table ── */}
+            {loading ? (
+                <div className="st-card">
+                    <div className="st-empty">
+                        <p>Loading station data...</p>
+                    </div>
+                </div>
+            ) : (
+            <div className="st-card">
+                <div className="st-card-head">
+                    <h2><MapPin size={17} /> Station Overview</h2>
+                    <div className="st-legend">
+                        <span className="legend-chip chip-normal"><CheckCircle2 size={11} /> Normal</span>
+                        <span className="legend-chip chip-monitor"><AlertTriangle size={11} /> Monitor</span>
+                        <span className="legend-chip chip-critical"><AlertCircle size={11} /> Critical</span>
+                    </div>
+                    <span className="st-count">{filtered.length} stations</span>
+                </div>
+
+                <div className="table-responsive">
+                    <table className="st-table">
+                        <thead>
+                            <tr>
+                                <th>Station</th>
+                                <th>Total Patients</th>
+                                <th>High-Risk</th>
+                                <th>Deliveries</th>
+                                <th>Vacc. Coverage</th>
+                                <th>Newborns</th>
+                                <th>Supp. Coverage</th>
+                                <th>Trimester Mix</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filtered.map(b => (
+                                <React.Fragment key={b.id}>
+                                    <tr className={`st-row ${getRiskClass(b.riskStatus)}`}>
+                                        <td>
+                                            <button className="expand-btn" onClick={() => setExpandedRow(expandedRow === b.id ? null : b.id)}>
+                                                {expandedRow === b.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                            </button>
+                                            <div className="st-name-cell">
+                                                <div className="st-station-icon"><MapPin size={13} /></div>
+                                                <div>
+                                                    <span className="st-station-name">{b.name}</span>
+                                                    {b.alerts.length > 0 && (
+                                                        <span className="st-alert-count">{b.alerts.length} alert{b.alerts.length > 1 ? 's' : ''}</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span className="st-num">{b.totalPatients}</span>
+                                        </td>
+                                        <td>
+                                            <span className={`hr-num ${b.highRisk >= 10 ? 'hr-high' : b.highRisk >= 6 ? 'hr-mid' : 'hr-low'}`}>{b.highRisk}</span>
+                                        </td>
+                                        <td className="st-num">{b.recentDeliveries}</td>
+                                        <td>
+                                            <MiniBar value={b.vaccCoverage} color={b.vaccCoverage >= 90 ? '#6db8a0' : b.vaccCoverage >= 80 ? '#e8b84b' : '#e05c73'} />
+                                        </td>
+                                        <td className="st-num">{b.newborns}</td>
+                                        <td>
+                                            <MiniBar value={b.suppCoverage} color={b.suppCoverage >= 90 ? '#6db8a0' : b.suppCoverage >= 80 ? '#e8b84b' : '#e05c73'} />
+                                        </td>
+                                        <td style={{ minWidth: '100px' }}>
+                                            <TriBar b={b} />
+                                        </td>
+                                        <td>
+                                            <span className={`risk-badge ${getRiskBadge(b.riskStatus)}`}>{b.riskStatus}</span>
+                                        </td>
+                                        <td>
+                                            <div className="row-actions">
+                                                <button className="action-btn view-btn" title="View Detail" onClick={() => setSelectedStation(b)}><Eye size={13} /></button>
+                                                <button className="action-btn export-btn" title="Export Report"><Download size={13} /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+
+                                    {/* Expanded inline view */}
+                                    {expandedRow === b.id && (
+                                        <tr className="st-expanded-row">
+                                            <td colSpan="10">
+                                                <div className="expand-detail">
+                                                    <div className="expand-col">
+                                                        <h4>📅 Trimesters</h4>
+                                                        <p><strong>1st Trimester:</strong> {b.trimester.first}</p>
+                                                        <p><strong>2nd Trimester:</strong> {b.trimester.second}</p>
+                                                        <p><strong>3rd Trimester:</strong> {b.trimester.third}</p>
+                                                    </div>
+                                                    <div className="expand-col">
+                                                        <h4>🏥 Deliveries</h4>
+                                                        <p><strong>NSD:</strong> {b.deliveryTypes.nsd}</p>
+                                                        <p><strong>CS:</strong> {b.deliveryTypes.cs}</p>
+                                                        <p><strong>Complications:</strong> {b.complications}</p>
+                                                    </div>
+                                                    <div className="expand-col">
+                                                        <h4>👶 Newborns</h4>
+                                                        <p><strong>Total:</strong> {b.newborns}</p>
+                                                        <p><strong>Low BW:</strong> {b.lbwBabies}</p>
+                                                        <p><strong>NICU:</strong> {b.nicuBabies}</p>
+                                                    </div>
+                                                    <div className="expand-col">
+                                                        <h4>⚠ Alerts</h4>
+                                                        {b.alerts.length > 0 ? b.alerts.map((a, i) => <p key={i} className="expand-alert">{a}</p>) : <p>No alerts.</p>}
+                                                        <div className="expand-actions">
+                                                            <button className="btn btn-outline" onClick={() => setSelectedStation(b)}>Full Report →</button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </React.Fragment>
+                            ))}
+
+                            {filtered.length === 0 && (
+                                <tr>
+                                    <td colSpan="10" className="st-empty">
+                                        <MapPin size={30} />
+                                        <p>No stations match your filters.</p>
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            )}
+
+            {/* ── Detail Modal ── */}
+            {selectedStation && <DetailModal station={selectedStation} onClose={() => setSelectedStation(null)} navigate={navigate} />}
+        </div>
+    );
+};
+
+export default StationReports;
 
 /* simple inline bar chart component */
 const MiniBar = ({ value, max = 100, color = '#a0c282' }) => {
@@ -430,240 +634,3 @@ const ChartsSection = ({ stations }) => {
         </div>
     );
 };
-
-/* ════════════════════════════
-   MAIN COMPONENT
-════════════════════════════ */
-const StationReports = () => {
-    const navigate = useNavigate();
-    const [searchTerm, setSearchTerm] = useState('');
-    const [filters, setFilters] = useState({ risk: 'All', vacc: 'All' });
-    const [selectedStation, setSelectedStation] = useState(null);
-    const [expandedRow, setExpandedRow] = useState(null);
-    const [showCharts, setShowCharts] = useState(true);
-
-    const handleFilter = (k, v) => setFilters(prev => ({ ...prev, [k]: v }));
-
-    const filtered = stationS.filter(b => {
-        const s = searchTerm.toLowerCase();
-        const matchSearch = b.name.toLowerCase().includes(s);
-        const matchRisk = filters.risk === 'All' || b.riskStatus === filters.risk;
-        const matchVacc = filters.vacc === 'All' ||
-            (filters.vacc === 'High' && b.vaccCoverage >= 90) ||
-            (filters.vacc === 'Low' && b.vaccCoverage < 90);
-        return matchSearch && matchRisk && matchVacc;
-    });
-
-    const getRiskClass = (r) => {
-        if (r === 'Critical') return 'st-row--critical';
-        if (r === 'Monitor') return 'st-row--monitor';
-        return 'st-row--normal';
-    };
-
-    const getRiskBadge = (r) => {
-        if (r === 'Critical') return 'badge-critical';
-        if (r === 'Monitor') return 'badge-monitor';
-        return 'badge-normal';
-    };
-
-    const coverageColor = (v) => v >= 90 ? '#80a06c' : v >= 80 ? '#b08d70' : '#926674';
-    const coverageBg = (v) => v >= 90 ? 'rgba(160,194,130,0.12)' : v >= 80 ? 'rgba(237,189,154,0.12)' : 'rgba(182,129,145,0.12)';
-
-    return (
-        <div className="st-page">
-
-            {/* ── Page Header ── */}
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title"><MapPin size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Station Reports</h1>
-                    <p className="page-subtitle">Community-level health monitoring — patient coverage, risk distribution, and vaccination rates</p>
-                </div>
-                <div className="header-actions">
-                    <button className="btn btn-outline" onClick={() => setShowCharts(v => !v)}>
-                        <Activity size={16} /> {showCharts ? 'Hide Charts' : 'Show Charts'}
-                    </button>
-                    <button className="btn btn-outline"><Download size={16} /> Export All</button>
-                    <button className="btn btn-primary"><FileText size={16} /> Generate Report</button>
-                </div>
-            </div>
-
-            {/* ── Summary Cards ── */}
-            <div className="st-stats-grid">
-                {SUMMARY_STATS.map(s => {
-                    const Icon = s.icon;
-                    return (
-                        <div key={s.label} className={`stat-card stat-card--${s.color}`}>
-                            <div className="stat-top">
-                                <div className={`stat-icon stat-icon--${s.color}`}>
-                                    <Icon size={20} />
-                                </div>
-                            </div>
-                            <div className="stat-value">{s.value}</div>
-                            <div className="stat-label">{s.label}</div>
-                        </div>
-                    );
-                })}
-            </div>
-
-            {/* ── Chartsection ── */}
-            {showCharts && <ChartsSection stations={stationS} />}
-
-            {/* ── Search & Filters ── */}
-            <div className="st-controls">
-                <div className="st-search-wrap">
-                    <Search size={16} className="st-search-icon" />
-                    <input
-                        type="text"
-                        className="st-search-input"
-                        placeholder="Search station name..."
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                    />
-                </div>
-                <div className="st-filters-row">
-                    <span className="filters-label"><Filter size={13} /> Filters:</span>
-                    <select value={filters.risk} onChange={e => handleFilter('risk', e.target.value)}>
-                        <option value="All">All Risk Levels</option>
-                        <option value="Normal">Normal</option>
-                        <option value="Monitor">Monitor</option>
-                        <option value="Critical">Critical</option>
-                    </select>
-                    <select value={filters.vacc} onChange={e => handleFilter('vacc', e.target.value)}>
-                        <option value="All">All Coverage Levels</option>
-                        <option value="High">High Coverage (≥90%)</option>
-                        <option value="Low">Low Coverage (&lt;90%)</option>
-                    </select>
-                </div>
-            </div>
-
-            {/* ── Station Table ── */}
-            <div className="st-card">
-                <div className="st-card-head">
-                    <h2><MapPin size={17} /> Station Overview</h2>
-                    <div className="st-legend">
-                        <span className="legend-chip chip-normal"><CheckCircle2 size={11} /> Normal</span>
-                        <span className="legend-chip chip-monitor"><AlertTriangle size={11} /> Monitor</span>
-                        <span className="legend-chip chip-critical"><AlertCircle size={11} /> Critical</span>
-                    </div>
-                    <span className="st-count">{filtered.length} stations</span>
-                </div>
-
-                <div className="table-responsive">
-                    <table className="st-table">
-                        <thead>
-                            <tr>
-                                <th>Station</th>
-                                <th>Total Patients</th>
-                                <th>High-Risk</th>
-                                <th>Deliveries</th>
-                                <th>Vacc. Coverage</th>
-                                <th>Newborns</th>
-                                <th>Supp. Coverage</th>
-                                <th>Trimester Mix</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filtered.map(b => (
-                                <React.Fragment key={b.id}>
-                                    <tr className={`st-row ${getRiskClass(b.riskStatus)}`}>
-                                        <td>
-                                            <button className="expand-btn" onClick={() => setExpandedRow(expandedRow === b.id ? null : b.id)}>
-                                                {expandedRow === b.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                                            </button>
-                                            <div className="st-name-cell">
-                                                <div className="st-station-icon"><MapPin size={13} /></div>
-                                                <div>
-                                                    <span className="st-station-name">{b.name}</span>
-                                                    {b.alerts.length > 0 && (
-                                                        <span className="st-alert-count">{b.alerts.length} alert{b.alerts.length > 1 ? 's' : ''}</span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <span className="st-num">{b.totalPatients}</span>
-                                        </td>
-                                        <td>
-                                            <span className={`hr-num ${b.highRisk >= 10 ? 'hr-high' : b.highRisk >= 6 ? 'hr-mid' : 'hr-low'}`}>{b.highRisk}</span>
-                                        </td>
-                                        <td className="st-num">{b.recentDeliveries}</td>
-                                        <td>
-                                            <MiniBar value={b.vaccCoverage} color={b.vaccCoverage >= 90 ? '#6db8a0' : b.vaccCoverage >= 80 ? '#e8b84b' : '#e05c73'} />
-                                        </td>
-                                        <td className="st-num">{b.newborns}</td>
-                                        <td>
-                                            <MiniBar value={b.suppCoverage} color={b.suppCoverage >= 90 ? '#6db8a0' : b.suppCoverage >= 80 ? '#e8b84b' : '#e05c73'} />
-                                        </td>
-                                        <td style={{ minWidth: '100px' }}>
-                                            <TriBar b={b} />
-                                        </td>
-                                        <td>
-                                            <span className={`risk-badge ${getRiskBadge(b.riskStatus)}`}>{b.riskStatus}</span>
-                                        </td>
-                                        <td>
-                                            <div className="row-actions">
-                                                <button className="action-btn view-btn" title="View Detail" onClick={() => setSelectedStation(b)}><Eye size={13} /></button>
-                                                <button className="action-btn export-btn" title="Export Report"><Download size={13} /></button>
-                                            </div>
-                                        </td>
-                                    </tr>
-
-                                    {/* Expanded inline view */}
-                                    {expandedRow === b.id && (
-                                        <tr className="st-expanded-row">
-                                            <td colSpan="10">
-                                                <div className="expand-detail">
-                                                    <div className="expand-col">
-                                                        <h4>📅 Trimesters</h4>
-                                                        <p><strong>1st Trimester:</strong> {b.trimester.first}</p>
-                                                        <p><strong>2nd Trimester:</strong> {b.trimester.second}</p>
-                                                        <p><strong>3rd Trimester:</strong> {b.trimester.third}</p>
-                                                    </div>
-                                                    <div className="expand-col">
-                                                        <h4>🏥 Deliveries</h4>
-                                                        <p><strong>NSD:</strong> {b.deliveryTypes.nsd}</p>
-                                                        <p><strong>CS:</strong> {b.deliveryTypes.cs}</p>
-                                                        <p><strong>Complications:</strong> {b.complications}</p>
-                                                    </div>
-                                                    <div className="expand-col">
-                                                        <h4>👶 Newborns</h4>
-                                                        <p><strong>Total:</strong> {b.newborns}</p>
-                                                        <p><strong>Low BW:</strong> {b.lbwBabies}</p>
-                                                        <p><strong>NICU:</strong> {b.nicuBabies}</p>
-                                                    </div>
-                                                    <div className="expand-col">
-                                                        <h4>⚠ Alerts</h4>
-                                                        {b.alerts.length > 0 ? b.alerts.map((a, i) => <p key={i} className="expand-alert">{a}</p>) : <p>No alerts.</p>}
-                                                        <div className="expand-actions">
-                                                            <button className="btn btn-outline" onClick={() => setSelectedStation(b)}>Full Report →</button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )}
-                                </React.Fragment>
-                            ))}
-
-                            {filtered.length === 0 && (
-                                <tr>
-                                    <td colSpan="10" className="st-empty">
-                                        <MapPin size={30} />
-                                        <p>No stations match your filters.</p>
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            {/* ── Detail Modal ── */}
-            {selectedStation && <DetailModal station={selectedStation} onClose={() => setSelectedStation(null)} navigate={navigate} />}
-        </div>
-    );
-};
-
-export default StationReports;
