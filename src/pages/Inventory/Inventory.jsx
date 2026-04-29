@@ -38,8 +38,7 @@ const Inventory = () => {
     max_stock: '', 
     unit: 'vials', 
     brand: '', 
-    expiration_date: '',
-    batch_number: ''
+    expiration_date: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -72,7 +71,6 @@ const Inventory = () => {
         status: row?.status || 'active', // Note: This is a custom status field, not from DB
         brand: row?.brand || '',
         expiration_date: row?.expiration_date || null,
-        batch_number: row?.batch_number || '',
         doses: row?.doses || null
       }));
       const mappedSupplements = (suppData || []).map(row => ({
@@ -84,7 +82,6 @@ const Inventory = () => {
         status: row?.status || 'active', // Note: This is a custom status field, not from DB
         brand: row?.brand || '',
         expiration_date: row?.expiration_date || null,
-        batch_number: row?.batch_number || ''
       }));
 
       console.log('Mapped vaccines:', mappedVaccines.length, 'Mapped supplements:', mappedSupplements.length);
@@ -126,7 +123,7 @@ const Inventory = () => {
     return Math.min(100, Math.max(0, percentage));
   };
 
-  // Group vaccines by name and aggregate quantities/brands
+  // Group vaccines by name and brand, then assign batch numbers based on expiry dates
   const groupVaccinesByName = (vaccineList) => {
     if (!vaccineList || vaccineList.length === 0) {
       console.log('Debug: No vaccines to group');
@@ -137,39 +134,64 @@ const Inventory = () => {
     
     vaccineList.forEach(vaccine => {
       const name = vaccine.item_name;
+      const brand = vaccine.brand || 'No Brand';
+      const key = `${name}|${brand}`;
+      
       if (!name) return; // Skip items without name
       
-      if (!grouped[name]) {
-        grouped[name] = {
+      if (!grouped[key]) {
+        grouped[key] = {
           item_name: name,
+          brand: brand,
           total_quantity: 0,
           total_max_stock: 0,
           unit: vaccine.unit,
-          brands: [],
           status: 'active',
           items: [] // Keep original items for details
         };
       }
       
       // Add to totals
-      grouped[name].total_quantity += vaccine.quantity || 0;
-      grouped[name].total_max_stock += vaccine.max_stock || 0;
-      
-      // Add brand if not already present
-      if (vaccine.brand && !grouped[name].brands.includes(vaccine.brand)) {
-        grouped[name].brands.push(vaccine.brand);
-      }
+      grouped[key].total_quantity += vaccine.quantity || 0;
+      grouped[key].total_max_stock += vaccine.max_stock || 0;
       
       // Store original item
-      grouped[name].items.push(vaccine);
+      grouped[key].items.push(vaccine);
     });
     
-    const result = Object.values(grouped);
+    // Sort items within each group by expiration date and assign batch numbers
+    const result = Object.values(grouped).map(group => {
+      // Sort items by expiration date (null/empty dates go last)
+      const sortedItems = group.items.sort((a, b) => {
+        if (!a.expiration_date && !b.expiration_date) return 0;
+        if (!a.expiration_date) return 1;
+        if (!b.expiration_date) return -1;
+        return new Date(a.expiration_date) - new Date(b.expiration_date);
+      });
+      
+      // Assign batch numbers based on unique expiration dates
+      const batches = {};
+      let batchCounter = 0;
+      const lastExpiry = null;
+      
+      sortedItems.forEach((item, index) => {
+        const expiry = item.expiration_date || 'No Expiry';
+        if (!batches[expiry]) {
+          batchCounter++;
+          batches[expiry] = `Batch ${batchCounter}`;
+        }
+        item.batch_number = batches[expiry];
+      });
+      
+      group.items = sortedItems;
+      return group;
+    });
+    
     console.log('Debug: Grouped vaccines:', result.length, 'Sample:', result[0]?.item_name);
     return result;
   };
 
-  // Group supplements by name (similar logic)
+  // Group supplements by name and brand, then assign batch numbers based on expiry dates
   const groupSupplementsByName = (supplementList) => {
     if (!supplementList || supplementList.length === 0) {
       console.log('Debug: No supplements to group');
@@ -180,31 +202,54 @@ const Inventory = () => {
     
     supplementList.forEach(supplement => {
       const name = supplement.item_name;
+      const brand = supplement.brand || 'No Brand';
+      const key = `${name}|${brand}`;
+      
       if (!name) return; // Skip items without name
       
-      if (!grouped[name]) {
-        grouped[name] = {
+      if (!grouped[key]) {
+        grouped[key] = {
           item_name: name,
+          brand: brand,
           total_quantity: 0,
           total_max_stock: 0,
           unit: supplement.unit,
-          brands: [],
           status: 'active',
           items: []
         };
       }
       
-      grouped[name].total_quantity += supplement.quantity || 0;
-      grouped[name].total_max_stock += supplement.max_stock || 0;
+      grouped[key].total_quantity += supplement.quantity || 0;
+      grouped[key].total_max_stock += supplement.max_stock || 0;
       
-      if (supplement.brand && !grouped[name].brands.includes(supplement.brand)) {
-        grouped[name].brands.push(supplement.brand);
-      }
-      
-      grouped[name].items.push(supplement);
+      grouped[key].items.push(supplement);
     });
     
-    const result = Object.values(grouped);
+    // Sort items within each group by expiration date and assign batch numbers
+    const result = Object.values(grouped).map(group => {
+      const sortedItems = group.items.sort((a, b) => {
+        if (!a.expiration_date && !b.expiration_date) return 0;
+        if (!a.expiration_date) return 1;
+        if (!b.expiration_date) return -1;
+        return new Date(a.expiration_date) - new Date(b.expiration_date);
+      });
+      
+      const batches = {};
+      let batchCounter = 0;
+      
+      sortedItems.forEach((item, index) => {
+        const expiry = item.expiration_date || 'No Expiry';
+        if (!batches[expiry]) {
+          batchCounter++;
+          batches[expiry] = `Batch ${batchCounter}`;
+        }
+        item.batch_number = batches[expiry];
+      });
+      
+      group.items = sortedItems;
+      return group;
+    });
+    
     console.log('Debug: Grouped supplements:', result.length, 'Sample:', result[0]?.item_name);
     return result;
   };
@@ -282,16 +327,19 @@ const Inventory = () => {
         max_stock: Number(form.max_stock) || (activeTab === 'vaccines' ? 500 : 1000),
         unit: form.unit,
         brand: form.brand,
-        expiration_date: form.expiration_date || null,
-        batch_number: form.batch_number || null
+        expiration_date: form.expiration_date || null
       };
+
+      console.log('handleAddSubmit - form values:', form);
+      console.log('handleAddSubmit - payload being sent:', payload);
 
       // Use inventory service which handles upsert logic (same brand + expiration = update)
       await inventoryService.addInventoryItem(table, payload);
 
       setShowAddModal(false);
-      setForm({ item_name: '', quantity: '', max_stock: '', unit: activeTab === 'vaccines' ? 'vials' : 'tablets', brand: '', expiration_date: '', batch_number: '' });
+      setForm({ item_name: '', quantity: '', max_stock: '', unit: activeTab === 'vaccines' ? 'vials' : 'tablets', brand: '', expiration_date: '' });
     } catch (error) {
+      console.error('handleAddSubmit error:', error);
       alert('Failed to add item: ' + error.message);
     } finally {
       setIsSubmitting(false);
@@ -373,7 +421,7 @@ const Inventory = () => {
           <button
             className="btn btn-primary"
             onClick={() => {
-              setForm({ item_name: '', quantity: '', max_stock: activeTab === 'vaccines' ? 500 : 1000, unit: activeTab === 'vaccines' ? 'vials' : 'tablets', brand: '', expiration_date: '', batch_number: '' });
+              setForm({ item_name: '', quantity: '', max_stock: activeTab === 'vaccines' ? 500 : 1000, unit: activeTab === 'vaccines' ? 'vials' : 'tablets', brand: '', expiration_date: '' });
               setShowAddModal(true);
             }}
           >
@@ -546,27 +594,26 @@ const Inventory = () => {
                   const percentage = getStockPercentage(item.total_quantity || 0, item.total_max_stock || 500);
                   const rowNumber = startIndex + index + 1;
                   return (
-                    <tr key={item.item_name} className="inv-row">
+                    <tr key={`${item.item_name}-${item.brand}-${index}`} className="inv-row">
                       <td className="row-number-cell">{rowNumber}</td>
                       <td className="item-name-cell">
                         <strong>{item.item_name}</strong>
                       </td>
                       <td className="brand-cell">
-                        {item.brands.length > 0 ? (
-                          <select className="brand-dropdown" title="Available brands">
-                            {item.brands.map(brand => (
-                              <option key={brand} value={brand}>{brand}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          '-'
-                        )}
+                        {item.brand || '-'}
                       </td>
                       <td className="batch-cell">
-                        {item.items.length > 0 && item.items[0].batch_number ? 
-                          item.items[0].batch_number : 
+                        {item.items.length > 0 ? (
+                          <div className="batch-list">
+                            {item.items.map((subItem, idx) => (
+                              <div key={idx} className="batch-item">
+                                {subItem.batch_number || '—'}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
                           '—'
-                        }
+                        )}
                       </td>
                       <td className="quantity-cell">
                         <div className="stock-level-display">
@@ -591,10 +638,20 @@ const Inventory = () => {
                       </td>
                       <td className="unit-cell">{item.unit || 'tablets'}</td>
                       <td className="expiration-cell">
-                        {item.items.length > 0 && item.items[0].expiration_date ? 
-                          new Date(item.items[0].expiration_date).toLocaleDateString() : 
+                        {item.items.length > 0 ? (
+                          <div className="batch-list">
+                            {item.items.map((subItem, idx) => (
+                              <div key={idx} className="batch-item">
+                                {subItem.expiration_date ? 
+                                  new Date(subItem.expiration_date).toLocaleDateString() : 
+                                  '-'
+                                }
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
                           '-'
-                        }
+                        )}
                       </td>
                       <td>
                         <span className={`status-badge ${status.class}`}>
@@ -813,28 +870,15 @@ const Inventory = () => {
                     placeholder="e.g. Pfizer"
                   />
                 </div>
-                <div className="form-grid">
-                  <div className="form-group">
-                    <label>Batch Number</label>
-                    <input
-                      type="text"
-                      value={form.batch_number}
-                      onChange={e =>
-                        setForm({ ...form, batch_number: e.target.value })
-                      }
-                      placeholder="e.g. BATCH-001"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Expiration Date</label>
-                    <input
-                      type="date"
-                      value={form.expiration_date}
-                      onChange={e =>
-                        setForm({ ...form, expiration_date: e.target.value })
-                      }
-                    />
-                  </div>
+                <div className="form-group">
+                  <label>Expiration Date</label>
+                  <input
+                    type="date"
+                    value={form.expiration_date}
+                    onChange={e =>
+                      setForm({ ...form, expiration_date: e.target.value })
+                    }
+                  />
                 </div>
                 <div className="form-grid">
                   <div className="form-group">

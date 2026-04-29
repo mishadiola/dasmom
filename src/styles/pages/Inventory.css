@@ -242,6 +242,20 @@
     width: 60px;
 }
 
+/* ── Batch List Display ── */
+.batch-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.batch-item {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text);
+    padding: 2px 0;
+}
+
 /* ── Pagination Controls ── */
 .pagination-container {
     display: flex;
