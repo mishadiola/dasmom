@@ -133,6 +133,43 @@
 .a-stat-card.orange .a-stat-icon { background: rgba(237, 189, 154, 0.15); color: #edbd9a; }
 .a-stat-card.sage .a-stat-icon   { background: rgba(160, 194, 130, 0.15); color: #a0c282; }
 
+/* Clickable stat cards */
+.a-stat-card--clickable {
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.a-stat-card--clickable:hover {
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.1);
+    border-color: rgba(185, 129, 138, 0.2);
+}
+
+.a-stat-card--clickable:active {
+    transform: translateY(-1px) scale(0.98);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+}
+
+.a-stat-card--clickable:focus-visible {
+    outline: 3px solid var(--color-rose);
+    outline-offset: 2px;
+}
+
+/* Mobile optimizations */
+@media (hover: none) {
+    .a-stat-card--clickable:hover {
+        transform: none;
+        box-shadow: 0 8px 24px rgba(45, 34, 52, 0.03);
+    }
+    
+    .a-stat-card--clickable:active {
+        transform: scale(0.96);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+}
+
 .a-stat-trend {
     position: absolute;
     top: 16px;

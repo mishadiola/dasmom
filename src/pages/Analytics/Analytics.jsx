@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     Users, Activity, AlertTriangle, CheckCircle2,
     TrendingUp, Calendar, MapPin, Filter,
@@ -13,6 +14,7 @@ import PatientService from '../../services/patientservice';
    MAIN COMPONENT
 ════════════════════════════ */
 const Analytics = () => {
+    const navigate = useNavigate();
     const [filters, setFilters] = useState({
         station: 'All',
         trimester: 'All',
@@ -122,7 +124,16 @@ const Analytics = () => {
 
             {/* ── Summary Stats ── */}
             <section className="analytics-summary-grid">
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="a-stat-card lilac">
+                <motion.div 
+                    initial={{ opacity: 0, y: 10 }} 
+                    animate={{ opacity: 1, y: 0 }} 
+                    className="a-stat-card lilac a-stat-card--clickable"
+                    onClick={() => navigate('/patients?filter=teenage')}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/patients?filter=teenage'); }}}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${metrics.teenageCount} Teenage Pregnancies (${metrics.teenagePct}%). Click to view patients under 20`}
+                >
                     <div className="a-stat-icon"><Users size={22} /></div>
                     <div className="a-stat-info">
                         <h3>{metrics.teenageCount}</h3>
@@ -133,7 +144,17 @@ const Analytics = () => {
                     </div>
                 </motion.div>
 
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="a-stat-card rose">
+                <motion.div 
+                    initial={{ opacity: 0, y: 10 }} 
+                    animate={{ opacity: 1, y: 0 }} 
+                    transition={{ delay: 0.1 }} 
+                    className="a-stat-card rose a-stat-card--clickable"
+                    onClick={() => navigate('/patients?filter=critical-risk')}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/patients?filter=critical-risk'); }}}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${metrics.highRiskCount} Critical High-Risk Cases. Click to view urgent cases`}
+                >
                     <div className="a-stat-icon"><AlertTriangle size={22} /></div>
                     <div className="a-stat-info">
                         <h3>{metrics.highRiskCount}</h3>
@@ -142,7 +163,17 @@ const Analytics = () => {
                     <div className="a-stat-badge">Urgent</div>
                 </motion.div>
 
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="a-stat-card orange">
+                <motion.div 
+                    initial={{ opacity: 0, y: 10 }} 
+                    animate={{ opacity: 1, y: 0 }} 
+                    transition={{ delay: 0.2 }} 
+                    className="a-stat-card orange a-stat-card--clickable"
+                    onClick={() => navigate('/patients?filter=conditions')}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/patients?filter=conditions'); }}}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${metrics.urgentCount} patients with Underlying Conditions. Click to view`}
+                >
                     <div className="a-stat-icon"><Activity size={22} /></div>
                     <div className="a-stat-info">
                         <h3>{metrics.urgentCount}</h3>
@@ -150,7 +181,17 @@ const Analytics = () => {
                     </div>
                 </motion.div>
 
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="a-stat-card sage">
+                <motion.div 
+                    initial={{ opacity: 0, y: 10 }} 
+                    animate={{ opacity: 1, y: 0 }} 
+                    transition={{ delay: 0.3 }} 
+                    className="a-stat-card sage a-stat-card--clickable"
+                    onClick={() => navigate('/patients')}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/patients'); }}}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${metrics.total} Total Managed Cases. Click to view all patients`}
+                >
                     <div className="a-stat-icon"><Baby size={22} /></div>
                     <div className="a-stat-info">
                         <h3>{metrics.total}</h3>

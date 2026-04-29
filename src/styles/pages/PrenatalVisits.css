@@ -560,6 +560,22 @@
     padding: 16px;
     border-bottom: 1px solid #f4f6f9;
     font-size: 14px;
+}
+
+/* Row Number Column Styling */
+.row-number-header {
+    width: 50px;
+    text-align: center;
+    font-weight: 700;
+    color: var(--color-text-muted);
+}
+
+.row-number-cell {
+    width: 50px;
+    text-align: center;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    font-size: 13px;
     transition: background 0.15s;
 }
 

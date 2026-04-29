@@ -22,11 +22,11 @@ const StationReports = () => {
     const [stations, setStations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [summaryStats, setSummaryStats] = useState([
-        { label: 'Total Pregnant Patients', value: 0, color: 'sage', icon: Users },
-        { label: 'High-Risk Pregnancies', value: 0, color: 'rose', icon: AlertTriangle },
-        { label: 'Total Deliveries (Month)', value: 0, color: 'orange', icon: Heart },
-        { label: 'Vaccination Coverage', value: '0%', color: 'lilac', icon: Syringe },
-        { label: 'Supplements Distributed', value: 0, color: 'pink', icon: Pill },
+        { label: 'Total Pregnant Patients', value: 0, color: 'sage', icon: Users, path: '/patients', filter: null },
+        { label: 'High-Risk Pregnancies', value: 0, color: 'rose', icon: AlertTriangle, path: '/patients', filter: 'high-risk' },
+        { label: 'Total Deliveries (Month)', value: 0, color: 'orange', icon: Heart, path: '/deliveries', filter: null },
+        { label: 'Vaccination Coverage', value: '0%', color: 'lilac', icon: Syringe, path: '/inventory', filter: 'vaccines' },
+        { label: 'Supplements Distributed', value: 0, color: 'pink', icon: Pill, path: '/inventory', filter: 'supplements' },
     ]);
 
     const patientService = new PatientService();
@@ -51,11 +51,11 @@ const StationReports = () => {
             const totalSupplements = data.reduce((sum, s) => sum + s.totalSupplementsGiven, 0);
 
             setSummaryStats([
-                { label: 'Total Pregnant Patients', value: totalPregnant, color: 'sage', icon: Users },
-                { label: 'High-Risk Pregnancies', value: totalHighRisk, color: 'rose', icon: AlertTriangle },
-                { label: 'Total Deliveries (Month)', value: totalDeliveries, color: 'orange', icon: Heart },
-                { label: 'Vaccination Coverage', value: `${avgVaccCoverage}%`, color: 'lilac', icon: Syringe },
-                { label: 'Supplements Distributed', value: totalSupplements, color: 'pink', icon: Pill },
+                { label: 'Total Pregnant Patients', value: totalPregnant, color: 'sage', icon: Users, path: '/patients', filter: null },
+                { label: 'High-Risk Pregnancies', value: totalHighRisk, color: 'rose', icon: AlertTriangle, path: '/patients', filter: 'high-risk' },
+                { label: 'Total Deliveries (Month)', value: totalDeliveries, color: 'orange', icon: Heart, path: '/deliveries', filter: null },
+                { label: 'Vaccination Coverage', value: `${avgVaccCoverage}%`, color: 'lilac', icon: Syringe, path: '/inventory', filter: 'vaccines' },
+                { label: 'Supplements Distributed', value: totalSupplements, color: 'pink', icon: Pill, path: '/inventory', filter: 'supplements' },
             ]);
         } catch (error) {
             console.error('Error fetching station data:', error);
@@ -113,8 +113,29 @@ const StationReports = () => {
             <div className="st-stats-grid">
                 {summaryStats.map(s => {
                     const Icon = s.icon;
+                    const handleCardClick = () => {
+                        if (s.filter) {
+                            navigate(`${s.path}?filter=${s.filter}`);
+                        } else {
+                            navigate(s.path);
+                        }
+                    };
+                    const handleKeyDown = (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleCardClick();
+                        }
+                    };
                     return (
-                        <div key={s.label} className={`stat-card stat-card--${s.color}`}>
+                        <div 
+                            key={s.label} 
+                            className={`stat-card stat-card--${s.color} stat-card--clickable`}
+                            onClick={handleCardClick}
+                            onKeyDown={handleKeyDown}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`${s.label}: ${s.value}. Click to view details`}
+                        >
                             <div className="stat-top">
                                 <div className={`stat-icon stat-icon--${s.color}`}>
                                     <Icon size={20} />

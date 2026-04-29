@@ -38,7 +38,8 @@ const Inventory = () => {
     max_stock: '', 
     unit: 'vials', 
     brand: '', 
-    expiration_date: '' 
+    expiration_date: '',
+    batch_number: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -71,6 +72,7 @@ const Inventory = () => {
         status: row?.status || 'active', // Note: This is a custom status field, not from DB
         brand: row?.brand || '',
         expiration_date: row?.expiration_date || null,
+        batch_number: row?.batch_number || '',
         doses: row?.doses || null
       }));
       const mappedSupplements = (suppData || []).map(row => ({
@@ -81,7 +83,8 @@ const Inventory = () => {
         unit: row?.unit || 'tablets',
         status: row?.status || 'active', // Note: This is a custom status field, not from DB
         brand: row?.brand || '',
-        expiration_date: row?.expiration_date || null
+        expiration_date: row?.expiration_date || null,
+        batch_number: row?.batch_number || ''
       }));
 
       console.log('Mapped vaccines:', mappedVaccines.length, 'Mapped supplements:', mappedSupplements.length);
@@ -279,14 +282,15 @@ const Inventory = () => {
         max_stock: Number(form.max_stock) || (activeTab === 'vaccines' ? 500 : 1000),
         unit: form.unit,
         brand: form.brand,
-        expiration_date: form.expiration_date || null
+        expiration_date: form.expiration_date || null,
+        batch_number: form.batch_number || null
       };
 
       // Use inventory service which handles upsert logic (same brand + expiration = update)
       await inventoryService.addInventoryItem(table, payload);
 
       setShowAddModal(false);
-      setForm({ item_name: '', quantity: '', max_stock: '', unit: activeTab === 'vaccines' ? 'vials' : 'tablets', brand: '', expiration_date: '' });
+      setForm({ item_name: '', quantity: '', max_stock: '', unit: activeTab === 'vaccines' ? 'vials' : 'tablets', brand: '', expiration_date: '', batch_number: '' });
     } catch (error) {
       alert('Failed to add item: ' + error.message);
     } finally {
@@ -369,7 +373,7 @@ const Inventory = () => {
           <button
             className="btn btn-primary"
             onClick={() => {
-              setForm({ item_name: '', quantity: '', max_stock: activeTab === 'vaccines' ? 500 : 1000, unit: activeTab === 'vaccines' ? 'vials' : 'tablets', brand: '', expiration_date: '' });
+              setForm({ item_name: '', quantity: '', max_stock: activeTab === 'vaccines' ? 500 : 1000, unit: activeTab === 'vaccines' ? 'vials' : 'tablets', brand: '', expiration_date: '', batch_number: '' });
               setShowAddModal(true);
             }}
           >
@@ -521,6 +525,7 @@ const Inventory = () => {
                 <th className="row-number-header">#</th>
                 <th>Item Name</th>
                 <th>Brand</th>
+                <th>Batch No.</th>
                 <th>Stock Level</th>
                 <th>Unit</th>
                 <th>Expiration Date</th>
@@ -531,7 +536,7 @@ const Inventory = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="8" className="text-center py-8">
+                  <td colSpan="9" className="text-center py-8">
                     Loading inventory data...
                   </td>
                 </tr>
@@ -556,6 +561,12 @@ const Inventory = () => {
                         ) : (
                           '-'
                         )}
+                      </td>
+                      <td className="batch-cell">
+                        {item.items.length > 0 && item.items[0].batch_number ? 
+                          item.items[0].batch_number : 
+                          '—'
+                        }
                       </td>
                       <td className="quantity-cell">
                         <div className="stock-level-display">
@@ -658,7 +669,7 @@ const Inventory = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan="8" className="text-center py-8">
+                  <td colSpan="9" className="text-center py-8">
                     No items found
                   </td>
                 </tr>
@@ -802,15 +813,28 @@ const Inventory = () => {
                     placeholder="e.g. Pfizer"
                   />
                 </div>
-                <div className="form-group">
-                  <label>Expiration Date</label>
-                  <input
-                    type="date"
-                    value={form.expiration_date}
-                    onChange={e =>
-                      setForm({ ...form, expiration_date: e.target.value })
-                    }
-                  />
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label>Batch Number</label>
+                    <input
+                      type="text"
+                      value={form.batch_number}
+                      onChange={e =>
+                        setForm({ ...form, batch_number: e.target.value })
+                      }
+                      placeholder="e.g. BATCH-001"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Expiration Date</label>
+                    <input
+                      type="date"
+                      value={form.expiration_date}
+                      onChange={e =>
+                        setForm({ ...form, expiration_date: e.target.value })
+                      }
+                    />
+                  </div>
                 </div>
                 <div className="form-grid">
                   <div className="form-group">
@@ -884,39 +908,44 @@ const Inventory = () => {
           <div
             className="modal-content"
             onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '420px' }}
           >
             <div className="modal-header">
-              <h2>Update Quantity</h2>
+              <h2>Update Stock</h2>
               <p>{showUpdateModal.item.item_name}</p>
             </div>
             <form onSubmit={handleUpdateQuantity}>
               <div className="modal-body">
                 <div className="form-group">
-                  <label>
-                    Current Stock: {showUpdateModal.item.quantity}{' '}
-                    {showUpdateModal.item.unit}
+                  <label style={{ textTransform: 'none', fontSize: '13px', fontWeight: 600 }}>
+                    Current Stock: <strong>{showUpdateModal.item.quantity} {showUpdateModal.item.unit}</strong>
                   </label>
-                  <input
-                    type="number"
-                    required
-                    value={form.quantity}
-                    onChange={e =>
-                      setForm({ ...form, quantity: e.target.value })
-                    }
-                    placeholder="Enter new quantity"
-                  />
                 </div>
-                <div className="form-group">
-                  <label>Maximum Stock Capacity</label>
-                  <input
-                    type="number"
-                    required
-                    value={form.max_stock}
-                    onChange={e =>
-                      setForm({ ...form, max_stock: e.target.value })
-                    }
-                    placeholder="Enter maximum stock capacity"
-                  />
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label>New Quantity</label>
+                    <input
+                      type="number"
+                      required
+                      value={form.quantity}
+                      onChange={e =>
+                        setForm({ ...form, quantity: e.target.value })
+                      }
+                      placeholder="Enter quantity"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Max Capacity</label>
+                    <input
+                      type="number"
+                      required
+                      value={form.max_stock}
+                      onChange={e =>
+                        setForm({ ...form, max_stock: e.target.value })
+                      }
+                      placeholder="Enter max stock"
+                    />
+                  </div>
                 </div>
               </div>
               <div className="modal-footer">
@@ -932,7 +961,7 @@ const Inventory = () => {
                   className="btn btn-primary"
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? 'Updating...' : 'Update Stock'}
+                  {isSubmitting ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>

@@ -21,6 +21,43 @@
     gap: 16px;
 }
 
+/* Clickable stat cards */
+.stat-card--clickable {
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.stat-card--clickable:hover {
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+}
+
+.stat-card--clickable:active {
+    transform: translateY(-1px) scale(0.98);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.stat-card--clickable:focus-visible {
+    outline: 3px solid var(--color-rose);
+    outline-offset: 2px;
+}
+
+/* Mobile optimizations */
+@media (hover: none) {
+    .stat-card--clickable:hover {
+        transform: none;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+    }
+    
+    .stat-card--clickable:active {
+        transform: scale(0.96);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+}
+
 /* ════════════════════════════
    CHARTS GRID
 ════════════════════════════ */

@@ -687,15 +687,6 @@ const AddPatient = () => {
                     </h1>
                     <p>BHW: {currentStaff.full_name} | Available Stations: {availableStations.length}</p>
                 </div>
-                <div className="ap-actions">
-                    <button className="btn btn-outline" onClick={() => navigate(-1)} disabled={isSaving}>
-                        <X size={15} /> Cancel
-                    </button>
-                    <button className="btn btn-primary" onClick={handleSave} disabled={isSaving || !currentStaff.id}>
-                        {isSaving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-                        {isSaving ? 'Saving...' : 'Save & Auto-Schedule Visits'}
-                    </button>
-                </div>
             </div>
 
             <div className="ap-smart-badges">
@@ -837,19 +828,24 @@ const AddPatient = () => {
                                     />
                                     {showEmailSuggestions && emailSuggestions.length > 0 && (
                                         <div className="email-suggestions-dropdown">
-                                            {emailSuggestions.map((suggestion, index) => (
-                                                <div 
-                                                    key={index}
-                                                    className="email-suggestion-item"
-                                                    onClick={() => {
-                                                        setFormData(prev => ({ ...prev, email: suggestion }));
-                                                        setShowEmailSuggestions(false);
-                                                        setEmailSuggestions([]);
-                                                    }}
-                                                >
-                                                    {suggestion}
-                                                </div>
-                                            ))}
+                                            {emailSuggestions.map((suggestion, index) => {
+                                                const [username, domain] = suggestion.split('@');
+                                                return (
+                                                    <div 
+                                                        key={index}
+                                                        className="email-suggestion-item"
+                                                        onClick={() => {
+                                                            setFormData(prev => ({ ...prev, email: suggestion }));
+                                                            setShowEmailSuggestions(false);
+                                                            setEmailSuggestions([]);
+                                                        }}
+                                                        role="option"
+                                                        aria-selected="false"
+                                                    >
+                                                        {username}@<strong>{domain}</strong>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     )}
                                     {nameValidationErrors.email && (
@@ -1545,18 +1541,18 @@ const AddPatient = () => {
                                     )}
                                 </div>
                                 <div className="form-group">
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                                        <label style={{ margin: 0 }}>Address {!sameAsPatientAddress && <span className="req">*</span>}</label>
+                                    <label>Address {!sameAsPatientAddress && <span className="req">*</span>}</label>
+                                    <div className="checkbox-wrapper" style={{ marginBottom: '10px' }}>
+                                        <label className="checkbox-inline" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--color-text-muted)', cursor: 'pointer' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={sameAsPatientAddress}
+                                                onChange={(e) => setSameAsPatientAddress(e.target.checked)}
+                                                style={{ cursor: 'pointer', width: '16px', height: '16px', margin: 0 }}
+                                            />
+                                            <span>Same as Patient Address</span>
+                                        </label>
                                     </div>
-                                    <label className="checkbox-inline" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--color-text-muted)', cursor: 'pointer', marginBottom: '8px' }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={sameAsPatientAddress}
-                                            onChange={(e) => setSameAsPatientAddress(e.target.checked)}
-                                            style={{ cursor: 'pointer' }}
-                                        />
-                                        <span>Same as Patient Address</span>
-                                    </label>
                                     <input 
                                         type="text" 
                                         name="emAddress" 
@@ -1570,6 +1566,17 @@ const AddPatient = () => {
                             </div>
                         </div>
                     )}
+                    
+                    {/* Form Action Buttons - Bottom Placement */}
+                    <div className="ap-form-actions">
+                        <button className="btn btn-outline" onClick={() => navigate(-1)} disabled={isSaving} type="button">
+                            <X size={15} /> Cancel
+                        </button>
+                        <button className="btn btn-primary" onClick={handleSave} disabled={isSaving || !currentStaff.id} type="button">
+                            {isSaving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                            {isSaving ? 'Saving...' : 'Save & Auto-Schedule Visits'}
+                        </button>
+                    </div>
                     </div>
                 </form>
             </div>
