@@ -90,11 +90,12 @@ const Dashboard = () => {
             const now = new Date();
             const todayStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
             
-            const [{ count: totalPatients }, { count: highRisk }, { count: newborns }, { count: apptToday }, { data: apptData }, { data: pregnancyData }] = await Promise.all([
+            // Fetch high risk stats using PatientService (same logic as HighRiskCases page)
+            const highRiskStats = await patientService.getHighRiskStats();
+            
+            const [{ count: totalPatients }, { count: newborns }, { count: apptToday }, { data: apptData }, { data: pregnancyData }] = await Promise.all([
                 // Count only pregnant patients (not postpartum)
                 supabase.from('pregnancy_info').select('patient_id', { count: 'exact', head: true }).eq('pregn_postp', 'Pregnant'),
-                // Count only actual high risk pregnancies, not all non-normal risk categories
-                supabase.from('pregnancy_info').select('id', { count: 'exact', head: true }).ilike('calculated_risk', '%high risk%').eq('pregn_postp', 'Pregnant'),
                 supabase.from('newborns').select('id', { count: 'exact', head: true }),
                 supabase.from('prenatal_visits').select('id', { count: 'exact', head: true }).eq('visit_date', todayStr),
                 
@@ -112,7 +113,7 @@ const Dashboard = () => {
 
             setLiveStats({
                 totalPatients: totalPatients ?? 0,
-                highRisk: highRisk ?? 0,
+                highRisk: highRiskStats?.highRiskCount ?? 0,
                 newborns: newborns ?? 0,
                 apptToday: apptToday ?? 0,
             });

@@ -92,6 +92,7 @@ const AddPatient = () => {
     const [vitalWarnings, setVitalWarnings] = useState({});
     const [bpWarning, setBpWarning] = useState(null);
     const [tempWarning, setTempWarning] = useState(null);
+    const [sameAsPatientAddress, setSameAsPatientAddress] = useState(false);
 
     const currentStaff = {
         id: user?.id || null,
@@ -298,6 +299,13 @@ const AddPatient = () => {
             }
         }
     }, [formData.bp]);
+
+    // Sync emergency contact address when "Same as Patient Address" is checked
+    useEffect(() => {
+        if (sameAsPatientAddress) {
+            setFormData(prev => ({ ...prev, emAddress: prev.address }));
+        }
+    }, [sameAsPatientAddress, formData.address]);
 
     const handleChange = (e) => {
         const { name, value, type } = e.target;
@@ -550,7 +558,10 @@ const AddPatient = () => {
         }
 
         const requiredPersonal = ['firstName', 'lastName', 'dob', 'email', 'contactNumber', 'address', 'station'];
-        const requiredEmergency = ['emName', 'emRel', 'emPhone', 'emAddress'];
+        // emAddress is not required if sameAsPatientAddress is checked (it will be auto-filled from patient address)
+        const requiredEmergency = sameAsPatientAddress 
+            ? ['emName', 'emRel', 'emPhone'] 
+            : ['emName', 'emRel', 'emPhone', 'emAddress'];
         
         // Different required fields based on pregnancy status
         let requiredPregnancy = [];
@@ -1534,13 +1545,26 @@ const AddPatient = () => {
                                     )}
                                 </div>
                                 <div className="form-group">
-                                    <label>Address <span className="req">*</span></label>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                        <label style={{ margin: 0 }}>Address {!sameAsPatientAddress && <span className="req">*</span>}</label>
+                                    </div>
+                                    <label className="checkbox-inline" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--color-text-muted)', cursor: 'pointer', marginBottom: '8px' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={sameAsPatientAddress}
+                                            onChange={(e) => setSameAsPatientAddress(e.target.checked)}
+                                            style={{ cursor: 'pointer' }}
+                                        />
+                                        <span>Same as Patient Address</span>
+                                    </label>
                                     <input 
                                         type="text" 
                                         name="emAddress" 
                                         value={formData.emAddress} 
                                         onChange={handleChange} 
-                                        className={missingFields.includes('emAddress') ? 'error-field' : ''}
+                                        readOnly={sameAsPatientAddress}
+                                        className={!sameAsPatientAddress && missingFields.includes('emAddress') ? 'error-field' : ''}
+                                        style={sameAsPatientAddress ? { backgroundColor: '#f5f5f5', cursor: 'not-allowed' } : {}}
                                     />
                                 </div>
                             </div>
