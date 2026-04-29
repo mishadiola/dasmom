@@ -107,8 +107,8 @@ const Dashboard = () => {
                     )
                 `).eq('visit_date', todayStr).order('created_at', { ascending: true }),
                 
-                // Fetch pregnancy info separately to avoid nested relationship error
-                supabase.from('pregnancy_info').select('patient_id, calculated_risk, lmd').eq('pregn_postp', 'Pregnant')
+                // Fetch pregnancy info separately to avoid nested relationship error, ordered by created_at to get latest first
+                supabase.from('pregnancy_info').select('patient_id, lmd, created_at').eq('pregn_postp', 'Pregnant').order('created_at', { ascending: false })
             ]);
 
             setLiveStats({
@@ -120,10 +120,11 @@ const Dashboard = () => {
 
             // Dynamically map schedule data instead of relying on empty mock arrays
             if (apptData) {
-                // Create a map of patient_id to pregnancy info
+                // Create a map of patient_id to pregnancy info (only keep latest per patient)
                 const pregMap = new Map();
                 (pregnancyData || []).forEach(p => {
-                    if (p.patient_id) {
+                    if (p.patient_id && !pregMap.has(p.patient_id)) {
+                        // Since we ordered by created_at descending, first occurrence is the latest
                         pregMap.set(p.patient_id, p);
                     }
                 });
@@ -206,7 +207,7 @@ const Dashboard = () => {
             setLoadingHealth(true);
             const [{ data: prenatalVisits, error: visitsError }, { data: pregnancies, error: pregError }] = await Promise.all([
                 supabase.from('prenatal_visits').select('bp_systolic, bp_diastolic, risk_factors, calculated_risk'),
-                supabase.from('pregnancy_info').select('lmd')
+                supabase.from('pregnancy_info').select('patient_id, lmd, created_at').eq('pregn_postp', 'Pregnant').order('created_at', { ascending: false })
             ]);
 
             if (visitsError) console.error('Error fetching prenatal visits for health snapshot:', visitsError);
@@ -250,11 +251,20 @@ const Dashboard = () => {
                 { label: 'Gestational Diabetes', pct: totalVisits > 0 ? Math.round((gestationalDiabetes / totalVisits) * 100) : 0, color: 'yellow' },
             ];
 
-            // Calculate trimester distribution
+            // Calculate trimester distribution - count unique pregnant patients only
             let tri1 = 0, tri2 = 0, tri3 = 0;
             const currentDate = new Date();
 
-            pregnancies?.forEach(preg => {
+            // Build map of latest pregnancy info per patient (first occurrence is latest due to ordering)
+            const latestPregMap = new Map();
+            (pregnancies || []).forEach(p => {
+                if (p.patient_id && !latestPregMap.has(p.patient_id)) {
+                    latestPregMap.set(p.patient_id, p);
+                }
+            });
+
+            // Count unique patients in each trimester
+            latestPregMap.forEach(preg => {
                 if (preg.lmd) {
                     const lmpDate = new Date(preg.lmd);
                     const weeks = Math.floor((currentDate - lmpDate) / (1000 * 60 * 60 * 24 * 7));
@@ -426,14 +436,13 @@ const Dashboard = () => {
                                         <th>Patient</th>
                                         <th>Trimester</th>
                                         <th>Type</th>
-                                        <th>Time</th>
                                         <th>Risk</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {todayAppts.length === 0 ? (
                                         <tr>
-                                            <td colSpan="5" style={{textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)'}}>
+                                            <td colSpan="4" style={{textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)'}}>
                                                 No appointments scheduled for today.
                                             </td>
                                         </tr>
@@ -453,7 +462,6 @@ const Dashboard = () => {
                                                 </td>
                                                 <td><TrimesterBadge weeks={a.weeks} /></td>
                                                 <td><span className="type-tag">{a.type}</span></td>
-                                                <td><span className="time-tag">{a.time}</span></td>
                                                 <td>
                                                     <span className={`risk-badge risk-badge--${a.risk.replace(' ', '-').toLowerCase()}`}>
                                                         {a.risk}

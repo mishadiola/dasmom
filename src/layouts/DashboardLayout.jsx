@@ -174,9 +174,9 @@ const DashboardLayout = () => {
                         });
                 }
 
-                // Fetch high-risk patients
+                // Fetch high-risk patients from prenatal_visits (calculated_risk is in prenatal_visits, not pregnancy_info)
                 const { data: highRiskPatients } = await supabase
-                    .from('pregnancy_info')
+                    .from('prenatal_visits')
                     .select(`
                         calculated_risk,
                         patient_basic_info (first_name, last_name, barangay)
