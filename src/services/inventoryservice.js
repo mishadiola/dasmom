@@ -4,6 +4,7 @@ import AuthService from './authservice'; // ← now you have real AuthService
 class InventoryService {
   constructor() {
     this.auth = new AuthService();
+    this.supabase = supabase;
     this.subscribers = {
       vaccine_inventory: [],
       supplement_inventory: [],
@@ -19,7 +20,7 @@ class InventoryService {
   async getVaccineInventory() {
     const { data, error } = await supabase
       .from('vaccine_inventory')
-      .select('id, vaccine_name, quantity, unit, max_quantity, created_by, created_at, brand, expiration_date, doses');
+      .select('id, vaccine_name, quantity, unit, max_quantity, created_by, created_at, brand, expiration_date, doses, batch, manufactured_date');
 
     if (error) {
       console.error('Error fetching vaccine inventory:', error);
@@ -49,7 +50,9 @@ class InventoryService {
         status: status,
         brand: row.brand,
         expiration_date: row.expiration_date,
-        doses: row.doses
+        doses: row.doses,
+        batch: row.batch,
+        manufactured_date: row.manufactured_date
       };
     });
   }
@@ -57,7 +60,7 @@ class InventoryService {
   async getSupplementInventory() {
     const { data, error } = await supabase
       .from('supplement_inventory')
-      .select('id, supplement_name, quantity, unit, max_quant, created_by, created_at, brand, expiration_date');
+      .select('id, supplement_name, quantity, unit, max_quant, created_by, created_at, brand, expiration_date, batch_number, manufactured_date');
 
     if (error) {
       console.error('Error fetching supplement inventory:', error);
@@ -86,18 +89,20 @@ class InventoryService {
         max_stock: row.max_quant,
         status: status,
         brand: row.brand,
-        expiration_date: row.expiration_date
+        expiration_date: row.expiration_date,
+        batch_number: row.batch_number,
+        manufactured_date: row.manufactured_date
       };
     });
   }
 
-  async addInventoryItem(table, { item_name, quantity, max_stock, unit, brand, expiration_date }) {
+  async addInventoryItem(table, { item_name, quantity, max_stock, unit, brand, expiration_date, batch_number, manufactured_date }) {
     await this._ensureAdmin(); // only admins
 
     const currentUser = await this.auth.getAuthUser();
     if (!currentUser) throw new Error('No logged‑in user');
 
-    console.log('addInventoryItem called with:', { item_name, quantity, max_stock, unit, brand, expiration_date });
+    console.log('addInventoryItem called with:', { item_name, quantity, max_stock, unit, brand, expiration_date, batch_number, manufactured_date });
 
     // Check for existing item with same name, brand, and expiration date
     let query = supabase
@@ -165,8 +170,16 @@ class InventoryService {
       unit: unit || (table === 'vaccine_inventory' ? 'vials' : 'pcs'),
       created_by: currentUser.id,
       brand: brand || null,
-      expiration_date: expiration_date || null
+      expiration_date: expiration_date || null,
+      manufactured_date: manufactured_date || null
     };
+
+    // Add batch field based on table type
+    if (table === 'vaccine_inventory') {
+      payload.batch = batch_number ? Number(batch_number) : null;
+    } else if (table === 'supplement_inventory') {
+      payload.batch_number = batch_number ? Number(batch_number) : null;
+    }
 
     if (table === 'vaccine_inventory') {
       payload.vaccine_name = item_name;

@@ -489,11 +489,11 @@ const Dashboard = () => {
                         {!loadingStock && vaccineStock.length > 0 && (
                             <div className="stock-summary-cards">
                                 <div className="stock-summary-card stock-summary--critical">
-                                    <span className="stock-summary-count">{vaccineStock.filter(v => v.status === 'critical').length}</span>
+                                    <span className="stock-summary-count">{vaccineStock.filter(v => v.status === 'critical' || v.status === 'expired').length}</span>
                                     <span className="stock-summary-label">Critical</span>
                                 </div>
                                 <div className="stock-summary-card stock-summary--low">
-                                    <span className="stock-summary-count">{vaccineStock.filter(v => v.status === 'low').length}</span>
+                                    <span className="stock-summary-count">{vaccineStock.filter(v => v.status === 'low' || v.status === 'expiring-soon').length}</span>
                                     <span className="stock-summary-label">Low Stock</span>
                                 </div>
                                 <div className="stock-summary-card stock-summary--ok">
@@ -509,8 +509,8 @@ const Dashboard = () => {
                             ) : vaccineStock.length > 0 ? (
                                 vaccineStock
                                     .sort((a, b) => {
-                                        // Priority sort: Critical (0) → Low (1) → Medium (2) → Ok (3)
-                                        const priority = { critical: 0, low: 1, medium: 2, ok: 3 };
+                                        // Priority sort: Expired (0) → Critical (1) → Expiring Soon (2) → Low (3) → Ok (4)
+                                        const priority = { expired: 0, critical: 1, 'expiring-soon': 2, low: 3, ok: 4 };
                                         return priority[a.status] - priority[b.status];
                                     })
                                     .slice(0, 5)
@@ -522,16 +522,25 @@ const Dashboard = () => {
                                                 <MiniBar
                                                     value={v.stock}
                                                     max={Math.max(v.stock, v.min) * 1.5}
-                                                    color={v.status === 'ok' ? 'sage' : v.status === 'medium' ? 'blue' : v.status === 'low' ? 'yellow' : 'rose'}
+                                                    color={v.status === 'ok' ? 'sage' : v.status === 'low' ? 'yellow' : v.status === 'expiring-soon' ? 'orange' : 'rose'}
                                                 />
                                             </div>
                                         </div>
                                         <div className="stock-meta">
                                             <span className="stock-qty">{v.stock} {v.unit}</span>
                                             <span className={`stock-badge stock-badge--${v.status}`}>
-                                                {v.status === 'ok' ? 'Normal' : v.status === 'medium' ? 'Medium' : v.status === 'low' ? 'Low' : 'Critical'}
+                                                {v.status === 'ok' ? 'Normal' : v.status === 'expired' ? 'Expired' : v.status === 'expiring-soon' ? 'Expiring Soon' : v.status === 'low' ? 'Low' : 'Critical'}
                                             </span>
                                         </div>
+                                        {v.expiration_date && (
+                                            <div style={{ fontSize: '11px', color: '#666', marginTop: '4px' }}>
+                                                {v.days_until_expiry < 0 
+                                                  ? `Expired ${Math.abs(v.days_until_expiry)} days ago` 
+                                                  : v.days_until_expiry <= 30 
+                                                    ? `Expires in ${v.days_until_expiry} days` 
+                                                    : `Expires: ${new Date(v.expiration_date).toLocaleDateString()}`}
+                                            </div>
+                                        )}
                                     </div>
                                 ))
                             ) : (

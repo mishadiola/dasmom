@@ -11,6 +11,7 @@ import {
   ArchiveRestore,
   Syringe,
   Pill,
+  ChevronDown,
 } from 'lucide-react';
 import InventoryService from '../../services/inventoryservice';
 import PatientService from '../../services/patientservice';
@@ -38,11 +39,18 @@ const Inventory = () => {
     max_stock: '', 
     unit: 'vials', 
     brand: '', 
-    expiration_date: ''
+    expiration_date: '',
+    batch_number: '',
+    manufactured_date: ''
   });
+  const [modalSearchTerm, setModalSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [selectedExistingItem, setSelectedExistingItem] = useState(null);
+  const [isSearching, setIsSearching] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [expandedRow, setExpandedRow] = useState(null);
   const itemsPerPage = 20;
 
   const vaccineUnitOptions = ['vials', 'doses', 'ml'];
@@ -71,7 +79,9 @@ const Inventory = () => {
         status: row?.status || 'active', // Note: This is a custom status field, not from DB
         brand: row?.brand || '',
         expiration_date: row?.expiration_date || null,
-        doses: row?.doses || null
+        doses: row?.doses || null,
+        batch: row?.batch || null,
+        manufactured_date: row?.manufactured_date || null
       }));
       const mappedSupplements = (suppData || []).map(row => ({
         id: row?.id || '',
@@ -82,6 +92,8 @@ const Inventory = () => {
         status: row?.status || 'active', // Note: This is a custom status field, not from DB
         brand: row?.brand || '',
         expiration_date: row?.expiration_date || null,
+        batch_number: row?.batch_number || null,
+        manufactured_date: row?.manufactured_date || null
       }));
 
       console.log('Mapped vaccines:', mappedVaccines.length, 'Mapped supplements:', mappedSupplements.length);
@@ -123,7 +135,7 @@ const Inventory = () => {
     return Math.min(100, Math.max(0, percentage));
   };
 
-  // Group vaccines by name and brand, then assign batch numbers based on expiry dates
+  // Group vaccines by name only (not brand), keep all batches
   const groupVaccinesByName = (vaccineList) => {
     if (!vaccineList || vaccineList.length === 0) {
       console.log('Debug: No vaccines to group');
@@ -134,15 +146,12 @@ const Inventory = () => {
     
     vaccineList.forEach(vaccine => {
       const name = vaccine.item_name;
-      const brand = vaccine.brand || 'No Brand';
-      const key = `${name}|${brand}`;
       
       if (!name) return; // Skip items without name
       
-      if (!grouped[key]) {
-        grouped[key] = {
+      if (!grouped[name]) {
+        grouped[name] = {
           item_name: name,
-          brand: brand,
           total_quantity: 0,
           total_max_stock: 0,
           unit: vaccine.unit,
@@ -152,35 +161,19 @@ const Inventory = () => {
       }
       
       // Add to totals
-      grouped[key].total_quantity += vaccine.quantity || 0;
-      grouped[key].total_max_stock += vaccine.max_stock || 0;
+      grouped[name].total_quantity += vaccine.quantity || 0;
+      grouped[name].total_max_stock += vaccine.max_stock || 0;
       
       // Store original item
-      grouped[key].items.push(vaccine);
+      grouped[name].items.push(vaccine);
     });
     
-    // Sort items within each group by expiration date and assign batch numbers
     const result = Object.values(grouped).map(group => {
-      // Sort items by expiration date (null/empty dates go last)
+      // Sort items by batch number
       const sortedItems = group.items.sort((a, b) => {
-        if (!a.expiration_date && !b.expiration_date) return 0;
-        if (!a.expiration_date) return 1;
-        if (!b.expiration_date) return -1;
-        return new Date(a.expiration_date) - new Date(b.expiration_date);
-      });
-      
-      // Assign batch numbers based on unique expiration dates
-      const batches = {};
-      let batchCounter = 0;
-      const lastExpiry = null;
-      
-      sortedItems.forEach((item, index) => {
-        const expiry = item.expiration_date || 'No Expiry';
-        if (!batches[expiry]) {
-          batchCounter++;
-          batches[expiry] = `Batch ${batchCounter}`;
-        }
-        item.batch_number = batches[expiry];
+        const batchA = a.batch || 0;
+        const batchB = b.batch || 0;
+        return batchA - batchB;
       });
       
       group.items = sortedItems;
@@ -191,7 +184,7 @@ const Inventory = () => {
     return result;
   };
 
-  // Group supplements by name and brand, then assign batch numbers based on expiry dates
+  // Group supplements by name only (not brand), keep all batches
   const groupSupplementsByName = (supplementList) => {
     if (!supplementList || supplementList.length === 0) {
       console.log('Debug: No supplements to group');
@@ -202,48 +195,34 @@ const Inventory = () => {
     
     supplementList.forEach(supplement => {
       const name = supplement.item_name;
-      const brand = supplement.brand || 'No Brand';
-      const key = `${name}|${brand}`;
       
       if (!name) return; // Skip items without name
       
-      if (!grouped[key]) {
-        grouped[key] = {
+      if (!grouped[name]) {
+        grouped[name] = {
           item_name: name,
-          brand: brand,
           total_quantity: 0,
           total_max_stock: 0,
           unit: supplement.unit,
           status: 'active',
-          items: []
+          items: [] // Keep original items for details
         };
       }
       
-      grouped[key].total_quantity += supplement.quantity || 0;
-      grouped[key].total_max_stock += supplement.max_stock || 0;
+      // Add to totals
+      grouped[name].total_quantity += supplement.quantity || 0;
+      grouped[name].total_max_stock += supplement.max_stock || 0;
       
-      grouped[key].items.push(supplement);
+      // Store original item
+      grouped[name].items.push(supplement);
     });
     
-    // Sort items within each group by expiration date and assign batch numbers
     const result = Object.values(grouped).map(group => {
+      // Sort items by batch number
       const sortedItems = group.items.sort((a, b) => {
-        if (!a.expiration_date && !b.expiration_date) return 0;
-        if (!a.expiration_date) return 1;
-        if (!b.expiration_date) return -1;
-        return new Date(a.expiration_date) - new Date(b.expiration_date);
-      });
-      
-      const batches = {};
-      let batchCounter = 0;
-      
-      sortedItems.forEach((item, index) => {
-        const expiry = item.expiration_date || 'No Expiry';
-        if (!batches[expiry]) {
-          batchCounter++;
-          batches[expiry] = `Batch ${batchCounter}`;
-        }
-        item.batch_number = batches[expiry];
+        const batchA = a.batch_number || 0;
+        const batchB = b.batch_number || 0;
+        return batchA - batchB;
       });
       
       group.items = sortedItems;
@@ -314,11 +293,39 @@ const Inventory = () => {
     setCurrentPage(1);
   }, [activeTab, searchTerm, statusFilter, activeSummaryFilter, archiveFilter]);
 
+  const generateBatchNumber = async (itemName) => {
+    try {
+      const table = activeTab === 'vaccines' ? 'vaccine_inventory' : 'supplement_inventory';
+      const nameField = activeTab === 'vaccines' ? 'vaccine_name' : 'supplement_name';
+      const batchField = activeTab === 'vaccines' ? 'batch' : 'batch_number';
+      
+      // Query existing items with same name (regardless of brand) to get the highest batch number
+      const { data, error } = await inventoryService.supabase
+        .from(table)
+        .select(batchField)
+        .eq(nameField, itemName);
+      
+      if (error) throw error;
+      
+      // Get the highest batch number and increment by 1
+      const existingBatches = (data || []).map(item => item[batchField]).filter(b => b !== null && b !== undefined);
+      const maxBatch = existingBatches.length > 0 ? Math.max(...existingBatches) : 0;
+      
+      return maxBatch + 1;
+    } catch (error) {
+      console.error('Error generating batch number:', error);
+      return 1; // Default to 1 if there's an error
+    }
+  };
+
   const handleAddSubmit = async e => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
       const table = activeTab === 'vaccines' ? 'vaccine_inventory' : 'supplement_inventory';
+
+      // Auto-generate batch number
+      const autoBatchNumber = await generateBatchNumber(form.item_name);
 
       // Map form fields to correct database field names
       const payload = {
@@ -327,7 +334,9 @@ const Inventory = () => {
         max_stock: Number(form.max_stock) || (activeTab === 'vaccines' ? 500 : 1000),
         unit: form.unit,
         brand: form.brand,
-        expiration_date: form.expiration_date || null
+        expiration_date: form.expiration_date || null,
+        batch_number: autoBatchNumber,
+        manufactured_date: form.manufactured_date
       };
 
       console.log('handleAddSubmit - form values:', form);
@@ -337,13 +346,59 @@ const Inventory = () => {
       await inventoryService.addInventoryItem(table, payload);
 
       setShowAddModal(false);
-      setForm({ item_name: '', quantity: '', max_stock: '', unit: activeTab === 'vaccines' ? 'vials' : 'tablets', brand: '', expiration_date: '' });
+      setModalSearchTerm('');
+      setSearchResults([]);
+      setSelectedExistingItem(null);
+      setForm({ item_name: '', quantity: '', max_stock: '', unit: activeTab === 'vaccines' ? 'vials' : 'tablets', brand: '', expiration_date: '', batch_number: '', manufactured_date: '' });
     } catch (error) {
       console.error('handleAddSubmit error:', error);
       alert('Failed to add item: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSearchInventory = async (searchValue) => {
+    setModalSearchTerm(searchValue);
+    if (!searchValue || searchValue.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const table = activeTab === 'vaccines' ? 'vaccine_inventory' : 'supplement_inventory';
+      const nameField = activeTab === 'vaccines' ? 'vaccine_name' : 'supplement_name';
+      
+      const { data, error } = await inventoryService.supabase
+        .from(table)
+        .select('*')
+        .ilike(nameField, `%${searchValue}%`)
+        .limit(10);
+
+      if (error) throw error;
+      setSearchResults(data || []);
+    } catch (error) {
+      console.error('Error searching inventory:', error);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleSelectExistingItem = (item) => {
+    setSelectedExistingItem(item);
+    setForm({
+      item_name: activeTab === 'vaccines' ? item.vaccine_name : item.supplement_name,
+      brand: item.brand || '',
+      expiration_date: item.expiration_date || '',
+      batch_number: '', // Will be auto-generated on save
+      manufactured_date: item.manufactured_date || '',
+      unit: item.unit || (activeTab === 'vaccines' ? 'vials' : 'tablets'),
+      max_stock: activeTab === 'vaccines' ? item.max_quantity || 500 : item.max_quant || 1000,
+      quantity: ''
+    });
+    setSearchResults([]);
+    setModalSearchTerm('');
   };
 
   const handleUpdateQuantity = async e => {
@@ -421,7 +476,10 @@ const Inventory = () => {
           <button
             className="btn btn-primary"
             onClick={() => {
-              setForm({ item_name: '', quantity: '', max_stock: activeTab === 'vaccines' ? 500 : 1000, unit: activeTab === 'vaccines' ? 'vials' : 'tablets', brand: '', expiration_date: '' });
+              setForm({ item_name: '', quantity: '', max_stock: activeTab === 'vaccines' ? 500 : 1000, unit: activeTab === 'vaccines' ? 'vials' : 'tablets', brand: '', expiration_date: '', batch_number: '', manufactured_date: '' });
+              setModalSearchTerm('');
+              setSearchResults([]);
+              setSelectedExistingItem(null);
               setShowAddModal(true);
             }}
           >
@@ -572,11 +630,8 @@ const Inventory = () => {
               <tr>
                 <th className="row-number-header">#</th>
                 <th>Item Name</th>
-                <th>Brand</th>
-                <th>Batch No.</th>
-                <th>Stock Level</th>
+                <th>Total Stock</th>
                 <th>Unit</th>
-                <th>Expiration Date</th>
                 <th>Status</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
@@ -584,7 +639,7 @@ const Inventory = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="9" className="text-center py-8">
+                  <td colSpan="6" className="text-center py-8">
                     Loading inventory data...
                   </td>
                 </tr>
@@ -594,26 +649,34 @@ const Inventory = () => {
                   const percentage = getStockPercentage(item.total_quantity || 0, item.total_max_stock || 500);
                   const rowNumber = startIndex + index + 1;
                   return (
-                    <tr key={`${item.item_name}-${item.brand}-${index}`} className="inv-row">
-                      <td className="row-number-cell">{rowNumber}</td>
+                    <>
+                    <tr key={`${item.item_name}-${index}`} className="inv-row">
+                      <td className="row-number-cell">
+                        {item.items.length > 0 && (
+                          <button
+                            onClick={() => setExpandedRow(expandedRow === rowNumber ? null : rowNumber)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              padding: '4px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <span style={{ fontSize: '12px', fontWeight: '500' }}>{rowNumber}</span>
+                            {expandedRow === rowNumber ? (
+                              <ChevronDown size={14} style={{ transform: 'rotate(180deg)' }} />
+                            ) : (
+                              <ChevronDown size={14} />
+                            )}
+                          </button>
+                        )}
+                        {item.items.length === 0 && <span style={{ fontSize: '12px', fontWeight: '500' }}>{rowNumber}</span>}
+                      </td>
                       <td className="item-name-cell">
                         <strong>{item.item_name}</strong>
-                      </td>
-                      <td className="brand-cell">
-                        {item.brand || '-'}
-                      </td>
-                      <td className="batch-cell">
-                        {item.items.length > 0 ? (
-                          <div className="batch-list">
-                            {item.items.map((subItem, idx) => (
-                              <div key={idx} className="batch-item">
-                                {subItem.batch_number || '—'}
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          '—'
-                        )}
                       </td>
                       <td className="quantity-cell">
                         <div className="stock-level-display">
@@ -722,11 +785,159 @@ const Inventory = () => {
                         </div>
                       </td>
                     </tr>
+                    {expandedRow === rowNumber && item.items.length > 0 && (
+                      <tr key={`detail-${item.item_name}-${index}`} className="inv-row-detail">
+                        <td colSpan="6" style={{ padding: '0' }}>
+                          <div style={{
+                            padding: '16px 20px',
+                            background: '#f8f9fa',
+                            borderBottom: '1px solid #e9ecef'
+                          }}>
+                            <h4 style={{
+                              margin: '0 0 12px 0',
+                              fontSize: '14px',
+                              fontWeight: '600',
+                              color: '#333'
+                            }}>
+                              Detailed Batch Information for {item.item_name}
+                            </h4>
+                            <div style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                              gap: '12px'
+                            }}>
+                              {item.items.map((subItem, idx) => {
+                                const subStatus = getStatus(subItem.quantity, subItem.max_stock);
+                                const subPercentage = getStockPercentage(subItem.quantity || 0, subItem.max_stock || 500);
+                                const daysUntilExpiry = subItem.expiration_date 
+                                  ? Math.ceil((new Date(subItem.expiration_date) - new Date()) / (1000 * 60 * 60 * 24))
+                                  : null;
+                                const expiryStatus = daysUntilExpiry !== null
+                                  ? daysUntilExpiry < 0
+                                    ? { label: 'Expired', class: 'status-out' }
+                                    : daysUntilExpiry <= 30
+                                      ? { label: 'Expiring Soon', class: 'status-low' }
+                                      : daysUntilExpiry <= 90
+                                        ? { label: 'Expiring', class: 'status-medium' }
+                                        : { label: 'Good', class: 'status-ok' }
+                                  : { label: 'No Date', class: 'status-medium' };
+                                const batchNumber = activeTab === 'vaccines' ? subItem.batch : subItem.batch_number;
+                                return (
+                                  <div key={idx} style={{
+                                    background: 'white',
+                                    padding: '12px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #e9ecef',
+                                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                                  }}>
+                                    <div style={{
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      marginBottom: '8px'
+                                    }}>
+                                      <span style={{
+                                        fontSize: '13px',
+                                        fontWeight: '600',
+                                        color: '#333'
+                                      }}>
+                                        Batch {batchNumber || 'N/A'}
+                                      </span>
+                                      <span className={`status-badge ${expiryStatus.class}`} style={{
+                                        fontSize: '11px',
+                                        padding: '2px 8px',
+                                        borderRadius: '4px'
+                                      }}>
+                                        {expiryStatus.label}
+                                      </span>
+                                    </div>
+                                    <div style={{ fontSize: '12px', color: '#666', lineHeight: '1.6', marginBottom: '12px' }}>
+                                      <div><strong>Brand:</strong> {subItem.brand || 'N/A'}</div>
+                                      <div><strong>Quantity:</strong> {subItem.quantity} / {subItem.max_stock} ({subPercentage}%)</div>
+                                      <div><strong>Stock Status:</strong> <span className={`status-badge ${subStatus.class}`} style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '3px' }}>{subStatus.label}</span></div>
+                                      <div><strong>Expiration:</strong> {subItem.expiration_date ? new Date(subItem.expiration_date).toLocaleDateString() : 'N/A'}</div>
+                                      {daysUntilExpiry !== null && (
+                                        <div><strong>Days Until Expiry:</strong> {daysUntilExpiry < 0 ? `${Math.abs(daysUntilExpiry)} days overdue` : `${daysUntilExpiry} days`}</div>
+                                      )}
+                                      <div><strong>Manufactured:</strong> {subItem.manufactured_date ? new Date(subItem.manufactured_date).toLocaleDateString() : 'N/A'}</div>
+                                    </div>
+                                    <div style={{
+                                      display: 'flex',
+                                      gap: '8px',
+                                      borderTop: '1px solid #e9ecef',
+                                      paddingTop: '8px'
+                                    }}>
+                                      <button
+                                        onClick={() => {
+                                          setForm({
+                                            item_name: item.item_name,
+                                            brand: subItem.brand || '',
+                                            quantity: subItem.quantity,
+                                            max_stock: subItem.max_stock,
+                                            unit: subItem.unit,
+                                            expiration_date: subItem.expiration_date || '',
+                                            batch_number: batchNumber || '',
+                                            manufactured_date: subItem.manufactured_date || ''
+                                          });
+                                          setShowUpdateModal({
+                                            table: activeTab === 'vaccines' ? 'vaccine_inventory' : 'supplement_inventory',
+                                            item: subItem
+                                          });
+                                          setExpandedRow(null);
+                                        }}
+                                        style={{
+                                          flex: 1,
+                                          padding: '6px 12px',
+                                          fontSize: '12px',
+                                          background: '#e3f2fd',
+                                          color: '#1976d2',
+                                          border: 'none',
+                                          borderRadius: '4px',
+                                          cursor: 'pointer',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          gap: '4px'
+                                        }}
+                                      >
+                                        <Edit2 size={12} /> Edit
+                                      </button>
+                                      {subItem.status !== 'archived' && (
+                                        <button
+                                          onClick={() => handleArchive(subItem.id)}
+                                          style={{
+                                            flex: 1,
+                                            padding: '6px 12px',
+                                            fontSize: '12px',
+                                            background: '#ffebee',
+                                            color: '#c62828',
+                                            border: 'none',
+                                            borderRadius: '4px',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '4px'
+                                          }}
+                                        >
+                                          <Archive size={12} /> Archive
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </>
                   );
                 })
               ) : (
                 <tr>
-                  <td colSpan="9" className="text-center py-8">
+                  <td colSpan="6" className="text-center py-8">
                     No items found
                   </td>
                 </tr>
@@ -822,7 +1033,7 @@ const Inventory = () => {
           >
             <div className="modal-header">
               <h2>Add New Item</h2>
-              <p>Specify which inventory type this item belongs to.</p>
+              <p>Search existing items or add a new one.</p>
             </div>
             <form onSubmit={handleAddSubmit}>
               <div className="modal-body">
@@ -837,14 +1048,70 @@ const Inventory = () => {
                         ...prev,
                         unit: nextTab === 'vaccines' ? 'vials' : 'pcs',
                         brand: '',
-                        expiration_date: ''
+                        expiration_date: '',
+                        batch_number: '',
+                        manufactured_date: ''
                       }));
+                      setSearchResults([]);
+                      setModalSearchTerm('');
+                      setSelectedExistingItem(null);
                     }}
                     className="form-control"
                   >
                     <option value="vaccines">Vaccine</option>
                     <option value="supplements">Supplement</option>
                   </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Search Existing Items</label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      value={modalSearchTerm}
+                      onChange={e => handleSearchInventory(e.target.value)}
+                      placeholder="Search by item name..."
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #ddd', borderRadius: '6px' }}
+                    />
+                    {searchResults.length > 0 && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        background: 'white',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        marginTop: '4px',
+                        maxHeight: '200px',
+                        overflowY: 'auto',
+                        zIndex: 1000,
+                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                      }}>
+                        {searchResults.map((item, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => handleSelectExistingItem(item)}
+                            style={{
+                              padding: '10px 12px',
+                              cursor: 'pointer',
+                              borderBottom: '1px solid #f0f0f0',
+                              transition: 'background 0.2s'
+                            }}
+                            onMouseEnter={e => e.target.style.background = '#f5f5f5'}
+                            onMouseLeave={e => e.target.style.background = 'white'}
+                          >
+                            <div style={{ fontWeight: '600', fontSize: '13px' }}>
+                              {activeTab === 'vaccines' ? item.vaccine_name : item.supplement_name}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#666' }}>
+                              Brand: {item.brand || 'N/A'} | Qty: {item.quantity} {item.unit}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="form-group">
@@ -868,6 +1135,32 @@ const Inventory = () => {
                       setForm({ ...form, brand: e.target.value })
                     }
                     placeholder="e.g. Pfizer"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Batch Number (Auto-generated)</label>
+                  <input
+                    type="text"
+                    value={form.batch_number || 'Auto-generated on save'}
+                    readOnly
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      backgroundColor: '#f5f5f5',
+                      color: '#666'
+                    }}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Manufactured Date</label>
+                  <input
+                    type="date"
+                    value={form.manufactured_date}
+                    onChange={e =>
+                      setForm({ ...form, manufactured_date: e.target.value })
+                    }
                   />
                 </div>
                 <div className="form-group">
@@ -927,7 +1220,12 @@ const Inventory = () => {
                 <button
                   type="button"
                   className="btn btn-outline"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setModalSearchTerm('');
+                    setSearchResults([]);
+                    setSelectedExistingItem(null);
+                  }}
                 >
                   Cancel
                 </button>

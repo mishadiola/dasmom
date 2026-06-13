@@ -1664,23 +1664,87 @@ async getHighRiskPatients() {
   async getVaccineInventory() {
     // Bridges to new InventoryService but returns mapped format expected by Dashboard/Vaccinations
     const data = await inventoryService.getVaccineInventory();
-    return data.map(item => ({
-      name: item.item_name,
-      stock: item.quantity,
-      unit: item.unit,
-      min: item.min_stock,
-      status: item.quantity <= 0 ? 'critical' : item.quantity < item.min_stock ? 'low' : 'ok'
-    }));
+    return data.map(item => {
+      // Calculate expiration status
+      let expiryStatus = 'good';
+      let daysUntilExpiry = null;
+      if (item.expiration_date) {
+        const today = new Date();
+        const expiryDate = new Date(item.expiration_date);
+        daysUntilExpiry = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
+        if (daysUntilExpiry < 0) {
+          expiryStatus = 'expired';
+        } else if (daysUntilExpiry <= 30) {
+          expiryStatus = 'expiring-soon';
+        } else if (daysUntilExpiry <= 90) {
+          expiryStatus = 'expiring';
+        }
+      }
+      
+      // Combined status: prioritize expiration over stock level
+      let combinedStatus = item.quantity <= 0 ? 'critical' : item.quantity < (item.min_stock || item.max_stock * 0.2) ? 'low' : 'ok';
+      if (expiryStatus === 'expired') {
+        combinedStatus = 'expired';
+      } else if (expiryStatus === 'expiring-soon' && combinedStatus === 'ok') {
+        combinedStatus = 'expiring-soon';
+      }
+      
+      return {
+        name: item.item_name,
+        stock: item.quantity,
+        unit: item.unit,
+        min: item.min_stock || Math.floor(item.max_stock * 0.2),
+        status: combinedStatus,
+        expiration_date: item.expiration_date,
+        days_until_expiry: daysUntilExpiry,
+        expiry_status: expiryStatus,
+        brand: item.brand,
+        batch: item.batch
+      };
+    });
   }
 
   async getSupplementInventory() {
     const data = await inventoryService.getSupplementInventory();
-    return data.map(item => ({
-      id: item.id,
-      name: item.item_name,
-      stock: item.quantity,
+    return data.map(item => {
+      // Calculate expiration status
+      let expiryStatus = 'good';
+      let daysUntilExpiry = null;
+      if (item.expiration_date) {
+        const today = new Date();
+        const expiryDate = new Date(item.expiration_date);
+        daysUntilExpiry = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
+        if (daysUntilExpiry < 0) {
+          expiryStatus = 'expired';
+        } else if (daysUntilExpiry <= 30) {
+          expiryStatus = 'expiring-soon';
+        } else if (daysUntilExpiry <= 90) {
+          expiryStatus = 'expiring';
+        }
+      }
+      
+      // Combined status: prioritize expiration over stock level
+      let combinedStatus = item.quantity <= 0 ? 'critical' : item.quantity < (item.max_stock * 0.2) ? 'low' : 'ok';
+      if (expiryStatus === 'expired') {
+        combinedStatus = 'expired';
+      } else if (expiryStatus === 'expiring-soon' && combinedStatus === 'ok') {
+        combinedStatus = 'expiring-soon';
+      }
+      
+      return {
+        id: item.id,
+        name: item.item_name,
+        stock: item.quantity,
       unit: item.unit || 'units',
-    }));
+      status: combinedStatus,
+      expiration_date: item.expiration_date,
+      days_until_expiry: daysUntilExpiry,
+      expiry_status: expiryStatus,
+      brand: item.brand,
+      batch_number: item.batch_number,
+      max_stock: item.max_stock
+      };
+    });
   }
 
   async getVaccinationRecords() {
