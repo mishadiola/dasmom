@@ -307,7 +307,7 @@
   min-height: 100vh;
   background-image: 
     /* Mauve-tinted gradient overlay */
-    linear-gradient(135deg, rgba(185, 129, 138, 0.60) 0%, rgba(156, 102, 114, 0.60) 40%, rgba(122, 78, 88, 0.60) 100%),
+    linear-gradient(135deg, rgba(185, 129, 138, 0.55) 0%, rgba(156, 102, 114, 0.55) 40%, rgba(122, 78, 88, 0.55) 100%),
     /* Blurred maternal healthcare background image */
     url('/assets/images/hero-maternal-bg.png');
   background-size: cover;
@@ -328,7 +328,7 @@
   background-size: cover;
   background-position: center;
   background-attachment: fixed;
-  filter: blur(3px);
+  filter: blur(1.5px);
   pointer-events: none;
   z-index: 0;
 }
@@ -337,7 +337,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgba(185, 129, 138, 0.60) 0%, rgba(156, 102, 114, 0.60) 40%, rgba(122, 78, 88, 0.60) 100%);
+  background: linear-gradient(135deg, rgba(185, 129, 138, 0.55) 0%, rgba(156, 102, 114, 0.55) 40%, rgba(122, 78, 88, 0.55) 100%);
   pointer-events: none;
   z-index: 1;
 }
@@ -389,18 +389,19 @@
 .ldg-hero__container {
   position: relative;
   z-index: 3;
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 80px 24px;
+  padding: 130px 4% 80px;
   width: 100%;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 60px;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 40px;
   align-items: center;
 }
 .ldg-hero__content {
   display: flex;
   flex-direction: column;
+  margin-top: -50px;
 }
 .ldg-hero__gov-badge {
   display: inline-flex;
@@ -411,66 +412,66 @@
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 100px;
   color: #ffffff;
-  font-size: 0.68rem;
+  font-size: 0.95rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  margin-bottom: 20px;
+  margin-bottom: 32px;
   width: fit-content;
   backdrop-filter: blur(4px);
 }
 .ldg-hero__title {
-  font-size: 4.2rem;
+  font-size: 5rem;
   font-weight: 900;
   color: #ffffff;
   line-height: 0.95;
   letter-spacing: -0.03em;
-  margin-bottom: 10px;
+  margin-bottom: 16px;
 }
 .ldg-hero__plus {
   color: rgba(255, 255, 255, 0.65);
 }
 .ldg-hero__subtitle {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
-  line-height: 1.4;
-  margin-bottom: 16px;
-  max-width: 520px;
+  font-size: 3.5rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.95);
+  line-height: 1.1;
+  margin-bottom: 32px;
+  max-width: 800px;
 }
 .ldg-hero__desc {
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.75);
+  font-size: 1.35rem;
+  color: rgba(255, 255, 255, 0.85);
   line-height: 1.7;
-  max-width: 500px;
-  margin-bottom: 28px;
+  max-width: 700px;
+  margin-bottom: 48px;
 }
 .ldg-hero__trust-list {
   list-style: none;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-bottom: 32px;
-  max-width: 500px;
+  gap: 24px 20px;
+  margin-bottom: 48px;
+  max-width: 650px;
 }
 .ldg-hero__trust-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.82rem;
+  gap: 12px;
+  font-size: 1.1rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.95);
 }
 .ldg-hero__trust-check {
-  width: 18px;
-  height: 18px;
+  width: 26px;
+  height: 26px;
   background: rgba(255, 255, 255, 0.2);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 0.65rem;
+  font-size: 0.9rem;
   color: #fff;
   font-weight: 800;
 }
@@ -484,56 +485,57 @@
 .ldg-hero__visual {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
+  justify-self: end;
+  align-self: flex-end;
+  margin-top: 140px;
+  width: 100%;
   gap: 16px;
 }
 .ldg-hero__illus-wrap {
   position: relative;
   width: 100%;
-  max-width: 400px;
+  max-width: 480px;
 }
 /* Floating healthcare illustration card */
 .ldg-hero__illus-card {
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 20px;
-  padding: 24px;
-  backdrop-filter: blur(8px);
+  padding: 32px 24px;
+  backdrop-filter: blur(12px);
   text-align: center;
-}
-.ldg-hero__illus-svg {
   width: 100%;
-  max-width: 280px;
-  margin: 0 auto 16px;
-  display: block;
 }
 /* Mini stat chips below illustration */
 .ldg-hero__mini-stats {
   display: flex;
-  gap: 10px;
+  gap: 16px;
   justify-content: center;
   flex-wrap: wrap;
 }
 .ldg-hero__mini-stat {
   background: rgba(255, 255, 255, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 12px;
-  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 16px;
+  padding: 16px 20px;
   text-align: center;
+  flex: 1;
+  min-width: 120px;
 }
 .ldg-hero__mini-stat-val {
   display: block;
-  font-size: 1.2rem;
+  font-size: 1.8rem;
   font-weight: 800;
   color: #fff;
   line-height: 1;
 }
 .ldg-hero__mini-stat-lbl {
   display: block;
-  font-size: 0.6rem;
-  color: rgba(255, 255, 255, 0.7);
-  font-weight: 500;
-  margin-top: 2px;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 600;
+  margin-top: 6px;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -804,10 +806,28 @@
    ═══════════════════════════════════════════════════════════ */
 .ldg-services {
   padding: 80px 0;
-  background: #ffffff;
+  background-image: url('../../assets/images/services-bg.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   position: relative;
+  overflow: hidden;
 }
+
+.ldg-services::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.40);
+  z-index: 1;
+}
+
 .ldg-services__inner {
+  position: relative;
+  z-index: 2;
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 24px;

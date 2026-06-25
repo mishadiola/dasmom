@@ -112,37 +112,37 @@ const Landing = () => {
 
   const careJourneySteps = [
     {
-      icon: "🤱",
+      icon: ClipboardList,
       step: "01",
       title: "Pregnancy Registration",
       desc: "Register with your Barangay Health Station. A midwife records your health history and pregnancy details.",
     },
     {
-      icon: "🩺",
+      icon: Stethoscope,
       step: "02",
       title: "Prenatal Monitoring",
       desc: "Regular checkups are tracked digitally. Your health records are always up to date and accessible.",
     },
     {
-      icon: "💉",
+      icon: Syringe,
       step: "03",
       title: "Vaccination Tracking",
       desc: "Tetanus, micronutrients, and all prenatal vaccines are recorded and monitored for your protection.",
     },
     {
-      icon: "🏥",
+      icon: Building2,
       step: "04",
       title: "Delivery Care",
       desc: "Delivery details, outcomes, and newborn information are safely logged in your maternal record.",
     },
     {
-      icon: "🌸",
+      icon: HeartPulse,
       step: "05",
       title: "Postpartum Recovery",
       desc: "Follow-up care for the 6-week postpartum period is tracked to support your recovery.",
     },
     {
-      icon: "👶",
+      icon: Baby,
       step: "06",
       title: "Newborn Monitoring",
       desc: "Your newborn's immunization schedule, checkups, and growth milestones are tracked and managed.",
@@ -151,28 +151,28 @@ const Landing = () => {
 
   const whoUsers = [
     {
-      emoji: "🤰",
+      icon: Baby,
       title: "Pregnant Mothers",
       desc: "Track your prenatal appointments, vaccines, and pregnancy progress in one safe place.",
       tag: "Patient Access",
       color: "mauve",
     },
     {
-      emoji: "🩺",
+      icon: Stethoscope,
       title: "Midwives",
       desc: "Monitor your patients, record prenatal visits, and coordinate maternal care efficiently.",
       tag: "Healthcare Provider",
       color: "sage",
     },
     {
-      emoji: "👥",
+      icon: Users,
       title: "Barangay Health Workers",
       desc: "Coordinate patient follow-ups, community outreach, and maternal health support in your area.",
       tag: "Community Health",
       color: "amber",
     },
     {
-      emoji: "🏥",
+      icon: Building2,
       title: "Health Centers",
       desc: "Manage maternal health records, monitor outcomes, and generate reports for the City Health Office.",
       tag: "Administration",
@@ -181,17 +181,17 @@ const Landing = () => {
   ];
 
   const impactStats = [
-    { icon: "🤱", val: "501+", lbl: "Mothers Supported", color: "mauve" },
+    { icon: Heart, val: "501+", lbl: "Mothers Supported", color: "mauve" },
     {
-      icon: "👶",
+      icon: Baby,
       val: "152",
       lbl: "Healthy Deliveries Recorded",
       color: "rose",
     },
-    { icon: "💉", val: "850+", lbl: "Vaccinations Tracked", color: "sage" },
-    { icon: "🏥", val: "7", lbl: "Connected Health Stations", color: "amber" },
+    { icon: Syringe, val: "850+", lbl: "Vaccinations Tracked", color: "sage" },
+    { icon: Building2, val: "7", lbl: "Connected Health Stations", color: "amber" },
     {
-      icon: "📋",
+      icon: ClipboardList,
       val: "84%",
       lbl: "Postpartum Follow-Up Rate",
       color: "lavender",
@@ -200,7 +200,7 @@ const Landing = () => {
 
   const testimonialCards = [
     {
-      emoji: "🤰",
+      icon: Baby,
       role: "For Mothers",
       sub: "Pregnant & Postpartum",
       type: "mother",
@@ -213,7 +213,7 @@ const Landing = () => {
       ],
     },
     {
-      emoji: "🩺",
+      icon: Stethoscope,
       role: "For Midwives",
       sub: "Healthcare Professionals",
       type: "midwife",
@@ -226,7 +226,7 @@ const Landing = () => {
       ],
     },
     {
-      emoji: "👥",
+      icon: Users,
       role: "For Health Workers",
       sub: "Barangay Health Workers & Staff",
       type: "worker",
@@ -345,15 +345,13 @@ const Landing = () => {
             </div>
 
             <h1 className="ldg-hero__title">
-              DASMOM<span className="ldg-hero__plus">+</span>
+              Congratulations, Mommy!
             </h1>
 
-            <p className="ldg-hero__subtitle">
-              Supporting Mothers Through Every Stage of Pregnancy
-            </p>
+
 
             <p className="ldg-hero__desc">
-              A maternal healthcare platform that helps mothers stay connected
+              Dasmom+ is a maternal healthcare platform that helps mothers stay connected
               with healthcare workers, monitor pregnancy progress, track
               appointments, receive vaccinations, and access postpartum support.
             </p>
@@ -399,243 +397,12 @@ const Landing = () => {
           <div className="ldg-hero__visual">
             <div className="ldg-hero__illus-wrap">
               <div className="ldg-hero__illus-card">
-                {/* Healthcare SVG Illustration */}
-                <svg
-                  className="ldg-hero__illus-svg"
-                  viewBox="0 0 320 220"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                  aria-label="Maternal healthcare illustration"
-                  role="img"
-                >
-                  {/* Background shapes */}
-                  <ellipse
-                    cx="160"
-                    cy="200"
-                    rx="100"
-                    ry="18"
-                    fill="rgba(255,255,255,0.08)"
-                  />
-
-                  {/* Pregnant Mother */}
-                  {/* Body */}
-                  <ellipse
-                    cx="120"
-                    cy="145"
-                    rx="36"
-                    ry="48"
-                    fill="rgba(255,255,255,0.15)"
-                    stroke="rgba(255,255,255,0.4)"
-                    strokeWidth="2"
-                  />
-                  {/* Baby bump */}
-                  <ellipse
-                    cx="130"
-                    cy="160"
-                    rx="22"
-                    ry="20"
-                    fill="rgba(255,255,255,0.2)"
-                    stroke="rgba(255,255,255,0.35)"
-                    strokeWidth="1.5"
-                  />
-                  {/* Head */}
-                  <circle
-                    cx="120"
-                    cy="90"
-                    r="22"
-                    fill="rgba(255,255,255,0.2)"
-                    stroke="rgba(255,255,255,0.45)"
-                    strokeWidth="2"
-                  />
-                  {/* Hair */}
-                  <path
-                    d="M 100 78 Q 120 65 140 78 Q 138 70 120 66 Q 102 70 100 78"
-                    fill="rgba(255,255,255,0.35)"
-                  />
-                  {/* Face - smile */}
-                  <path
-                    d="M 112 96 Q 120 103 128 96"
-                    stroke="rgba(255,255,255,0.7)"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    fill="none"
-                  />
-                  {/* Eyes */}
-                  <circle
-                    cx="113"
-                    cy="90"
-                    r="2.5"
-                    fill="rgba(255,255,255,0.8)"
-                  />
-                  <circle
-                    cx="127"
-                    cy="90"
-                    r="2.5"
-                    fill="rgba(255,255,255,0.8)"
-                  />
-                  {/* Arms */}
-                  <path
-                    d="M 85 135 Q 75 150 80 165"
-                    stroke="rgba(255,255,255,0.35)"
-                    strokeWidth="10"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M 155 135 Q 165 150 160 170"
-                    stroke="rgba(255,255,255,0.35)"
-                    strokeWidth="10"
-                    strokeLinecap="round"
-                  />
-                  {/* Legs */}
-                  <path
-                    d="M 105 190 L 100 215"
-                    stroke="rgba(255,255,255,0.3)"
-                    strokeWidth="10"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M 132 192 L 138 217"
-                    stroke="rgba(255,255,255,0.3)"
-                    strokeWidth="10"
-                    strokeLinecap="round"
-                  />
-
-                  {/* Healthcare Worker */}
-                  {/* Lab coat / body */}
-                  <rect
-                    x="195"
-                    y="120"
-                    width="60"
-                    height="70"
-                    rx="12"
-                    fill="rgba(255,255,255,0.22)"
-                    stroke="rgba(255,255,255,0.4)"
-                    strokeWidth="1.5"
-                  />
-                  {/* Cross on coat */}
-                  <rect
-                    x="221"
-                    y="128"
-                    width="8"
-                    height="20"
-                    rx="2"
-                    fill="rgba(255,255,255,0.5)"
-                  />
-                  <rect
-                    x="215"
-                    y="134"
-                    width="20"
-                    height="8"
-                    rx="2"
-                    fill="rgba(255,255,255,0.5)"
-                  />
-                  {/* Head */}
-                  <circle
-                    cx="225"
-                    cy="96"
-                    r="20"
-                    fill="rgba(255,255,255,0.22)"
-                    stroke="rgba(255,255,255,0.45)"
-                    strokeWidth="2"
-                  />
-                  {/* Face */}
-                  <path
-                    d="M 218 103 Q 225 109 232 103"
-                    stroke="rgba(255,255,255,0.7)"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    fill="none"
-                  />
-                  <circle cx="219" cy="97" r="2" fill="rgba(255,255,255,0.8)" />
-                  <circle cx="231" cy="97" r="2" fill="rgba(255,255,255,0.8)" />
-                  {/* Stethoscope */}
-                  <path
-                    d="M 208 118 Q 200 130 205 140 Q 210 150 218 148"
-                    stroke="rgba(255,255,255,0.55)"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    fill="none"
-                  />
-                  <circle
-                    cx="218"
-                    cy="148"
-                    r="5"
-                    fill="none"
-                    stroke="rgba(255,255,255,0.6)"
-                    strokeWidth="2"
-                  />
-                  {/* Arms */}
-                  <path
-                    d="M 198 135 L 180 155"
-                    stroke="rgba(255,255,255,0.3)"
-                    strokeWidth="9"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M 252 135 L 270 155"
-                    stroke="rgba(255,255,255,0.3)"
-                    strokeWidth="9"
-                    strokeLinecap="round"
-                  />
-                  {/* Legs */}
-                  <path
-                    d="M 208 188 L 204 215"
-                    stroke="rgba(255,255,255,0.3)"
-                    strokeWidth="9"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M 240 188 L 245 215"
-                    stroke="rgba(255,255,255,0.3)"
-                    strokeWidth="9"
-                    strokeLinecap="round"
-                  />
-
-                  {/* Floating hearts */}
-                  <text
-                    x="162"
-                    y="80"
-                    fontSize="18"
-                    fill="rgba(255,255,255,0.7)"
-                    textAnchor="middle"
-                  >
-                    💗
-                  </text>
-                  <text
-                    x="75"
-                    y="115"
-                    fontSize="14"
-                    fill="rgba(255,255,255,0.5)"
-                    textAnchor="middle"
-                  >
-                    ✨
-                  </text>
-                  <text
-                    x="280"
-                    y="100"
-                    fontSize="12"
-                    fill="rgba(255,255,255,0.4)"
-                    textAnchor="middle"
-                  >
-                    ⭐
-                  </text>
-
-                  {/* Connection line between them */}
-                  <path
-                    d="M 155 160 Q 175 140 195 150"
-                    stroke="rgba(255,255,255,0.25)"
-                    strokeWidth="2"
-                    strokeDasharray="4 4"
-                    fill="none"
-                  />
-                </svg>
-
                 {/* Mini stat chips */}
                 <div className="ldg-hero__mini-stats">
                   <div className="ldg-hero__mini-stat">
                     <span className="ldg-hero__mini-stat-val">501+</span>
                     <span className="ldg-hero__mini-stat-lbl">
-                      Mothers Enrolled
+                      Mothers Registered
                     </span>
                   </div>
                   <div className="ldg-hero__mini-stat">
@@ -677,9 +444,7 @@ const Landing = () => {
                 id={`who-card-${i}`}
               >
                 <div className="ldg-who-card__icon-wrap">
-                  <span role="img" aria-label={user.title}>
-                    {user.emoji}
-                  </span>
+                  <user.icon size={32} strokeWidth={1.5} />
                 </div>
                 <h3 className="ldg-who-card__title">{user.title}</h3>
                 <p className="ldg-who-card__desc">{user.desc}</p>
@@ -707,202 +472,90 @@ const Landing = () => {
               <div className="ldg-about-visual-card__body">
                 <svg
                   className="ldg-about-visual-card__svg"
-                  viewBox="0 0 380 180"
+                  viewBox="0 0 480 320"
                   fill="none"
                   xmlns="http://www.w3.org/2000/svg"
-                  aria-label="System connectivity diagram"
+                  aria-label="Hub and spoke connectivity diagram"
                   role="img"
+                  style={{ width: "100%", height: "auto", display: "block" }}
                 >
                   <defs>
-                    <marker
-                      id="arr2"
-                      viewBox="0 0 10 10"
-                      refX="6"
-                      refY="5"
-                      markerWidth="6"
-                      markerHeight="6"
-                      orient="auto-start-reverse"
-                    >
-                      <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#b9818a" />
+                    <marker id="arr-start" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                      <path d="M 10 1 L 2 5 L 10 9 z" fill="#b9818a" />
                     </marker>
+                    <marker id="arr-end" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+                      <path d="M 0 1 L 8 5 L 0 9 z" fill="#b9818a" />
+                    </marker>
+                    <filter id="card-shadow" x="-20%" y="-20%" width="140%" height="140%">
+                      <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#2d2234" floodOpacity="0.08" />
+                    </filter>
+
+                    <g id="station-icon">
+                      <circle cx="0" cy="-5" r="40" fill="#e8f0e3" opacity="0.6" />
+                      <rect x="-24" y="-14" width="48" height="34" rx="4" fill="#ffffff" stroke="#7a9b6a" strokeWidth="1.5" />
+                      <path d="M -28 -14 L 28 -14 L 20 -28 L -20 -28 Z" fill="#7a9b6a" />
+                      <rect x="-6" y="8" width="12" height="12" rx="2" fill="#7a9b6a" opacity="0.8" />
+                      <rect x="-16" y="-4" width="8" height="8" rx="1" fill="#e8f0e3" stroke="#7a9b6a" strokeWidth="1" />
+                      <rect x="8" y="-4" width="8" height="8" rx="1" fill="#e8f0e3" stroke="#7a9b6a" strokeWidth="1" />
+                      <circle cx="0" cy="-20" r="7" fill="#ffffff" />
+                      <rect x="-1.5" y="-23.5" width="3" height="7" fill="#7a9b6a" />
+                      <rect x="-3.5" y="-21.5" width="7" height="3" fill="#7a9b6a" />
+                    </g>
+
+                    <g id="hub-icon">
+                      <circle cx="0" cy="0" r="70" fill="#f5eaec" opacity="0.7" />
+                      <rect x="-45" y="-20" width="90" height="55" rx="6" fill="#ffffff" stroke="#b9818a" strokeWidth="2" />
+                      <path d="M -52 -20 L 52 -20 L 40 -38 L -40 -38 Z" fill="#b9818a" />
+                      <rect x="-12" y="15" width="24" height="20" rx="3" fill="#b9818a" opacity="0.9" />
+                      <rect x="-32" y="-5" width="12" height="12" rx="2" fill="#f5eaec" stroke="#b9818a" strokeWidth="1" />
+                      <rect x="20" y="-5" width="12" height="12" rx="2" fill="#f5eaec" stroke="#b9818a" strokeWidth="1" />
+                      <rect x="-32" y="15" width="12" height="12" rx="2" fill="#f5eaec" stroke="#b9818a" strokeWidth="1" />
+                      <rect x="20" y="15" width="12" height="12" rx="2" fill="#f5eaec" stroke="#b9818a" strokeWidth="1" />
+                      <circle cx="0" cy="-30" r="12" fill="#ffffff" stroke="#b9818a" strokeWidth="1.5" />
+                      <rect x="-2" y="-35" width="4" height="10" fill="#b9818a" />
+                      <rect x="-5" y="-32" width="10" height="4" fill="#b9818a" />
+                    </g>
                   </defs>
 
-                  {/* Central Portal */}
-                  <rect
-                    x="130"
-                    y="15"
-                    width="120"
-                    height="58"
-                    rx="14"
-                    fill="#f5eaec"
-                    stroke="#b9818a"
-                    strokeWidth="2"
-                  />
-                  <text
-                    x="190"
-                    y="38"
-                    textAnchor="middle"
-                    fill="#7a4e58"
-                    fontWeight="bold"
-                    fontSize="11"
-                    fontFamily="Poppins, sans-serif"
-                  >
-                    DASMOM+ Portal
-                  </text>
-                  <text
-                    x="190"
-                    y="54"
-                    textAnchor="middle"
-                    fill="#b9818a"
-                    fontSize="9"
-                    fontFamily="Poppins, sans-serif"
-                  >
-                    City Health Office
-                  </text>
-                  <text
-                    x="190"
-                    y="66"
-                    textAnchor="middle"
-                    fill="#b9818a"
-                    fontSize="8"
-                    fontFamily="Poppins, sans-serif"
-                  >
-                    Central Records Hub
-                  </text>
+                  {/* Lines */}
+                  <g stroke="#b9818a" strokeWidth="2" strokeDasharray="5 5" markerStart="url(#arr-start)" markerEnd="url(#arr-end)" opacity="0.6">
+                    <line x1="175" y1="117" x2="125" y2="83" />
+                    <line x1="305" y1="117" x2="355" y2="83" />
+                    <line x1="165" y1="160" x2="105" y2="160" />
+                    <line x1="315" y1="160" x2="375" y2="160" />
+                    <line x1="175" y1="203" x2="125" y2="237" />
+                    <line x1="305" y1="203" x2="355" y2="237" />
+                  </g>
 
-                  {/* Station nodes */}
+                  {/* Stations */}
                   {[
-                    {
-                      cx: 55,
-                      cy: 145,
-                      name: "Dasma 1",
-                      color: "#c3cfb7",
-                      stroke: "#7a9b6a",
-                    },
-                    {
-                      cx: 155,
-                      cy: 155,
-                      name: "Salawag",
-                      color: "#f5eaec",
-                      stroke: "#b9818a",
-                    },
-                    {
-                      cx: 255,
-                      cy: 155,
-                      name: "Dasma 3",
-                      color: "#eef0f9",
-                      stroke: "#b5a9d4",
-                    },
-                    {
-                      cx: 345,
-                      cy: 145,
-                      name: "Paliparan",
-                      color: "#fef6ec",
-                      stroke: "#e8b97a",
-                    },
-                  ].map((n, i) => (
-                    <g key={i}>
-                      <circle
-                        cx={n.cx}
-                        cy={n.cy}
-                        r="28"
-                        fill={n.color}
-                        stroke={n.stroke}
-                        strokeWidth="2"
-                      />
-                      <text
-                        x={n.cx}
-                        y={n.cy + 4}
-                        textAnchor="middle"
-                        fill="#2d2234"
-                        fontWeight="600"
-                        fontSize="9"
-                        fontFamily="Poppins, sans-serif"
-                      >
-                        {n.name}
+                    { x: 90, y: 60, name: "Armstrong" },
+                    { x: 390, y: 60, name: "Dasma II" },
+                    { x: 60, y: 160, name: "Dasma I" },
+                    { x: 420, y: 160, name: "Dasma III" },
+                    { x: 90, y: 260, name: "Dasma IV" },
+                    { x: 390, y: 260, name: "Salawag" }
+                  ].map((s, i) => (
+                    <g key={i} transform={`translate(${s.x}, ${s.y})`}>
+                      <use href="#station-icon" />
+                      <rect x="-40" y="28" width="80" height="22" rx="11" fill="#ffffff" filter="url(#card-shadow)" />
+                      <text x="0" y="43" textAnchor="middle" fill="#7a4e58" fontSize="11" fontWeight="700" fontFamily="Poppins, sans-serif">
+                        {s.name}
                       </text>
                     </g>
                   ))}
 
-                  {/* Connection lines */}
-                  <path
-                    d="M 75 120 Q 110 70 145 58"
-                    fill="none"
-                    stroke="#b9818a"
-                    strokeWidth="1.5"
-                    strokeDasharray="4 4"
-                    markerEnd="url(#arr2)"
-                    opacity="0.7"
-                  />
-                  <path
-                    d="M 155 127 L 175 76"
-                    fill="none"
-                    stroke="#b9818a"
-                    strokeWidth="1.5"
-                    strokeDasharray="4 4"
-                    markerEnd="url(#arr2)"
-                    opacity="0.7"
-                  />
-                  <path
-                    d="M 255 127 L 225 76"
-                    fill="none"
-                    stroke="#b9818a"
-                    strokeWidth="1.5"
-                    strokeDasharray="4 4"
-                    markerEnd="url(#arr2)"
-                    opacity="0.7"
-                  />
-                  <path
-                    d="M 320 120 Q 285 70 240 60"
-                    fill="none"
-                    stroke="#b9818a"
-                    strokeWidth="1.5"
-                    strokeDasharray="4 4"
-                    markerEnd="url(#arr2)"
-                    opacity="0.7"
-                  />
-
-                  {/* Labels */}
-                  <text
-                    x="88"
-                    y="95"
-                    fill="#9c6672"
-                    fontSize="7.5"
-                    fontFamily="Poppins, sans-serif"
-                    fontStyle="italic"
-                  >
-                    Midwife Records
-                  </text>
-                  <text
-                    x="163"
-                    y="108"
-                    fill="#9c6672"
-                    fontSize="7.5"
-                    fontFamily="Poppins, sans-serif"
-                    fontStyle="italic"
-                  >
-                    Vitals
-                  </text>
-                  <text
-                    x="243"
-                    y="108"
-                    fill="#9c6672"
-                    fontSize="7.5"
-                    fontFamily="Poppins, sans-serif"
-                    fontStyle="italic"
-                  >
-                    Vaccines
-                  </text>
-                  <text
-                    x="290"
-                    y="95"
-                    fill="#9c6672"
-                    fontSize="7.5"
-                    fontFamily="Poppins, sans-serif"
-                    fontStyle="italic"
-                  >
-                    Follow-ups
-                  </text>
+                  {/* Center Hub */}
+                  <g transform="translate(240, 160)">
+                    <use href="#hub-icon" />
+                    <rect x="-70" y="42" width="140" height="38" rx="14" fill="#ffffff" filter="url(#card-shadow)" />
+                    <text x="0" y="58" textAnchor="middle" fill="#7a4e58" fontSize="13" fontWeight="800" fontFamily="Poppins, sans-serif">
+                      City Health Office 3
+                    </text>
+                    <text x="0" y="72" textAnchor="middle" fill="#9c6672" fontSize="10" fontWeight="600" fontFamily="Poppins, sans-serif">
+                      (Main Office)
+                    </text>
+                  </g>
                 </svg>
 
                 <div className="ldg-about-visual-card__stats">
@@ -1018,7 +671,7 @@ const Landing = () => {
                   </p>
                   <div className="ldg-service-card__benefit">
                     <span className="ldg-service-card__benefit-label">
-                      ✨ Why it matters
+                      - Why it matters
                     </span>
                     <span className="ldg-service-card__benefit-text">
                       {service.benefit}
@@ -1059,13 +712,9 @@ const Landing = () => {
                 id={`journey-step-${i}`}
               >
                 <div className="ldg-journey-step__num">{step.step}</div>
-                <span
-                  className="ldg-journey-step__icon"
-                  role="img"
-                  aria-label={step.title}
-                >
-                  {step.icon}
-                </span>
+                <div className="ldg-journey-step__icon">
+                  <step.icon size={32} strokeWidth={1.5} />
+                </div>
                 <h3 className="ldg-journey-step__title">{step.title}</h3>
                 <p className="ldg-journey-step__desc">{step.desc}</p>
               </div>
@@ -1101,13 +750,9 @@ const Landing = () => {
                 className={`ldg-impact-card ldg-impact-card--${stat.color}`}
                 id={`impact-stat-${i}`}
               >
-                <span
-                  className="ldg-impact-card__icon"
-                  role="img"
-                  aria-label={stat.lbl}
-                >
-                  {stat.icon}
-                </span>
+                <div className="ldg-impact-card__icon">
+                  <stat.icon size={32} strokeWidth={1.5} />
+                </div>
                 <div className="ldg-impact-card__val">{stat.val}</div>
                 <div className="ldg-impact-card__lbl">{stat.lbl}</div>
               </div>
@@ -1142,9 +787,7 @@ const Landing = () => {
               >
                 <div className="ldg-testimonial-card__top">
                   <div className="ldg-testimonial-card__avatar">
-                    <span role="img" aria-label={card.role}>
-                      {card.emoji}
-                    </span>
+                    <card.icon size={32} strokeWidth={1.5} />
                   </div>
                   <div className="ldg-testimonial-card__who">
                     <span className="ldg-testimonial-card__role">
@@ -1235,16 +878,14 @@ const Landing = () => {
 
           <div className="ldg-access-cta__icons">
             {[
-              { icon: "🔒", label: "Secure Access" },
-              { icon: "🩺", label: "Health Monitoring" },
-              { icon: "📋", label: "Maternal Records" },
-              { icon: "🤝", label: "Healthcare Support" },
+              { icon: ShieldCheck, label: "Secure Access" },
+              { icon: Activity, label: "Health Monitoring" },
+              { icon: ClipboardList, label: "Maternal Records" },
+              { icon: UserCheck, label: "Healthcare Support" },
             ].map((item, i) => (
               <div key={i} className="ldg-access-cta__icon-item">
                 <div className="ldg-access-cta__icon-circle">
-                  <span role="img" aria-label={item.label}>
-                    {item.icon}
-                  </span>
+                  <item.icon size={32} strokeWidth={1.5} />
                 </div>
                 <span className="ldg-access-cta__icon-lbl">{item.label}</span>
               </div>
