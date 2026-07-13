@@ -6,7 +6,7 @@ export default class NewbornService {
     }
 
     /**
-     * Get summary stats for newborn tracking dashboard cards
+     * Get summary stats for newborn records dashboard cards
      * Returns: { totalNewborns, lowBirthWeight, highRisk, vaccinationsDue, missedFollowups }
      */
     async getNewbornStats() {

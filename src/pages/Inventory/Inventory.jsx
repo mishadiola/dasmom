@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   Search,
   Filter,
@@ -12,7 +12,10 @@ import {
   Syringe,
   Pill,
   ChevronDown,
+  Truck,
+  Eye
 } from 'lucide-react';
+import { AuthContext } from '../../context/AuthContext';
 import InventoryService from '../../services/inventoryservice';
 import PatientService from '../../services/patientservice';
 import '../../styles/pages/Inventory.css';
@@ -21,6 +24,7 @@ const inventoryService = new InventoryService();
 const patientService = new PatientService();
 
 const Inventory = () => {
+  const { user } = useContext(AuthContext);
   const [activeTab, setActiveTab] = useState('vaccines');
   const [loading, setLoading] = useState(true);
   const [vaccines, setVaccines] = useState([]);
@@ -30,6 +34,37 @@ const Inventory = () => {
   const [activeSummaryFilter, setActiveSummaryFilter] = useState(null);
   const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
   const [vaccStats, setVaccStats] = useState({ mothersPending: 0, newbornsPending: 0 });
+
+  // Station Distribution states
+  const [showDistributionModal, setShowDistributionModal] = useState(false);
+  const [selectedDistRecord, setSelectedDistRecord] = useState(null);
+  const [availableStations, setAvailableStations] = useState([]);
+  const [distributionHistory, setDistributionHistory] = useState([]);
+  const [distForm, setDistForm] = useState({
+    item_type: 'vaccine',
+    item_id: '',
+    quantity: '',
+    destination_station: '',
+    distribution_date: new Date().toISOString().split('T')[0],
+    released_by: '',
+    remarks: ''
+  });
+
+  // History section filters state
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyStationFilter, setHistoryStationFilter] = useState('All');
+  const [historyTypeFilter, setHistoryTypeFilter] = useState('All');
+  const [historyDateFilter, setHistoryDateFilter] = useState('');
+
+  // Handle auto-populating user info when context resolves
+  useEffect(() => {
+    if (user) {
+      setDistForm(prev => ({
+        ...prev,
+        released_by: user.fullName || user.email?.split('@')[0] || prev.released_by
+      }));
+    }
+  }, [user]);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(null);
@@ -60,10 +95,21 @@ const Inventory = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [vaxData, suppData, statsData] = await Promise.all([
+      const [vaxData, suppData, statsData, stationsData] = await Promise.all([
         inventoryService.getVaccineInventory(),
         inventoryService.getSupplementInventory(),
-        patientService.getVaccinationStats()
+        patientService.getVaccinationStats(),
+        patientService.getAvailableStations()
+      ]);
+
+      setAvailableStations(stationsData && stationsData.length > 0 ? stationsData : [
+        'Salawag',
+        'Dasma I',
+        'Dasma 2',
+        'Dasma 3',
+        'Dasma 4',
+        'Armstrong',
+        'City Health Office 3'
       ]);
 
       console.log('Inventory data fetched - vaccines:', vaxData?.length || 0, 'supplements:', suppData?.length || 0, 'stats:', statsData);
@@ -112,6 +158,43 @@ const Inventory = () => {
 
     const vaxSub = inventoryService.subscribeToInventory('vaccine_inventory', () => fetchData());
     const suppSub = inventoryService.subscribeToInventory('supplement_inventory', () => fetchData());
+
+    // Load distribution history
+    const stored = localStorage.getItem('dasmom_station_distributions');
+    if (stored) {
+      setDistributionHistory(JSON.parse(stored));
+    } else {
+      const mockData = [
+        {
+          id: 'dist-mock-1',
+          distribution_date: '2026-07-10',
+          item_name: 'Tetanus Toxoid (TT)',
+          brand: 'Pfizer',
+          batch: '1',
+          item_type: 'Vaccine',
+          quantity: 5,
+          unit: 'vials',
+          destination_station: 'Salawag',
+          released_by: 'Admin User',
+          remarks: 'Routine supply distribution.'
+        },
+        {
+          id: 'dist-mock-2',
+          distribution_date: '2026-07-12',
+          item_name: 'Iron Supplements',
+          brand: 'Sandoz',
+          batch: '2',
+          item_type: 'Supplement',
+          quantity: 100,
+          unit: 'tablets',
+          destination_station: 'Dasma I',
+          released_by: 'Admin User',
+          remarks: 'Requested extra stock for high-risk prenatal patients.'
+        }
+      ];
+      localStorage.setItem('dasmom_station_distributions', JSON.stringify(mockData));
+      setDistributionHistory(mockData);
+    }
 
     return () => {
       vaxSub.unsubscribe();
@@ -420,6 +503,79 @@ const Inventory = () => {
     }
   };
 
+  const handleDistributionSubmit = async e => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const table = distForm.item_type === 'vaccine' ? 'vaccine_inventory' : 'supplement_inventory';
+      const availableList = distForm.item_type === 'vaccine' ? vaccines : supplements;
+      const selectedItem = availableList.find(item => item.id === distForm.item_id);
+
+      if (!selectedItem) {
+        alert('Please select a valid item.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const qtyToDistribute = Number(distForm.quantity);
+      if (isNaN(qtyToDistribute) || qtyToDistribute <= 0) {
+        alert('Please enter a valid quantity.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (qtyToDistribute > selectedItem.quantity) {
+        alert(`Cannot distribute more than available stock (${selectedItem.quantity} ${selectedItem.unit}).`);
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Deduct quantity
+      const newQuantity = selectedItem.quantity - qtyToDistribute;
+      await inventoryService.updateInventoryQuantity(table, selectedItem.id, newQuantity, selectedItem.max_stock || selectedItem.max_quantity || selectedItem.max_quant);
+
+      // Create log
+      const newRecord = {
+        id: `dist-${Date.now()}`,
+        distribution_date: distForm.distribution_date,
+        item_name: selectedItem.item_name,
+        brand: selectedItem.brand || '',
+        batch: String(selectedItem.batch || selectedItem.batch_number || 'N/A'),
+        item_type: distForm.item_type === 'vaccine' ? 'Vaccine' : 'Supplement',
+        quantity: qtyToDistribute,
+        unit: selectedItem.unit,
+        destination_station: distForm.destination_station,
+        released_by: distForm.released_by || user?.fullName || 'Staff User',
+        remarks: distForm.remarks || ''
+      };
+
+      const updatedHistory = [newRecord, ...distributionHistory];
+      localStorage.setItem('dasmom_station_distributions', JSON.stringify(updatedHistory));
+      setDistributionHistory(updatedHistory);
+
+      // Reset form & close
+      setShowDistributionModal(false);
+      setDistForm({
+        item_type: 'vaccine',
+        item_id: '',
+        quantity: '',
+        destination_station: '',
+        distribution_date: new Date().toISOString().split('T')[0],
+        released_by: user?.fullName || user?.email?.split('@')[0] || '',
+        remarks: ''
+      });
+
+      // Refresh stats and inventory immediately
+      await fetchData();
+      alert('Distribution successful! Stock levels updated.');
+    } catch (error) {
+      console.error('Error distributing inventory:', error);
+      alert('Failed to distribute items: ' + error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleArchive = async (table, id) => {
     if (!window.confirm('Are you sure you want to archive this item? It will be removed from active lists but can be restored.')) return;
     try {
@@ -472,7 +628,25 @@ const Inventory = () => {
           </h1>
           <p className="page-subtitle">Track and manage facility supplies for vaccines and supplements.</p>
         </div>
-        <div className="header-actions">
+        <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+          <button
+            className="btn btn-outline"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            onClick={() => {
+              setDistForm({
+                item_type: 'vaccine',
+                item_id: '',
+                quantity: '',
+                destination_station: '',
+                distribution_date: new Date().toISOString().split('T')[0],
+                released_by: user?.fullName || user?.email?.split('@')[0] || '',
+                remarks: ''
+              });
+              setShowDistributionModal(true);
+            }}
+          >
+            <Truck size={16} /> Station Distribution
+          </button>
           <button
             className="btn btn-primary"
             onClick={() => {
@@ -540,24 +714,6 @@ const Inventory = () => {
           </div>
           <div className="stat-value">{outOfStockCount}</div>
           <div className="stat-label">Out of Stock</div>
-        </div>
-        <div className="stat-card stat-card--pink" style={{ cursor: 'default' }}>
-          <div className="stat-top">
-            <div className="stat-icon stat-icon--pink">
-              <AlertTriangle size={20} />
-            </div>
-          </div>
-          <div className="stat-value">{vaccStats.mothersPending}</div>
-          <div className="stat-label">Mothers Pending Vaccines</div>
-        </div>
-        <div className="stat-card stat-card--sage" style={{ cursor: 'default' }}>
-          <div className="stat-top">
-            <div className="stat-icon stat-icon--sage">
-              <AlertTriangle size={20} />
-            </div>
-          </div>
-          <div className="stat-value">{vaccStats.newbornsPending}</div>
-          <div className="stat-label">Newborns Pending Vaccines</div>
         </div>
       </div>
 
@@ -1003,16 +1159,7 @@ const Inventory = () => {
                         </div>
                     </div>
                 )}
-                {vaccStats.mothersPending > 0 && (
-                    <div className="alert-item alert-info" style={{ background: 'rgba(91,174,208,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px' }}>
-                        <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', marginTop: '4px', flexShrink: 0, background: '#5baed0' }}></div>
-                        <div className="alert-body">
-                            <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Patient Action Required</p>
-                            <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{vaccStats.mothersPending} mothers pending vaccines.</span>
-                        </div>
-                    </div>
-                )}
-                {lowStockCount === 0 && outOfStockCount === 0 && vaccStats.mothersPending === 0 && (
+                {lowStockCount === 0 && outOfStockCount === 0 && (
                     <div style={{ textAlign: 'center', padding: '20px', fontSize: '12px', fontStyle: 'italic', color: 'var(--color-text-muted)' }}>
                         No urgent alerts.
                     </div>
@@ -1020,7 +1167,131 @@ const Inventory = () => {
             </div>
         </div>
     </div>
-  </div>
+    </div>
+
+      {/* ── STATION DISTRIBUTION HISTORY ── */}
+      <div className="inv-card" style={{ marginTop: '24px', borderRadius: '14px', overflow: 'hidden', border: '1px solid #e9ecef' }}>
+        <div className="inv-card-head" style={{ padding: '18px 24px', borderBottom: '1px solid #f0f2f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <h2 style={{ fontSize: '16px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Truck size={17} /> Station Distribution History
+          </h2>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative' }}>
+              <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#999', pointerEvents: 'none' }} />
+              <input
+                type="text"
+                placeholder="Search items..."
+                value={historySearch}
+                onChange={e => setHistorySearch(e.target.value)}
+                style={{ paddingLeft: '30px', paddingRight: '10px', paddingTop: '7px', paddingBottom: '7px', border: '1px solid #e9ecef', borderRadius: '8px', fontSize: '13px', width: '180px' }}
+              />
+            </div>
+            <select
+              value={historyStationFilter}
+              onChange={e => setHistoryStationFilter(e.target.value)}
+              style={{ padding: '7px 10px', border: '1px solid #e9ecef', borderRadius: '8px', fontSize: '13px', background: '#fff', cursor: 'pointer' }}
+            >
+              <option value="All">All Stations</option>
+              {availableStations.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select
+              value={historyTypeFilter}
+              onChange={e => setHistoryTypeFilter(e.target.value)}
+              style={{ padding: '7px 10px', border: '1px solid #e9ecef', borderRadius: '8px', fontSize: '13px', background: '#fff', cursor: 'pointer' }}
+            >
+              <option value="All">All Types</option>
+              <option value="Vaccine">Vaccine</option>
+              <option value="Supplement">Supplement</option>
+            </select>
+            <input
+              type="date"
+              value={historyDateFilter}
+              onChange={e => setHistoryDateFilter(e.target.value)}
+              style={{ padding: '7px 10px', border: '1px solid #e9ecef', borderRadius: '8px', fontSize: '13px' }}
+            />
+            {(historySearch || historyStationFilter !== 'All' || historyTypeFilter !== 'All' || historyDateFilter) && (
+              <button
+                className="btn btn-outline"
+                style={{ padding: '6px 12px', fontSize: '12px' }}
+                onClick={() => { setHistorySearch(''); setHistoryStationFilter('All'); setHistoryTypeFilter('All'); setHistoryDateFilter(''); }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="inv-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Date</th>
+                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Item</th>
+                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Type</th>
+                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Qty</th>
+                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Destination Station</th>
+                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Released By</th>
+                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Remarks</th>
+                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {distributionHistory
+                .filter(rec => {
+                  const search = historySearch.toLowerCase();
+                  const matchesSearch = !search || rec.item_name?.toLowerCase().includes(search) || rec.destination_station?.toLowerCase().includes(search) || rec.released_by?.toLowerCase().includes(search);
+                  const matchesStation = historyStationFilter === 'All' || rec.destination_station === historyStationFilter;
+                  const matchesType = historyTypeFilter === 'All' || rec.item_type === historyTypeFilter;
+                  const matchesDate = !historyDateFilter || rec.distribution_date === historyDateFilter;
+                  return matchesSearch && matchesStation && matchesType && matchesDate;
+                })
+                .map(rec => (
+                  <tr key={rec.id} style={{ borderBottom: '1px solid #f0f2f5', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'} onMouseLeave={e => e.currentTarget.style.background = ''}>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap' }}>{rec.distribution_date}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>
+                      <div style={{ fontWeight: '600' }}>{rec.item_name}</div>
+                      {rec.brand && <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>{rec.brand}{rec.batch && rec.batch !== 'N/A' ? ` · Batch ${rec.batch}` : ''}</div>}
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '600', background: rec.item_type === 'Vaccine' ? 'rgba(91,174,208,0.12)' : 'rgba(147,111,199,0.12)', color: rec.item_type === 'Vaccine' ? '#3a8db5' : '#7a4fa8' }}>
+                        {rec.item_type === 'Vaccine' ? <Syringe size={11} /> : <Pill size={11} />}
+                        {rec.item_type}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '600', color: '#333', textAlign: 'center' }}>{rec.quantity} <span style={{ fontWeight: 400, color: '#888', fontSize: '11px' }}>{rec.unit}</span></td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{rec.destination_station}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>{rec.released_by}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '12px', color: '#777', maxWidth: '200px' }}>
+                      <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{rec.remarks || '—'}</span>
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                      <button
+                        className="btn btn-outline"
+                        style={{ padding: '5px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        onClick={() => setSelectedDistRecord(rec)}
+                      >
+                        <Eye size={13} /> View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              {distributionHistory.filter(rec => {
+                const search = historySearch.toLowerCase();
+                const matchesSearch = !search || rec.item_name?.toLowerCase().includes(search) || rec.destination_station?.toLowerCase().includes(search) || rec.released_by?.toLowerCase().includes(search);
+                const matchesStation = historyStationFilter === 'All' || rec.destination_station === historyStationFilter;
+                const matchesType = historyTypeFilter === 'All' || rec.item_type === historyTypeFilter;
+                const matchesDate = !historyDateFilter || rec.distribution_date === historyDateFilter;
+                return matchesSearch && matchesStation && matchesType && matchesDate;
+              }).length === 0 && (
+                <tr>
+                  <td colSpan="8" style={{ padding: '40px', textAlign: 'center', color: '#aaa', fontSize: '13px', fontStyle: 'italic' }}>
+                    No distribution records found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {showAddModal && (
         <div
@@ -1310,6 +1581,211 @@ const Inventory = () => {
           </div>
         </div>
       )}
+
+      {/* ── STATION DISTRIBUTION MODAL ── */}
+      {showDistributionModal && (
+        <div className="modal-overlay" onClick={() => setShowDistributionModal(false)}>
+          <div
+            className="modal-content"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '580px' }}
+          >
+            <div className="modal-header">
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Truck size={18} /> Station Distribution</h2>
+              <p>Distribute vaccines or supplements from CHO inventory to a Barangay Health Station.</p>
+            </div>
+            <form onSubmit={handleDistributionSubmit}>
+              <div className="modal-body">
+                {/* Item Type */}
+                <div className="form-group">
+                  <label>Item Type <span style={{ color: '#e05c73' }}>*</span></label>
+                  <select
+                    required
+                    value={distForm.item_type}
+                    onChange={e => setDistForm({ ...distForm, item_type: e.target.value, item_id: '' })}
+                    className="form-control"
+                  >
+                    <option value="vaccine">Vaccine</option>
+                    <option value="supplement">Supplement</option>
+                  </select>
+                </div>
+
+                {/* Item */}
+                <div className="form-group">
+                  <label>Item <span style={{ color: '#e05c73' }}>*</span></label>
+                  <select
+                    required
+                    value={distForm.item_id}
+                    onChange={e => setDistForm({ ...distForm, item_id: e.target.value })}
+                    className="form-control"
+                  >
+                    <option value="">— Select item —</option>
+                    {(distForm.item_type === 'vaccine' ? vaccines : supplements)
+                      .filter(item => item.quantity > 0 && (item.status || 'active') === 'active')
+                      .map(item => (
+                        <option key={item.id} value={item.id}>
+                          {item.item_name}{item.brand ? ` (${item.brand})` : ''} — {item.quantity} {item.unit} available
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                {/* Unit (read-only) and Quantity */}
+                {distForm.item_id && (() => {
+                  const sel = (distForm.item_type === 'vaccine' ? vaccines : supplements).find(i => i.id === distForm.item_id);
+                  if (!sel) return null;
+                  const qtyNum = Number(distForm.quantity);
+                  const exceedsStock = qtyNum > sel.quantity;
+                  return (
+                    <div className="form-grid">
+                      <div className="form-group">
+                        <label>Quantity <span style={{ color: '#e05c73' }}>*</span></label>
+                        <input
+                          type="number"
+                          required
+                          min="1"
+                          max={sel.quantity}
+                          value={distForm.quantity}
+                          onChange={e => setDistForm({ ...distForm, quantity: e.target.value })}
+                          placeholder={`Max: ${sel.quantity}`}
+                          style={{ borderColor: exceedsStock ? '#e05c73' : undefined }}
+                        />
+                        {exceedsStock && (
+                          <span style={{ color: '#e05c73', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                            Exceeds available stock ({sel.quantity} {sel.unit}).
+                          </span>
+                        )}
+                      </div>
+                      <div className="form-group">
+                        <label>Unit</label>
+                        <input
+                          type="text"
+                          readOnly
+                          value={sel.unit}
+                          style={{ backgroundColor: '#f5f5f5', color: '#666', cursor: 'not-allowed' }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Destination Health Station */}
+                <div className="form-group">
+                  <label>Destination Health Station <span style={{ color: '#e05c73' }}>*</span></label>
+                  <select
+                    required
+                    value={distForm.destination_station}
+                    onChange={e => setDistForm({ ...distForm, destination_station: e.target.value })}
+                    className="form-control"
+                  >
+                    <option value="">— Select station —</option>
+                    {availableStations.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+
+                {/* Distribution Date & Released By */}
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label>Distribution Date <span style={{ color: '#e05c73' }}>*</span></label>
+                    <input
+                      type="date"
+                      required
+                      value={distForm.distribution_date}
+                      onChange={e => setDistForm({ ...distForm, distribution_date: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Released By <span style={{ color: '#e05c73' }}>*</span></label>
+                    <input
+                      type="text"
+                      required
+                      value={distForm.released_by}
+                      onChange={e => setDistForm({ ...distForm, released_by: e.target.value })}
+                      placeholder="Staff name"
+                    />
+                  </div>
+                </div>
+
+                {/* Remarks */}
+                <div className="form-group">
+                  <label>Remarks <span style={{ color: '#999', fontWeight: 400 }}>(optional)</span></label>
+                  <textarea
+                    rows={3}
+                    value={distForm.remarks}
+                    onChange={e => setDistForm({ ...distForm, remarks: e.target.value })}
+                    placeholder="Notes or reason for this distribution..."
+                    style={{ width: '100%', resize: 'vertical', padding: '8px 12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '13px', fontFamily: 'inherit' }}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setShowDistributionModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={isSubmitting}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Truck size={15} />
+                  {isSubmitting ? 'Processing...' : 'Confirm Distribution'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── VIEW DISTRIBUTION DETAILS MODAL ── */}
+      {selectedDistRecord && (
+        <div className="modal-overlay" onClick={() => setSelectedDistRecord(null)}>
+          <div
+            className="modal-content"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '480px' }}
+          >
+            <div className="modal-header">
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Eye size={17} /> Distribution Details</h2>
+              <p>Transaction log for this distribution record.</p>
+            </div>
+            <div className="modal-body">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                {[
+                  { label: 'Date', value: selectedDistRecord.distribution_date },
+                  { label: 'Item Type', value: selectedDistRecord.item_type },
+                  { label: 'Item Name', value: selectedDistRecord.item_name, fullWidth: true },
+                  { label: 'Brand', value: selectedDistRecord.brand || '—' },
+                  { label: 'Batch', value: selectedDistRecord.batch || '—' },
+                  { label: 'Quantity', value: `${selectedDistRecord.quantity} ${selectedDistRecord.unit}` },
+                  { label: 'Destination Station', value: selectedDistRecord.destination_station, fullWidth: true },
+                  { label: 'Released By', value: selectedDistRecord.released_by, fullWidth: true },
+                  { label: 'Remarks', value: selectedDistRecord.remarks || '—', fullWidth: true }
+                ].map(({ label, value, fullWidth }) => (
+                  <div key={label} style={{ gridColumn: fullWidth ? '1 / -1' : undefined }}>
+                    <div style={{ fontSize: '11px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>{label}</div>
+                    <div style={{ fontSize: '14px', color: '#333', fontWeight: label === 'Item Name' || label === 'Quantity' ? '600' : '400' }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setSelectedDistRecord(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

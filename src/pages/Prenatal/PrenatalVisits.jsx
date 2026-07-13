@@ -1,11 +1,12 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, useContext } from 'react';
 import PatientService from '../../services/patientservice';
 import {
     Search, Plus, Eye, Edit2, Trash2, CalendarCheck,
     AlertTriangle, HeartPulse, Filter, Clock, ChevronLeft,
     ChevronRight, Calendar as CalendarIcon, Users, MapPin, X,
-    CheckCircle2
+    CheckCircle2, Zap, RotateCcw
 } from 'lucide-react';
+import { AuthContext } from '../../context/AuthContext';
 import ScheduledVisitModal from '../../components/Prenatal/ScheduledVisitModal';
 import PatientModal from '../../components/Prenatal/PatientModal';
 import { useNavigate } from 'react-router-dom';
@@ -125,6 +126,7 @@ const SearchableDropdown = ({ patients, value, onChange }) => {
 
 const PrenatalVisits = () => {
     const navigate = useNavigate();
+    const { user } = useContext(AuthContext);
 
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('All');
@@ -139,6 +141,22 @@ const PrenatalVisits = () => {
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [visitTypeTab, setVisitTypeTab] = useState('prenatal'); // 'prenatal' | 'vaccination' | 'postpartum'
     const [visitCategoryTab, setVisitCategoryTab] = useState('upcoming'); // 'upcoming' | 'missed' | 'completed'
+
+    // Add Visit modal states
+    const [showAddVisitModal, setShowAddVisitModal] = useState(false);
+    const [allPatients, setAllPatients] = useState([]);
+    const [manualVisits, setManualVisits] = useState([]);
+    const [isAddingVisit, setIsAddingVisit] = useState(false);
+    const [addVisitForm, setAddVisitForm] = useState({
+        visit_type: 'emergency',
+        patient_id: '',
+        visit_date: new Date().toISOString().split('T')[0],
+        visit_time: '',
+        assigned_staff: '',
+        reason: '',
+        notes: '',
+        related_emergency_id: ''
+    });
 
     const patientService = useMemo(() => new PatientService(), []);
 
@@ -243,6 +261,80 @@ const PrenatalVisits = () => {
             patientService.supabase.removeChannel(subscription);
         };
     }, [calendarView, currentDate, fetchData, patientService.supabase]);
+
+    // Load patients list and manual visits on mount
+    useEffect(() => {
+        const loadPatients = async () => {
+            try {
+                const data = await patientService.getAllPatients();
+                setAllPatients((data || []).map(p => ({
+                    id: p.id,
+                    name: p.fullName || `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.name || p.id
+                })));
+            } catch (e) {
+                console.error('Failed to load patients for Add Visit modal:', e);
+            }
+        };
+        loadPatients();
+
+        const stored = localStorage.getItem('dasmom_manual_visits');
+        if (stored) {
+            try { setManualVisits(JSON.parse(stored)); } catch (_) {}
+        }
+    }, [patientService]);
+
+    // Auto-fill assigned staff from auth context
+    useEffect(() => {
+        if (user) {
+            setAddVisitForm(prev => ({
+                ...prev,
+                assigned_staff: user.fullName || user.email?.split('@')[0] || prev.assigned_staff
+            }));
+        }
+    }, [user]);
+
+    const handleAddVisitSubmit = (e) => {
+        e.preventDefault();
+        setIsAddingVisit(true);
+
+        const patient = allPatients.find(p => p.id === addVisitForm.patient_id);
+        const newRecord = {
+            id: `manual-${Date.now()}`,
+            visit_type: addVisitForm.visit_type, // 'emergency' | 'follow_up'
+            patient_id: addVisitForm.patient_id,
+            patient_name: patient?.name || addVisitForm.patient_id,
+            visit_date: addVisitForm.visit_date,
+            visit_time: addVisitForm.visit_time,
+            assigned_staff: addVisitForm.assigned_staff,
+            reason: addVisitForm.reason,
+            notes: addVisitForm.notes,
+            related_emergency_id: addVisitForm.visit_type === 'follow_up' ? addVisitForm.related_emergency_id : '',
+            created_at: new Date().toISOString()
+        };
+
+        const updated = [newRecord, ...manualVisits];
+        localStorage.setItem('dasmom_manual_visits', JSON.stringify(updated));
+        setManualVisits(updated);
+
+        // Reset form
+        setShowAddVisitModal(false);
+        setAddVisitForm({
+            visit_type: 'emergency',
+            patient_id: '',
+            visit_date: new Date().toISOString().split('T')[0],
+            visit_time: '',
+            assigned_staff: user?.fullName || user?.email?.split('@')[0] || '',
+            reason: '',
+            notes: '',
+            related_emergency_id: ''
+        });
+
+        setToast('Visit added successfully!');
+        setTimeout(() => setToast(null), 3000);
+        setIsAddingVisit(false);
+    };
+
+
 
     const handlePrev = () => {
         setCurrentDate(prev => {
@@ -439,8 +531,29 @@ const PrenatalVisits = () => {
             {/* Page Header */}
             <div className="page-header">
                 <div>
-                    <h1 className="page-title">Visits & Scheduling</h1>
+                    <h1 className="page-title">Visits &amp; Scheduling</h1>
                     <p className="page-subtitle">30 slots/day max (25 regular + 5 rescheduling)</p>
+                </div>
+                <div className="header-actions">
+                    <button
+                        className="btn btn-primary"
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                        onClick={() => {
+                            setAddVisitForm({
+                                visit_type: 'emergency',
+                                patient_id: '',
+                                visit_date: new Date().toISOString().split('T')[0],
+                                visit_time: '',
+                                assigned_staff: user?.fullName || user?.email?.split('@')[0] || '',
+                                reason: '',
+                                notes: '',
+                                related_emergency_id: ''
+                            });
+                            setShowAddVisitModal(true);
+                        }}
+                    >
+                        <Plus size={16} /> Add Visit
+                    </button>
                 </div>
             </div>
 
@@ -505,6 +618,7 @@ const PrenatalVisits = () => {
                             {visibleDays.map(day => {
                                 const dayVisits = visitsTable.filter(v => v.visitDateOnly === day.date);
                                 const dayAppts = appointments.filter(a => a.date === day.date);
+                                const dayManual = manualVisits.filter(v => v.visit_date === day.date);
                                 
                                 return (
                                     <div key={day.date} className={`day-schedule-card ${day.date === TODAY ? 'day-today' : ''}`}>
@@ -514,7 +628,7 @@ const PrenatalVisits = () => {
                                                 {day.date === TODAY && <span className="today-badge">TODAY</span>}
                                             </h3>
                                             <span className="day-schedule-count">
-                                                {dayVisits.length + dayAppts.length} schedule{dayVisits.length + dayAppts.length !== 1 ? 's' : ''}
+                                                {dayVisits.length + dayAppts.length + dayManual.length} schedule{dayVisits.length + dayAppts.length + dayManual.length !== 1 ? 's' : ''}
                                             </span>
                                         </div>
                                         <div className="day-schedule-list">
@@ -557,6 +671,22 @@ const PrenatalVisits = () => {
                                             ) : (
                                                 <div className="no-schedules">No schedules for this day</div>
                                             )}
+                                            {/* Manual visits (Emergency / Follow-up) */}
+                                            {dayManual.map(mv => (
+                                                <div key={mv.id} className={`schedule-item manual-visit-item manual-${mv.visit_type}`}>
+                                                    <div className="schedule-time">
+                                                        <Clock size={14} />
+                                                        <span>{mv.visit_time || 'TBD'}</span>
+                                                    </div>
+                                                    <div className="schedule-details">
+                                                        <span className="schedule-patient">{mv.patient_name}</span>
+                                                        <span className="visit-type-badge badge-manual-type badge-{mv.visit_type}">{mv.visit_type === 'emergency' ? 'Emergency' : 'Follow-up'}</span>
+                                                    </div>
+                                                    <span className="visit-type-badge" style={{ background: mv.visit_type === 'emergency' ? 'rgba(224,92,115,0.15)' : 'rgba(147,111,199,0.15)', color: mv.visit_type === 'emergency' ? '#c94070' : '#7a4fa8', fontWeight: 600, fontSize: '11px', padding: '2px 8px', borderRadius: '10px' }}>
+                                                        {mv.visit_type === 'emergency' ? 'Emergency' : 'Follow-up'}
+                                                    </span>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
                                 );
@@ -583,7 +713,13 @@ const PrenatalVisits = () => {
                                                         <span className="visit-status">{v.status}</span>
                                                     </div>
                                                 ))}
-                                                {visitsTable.filter(v => v.visitDateOnly === day.date).length === 0 && (
+                                                {manualVisits.filter(mv => mv.visit_date === day.date).map(mv => (
+                                                    <div key={mv.id} className={`visit-item manual-${mv.visit_type}`}>
+                                                        <span className="visit-patient">{mv.patient_name}</span>
+                                                        <span className="visit-type-badge" style={{ background: mv.visit_type === 'emergency' ? 'rgba(224,92,115,0.15)' : 'rgba(147,111,199,0.15)', color: mv.visit_type === 'emergency' ? '#c94070' : '#7a4fa8', fontWeight: 600, fontSize: '10px', padding: '1px 6px', borderRadius: '8px' }}>{mv.visit_type === 'emergency' ? 'Emergency' : 'Follow-up'}</span>
+                                                    </div>
+                                                ))}
+                                                {visitsTable.filter(v => v.visitDateOnly === day.date).length === 0 && manualVisits.filter(mv => mv.visit_date === day.date).length === 0 && (
                                                     <div className="no-visits">No visits</div>
                                                 )}
                                             </div>
@@ -616,7 +752,13 @@ const PrenatalVisits = () => {
                                                                 <span className="visit-status">{v.status}</span>
                                                             </div>
                                                         ))}
-                                                        {visitsTable.filter(v => v.visitDateOnly === day.date).length === 0 && (
+                                                        {manualVisits.filter(mv => mv.visit_date === day.date).map(mv => (
+                                                            <div key={mv.id} className={`visit-item manual-${mv.visit_type}`}>
+                                                                <span className="visit-patient">{mv.patient_name}</span>
+                                                                <span className="visit-type-badge" style={{ background: mv.visit_type === 'emergency' ? 'rgba(224,92,115,0.15)' : 'rgba(147,111,199,0.15)', color: mv.visit_type === 'emergency' ? '#c94070' : '#7a4fa8', fontWeight: 600, fontSize: '10px', padding: '1px 6px', borderRadius: '8px' }}>{mv.visit_type === 'emergency' ? 'Emergency' : 'Follow-up'}</span>
+                                                            </div>
+                                                        ))}
+                                                        {visitsTable.filter(v => v.visitDateOnly === day.date).length === 0 && manualVisits.filter(mv => mv.visit_date === day.date).length === 0 && (
                                                             <div className="no-visits">No visits</div>
                                                         )}
                                                     </div>
@@ -808,6 +950,148 @@ const PrenatalVisits = () => {
                         <Users size={48} />
                         <h3>No {visitTypeTab} schedules found.</h3>
                         <p>{visitTypeTab.charAt(0).toUpperCase() + visitTypeTab.slice(1)} patient records will appear here.</p>
+                    </div>
+                </div>
+            )}
+
+            {showAddVisitModal && (
+                <div className="modal-overlay" onClick={() => setShowAddVisitModal(false)}>
+                    <div
+                        className="modal-content"
+                        onClick={e => e.stopPropagation()}
+                        style={{ maxWidth: '500px' }}
+                    >
+                        <div className="modal-header">
+                            <h2>Add Manual Visit</h2>
+                            <p>Schedule an Emergency or Follow-up visit for a patient.</p>
+                        </div>
+                        <form onSubmit={handleAddVisitSubmit}>
+                            <div className="modal-body">
+                                {/* Visit Type */}
+                                <div className="form-group">
+                                    <label>Visit Type <span style={{ color: '#e05c73' }}>*</span></label>
+                                    <select
+                                        required
+                                        value={addVisitForm.visit_type}
+                                        onChange={e => setAddVisitForm({ ...addVisitForm, visit_type: e.target.value, related_emergency_id: '' })}
+                                        className="form-control"
+                                    >
+                                        <option value="emergency">Emergency Visit</option>
+                                        <option value="follow_up">Follow-up Visit</option>
+                                    </select>
+                                </div>
+
+                                {/* Patient searchable dropdown */}
+                                <div className="form-group">
+                                    <label>Patient <span style={{ color: '#e05c73' }}>*</span></label>
+                                    <SearchableDropdown
+                                        patients={allPatients}
+                                        value={addVisitForm.patient_id}
+                                        onChange={val => setAddVisitForm({ ...addVisitForm, patient_id: val, related_emergency_id: '' })}
+                                    />
+                                </div>
+
+                                {/* Conditional Related Emergency Visit for Follow-up type */}
+                                {addVisitForm.visit_type === 'follow_up' && (
+                                    <div className="form-group">
+                                        <label>Related Emergency Visit <span style={{ color: '#e05c73' }}>*</span></label>
+                                        <select
+                                            required
+                                            value={addVisitForm.related_emergency_id}
+                                            onChange={e => setAddVisitForm({ ...addVisitForm, related_emergency_id: e.target.value })}
+                                            className="form-control"
+                                        >
+                                            <option value="">— Select emergency visit —</option>
+                                            {manualVisits
+                                                .filter(v => v.patient_id === addVisitForm.patient_id && v.visit_type === 'emergency')
+                                                .map(v => (
+                                                    <option key={v.id} value={v.id}>
+                                                        Emergency Visit – {formatReadableDate(v.visit_date)}
+                                                    </option>
+                                                ))}
+                                        </select>
+                                        {manualVisits.filter(v => v.patient_id === addVisitForm.patient_id && v.visit_type === 'emergency').length === 0 && (
+                                            <span style={{ color: '#e8b84b', fontSize: '11px', marginTop: '4px', display: 'block' }}>
+                                                No previous emergency visits recorded for this patient.
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Date and Time */}
+                                <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                    <div className="form-group">
+                                        <label>Visit Date <span style={{ color: '#e05c73' }}>*</span></label>
+                                        <input
+                                            type="date"
+                                            required
+                                            value={addVisitForm.visit_date}
+                                            onChange={e => setAddVisitForm({ ...addVisitForm, visit_date: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label>Visit Time <span style={{ color: '#e05c73' }}>*</span></label>
+                                        <input
+                                            type="time"
+                                            required
+                                            value={addVisitForm.visit_time}
+                                            onChange={e => setAddVisitForm({ ...addVisitForm, visit_time: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Assigned Healthcare Staff */}
+                                <div className="form-group">
+                                    <label>Assigned Healthcare Staff</label>
+                                    <input
+                                        type="text"
+                                        value={addVisitForm.assigned_staff}
+                                        onChange={e => setAddVisitForm({ ...addVisitForm, assigned_staff: e.target.value })}
+                                        placeholder="Enter staff name"
+                                    />
+                                </div>
+
+                                {/* Reason */}
+                                <div className="form-group">
+                                    <label>Reason <span style={{ color: '#e05c73' }}>*</span></label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={addVisitForm.reason}
+                                        onChange={e => setAddVisitForm({ ...addVisitForm, reason: e.target.value })}
+                                        placeholder="e.g. Severe abdominal pain"
+                                    />
+                                </div>
+
+                                {/* Notes */}
+                                <div className="form-group">
+                                    <label>Notes</label>
+                                    <textarea
+                                        rows={3}
+                                        value={addVisitForm.notes}
+                                        onChange={e => setAddVisitForm({ ...addVisitForm, notes: e.target.value })}
+                                        placeholder="Additional observations or treatment..."
+                                        style={{ width: '100%', padding: '8px 12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '13px', resize: 'vertical' }}
+                                    />
+                                </div>
+                            </div>
+                            <div className="modal-footer">
+                                <button
+                                    type="button"
+                                    className="btn btn-outline"
+                                    onClick={() => setShowAddVisitModal(false)}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="btn btn-primary"
+                                    disabled={isAddingVisit}
+                                >
+                                    {isAddingVisit ? 'Saving...' : 'Save Visit'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}

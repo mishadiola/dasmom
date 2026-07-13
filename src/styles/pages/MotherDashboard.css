@@ -225,7 +225,7 @@
 /* ── Grid Layout ── */
 .mother-dash-grid {
     display: grid;
-    grid-template-columns: 1.5fr 1fr;
+    grid-template-columns: 1.6fr 1fr;
     gap: 24px;
 }
 

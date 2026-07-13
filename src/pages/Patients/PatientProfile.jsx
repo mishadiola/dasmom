@@ -47,9 +47,9 @@ const TABS = [
     { id: 'history', label: 'Medical History', icon: History },
     { id: 'tracking', label: 'Pregnancy Tracking', icon: HeartPulse },
     { id: 'visits', label: 'Prenatal Visits', icon: CalendarCheck },
-    { id: 'vaccines', label: 'Vaccines & Supps', icon: Syringe },
+    { id: 'vaccines', label: 'Distribution Records', icon: Syringe },
     { id: 'delivery', label: 'Delivery & Postpartum', icon: Activity },
-    { id: 'newborn', label: 'Newborns', icon: Baby },
+    { id: 'newborn', label: 'Newborn Records', icon: Baby },
 ];
 
 const PatientProfile = () => {
@@ -1010,7 +1010,7 @@ const PatientProfile = () => {
                     </div>
                 )}
 
-                {/* --- VACCINES & SUPPLEMENTS --- */}
+                {/* --- DISTRIBUTION RECORDS --- */}
                 {activeTab === 'vaccines' && (
                     <div className="info-grid animate-fade">
                         <div className="info-card">
@@ -1170,7 +1170,7 @@ const PatientProfile = () => {
                                         <div className="b-stat"><span>Condition:</span> <strong>{baby.condition}</strong></div>
                                     </div>
                                     <button className="btn btn-sm btn-outline mt-3 w-100" onClick={() => navigate('/dashboard/newborns')}>
-                                        View Tracking Profile
+                                        View Newborn Records
                                     </button>
                                 </div>
                             ))

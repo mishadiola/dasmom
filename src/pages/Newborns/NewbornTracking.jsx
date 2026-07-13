@@ -140,7 +140,7 @@ const VaccinationDetailModal = ({ baby, onClose }) => {
                 <div className="modal-footer">
                     <button className="btn btn-outline" onClick={onClose}>Close</button>
                     <button className="btn btn-primary" onClick={() => navigate('/dashboard/vaccinations')}>
-                        <Syringe size={14} /> Go to Vaccination Page
+                        <Syringe size={14} /> Go to Distribution Records
                     </button>
                 </div>
             </div>
@@ -385,7 +385,7 @@ const NewbornTracking = () => {
         <div className="nb-page">
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px', gap: '16px' }}>
                 <div className="spinner" style={{ width: '40px', height: '40px', border: '3px solid #f0f2f5', borderTopColor: 'var(--color-rose)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
-                <p style={{ fontSize: '14px', color: 'var(--color-text-muted)', fontWeight: 600 }}>Loading newborn tracker...</p>
+                <p style={{ fontSize: '14px', color: 'var(--color-text-muted)', fontWeight: 600 }}>Loading newborn records...</p>
                 <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </div>
         </div>
@@ -397,7 +397,7 @@ const NewbornTracking = () => {
             {/* ── Page Header ── */}
             <div className="page-header vacc-header">
                 <div>
-                    <h1 className="page-title"><Baby size={24} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Newborn Overview / Registry</h1>
+                    <h1 className="page-title"><Baby size={24} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Newborn Records</h1>
                     <p className="page-subtitle">View all newborn records, vaccination status, and patient information</p>
                 </div>
                 <div className="header-actions">

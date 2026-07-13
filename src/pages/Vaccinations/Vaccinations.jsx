@@ -1315,7 +1315,7 @@ const Vaccinations = () => {
             {/* ── Page Header ── */}
             <div className="page-header">
                 <div>
-                    <h1 className="page-title"><Syringe size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Vaccines & Supplements</h1>
+                    <h1 className="page-title"><Syringe size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Distribution Records</h1>
                     <p className="page-subtitle">This page is used to record and track vaccines and supplements that have been administered to patients.</p>
                 </div>
                 <div className="header-actions">

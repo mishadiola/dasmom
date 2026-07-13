@@ -549,7 +549,7 @@ const PregnancyTips = () => {
         const updatedRead = readIds.includes(id) ? readIds : [...readIds, id];
         setReadIds(updatedRead);
         setLS(LS_READ, updatedRead);
-        navigate(`/dashboard/user-tips/${id}`);
+        navigate(`/mother-home/user-tips/${id}`);
     };
 
     const isActiveFiler = searchTerm !== '' || activeCategory !== 'All' || showBookmarksOnly;

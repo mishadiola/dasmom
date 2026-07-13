@@ -42,7 +42,7 @@ const TipDetailPage = () => {
             <div className="tdp-not-found">
                 <BookOpen size={64} />
                 <h2>Article not found</h2>
-                <button onClick={() => navigate('/dashboard/user-tips')}>
+                <button onClick={() => navigate('/mother-home/user-tips')}>
                     <ArrowLeft size={16} /> Back to Tips
                 </button>
             </div>
@@ -69,7 +69,7 @@ const TipDetailPage = () => {
         <div className="tdp-page">
             {/* ── Breadcrumb ── */}
             <nav className="tdp-breadcrumb">
-                <button className="tdp-back" onClick={() => navigate('/dashboard/user-tips')}>
+                <button className="tdp-back" onClick={() => navigate('/mother-home/user-tips')}>
                     <ArrowLeft size={16} /> Back to Pregnancy Tips
                 </button>
                 <span className="tdp-breadcrumb-sep">/</span>
@@ -78,7 +78,7 @@ const TipDetailPage = () => {
 
             <header className="mother-page-header">
                 <div className="mother-page-header-content">
-                    <button className="back-btn" onClick={() => navigate('/dashboard/user-tips')}>
+                    <button className="back-btn" onClick={() => navigate('/mother-home/user-tips')}>
                         <ArrowLeft size={18} />
                     </button>
                     <div className="mother-page-header-text">
@@ -182,7 +182,7 @@ const TipDetailPage = () => {
                         <div
                             key={rel.id}
                             className="tdp-related-card"
-                            onClick={() => navigate(`/dashboard/user-tips/${rel.id}`)}
+                            onClick={() => navigate(`/mother-home/user-tips/${rel.id}`)}
                         >
                             <div className={`tdp-related-cover ${rel.colorClass}`}>
                                 <div className="tdp-related-icon">{rel.icon}</div>

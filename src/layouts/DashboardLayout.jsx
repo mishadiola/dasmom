@@ -11,6 +11,7 @@ import logo from '../assets/images/dasmom_logo.png';
 import { AuthContext } from '../context/AuthContext';
 import PatientService from '../services/patientservice';
 import supabase from '../config/supabaseclient';
+import MotherAIChatAssistant from '../components/MotherDashboard/MotherAIChatAssistant';
 
 const NAV_ITEMS = [
     {
@@ -32,8 +33,8 @@ const NAV_ITEMS = [
     {
         section: 'Health Programs',
         items: [
-            { label: 'Newborn Tracking', icon: Baby, path: '/dashboard/newborns' },
-            { label: 'Vaccines & Supplements', icon: Syringe, path: '/dashboard/vaccinations' },
+            { label: 'Newborn Records', icon: Baby, path: '/dashboard/newborns' },
+            { label: 'Distribution Records', icon: Syringe, path: '/dashboard/vaccinations' },
             { label: 'Inventory Management', icon: Package, path: '/dashboard/inventory' },
         ],
     },
@@ -521,6 +522,9 @@ const DashboardLayout = () => {
                     </div>
                 </div>
             )}
+
+            {/* ── Mother Portal AI Chat Assistant ── */}
+            {isUserView && <MotherAIChatAssistant />}
         </div>
     );
 };
