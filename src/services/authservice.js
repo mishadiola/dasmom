@@ -8,6 +8,38 @@ export default class AuthService {
     this._currentUser = null; 
   }
 
+  async getOrCreateStationId(stationName) {
+    if (!stationName || !stationName.trim()) return null;
+    const normalizedName = stationName.trim();
+
+    const { data: existing, error: selectError } = await this.supabase
+      .from('stations')
+      .select('id')
+      .eq('station_name', normalizedName)
+      .limit(1)
+      .maybeSingle();
+
+    if (selectError) {
+      console.error('Error resolving station:', selectError);
+      throw selectError;
+    }
+
+    if (existing?.id) return existing.id;
+
+    const { data: inserted, error: insertError } = await this.supabase
+      .from('stations')
+      .insert({ station_name: normalizedName })
+      .select('id')
+      .maybeSingle();
+
+    if (insertError) {
+      console.error('Error creating station:', insertError);
+      throw insertError;
+    }
+
+    return inserted?.id || null;
+  }
+
   async login(email, password) {
     const { data: authData, error: authError } = await this.supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
@@ -164,21 +196,25 @@ export default class AuthService {
   async getFullStaffProfile(userId) {
     const { data, error } = await this.supabase
       .from('staff_profiles')
-      .select('*')
+      .select('*, stations:station_ass (id, station_name)')
       .eq('id', userId)
       .maybeSingle();
 
     if (error) throw error;
+    if (data) {
+      data.barangay_assignment = data.stations?.station_name || data.barangay_assignment;
+    }
     return data;
   }
 
   async updateStaffProfile(userId, { fullName, contactNo, barangayAssignment }) {
+    const stationId = barangayAssignment ? await this.getOrCreateStationId(barangayAssignment) : null;
     const { data, error } = await this.supabase
       .from('staff_profiles')
       .update({
         full_name: fullName,
         contact_no: contactNo,
-        barangay_assignment: barangayAssignment
+        station_ass: stationId
       })
       .eq('id', userId)
       .select()

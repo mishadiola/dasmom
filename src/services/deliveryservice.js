@@ -21,10 +21,10 @@ export default class DeliveryService {
 
             const motherIds = [...new Set(babies.map(b => b.patient_id))];
 
-            // Fetch mother basic info
+            // Fetch mother basic info with current station relationship
             const { data: mothers, error: motherError } = await this.supabase
                 .from('patient_basic_info')
-                .select('id, first_name, last_name, barangay')
+                .select('id, first_name, last_name, station_ass, stations:station_ass (station_name)')
                 .in('id', motherIds);
 
             if (motherError) throw motherError;
@@ -46,7 +46,7 @@ export default class DeliveryService {
                     id: baby.id,
                     patientId: baby.patient_id,
                     patientName: mother ? `${mother.first_name} ${mother.last_name}` : 'Unknown',
-                    station: mother?.barangay || 'N/A',
+                    station: mother?.stations?.station_name || 'N/A',
                     deliveryDate: baby.birth_date,
                     deliveryTime: baby.birth_time || '--:--',
                     deliveryType: baby.delivery_type || 'NSD',
@@ -81,7 +81,7 @@ export default class DeliveryService {
                     patient_id, 
                     edd, 
                     risk_level, 
-                    patient_basic_info (first_name, last_name, barangay)
+                    patient_basic_info (first_name, last_name, station_ass, stations:station_ass (station_name))
                 `)
                 .eq('pregn_postp', 'Pregnant')
                 .not('edd', 'is', null)
@@ -92,7 +92,7 @@ export default class DeliveryService {
             return data.map(p => ({
                 patientId: p.patient_id,
                 patientName: `${p.patient_basic_info.first_name} ${p.patient_basic_info.last_name}`,
-                station: p.patient_basic_info.barangay,
+                station: p.patient_basic_info?.stations?.station_name || 'N/A',
                 edd: p.edd,
                 riskLevel: p.risk_level,
                 status: 'Upcoming'
@@ -159,7 +159,7 @@ export default class DeliveryService {
                     id, 
                     first_name, 
                     last_name, 
-                    barangay,
+                    station_ass,
                     pregnancy_info (risk_level, edd, pregn_postp)
                 `)
                 .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%`)
@@ -169,7 +169,7 @@ export default class DeliveryService {
             return data.map(p => ({
                 id: p.id,
                 name: `${p.first_name} ${p.last_name}`,
-                station: p.barangay,
+                station: p.stations?.station_name || 'N/A',
                 riskLevel: p.pregnancy_info?.[0]?.risk_level || 'Normal',
                 isPregnant: p.pregnancy_info?.[0]?.pregn_postp === 'Pregnant'
             }));

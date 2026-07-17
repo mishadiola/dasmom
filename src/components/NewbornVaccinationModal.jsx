@@ -18,16 +18,16 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
 
             const { data: motherData, error: motherError } = await supabase
                 .from('newborns')
-                .select('mother_id, patient_basic_info!mother_id (barangay)')
+                .select('mother_id, patient_basic_info!mother_id (station_ass, stations:station_ass (station_name))')
                 .eq('id', newborn.id)
                 .single();
 
-            const barangay = motherData?.patient_basic_info?.barangay;
-            if (barangay) {
+            const station = motherData?.patient_basic_info?.stations?.station_name;
+            if (station) {
                 const { data: staffData, error: staffError } = await supabase
                     .from('staff_profiles')
-                    .select('full_name')
-                    .eq('barangay_assignment', barangay);
+                    .select('full_name, station_ass, stations:station_ass (station_name)')
+                    .ilike('stations.station_name', `%${station}%`);
 
                 const staffOptions = staffData ? staffData.map(s => s.full_name) : [];
                 setStaffList(staffOptions);

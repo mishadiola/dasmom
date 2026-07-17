@@ -134,7 +134,7 @@ export default class NewbornService {
                         id,
                         first_name,
                         last_name,
-                        barangay
+                        station_ass
                     ),
                     deliveries (
                         delivery_date
@@ -216,7 +216,7 @@ export default class NewbornService {
                     babyName: baby.baby_name || 'Newborn',
                     motherId: baby.mother_id,
                     motherName: mother ? `${mother.first_name} ${mother.last_name}`.trim() : 'Unknown',
-                    station: mother?.barangay || 'N/A',
+                        station: mother?.stations?.station_name || 'N/A',
                     birthDate: baby.deliveries?.delivery_date || null,
                     gender: baby.gender || 'Unknown',
                     birthWeight: baby.birth_weight || 0,

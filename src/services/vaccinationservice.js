@@ -352,12 +352,12 @@ class VaccinationService {
           created_by,
           staff_profiles!vaccinations_created_by_fkey (full_name),
           vaccine_inventory (vaccine_name),
-          patient_basic_info!vaccinations_patient_id_fkey (id, first_name, last_name, barangay, province),
+          patient_basic_info!vaccinations_patient_id_fkey (id, first_name, last_name, station_ass, stations:station_ass (station_name), province),
           newborns!vaccinations_newborn_id_fkey (
             id, 
             baby_name, 
             mother_id, 
-            patient_basic_info!mother_id (first_name, last_name, barangay, province)
+            patient_basic_info!mother_id (first_name, last_name, station_ass, stations:station_ass (station_name), province)
           )
         `)
         .order('created_at', { ascending: false });
@@ -368,14 +368,14 @@ class VaccinationService {
         let patientName, station, type, patientId;
         if (record.patient_id) {
           patientName = `${record.patient_basic_info?.first_name || ''} ${record.patient_basic_info?.last_name || ''}`.trim();
-          station = `${record.patient_basic_info?.barangay || 'N/A'}, ${record.patient_basic_info?.province || 'N/A'}`;
+          station = `${record.patient_basic_info?.stations?.station_name || 'N/A'}, ${record.patient_basic_info?.province || 'N/A'}`;
           type = 'Mother';
           patientId = record.patient_id;
         } else if (record.newborn_id) {
           const newbornRecord = Array.isArray(record.newborns) ? record.newborns[0] : record.newborns;
           const mother = Array.isArray(newbornRecord?.patient_basic_info) ? newbornRecord.patient_basic_info[0] : newbornRecord?.patient_basic_info;
           patientName = newbornRecord?.baby_name || 'Unknown Newborn';
-          station = `${mother?.barangay || 'N/A'}, ${mother?.province || 'N/A'}`;
+          station = `${mother?.stations?.station_name || 'N/A'}, ${mother?.province || 'N/A'}`;
           type = 'Newborn';
           patientId = record.newborn_id;
         } else {
@@ -522,10 +522,9 @@ class VaccinationService {
           
           // Schedule flu for any trimester (use current date or next available)
           const fluDate = new Date(baseDate);
-          fluDate.setDate(fluDate.getDate() + 7); // Schedule 1 week after first vaccine
+          fluDate.setDate(fluDate.getDate() + 7);
           const fluDateStr = fluDate.toISOString().split('T')[0];
           
-          // Make sure it's within pregnancy window
           if (fluDate <= edd) {
             schedule.push({
               patient_id: patientId,

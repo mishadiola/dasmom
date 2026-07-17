@@ -47,7 +47,10 @@ export default class StaffService {
           id,
           full_name,
           employee_id,
-          barangay_assignment,
+          station_ass,
+          stations:station_ass (
+            station_name
+          ),
           created_at,
           users (
             email_address,
@@ -65,7 +68,7 @@ export default class StaffService {
         name: staff.full_name,
         email: staff.users?.email_address || 'N/A',
         role: staff.users?.user_type?.user_type || 'Staff',
-        station: staff.barangay_assignment || 'No Assignment',
+        station: staff.stations?.station_name || 'No Assignment',
         employeeId: staff.employee_id,
         status: 'Active',
         lastLogin: 'N/A',
@@ -83,24 +86,24 @@ export default class StaffService {
   }
 
   /**
-   * Get all unique barangay assignments (stations)
+   * Get all unique station names
    */
   async getAllStations() {
     try {
       const { data, error } = await this.supabase
-        .from('staff_profiles')
-        .select('barangay_assignment')
-        .not('barangay_assignment', 'is', null);
+        .from('stations')
+        .select('station_name')
+        .order('station_name', { ascending: true });
 
       if (error) throw error;
 
       const stations = [...new Set(
         (data || [])
-          .map(s => s.barangay_assignment)
+          .map(s => s.station_name)
           .filter(Boolean)
       )];
 
-      return stations.sort();
+      return stations;
     } catch (error) {
       console.error('❌ getAllStations:', error);
       return [];
@@ -133,12 +136,16 @@ export default class StaffService {
       if (userError) throw userError;
 
       // 3. Create staff profile (barangay_assignment can be new or existing)
+      const stationId = station && station.trim()
+        ? await authService.getOrCreateStationId(station.trim())
+        : null;
+
       const { data: staffData, error: staffError } = await this.supabase
         .from('staff_profiles')
         .insert({
           id: staffId,
           full_name: fullName,
-          barangay_assignment: station && station.trim() ? station.trim() : null,
+          station_ass: stationId,
           created_at: new Date().toISOString(),
         })
         .select()
@@ -169,11 +176,15 @@ export default class StaffService {
         if (userTypeError) throw userTypeError;
       }
 
+      const stationId = station && station.trim()
+        ? await authService.getOrCreateStationId(station.trim())
+        : null;
+
       const { data, error } = await this.supabase
         .from('staff_profiles')
         .update({
           full_name: fullName,
-          barangay_assignment: station && station.trim() ? station.trim() : null,
+          station_ass: stationId,
           contact_no: contactNo,
         })
         .eq('id', staffId)
@@ -226,6 +237,10 @@ export default class StaffService {
         .from('staff_profiles')
         .select(`
           *,
+          station_ass,
+          stations:station_ass (
+            station_name
+          ),
           users (
             email_address,
             user_type (
@@ -254,7 +269,7 @@ export default class StaffService {
       name: data.full_name,
       email: data.users?.email_address || 'N/A',
       role: data.users?.user_type?.user_type || 'Staff',
-      station: data.barangay_assignment || 'No Assignment',
+      station: data.stations?.station_name || data.barangay_assignment || 'No Assignment',
       employeeId: data.employee_id,
       status: 'Active',
       avatar: data.full_name

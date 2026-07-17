@@ -213,11 +213,11 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
 
                 // Fetch staff for the patient's barangay - match barangay_assignment
                 console.log('🏥 RecordModal - Barangay before staff fetch:', barangay);
-                if (barangay) {
+                    if (barangay) {
                     const { data: staffData, error: staffError } = await supabase
                         .from('staff_profiles')
-                        .select('full_name')
-                        .eq('barangay_assignment', barangay);
+                        .select('full_name, station_ass, stations:station_ass (station_name)')
+                        .ilike('stations.station_name', `%${barangay}%`);
                     
                     console.log('👨‍⚕️ RecordModal - Staff Data:', staffData, 'Error:', staffError);
                     

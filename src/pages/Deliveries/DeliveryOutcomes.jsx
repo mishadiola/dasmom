@@ -467,7 +467,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
             try {
                 const { data, error } = await supabase
                     .from('staff_profiles')
-                    .select('id, full_name, barangay_assignment')
+                    .select('id, full_name, station_ass, stations:station_ass (station_name)')
                     .order('full_name');
                 
                 if (error) throw error;
@@ -476,9 +476,9 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
             } catch (err) {
                 console.error('❌ Staff load failed:', err);
                 setLocalStaff([
-                    { id: 'demo1', full_name: 'Midwife Elena P.', role: 'Midwife', barangay_assignment: 'Brgy Poblacion' },
-                    { id: 'demo2', full_name: 'Dr. Reyes (OB)', role: 'Doctor', barangay_assignment: 'Main Clinic' }
-                ]); 
+                    { id: 'demo1', full_name: 'Midwife Elena P.', role: 'Midwife', stations: { station_name: 'Brgy Poblacion' } },
+                    { id: 'demo2', full_name: 'Dr. Reyes (OB)', role: 'Doctor', stations: { station_name: 'Main Clinic' } }
+                ]);
             } finally {
                 setStaffLoading(false);
             }
@@ -494,8 +494,8 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
 
         const sourceStaff = localStaff.length ? localStaff : staffList;
         return sourceStaff.filter(staff => {
-            const barangay = staff.barangay_assignment?.toLowerCase() || '';
-            return barangay.includes(targetBarangay);
+            const stationName = (staff.stations?.station_name || '').toLowerCase();
+            return stationName.includes(targetBarangay);
         });
     }, [form.station, localStaff, staffList]);
 
@@ -843,7 +843,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                                     <option value="">Select Staff</option>
                                     {filteredStaffList.map(s => (
                                         <option key={s.id} value={s.id}>
-                                            {s.full_name} - {s.barangay_assignment || 'N/A'}
+                                            {s.full_name} - {s.stations?.station_name || 'N/A'}
                                         </option>
                                     ))}
                                 </select>

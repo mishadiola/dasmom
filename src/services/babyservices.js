@@ -27,7 +27,8 @@ class BabyService {
           id,
           first_name,
           last_name,
-          barangay,
+          station_ass,
+          stations:station_ass (station_name),
           province,
           pregnancy_info (
             id,
@@ -40,10 +41,7 @@ class BabyService {
           )
         `)
         .or(
-          `first_name.ilike.%${safeTerm}%,
-           last_name.ilike.%${safeTerm}%,
-           barangay.ilike.%${safeTerm}%`
-            .replace(/\s+/g, '')
+          `first_name.ilike.%${safeTerm}%,last_name.ilike.%${safeTerm}%,stations.station_name.ilike.%${safeTerm}%`
         )
         .order('created_at', { ascending: false })
         .limit(10);
@@ -71,7 +69,7 @@ class BabyService {
         return {
           id: patient.id,
           name: `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
-          station: `${patient.barangay || 'No Barangay'}, ${patient.province || 'N/A'}`,
+          station: `${patient.stations?.station_name || 'No Station'}, ${patient.province || 'N/A'}`,
           riskLevel: 'Normal', // Default risk level since calculated_risk field doesn't exist
           isPregnant: !!preg?.id,
           pregnancyType: preg?.pregnancy_type || 'Singleton',
@@ -104,7 +102,8 @@ class BabyService {
         patient_basic_info!mother_id (
           first_name,
           last_name,
-          barangay,
+          station_ass,
+            stations:station_ass (station_name),
           province
         )
       `)
@@ -137,7 +136,8 @@ class BabyService {
           patient_basic_info!mother_id (
             first_name,
             last_name,
-            barangay,
+            station_ass,
+              stations:station_ass (station_name),
             province
           )
         `)
@@ -166,7 +166,7 @@ class BabyService {
       return {
         id: newborn.id,
         name: newborn.baby_name || `Newborn of ${mother.first_name} ${mother.last_name}`,
-        station: `${mother.barangay || 'No Barangay'}, ${mother.province || 'N/A'}`,
+        station: `${mother.stations?.station_name || 'No Station'}, ${mother.province || 'N/A'}`,
         motherName: `${mother.first_name || ''} ${mother.last_name || ''}`.trim(),
         birthDate: newborn.deliveries.delivery_date,
         motherId: newborn.mother_id
@@ -195,7 +195,7 @@ class BabyService {
             id,
             first_name,
             last_name,
-            barangay
+            station_ass
           ),
           newborns (
             id,
@@ -217,14 +217,14 @@ class BabyService {
 
       if (error) throw error;
 
-      return (data || []).map(d => {
+        return (data || []).map(d => {
         const newborn = Array.isArray(d.newborns) ? d.newborns[0] : d.newborns;
         const staff = Array.isArray(d.staff_profiles) ? d.staff_profiles[0] : d.staff_profiles;
         return {
           id: d.id,
           patientId: d.patient_basic_info?.id || '',
           patientName: `${d.patient_basic_info?.first_name || ''} ${d.patient_basic_info?.last_name || ''}`.trim(),
-          station: d.patient_basic_info?.barangay || 'N/A',
+          station: d.patient_basic_info?.stations?.station_name || 'N/A',
           deliveryDate: d.delivery_date,
           deliveryTime: d.delivery_time,
           deliveryType: d.delivery_type,
@@ -499,13 +499,13 @@ class BabyService {
     try {
         const { data, error } = await supabase
             .from('staff_profiles')
-            .select('barangay_assignment')
-            .not('barangay_assignment', 'is', null)
-            .order('barangay_assignment');
+            .select('station_ass')
+            .not('station_ass', 'is', null)
+            .order('station_ass');
         
         if (error) throw error;
         
-        return ['All Stations', ...new Set(data?.map(s => s.barangay_assignment).filter(Boolean))];
+        return ['All Stations', ...new Set(data?.map(s => s.station_ass).filter(Boolean))];
     } catch (error) {
         console.error('Error loading stations:', error);
         return ['Main Clinic'];
@@ -516,7 +516,7 @@ class BabyService {
     try {
         const { data, error } = await supabase
             .from('staff_profiles')
-            .select('id, full_name, barangay_assignment')
+            .select('id, full_name, station_ass')
             .order('full_name');
         if (error) throw error;
         return data || [];
@@ -530,7 +530,7 @@ class BabyService {
     try {
         const { data, error } = await supabase
             .from('staff_profiles')
-            .select('id, full_name, barangay_assignment')
+            .select('id, full_name, station_ass')
             .order('full_name');
         if (error) throw error;
         return data || [];
@@ -556,7 +556,7 @@ class BabyService {
                 postpartum_visit_date,
                 notes,
                 patient_basic_info!deliveries_mother_id_fkey (
-                    id, first_name, last_name, barangay
+                    id, first_name, last_name, station_ass
                 ),
                 newborns (
                     id, condition_at_birth, risk_level
