@@ -17,6 +17,252 @@ class InventoryService {
     if (user.role !== 'admin') throw new Error('Only admins can modify inventory');
   }
 
+  async _resolveStationId(stationName) {
+    if (!stationName || !stationName.trim()) {
+      throw new Error('Destination station is required');
+    }
+    return await this.auth.getOrCreateStationId(stationName.trim());
+  }
+
+  async getStationDistributionHistory() {
+    const [vaccineResult, supplementResult] = await Promise.all([
+      this.supabase
+        .from('vaccine_distribution')
+        .select(`
+          id,
+          distributed_date,
+          quantity,
+          remarks,
+          station_id,
+          stations:station_id (station_name),
+          distributed_by,
+          users:distributed_by (email_address),
+          vaccine_id,
+          vaccine_inventory:vaccine_id (vaccine_name, brand, batch, unit)
+        `),
+      this.supabase
+        .from('supplement_distribution')
+        .select(`
+          id,
+          distributed_date,
+          quantity,
+          remarks,
+          station_id,
+          stations:station_id (station_name),
+          distributed_by,
+          users:distributed_by (email_address),
+          supplement_id,
+          supplement_inventory:supplement_id (supplement_name, brand, batch_number, unit)
+        `)
+    ]);
+
+    if (vaccineResult.error) {
+      console.error('Error fetching vaccine distribution history:', vaccineResult.error);
+      throw vaccineResult.error;
+    }
+    if (supplementResult.error) {
+      console.error('Error fetching supplement distribution history:', supplementResult.error);
+      throw supplementResult.error;
+    }
+
+    const vaccineRecords = (vaccineResult.data || []).map(row => ({
+      id: row.id,
+      distribution_date: row.distributed_date,
+      item_name: row.vaccine_inventory?.vaccine_name || 'Unknown',
+      brand: row.vaccine_inventory?.brand || '',
+      batch: row.vaccine_inventory?.batch || null,
+      item_type: 'Vaccine',
+      quantity: row.quantity,
+      unit: row.vaccine_inventory?.unit || 'vials',
+      destination_station: row.stations?.station_name || 'Unknown',
+      released_by: row.users?.email_address || row.distributed_by || 'Unknown',
+      remarks: row.remarks || ''
+    }));
+
+    const supplementRecords = (supplementResult.data || []).map(row => ({
+      id: row.id,
+      distribution_date: row.distributed_date,
+      item_name: row.supplement_inventory?.supplement_name || 'Unknown',
+      brand: row.supplement_inventory?.brand || '',
+      batch: row.supplement_inventory?.batch_number || null,
+      item_type: 'Supplement',
+      quantity: row.quantity,
+      unit: row.supplement_inventory?.unit || 'pcs',
+      destination_station: row.stations?.station_name || 'Unknown',
+      released_by: row.users?.email_address || row.distributed_by || 'Unknown',
+      remarks: row.remarks || ''
+    }));
+
+    return [...vaccineRecords, ...supplementRecords].sort((a, b) => {
+      const aTime = a.distribution_date ? new Date(a.distribution_date).getTime() : 0;
+      const bTime = b.distribution_date ? new Date(b.distribution_date).getTime() : 0;
+      return bTime - aTime;
+    });
+  }
+
+  async distributeInventory({ itemType, itemId, quantity, destinationStation, distributedBy, distributedDate, remarks }) {
+    if (!itemType || !['vaccine', 'supplement'].includes(itemType)) {
+      throw new Error('Invalid item type for distribution');
+    }
+
+    if (itemType === 'vaccine') {
+      return await this.distributeVaccine(itemId, quantity, destinationStation, distributedBy, distributedDate, remarks);
+    }
+
+    return await this.distributeSupplement(itemId, quantity, destinationStation, distributedBy, distributedDate, remarks);
+  }
+
+  async distributeVaccine(vaccineId, quantity, stationName, distributedBy, distributedDate = new Date().toISOString().split('T')[0], remarks = null) {
+    await this._ensureAdmin();
+
+    const qty = Number(quantity);
+    if (!vaccineId) throw new Error('Vaccine item is required');
+    if (!stationName) throw new Error('Destination station is required');
+    if (!distributedBy) throw new Error('Distributed by must be a valid user id');
+    if (!Number.isFinite(qty) || qty <= 0) throw new Error('Quantity must be greater than zero');
+
+    const station_id = await this._resolveStationId(stationName);
+    const { data: item, error: fetchError } = await this.supabase
+      .from('vaccine_inventory')
+      .select('id, quantity')
+      .eq('id', vaccineId)
+      .maybeSingle();
+
+    if (fetchError) throw fetchError;
+    if (!item) throw new Error('Selected vaccine item was not found');
+    if (item.quantity < qty) throw new Error('Insufficient vaccine stock for distribution');
+
+    const { data: updatedMain, error: updateError } = await this.supabase
+      .from('vaccine_inventory')
+      .update({ quantity: item.quantity - qty })
+      .eq('id', vaccineId)
+      .select()
+      .maybeSingle();
+
+    if (updateError) throw updateError;
+
+    const { data: distData, error: distError } = await this.supabase
+      .from('vaccine_distribution')
+      .insert([{ 
+        vaccine_id: vaccineId,
+        station_id,
+        distributed_by: distributedBy,
+        quantity: qty,
+        distributed_date: distributedDate,
+        remarks: remarks || null
+      }])
+      .select()
+      .maybeSingle();
+
+    if (distError) throw distError;
+
+    const { data: stationExisting, error: stationFetchError } = await this.supabase
+      .from('station_vaccine_inventory')
+      .select('id, quantity')
+      .eq('station_id', station_id)
+      .eq('vaccine_id', vaccineId)
+      .maybeSingle();
+
+    if (stationFetchError) throw stationFetchError;
+
+    let stationInventory;
+    if (stationExisting) {
+      const { data, error } = await this.supabase
+        .from('station_vaccine_inventory')
+        .update({ quantity: Number(stationExisting.quantity) + qty, updated_at: distributedDate })
+        .eq('id', stationExisting.id)
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      stationInventory = data;
+    } else {
+      const { data, error } = await this.supabase
+        .from('station_vaccine_inventory')
+        .insert([{ station_id, vaccine_id: vaccineId, quantity: qty, updated_at: distributedDate }])
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      stationInventory = data;
+    }
+
+    return { distribution: distData, updatedMain, stationInventory };
+  }
+
+  async distributeSupplement(supplementId, quantity, stationName, distributedBy, distributedDate = new Date().toISOString().split('T')[0], remarks = null) {
+    await this._ensureAdmin();
+
+    const qty = Number(quantity);
+    if (!supplementId) throw new Error('Supplement item is required');
+    if (!stationName) throw new Error('Destination station is required');
+    if (!distributedBy) throw new Error('Distributed by must be a valid user id');
+    if (!Number.isFinite(qty) || qty <= 0) throw new Error('Quantity must be greater than zero');
+
+    const station_id = await this._resolveStationId(stationName);
+    const { data: item, error: fetchError } = await this.supabase
+      .from('supplement_inventory')
+      .select('id, quantity')
+      .eq('id', supplementId)
+      .maybeSingle();
+
+    if (fetchError) throw fetchError;
+    if (!item) throw new Error('Selected supplement item was not found');
+    if (item.quantity < qty) throw new Error('Insufficient supplement stock for distribution');
+
+    const { data: updatedMain, error: updateError } = await this.supabase
+      .from('supplement_inventory')
+      .update({ quantity: item.quantity - qty })
+      .eq('id', supplementId)
+      .select()
+      .maybeSingle();
+
+    if (updateError) throw updateError;
+
+    const { data: distData, error: distError } = await this.supabase
+      .from('supplement_distribution')
+      .insert([{ 
+        supplement_id: supplementId,
+        station_id,
+        distributed_by: distributedBy,
+        quantity: qty,
+        distributed_date: distributedDate,
+      }])
+      .select()
+      .maybeSingle();
+
+    if (distError) throw distError;
+
+    const { data: stationExisting, error: stationFetchError } = await this.supabase
+      .from('station_supplement_inventory')
+      .select('id, quantity')
+      .eq('station_id', station_id)
+      .eq('supplement_inventory_id', supplementId)
+      .maybeSingle();
+
+    if (stationFetchError) throw stationFetchError;
+
+    let stationInventory;
+    if (stationExisting) {
+      const { data, error } = await this.supabase
+        .from('station_supplement_inventory')
+        .update({ quantity: Number(stationExisting.quantity) + qty, updated_at: distributedDate })
+        .eq('id', stationExisting.id)
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      stationInventory = data;
+    } else {
+      const { data, error } = await this.supabase
+        .from('station_supplement_inventory')
+        .insert([{ station_id, supplement_inventory_id: supplementId, quantity: qty, updated_at: distributedDate }])
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      stationInventory = data;
+    }
+
+    return { distribution: distData, updatedMain, stationInventory };
+  }
+
   async getVaccineInventory() {
     const { data, error } = await supabase
       .from('vaccine_inventory')

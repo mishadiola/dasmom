@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useMemo } from 'react';
 import {
   Search,
   Filter,
@@ -55,6 +55,35 @@ const Inventory = () => {
   const [historyStationFilter, setHistoryStationFilter] = useState('All');
   const [historyTypeFilter, setHistoryTypeFilter] = useState('All');
   const [historyDateFilter, setHistoryDateFilter] = useState('');
+
+  const stationInventory = useMemo(() => {
+    if (!distributionHistory || distributionHistory.length === 0) return [];
+    const grouped = {};
+
+    distributionHistory.forEach(rec => {
+      const key = `${rec.destination_station || 'Unknown'}||${rec.item_type || 'Unknown'}||${rec.item_name || 'Unknown'}`;
+      if (!grouped[key]) {
+        grouped[key] = {
+          station: rec.destination_station || 'Unknown',
+          item_name: rec.item_name || 'Unknown',
+          item_type: rec.item_type || 'Unknown',
+          unit: rec.unit || (rec.item_type === 'Vaccine' ? 'vials' : 'tablets'),
+          quantity: 0,
+          last_distribution_date: rec.distribution_date || ''
+        };
+      }
+      grouped[key].quantity += Number(rec.quantity) || 0;
+      if (rec.distribution_date && rec.distribution_date > grouped[key].last_distribution_date) {
+        grouped[key].last_distribution_date = rec.distribution_date;
+      }
+    });
+
+    return Object.values(grouped).sort((a, b) => {
+      if (a.station !== b.station) return a.station.localeCompare(b.station);
+      if (a.item_type !== b.item_type) return a.item_type.localeCompare(b.item_type);
+      return a.item_name.localeCompare(b.item_name);
+    });
+  }, [distributionHistory]);
 
   // Handle auto-populating user info when context resolves
   useEffect(() => {
@@ -159,41 +188,20 @@ const Inventory = () => {
     const vaxSub = inventoryService.subscribeToInventory('vaccine_inventory', () => fetchData());
     const suppSub = inventoryService.subscribeToInventory('supplement_inventory', () => fetchData());
 
-    // Load distribution history
+    // Load distribution history from localStorage and remove legacy mock entries
     const stored = localStorage.getItem('dasmom_station_distributions');
     if (stored) {
-      setDistributionHistory(JSON.parse(stored));
-    } else {
-      const mockData = [
-        {
-          id: 'dist-mock-1',
-          distribution_date: '2026-07-10',
-          item_name: 'Tetanus Toxoid (TT)',
-          brand: 'Pfizer',
-          batch: '1',
-          item_type: 'Vaccine',
-          quantity: 5,
-          unit: 'vials',
-          destination_station: 'Salawag',
-          released_by: 'Admin User',
-          remarks: 'Routine supply distribution.'
-        },
-        {
-          id: 'dist-mock-2',
-          distribution_date: '2026-07-12',
-          item_name: 'Iron Supplements',
-          brand: 'Sandoz',
-          batch: '2',
-          item_type: 'Supplement',
-          quantity: 100,
-          unit: 'tablets',
-          destination_station: 'Dasma I',
-          released_by: 'Admin User',
-          remarks: 'Requested extra stock for high-risk prenatal patients.'
+      try {
+        const parsed = JSON.parse(stored) || [];
+        const filtered = parsed.filter(record => !record.id?.toString().startsWith('dist-mock-'));
+        if (filtered.length !== parsed.length) {
+          localStorage.setItem('dasmom_station_distributions', JSON.stringify(filtered));
         }
-      ];
-      localStorage.setItem('dasmom_station_distributions', JSON.stringify(mockData));
-      setDistributionHistory(mockData);
+        setDistributionHistory(filtered);
+      } catch (err) {
+        console.error('Failed to load distribution history from localStorage:', err);
+        setDistributionHistory([]);
+      }
     }
 
     return () => {
@@ -530,11 +538,10 @@ const Inventory = () => {
         return;
       }
 
-      // Deduct quantity
       const newQuantity = selectedItem.quantity - qtyToDistribute;
       await inventoryService.updateInventoryQuantity(table, selectedItem.id, newQuantity, selectedItem.max_stock || selectedItem.max_quantity || selectedItem.max_quant);
 
-      // Create log
+      const releasedBy = user?.fullName || user?.email?.split('@')[0] || 'Local User';
       const newRecord = {
         id: `dist-${Date.now()}`,
         distribution_date: distForm.distribution_date,
@@ -545,7 +552,7 @@ const Inventory = () => {
         quantity: qtyToDistribute,
         unit: selectedItem.unit,
         destination_station: distForm.destination_station,
-        released_by: distForm.released_by || user?.fullName || 'Staff User',
+        released_by: releasedBy,
         remarks: distForm.remarks || ''
       };
 
@@ -1132,6 +1139,48 @@ const Inventory = () => {
       </div>
     </div>
 
+    {/* ── STATION INVENTORY ── */}
+    <div className="inv-card" style={{ marginTop: '24px', borderRadius: '14px', overflow: 'hidden', border: '1px solid #e9ecef' }}>
+      <div className="inv-card-head" style={{ padding: '18px 24px', borderBottom: '1px solid #f0f2f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+        <h2 style={{ fontSize: '16px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Package size={17} /> Station Inventory
+        </h2>
+        <span style={{ fontSize: '13px', color: '#555' }}>{stationInventory.length} entries</span>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="inv-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Station</th>
+              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Item</th>
+              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Type</th>
+              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Qty</th>
+              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Unit</th>
+              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Last Distributed</th>
+            </tr>
+          </thead>
+          <tbody>
+            {stationInventory.length > 0 ? stationInventory.map((record, index) => (
+              <tr key={`${record.station}-${record.item_name}-${index}`} style={{ borderBottom: '1px solid #f0f2f5' }}>
+                <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{record.station}</td>
+                <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{record.item_name}</td>
+                <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{record.item_type}</td>
+                <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '600', textAlign: 'center' }}>{record.quantity}</td>
+                <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{record.unit}</td>
+                <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{record.last_distribution_date || 'N/A'}</td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: '#888', fontSize: '13px' }}>
+                  No station inventory records yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     {/* ── ALERTS PANEL ── */}
     <div className="inv-side-col">
         <div className="inv-card">
@@ -1621,7 +1670,7 @@ const Inventory = () => {
                   >
                     <option value="">— Select item —</option>
                     {(distForm.item_type === 'vaccine' ? vaccines : supplements)
-                      .filter(item => item.quantity > 0 && (item.status || 'active') === 'active')
+                      .filter(item => item.quantity > 0 && item.status !== 'archived')
                       .map(item => (
                         <option key={item.id} value={item.id}>
                           {item.item_name}{item.brand ? ` (${item.brand})` : ''} — {item.quantity} {item.unit} available
