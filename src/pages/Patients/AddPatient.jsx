@@ -1280,6 +1280,64 @@ const AddPatient = () => {
                                     ) : (
                                         <div className="no-lmp">Enter LMP to see 9-visit calendar</div>
                                     )}
+
+                                    {/* Auto-Generated Vaccination Schedule */}
+                                    <div style={{ marginTop: '24px' }}>
+                                        <label>Auto-Generated Vaccination Schedule</label>
+                                        <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#64748b', textTransform: 'none', lineHeight: '1.5' }}>
+                                            The maternal vaccination schedule is automatically generated based on the patient's LMP and assigned prenatal care plan.
+                                        </p>
+                                        {formData.lmp && !loadingSchedule ? (
+                                            (() => {
+                                                const lmpDate = new Date(formData.lmp);
+                                                if (isNaN(lmpDate.getTime())) {
+                                                    return <div className="no-lmp">Enter LMP to see vaccination schedule</div>;
+                                                }
+                                                
+                                                // Td1: LMP + 4 weeks (28 days)
+                                                const td1Date = new Date(lmpDate);
+                                                td1Date.setDate(td1Date.getDate() + 28);
+                                                
+                                                // Td2: Td1 + 4 weeks (28 days)
+                                                const td2Date = new Date(td1Date);
+                                                td2Date.setDate(td2Date.getDate() + 28);
+                                                
+                                                const vaccSchedule = [
+                                                    {
+                                                        name: 'Td1',
+                                                        date: td1Date,
+                                                        week: 4,
+                                                        stage: 'First Prenatal Visit',
+                                                        trimester: 1
+                                                    },
+                                                    {
+                                                        name: 'Td2',
+                                                        date: td2Date,
+                                                        week: 8,
+                                                        stage: 'Second Maternal Vaccination',
+                                                        trimester: 1
+                                                    }
+                                                ];
+                                                
+                                                return (
+                                                    <div className="visit-calendar visit-calendar--preview vacc-calendar">
+                                                        {vaccSchedule.map((vacc, i) => (
+                                                            <div key={i} className={`calendar-day trimester-${vacc.trimester}`}>
+                                                                <div className="day-number">{vacc.date.getDate()}</div>
+                                                                <div className="week-label">{vacc.name}</div>
+                                                                <div className="date-label">{vacc.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                                                                <div className="visit-number">{vacc.stage}</div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                );
+                                            })()
+                                        ) : formData.lmp ? (
+                                            <div>Loading vaccination schedule...</div>
+                                        ) : (
+                                            <div className="no-lmp">Enter LMP to see vaccination schedule</div>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                                     <div className="prenatal-schedule-card">
