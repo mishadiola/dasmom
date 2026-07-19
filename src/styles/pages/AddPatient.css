@@ -981,3 +981,67 @@
 }
 
 .full-width { grid-column: 1 / -1; }
+
+/* ══════════════════════════════════════════
+   PRENATAL SCHEDULE TEMPLATE CARD
+   ══════════════════════════════════════════ */
+.prenatal-schedule-card {
+    background: #ffffff;
+    border: 1.5px solid #eef0f4;
+    border-radius: var(--radius-md, 12px);
+    padding: 20px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+    transition: var(--t-fast, all 0.2s ease);
+}
+
+.prenatal-schedule-card:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
+    border-color: rgba(185, 129, 138, 0.35);
+}
+
+.prenatal-schedule-card h3 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-text, #2d2234);
+    margin: 0 0 16px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #f4f6f9;
+}
+
+.recommendation-alert {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 14px;
+    border-radius: var(--radius-sm, 8px);
+    font-size: 13px;
+    margin-bottom: 16px;
+    line-height: 1.5;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.recommendation-alert--high-risk {
+    background-color: rgba(224, 92, 115, 0.08);
+    border-left: 4px solid #b73a52;
+    color: #b73a52;
+}
+
+.recommendation-alert--medium-risk {
+    background-color: rgba(249, 162, 108, 0.08);
+    border-left: 4px solid #b76326;
+    color: #b76326;
+}
+
+.recommendation-alert--low-risk {
+    background-color: rgba(109, 184, 160, 0.08);
+    border-left: 4px solid #3d8870;
+    color: #3d8870;
+}
+
+.recommendation-title {
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13.5px;
+}

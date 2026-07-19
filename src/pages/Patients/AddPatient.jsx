@@ -109,6 +109,7 @@ const AddPatient = () => {
         plannedDeliveryPlace: 'Hospital',
         conditions: [], otherConditions: '', riskLevel: 'Low Risk',
         retained_staff: '',
+        scheduleTemplate: 'Standard Prenatal Schedule',
         bp: '', weight: '', height: '', bmi: '', temp: '', pulse: '', respRate: '', fundalHeight: '',
         fetalMovement: '', presentation: '', testsDone: '', visitNotes: '',
         fhr: '', hgb: '',
@@ -299,6 +300,14 @@ const AddPatient = () => {
             }
         }
     }, [formData.bp]);
+
+    // Sync schedule template recommendation when risk level changes
+    useEffect(() => {
+        setFormData(prev => ({
+            ...prev,
+            scheduleTemplate: prev.riskLevel === 'High Risk' ? 'High-Risk Prenatal Schedule' : 'Standard Prenatal Schedule'
+        }));
+    }, [formData.riskLevel]);
 
     // Sync emergency contact address when "Same as Patient Address" is checked
     useEffect(() => {
@@ -1272,14 +1281,51 @@ const AddPatient = () => {
                                         <div className="no-lmp">Enter LMP to see 9-visit calendar</div>
                                     )}
                                 </div>
-                                <div className="form-group">
-                                    <label>Assigned Staff</label>
-                                    <select name="retained_staff" value={formData.retained_staff} onChange={handleChange}>
-                                        <option value="">{retainedStaffList.length} available</option>
-                                        {retainedStaffList.map(staff => (
-                                            <option key={staff.id} value={staff.id}>{staff.full_name}</option>
-                                        ))}
-                                    </select>
+                                <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                    <div className="prenatal-schedule-card">
+                                        <h3>Prenatal Schedule Template</h3>
+                                        
+                                        <div className={`recommendation-alert recommendation-alert--${
+                                            formData.riskLevel === 'High Risk' ? 'high-risk' : 
+                                            formData.riskLevel === 'Medium Risk' ? 'medium-risk' : 'low-risk'
+                                        }`}>
+                                            <div className="recommendation-title">
+                                                <AlertTriangle size={15} />
+                                                Recommended Schedule
+                                            </div>
+                                            <p style={{ margin: 0, fontSize: '13px', textTransform: 'none' }}>
+                                                {formData.riskLevel === 'High Risk' 
+                                                    ? "This patient has been assessed as High Risk based on the medical assessment. It is recommended to assign the High-Risk Prenatal Schedule."
+                                                    : formData.riskLevel === 'Medium Risk'
+                                                    ? "This patient is classified as Medium Risk. The Standard Prenatal Schedule is recommended."
+                                                    : "This patient is classified as Low Risk. The Standard Prenatal Schedule is recommended."
+                                                }
+                                            </p>
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label>Template <span className="req">*</span></label>
+                                            <select 
+                                                name="scheduleTemplate" 
+                                                value={formData.scheduleTemplate || 'Standard Prenatal Schedule'} 
+                                                onChange={handleChange}
+                                                required
+                                            >
+                                                <option value="Standard Prenatal Schedule">Standard Prenatal Schedule</option>
+                                                <option value="High-Risk Prenatal Schedule">High-Risk Prenatal Schedule</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="form-group">
+                                        <label>Assigned Staff</label>
+                                        <select name="retained_staff" value={formData.retained_staff} onChange={handleChange}>
+                                            <option value="">{retainedStaffList.length} available</option>
+                                            {retainedStaffList.map(staff => (
+                                                <option key={staff.id} value={staff.id}>{staff.full_name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                             <hr className="divider" />
