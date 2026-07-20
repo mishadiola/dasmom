@@ -4,11 +4,31 @@ import {
     Search, Filter, X, Baby, Heart, AlertTriangle,
     CheckCircle2, Clock, AlertCircle, Eye,
     Syringe, Calendar, Download, ChevronDown, ChevronUp,
-    TrendingUp, ShieldCheck, Timer
+    TrendingUp, ShieldCheck, Timer, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import NewbornService from '../../services/newbornservice';
 import * as XLSX from 'xlsx';
 import '../../styles/pages/NewbornTracking.css';
+
+/* ════════════════════════════
+   CALENDAR HELPERS
+════════════════════════════ */
+const toLocalDateStr = (d) => {
+    const offset = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - offset).toISOString().split('T')[0];
+};
+
+const formatCalDate = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+const formatReadableDateNB = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+};
 
 // Helper function for readable date formatting
 const formatDateLong = (dateString) => {
@@ -159,6 +179,10 @@ const NewbornTracking = () => {
     const [selectedBaby, setSelectedBaby] = useState(null);
     const [expandedRow, setExpandedRow] = useState(null);
 
+    // ── Baby Vaccination Calendar State ──
+    const [vaccCalendarDate, setVaccCalendarDate] = useState(new Date());
+    const [vaccCalendarView, setVaccCalendarView] = useState('week');
+
     // Live data state - filtered for vaccination tracking
     const [stats, setStats] = useState({
         totalWithVaccines: 0,
@@ -229,6 +253,95 @@ const NewbornTracking = () => {
     }, [loadNewbornData]);
 
     const handleFilter = (k, v) => setFilters(prev => ({ ...prev, [k]: v }));
+
+    /* ────────────────────────────────────────────────────
+       BABY VACCINATION CALENDAR HELPERS
+    ──────────────────────────────────────────────────── */
+    const getVaccVisibleDays = (date, view) => {
+        const d = new Date(date);
+        if (view === 'day') {
+            return [{ date: toLocalDateStr(d), label: d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }) }];
+        }
+        if (view === 'week') {
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            const start = new Date(d);
+            start.setDate(diff);
+            const days = [];
+            for (let i = 0; i < 7; i++) {
+                const curr = new Date(start);
+                curr.setDate(start.getDate() + i);
+                days.push({ date: toLocalDateStr(curr), label: formatCalDate(curr) });
+            }
+            return days;
+        }
+        if (view === 'month') {
+            const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+            const days = [];
+            for (let i = 1; i <= end.getDate(); i++) {
+                const curr = new Date(d.getFullYear(), d.getMonth(), i);
+                days.push({ date: toLocalDateStr(curr), label: formatCalDate(curr) });
+            }
+            return days;
+        }
+        return [];
+    };
+
+    const vaccVisibleDays = useMemo(
+        () => getVaccVisibleDays(vaccCalendarDate, vaccCalendarView),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [vaccCalendarDate, vaccCalendarView]
+    );
+
+    const formatVaccNavLabel = () => {
+        if (!vaccVisibleDays || vaccVisibleDays.length === 0) return '';
+        if (vaccCalendarView === 'day') return formatReadableDateNB(vaccVisibleDays[0]?.date);
+        const start = new Date(vaccVisibleDays[0].date);
+        const end = new Date(vaccVisibleDays[vaccVisibleDays.length - 1].date);
+        if (vaccCalendarView === 'month') return start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        return `${formatReadableDateNB(start)} – ${formatReadableDateNB(end)}`;
+    };
+
+    const handleVaccPrev = () => {
+        setVaccCalendarDate(prev => {
+            const d = new Date(prev);
+            if (vaccCalendarView === 'day') d.setDate(d.getDate() - 1);
+            if (vaccCalendarView === 'week') d.setDate(d.getDate() - 7);
+            if (vaccCalendarView === 'month') d.setMonth(d.getMonth() - 1);
+            return d;
+        });
+    };
+
+    const handleVaccNext = () => {
+        setVaccCalendarDate(prev => {
+            const d = new Date(prev);
+            if (vaccCalendarView === 'day') d.setDate(d.getDate() + 1);
+            if (vaccCalendarView === 'week') d.setDate(d.getDate() + 7);
+            if (vaccCalendarView === 'month') d.setMonth(d.getMonth() + 1);
+            return d;
+        });
+    };
+
+    // Build date → vaccinations map from existing newborns data
+    const vaccByDate = useMemo(() => {
+        const map = {};
+        newborns.forEach(b => {
+            (b.vaccLog || []).forEach(v => {
+                if (!v.nextDue) return;
+                const key = v.nextDue.split('T')[0];
+                if (!map[key]) map[key] = [];
+                map[key].push({
+                    babyName: b.babyName,
+                    vaccine: v.vaccine,
+                    dose: v.dose,
+                    status: v.status
+                });
+            });
+        });
+        return map;
+    }, [newborns]);
+
+    const VACC_TODAY = new Date().toISOString().split('T')[0];
 
     // Filter for vaccination tracking only
     const filtered = useMemo(() => {
@@ -457,6 +570,154 @@ const NewbornTracking = () => {
                         <option value="All">All Stations</option>
                         {[1,2,3,4,5,6,7].map(n => <option key={n} value={`Station ${n}`}>Station {n}</option>)}
                     </select>
+                </div>
+            </div>
+
+            {/* ── Baby Vaccination Schedule Calendar ── */}
+            <div className="pv-calendar-section vacc-cal-section">
+                {/* Section head bar */}
+                <div className="section-head-bar">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Syringe size={18} style={{ color: 'var(--color-rose)' }} />
+                            <span style={{ fontWeight: 700, fontSize: '15px', color: 'var(--color-text)' }}>Baby Vaccination Schedule</span>
+                        </div>
+                        <div className="date-nav">
+                            <button className="icon-btn-sm" onClick={handleVaccPrev}><ChevronLeft size={16} /></button>
+                            <h2>{formatVaccNavLabel()}</h2>
+                            <button className="icon-btn-sm" onClick={handleVaccNext}><ChevronRight size={16} /></button>
+                        </div>
+                    </div>
+                    <div className="cal-head-right">
+                        <div className="view-toggles">
+                            {['day', 'week', 'month'].map(v => (
+                                <button
+                                    key={v}
+                                    className={`view-toggle-btn ${vaccCalendarView === v ? 'active' : ''}`}
+                                    onClick={() => {
+                                        setVaccCalendarView(v);
+                                        if (v === 'day') setVaccCalendarDate(new Date());
+                                    }}
+                                >
+                                    {v.charAt(0).toUpperCase() + v.slice(1)}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="legend-pills">
+                            <span><i className="dot vacc-dot-scheduled"></i>Scheduled</span>
+                            <span><i className="dot vacc-dot-completed"></i>Completed</span>
+                            <span><i className="dot vacc-dot-missed"></i>Missed</span>
+                            <span><i className="dot vacc-dot-overdue"></i>Overdue</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Calendar grid */}
+                <div className="pv-grid-container">
+                    {vaccCalendarView === 'day' ? (
+                        <div className="day-view-container">
+                            {vaccVisibleDays.map(day => {
+                                const dayVaccs = vaccByDate[day.date] || [];
+                                return (
+                                    <div key={day.date} className={`day-schedule-card ${day.date === VACC_TODAY ? 'day-today' : ''}`}>
+                                        <div className="day-schedule-header">
+                                            <h3 className="day-schedule-title">
+                                                {day.label}
+                                                {day.date === VACC_TODAY && <span className="today-badge">TODAY</span>}
+                                            </h3>
+                                            <span className="day-schedule-count">
+                                                {dayVaccs.length} vaccination{dayVaccs.length !== 1 ? 's' : ''}
+                                            </span>
+                                        </div>
+                                        <div className="day-schedule-list">
+                                            {dayVaccs.length > 0 ? dayVaccs.map((vc, idx) => (
+                                                <div key={idx} className={`schedule-item vacc-schedule-item vacc-item-${vc.status?.toLowerCase()}`}>
+                                                    <div className="schedule-details">
+                                                        <span className="schedule-patient">{vc.babyName}</span>
+                                                        <span className="schedule-id">{vc.vaccine} · {vc.dose}</span>
+                                                    </div>
+                                                    <span className={`schedule-status vacc-status-badge vacc-badge-${vc.status?.toLowerCase()}`}>
+                                                        {vc.status}
+                                                    </span>
+                                                </div>
+                                            )) : (
+                                                <div className="no-schedules">No vaccinations scheduled for this day.</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : vaccCalendarView === 'week' ? (
+                        <div className="day-grid week-grid">
+                            <div className="week-row">
+                                {vaccVisibleDays.map(day => {
+                                    const dayVaccs = vaccByDate[day.date] || [];
+                                    return (
+                                        <div
+                                            key={day.date}
+                                            className={`day-cell ${day.date === VACC_TODAY ? 'day-today' : ''}`}
+                                            onClick={() => { setVaccCalendarView('day'); setVaccCalendarDate(new Date(day.date)); }}
+                                        >
+                                            <h4 className="day-header">
+                                                {formatCalDate(day.date)}
+                                                {day.date === VACC_TODAY && <span className="today-badge">TODAY</span>}
+                                            </h4>
+                                            <div className="day-visits">
+                                                {dayVaccs.length > 0 ? dayVaccs.map((vc, idx) => (
+                                                    <div key={idx} className={`visit-item vacc-item-${vc.status?.toLowerCase()}`}>
+                                                        <span className="visit-patient">{vc.babyName}</span>
+                                                        <span className="visit-status">{vc.vaccine}</span>
+                                                    </div>
+                                                )) : (
+                                                    <div className="no-visits">No vaccines</div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ) : (
+                        // Month view
+                        <div className="day-grid month-grid">
+                            {(() => {
+                                const weeks = [];
+                                for (let i = 0; i < vaccVisibleDays.length; i += 7) {
+                                    weeks.push(vaccVisibleDays.slice(i, i + 7));
+                                }
+                                return weeks.map((week, wi) => (
+                                    <div key={wi} className="week-row">
+                                        {week.map(day => {
+                                            const dayVaccs = vaccByDate[day.date] || [];
+                                            return (
+                                                <div
+                                                    key={day.date}
+                                                    className={`day-cell ${day.date === VACC_TODAY ? 'day-today' : ''}`}
+                                                    onClick={() => { setVaccCalendarView('day'); setVaccCalendarDate(new Date(day.date)); }}
+                                                >
+                                                    <h4 className="day-header">
+                                                        {formatCalDate(day.date)}
+                                                        {day.date === VACC_TODAY && <span className="today-badge">TODAY</span>}
+                                                    </h4>
+                                                    <div className="day-visits">
+                                                        {dayVaccs.length > 0 ? dayVaccs.map((vc, idx) => (
+                                                            <div key={idx} className={`visit-item vacc-item-${vc.status?.toLowerCase()}`}>
+                                                                <span className="visit-patient">{vc.babyName}</span>
+                                                                <span className="visit-status">{vc.vaccine}</span>
+                                                            </div>
+                                                        )) : (
+                                                            <div className="no-visits">No vaccines</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ));
+                            })()}
+                        </div>
+                    )}
                 </div>
             </div>
 

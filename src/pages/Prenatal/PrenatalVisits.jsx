@@ -141,6 +141,8 @@ const PrenatalVisits = () => {
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [visitTypeTab, setVisitTypeTab] = useState('prenatal'); // 'prenatal' | 'vaccination' | 'postpartum'
     const [visitCategoryTab, setVisitCategoryTab] = useState('upcoming'); // 'upcoming' | 'missed' | 'completed'
+    const [selectedVaccinePatientId, setSelectedVaccinePatientId] = useState('');
+    const [patientVaccinations, setPatientVaccinations] = useState([]);
 
     // Add Visit modal states
     const [showAddVisitModal, setShowAddVisitModal] = useState(false);
@@ -269,7 +271,10 @@ const PrenatalVisits = () => {
                 const data = await patientService.getAllPatients();
                 setAllPatients((data || []).map(p => ({
                     id: p.id,
-                    name: p.fullName || `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.name || p.id
+                    name: p.fullName || `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.name || p.id,
+                    lmp: p.lmp || null,
+                    edd: p.edd || null,
+                    pregnancyStatus: p.pregnancyStatus || ''
                 })));
             } catch (e) {
                 console.error('Failed to load patients for Add Visit modal:', e);
@@ -282,6 +287,103 @@ const PrenatalVisits = () => {
             try { setManualVisits(JSON.parse(stored)); } catch (_) {}
         }
     }, [patientService]);
+
+    // Fetch vaccinations when selected vaccine patient ID changes
+    useEffect(() => {
+        if (!selectedVaccinePatientId) {
+            setPatientVaccinations([]);
+            return;
+        }
+        const fetchVaccinations = async () => {
+            try {
+                const { data, error } = await patientService.supabase
+                    .from('vaccinations')
+                    .select('*, vaccine_inventory(vaccine_name)')
+                    .eq('patient_id', selectedVaccinePatientId);
+                if (error) throw error;
+                setPatientVaccinations(data || []);
+            } catch (err) {
+                console.error('Error fetching patient vaccinations:', err);
+            }
+        };
+        fetchVaccinations();
+    }, [selectedVaccinePatientId, patientService.supabase]);
+
+    // Generate vaccination schedule timeline based on patient's LMP and db records
+    const calculatedVaccineSchedule = useMemo(() => {
+        const selPat = allPatients.find(p => p.id === selectedVaccinePatientId);
+        if (!selPat || !selPat.lmp) return [];
+
+        const lmpDate = new Date(selPat.lmp);
+        if (Number.isNaN(lmpDate.getTime())) return [];
+
+        // Td1 is LMP + 12 weeks (First Prenatal Visit)
+        const td1Date = new Date(lmpDate);
+        td1Date.setDate(lmpDate.getDate() + 12 * 7);
+
+        // Td2 is 4 weeks after Td1 (LMP + 16 weeks)
+        const td2Date = new Date(td1Date);
+        td2Date.setDate(td1Date.getDate() + 28);
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Find match in actual vaccinations from DB
+        const findVaccRecord = (doseNum) => {
+            return patientVaccinations.find(v => {
+                const isTd = v.notes?.toLowerCase().includes('td') || 
+                             v.notes?.toLowerCase().includes('tetanus') ||
+                             (v.vaccine_inventory?.vaccine_name?.toLowerCase().includes('td') || 
+                              v.vaccine_inventory?.vaccine_name?.toLowerCase().includes('tetanus'));
+                return isTd && v.dose_number === doseNum;
+            });
+        };
+
+        const recTd1 = findVaccRecord(1);
+        const recTd2 = findVaccRecord(2);
+
+        const determineStatus = (dueDate, rec) => {
+            if (rec) {
+                return rec.status || 'Completed';
+            }
+            // Fallback status
+            const diffTime = today.getTime() - dueDate.getTime();
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            if (diffDays > 14) {
+                return 'Missed';
+            } else if (diffTime > 0) {
+                return 'Scheduled'; // Due around now
+            } else {
+                return 'Upcoming'; // Future
+            }
+        };
+
+        const getDisplayDate = (dueDate, rec) => {
+            if (rec && rec.vaccinated_date) {
+                return rec.vaccinated_date;
+            }
+            if (rec && rec.scheduled_vaccination) {
+                return rec.scheduled_vaccination;
+            }
+            return dueDate.toISOString().split('T')[0];
+        };
+
+        return [
+            {
+                name: 'Td1 (Tetanus-Diphtheria)',
+                displayDate: getDisplayDate(td1Date, recTd1),
+                description: 'First Prenatal Visit',
+                status: determineStatus(td1Date, recTd1)
+            },
+            {
+                name: 'Td2 (Tetanus-Diphtheria)',
+                displayDate: getDisplayDate(td2Date, recTd2),
+                description: '4 weeks after Td1',
+                status: determineStatus(td2Date, recTd2)
+            }
+        ];
+    }, [selectedVaccinePatientId, allPatients, patientVaccinations]);
 
     // Auto-fill assigned staff from auth context
     useEffect(() => {
@@ -775,13 +877,85 @@ const PrenatalVisits = () => {
                 </div>
             </div>
             ) : visitTypeTab === 'vaccination' ? (
-                /* Vaccination Tab - Calendar Empty State */
-                <div className="pv-calendar-section vaccination-empty">
-                    <div className="empty-state">
-                        <CalendarIcon size={48} />
-                        <h3>No vaccination schedules yet.</h3>
-                        <p>Vaccination scheduling will be available soon.</p>
+                /* Redesigned Vaccination Tab - Vertical Timeline */
+                <div className="pv-vaccination-timeline-section">
+                    <div className="nb-card patient-selector-card" style={{ padding: '20px', marginBottom: '24px' }}>
+                        <h3 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '12px', color: 'var(--color-text)' }}>
+                            Select Pregnant Patient
+                        </h3>
+                        <SearchableDropdown
+                            patients={allPatients.filter(p => p.pregnancyStatus === 'pregnant' || p.lmp)}
+                            value={selectedVaccinePatientId}
+                            onChange={(val) => setSelectedVaccinePatientId(val)}
+                        />
                     </div>
+
+                    {selectedVaccinePatientId ? (
+                        (() => {
+                            const selPat = allPatients.find(p => p.id === selectedVaccinePatientId);
+                            const schedule = calculatedVaccineSchedule;
+                            
+                            if (!selPat?.lmp) {
+                                return (
+                                    <div className="pv-calendar-section vaccination-empty">
+                                        <div className="empty-state">
+                                            <AlertTriangle size={48} style={{ color: 'var(--color-rose)' }} />
+                                            <h3>No LMP Recorded</h3>
+                                            <p>This patient does not have a Last Menstrual Period (LMP) date recorded, which is required to calculate the vaccination schedule.</p>
+                                        </div>
+                                    </div>
+                                );
+                            }
+
+                            return (
+                                <div className="timeline-container-wrap">
+                                    <div className="timeline-header-info">
+                                        <div>
+                                            <h3>Vaccination Timeline for {selPat.name}</h3>
+                                            <p className="timeline-subtitle">
+                                                LMP: <strong>{formatReadableDate(selPat.lmp)}</strong> · 
+                                                EDD: <strong>{formatReadableDate(selPat.edd)}</strong>
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="vertical-timeline">
+                                        <div className="timeline-line"></div>
+                                        {schedule.map((item, idx) => {
+                                            const statusClass = item.status.toLowerCase();
+                                            return (
+                                                <div key={idx} className={`timeline-card-wrapper status-${statusClass}`}>
+                                                    <div className="timeline-badge-dot"></div>
+                                                    <div className="timeline-card">
+                                                        <div className="timeline-card-header">
+                                                            <h4>{item.name}</h4>
+                                                            <span className={`status-badge status-${statusClass}`}>
+                                                                {item.status}
+                                                            </span>
+                                                        </div>
+                                                        <div className="timeline-card-body">
+                                                            <p className="timeline-date">
+                                                                <CalendarIcon size={14} /> {formatReadableDate(item.displayDate)}
+                                                            </p>
+                                                            <p className="timeline-desc">{item.description}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            );
+                        })()
+                    ) : (
+                        <div className="pv-calendar-section vaccination-empty">
+                            <div className="empty-state">
+                                <Syringe size={48} style={{ color: 'var(--color-rose)' }} />
+                                <h3>Select a Patient</h3>
+                                <p>Please select a pregnant patient from the dropdown above to view her maternal vaccination timeline.</p>
+                            </div>
+                        </div>
+                    )}
                 </div>
             ) : (
                 /* Postpartum Tab - Calendar Empty State */
@@ -945,8 +1119,8 @@ const PrenatalVisits = () => {
                     </div>
                 )}
             </div>
-            ) : (
-                /* Vaccination & Postpartum Tab - Table Empty State */
+            ) : visitTypeTab === 'postpartum' ? (
+                /* Postpartum Tab - Table Empty State */
                 <div className="pv-table-section vaccination-empty">
                     <div className="empty-state">
                         <Users size={48} />
@@ -954,7 +1128,7 @@ const PrenatalVisits = () => {
                         <p>{visitTypeTab.charAt(0).toUpperCase() + visitTypeTab.slice(1)} patient records will appear here.</p>
                     </div>
                 </div>
-            )}
+            ) : null}
 
             {showAddVisitModal && (
                 <div className="modal-overlay" onClick={() => setShowAddVisitModal(false)}>
