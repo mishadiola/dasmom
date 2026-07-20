@@ -305,7 +305,7 @@ const AddPatient = () => {
     useEffect(() => {
         setFormData(prev => ({
             ...prev,
-            scheduleTemplate: prev.riskLevel === 'High Risk' ? 'High-Risk Prenatal Schedule' : 'Standard Prenatal Schedule'
+            scheduleTemplate: 'Standard Prenatal Schedule'
         }));
     }, [formData.riskLevel]);
 
@@ -1344,39 +1344,41 @@ const AddPatient = () => {
                                     </div>
                                 </div>
                                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                                    <div className="prenatal-schedule-card">
-                                        <h3>Prenatal Schedule Template</h3>
-                                        
-                                        <div className={`recommendation-alert recommendation-alert--${
-                                            formData.riskLevel === 'High Risk' ? 'high-risk' : 
-                                            formData.riskLevel === 'Medium Risk' ? 'medium-risk' : 'low-risk'
-                                        }`}>
-                                            <div className="recommendation-title">
-                                                <AlertTriangle size={15} />
-                                                Recommended Schedule
-                                            </div>
-                                            <p style={{ margin: 0, fontSize: '13px', textTransform: 'none' }}>
-                                                {formData.riskLevel === 'High Risk' 
-                                                    ? "This patient has been assessed as High Risk based on the medical assessment. It is recommended to assign the High-Risk Prenatal Schedule."
-                                                    : formData.riskLevel === 'Medium Risk'
-                                                    ? "This patient is classified as Medium Risk. The Standard Prenatal Schedule is recommended."
-                                                    : "This patient is classified as Low Risk. The Standard Prenatal Schedule is recommended."
-                                                }
-                                            </p>
-                                        </div>
-
-                                        <div className="form-group">
-                                            <label>Template <span className="req">*</span></label>
-                                            <select 
-                                                name="scheduleTemplate" 
-                                                value={formData.scheduleTemplate || 'Standard Prenatal Schedule'} 
-                                                onChange={handleChange}
-                                                required
-                                            >
-                                                <option value="Standard Prenatal Schedule">Standard Prenatal Schedule</option>
-                                                <option value="High-Risk Prenatal Schedule">High-Risk Prenatal Schedule</option>
-                                            </select>
-                                        </div>
+                                    <div className={`prenatal-risk-info-card risk-info--${formData.riskLevel === 'High Risk' ? 'high' : 'low'}`}>
+                                        {formData.riskLevel === 'High Risk' ? (
+                                            <>
+                                                <div className="card-header">
+                                                    <AlertTriangle size={18} className="icon-high" />
+                                                    <h3>Referral Recommended</h3>
+                                                </div>
+                                                <div className="card-body">
+                                                    <p className="risk-status-text">
+                                                        This patient has been classified as <strong>High Risk</strong> based on the medical assessment.
+                                                    </p>
+                                                    <p className="risk-instruction-text">
+                                                        High-risk pregnancies require additional monitoring beyond the standard prenatal schedule provided by this system.
+                                                    </p>
+                                                    <p className="risk-action-text">
+                                                        Refer the patient to the appropriate physician or healthcare facility for additional prenatal checkups, vaccinations, and specialized maternal care when necessary.
+                                                    </p>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="card-header">
+                                                    <CheckCircle2 size={18} className="icon-low" />
+                                                    <h3>Standard Prenatal Care</h3>
+                                                </div>
+                                                <div className="card-body">
+                                                    <p className="risk-status-text">
+                                                        This patient is classified as <strong>{formData.riskLevel === 'Medium Risk' ? 'Medium Risk' : 'Low Risk'}</strong> based on the medical assessment.
+                                                    </p>
+                                                    <p className="risk-instruction-text">
+                                                        The standard prenatal visit schedule will be automatically generated based on the patient's LMP.
+                                                    </p>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
 
                                     <div className="form-group">

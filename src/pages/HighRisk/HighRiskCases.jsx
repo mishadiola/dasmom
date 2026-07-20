@@ -353,32 +353,6 @@ const HighRiskCases = () => {
             ))}
           </select>
           
-          {/* Type Filter */}
-          <select
-            value={filterType}
-            onChange={(e) => {
-              setFilterType(e.target.value);
-              setCurrentPage(1);
-            }}
-          >
-            <option value="All">All Types</option>
-            <option value="Mother">Mother</option>
-          </select>
-
-          {/* Risk Level Filter */}
-          <select
-            value={filterRiskLevel}
-            onChange={(e) => {
-              setFilterRiskLevel(e.target.value);
-              setCurrentPage(1);
-            }}
-          >
-            <option value="All">All Risk Levels</option>
-            <option value="High Risk">High Risk</option>
-            <option value="Medium Risk">Medium Risk</option>
-            <option value="Normal Risk">Normal Risk</option>
-          </select>
-          
           {/* Trimester Filter */}
           <select
             value={filterTrimester}
@@ -401,28 +375,12 @@ const HighRiskCases = () => {
               setCurrentPage(1);
             }}
           >
-            <option value="All">All Statuses</option>
             <option value="Active">Active</option>
-            <option value="Upcoming">Upcoming (7 days)</option>
-            <option value="Scheduled">Scheduled</option>
-            <option value="Overdue">Overdue</option>
-          </select>
-          
-          {/* Date Range Filter */}
-          <select
-            value={filterDateRange}
-            onChange={(e) => {
-              setFilterDateRange(e.target.value);
-              setCurrentPage(1);
-            }}
-          >
-            <option value="All">All Dates</option>
-            <option value="today">Today</option>
-            <option value="week">This Week</option>
-            <option value="month">This Month</option>
-            <option value="overdue">Overdue</option>
+            <option value="Archived">Archived</option>
+            <option value="All">All</option>
           </select>
         </div>
+
       </div>
 
       {/* ── Main Layout ── */}

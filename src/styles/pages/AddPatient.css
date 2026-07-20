@@ -1079,4 +1079,95 @@
     align-items: center;
     gap: 6px;
     font-size: 13.5px;
+}
+
+/* ══════════════════════════════════════════
+   PRENATAL RISK INFO CARD
+   ══════════════════════════════════════════ */
+.prenatal-risk-info-card {
+    background: #ffffff;
+    border: 1.5px solid #eef0f4;
+    border-radius: var(--radius-md, 12px);
+    padding: 20px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.prenatal-risk-info-card:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04);
+}
+
+.prenatal-risk-info-card.risk-info--high {
+    border-left: 5px solid #b73a52;
+    background-color: rgba(224, 92, 115, 0.02);
+}
+
+.prenatal-risk-info-card.risk-info--low {
+    border-left: 5px solid #3d8870;
+    background-color: rgba(109, 184, 160, 0.02);
+}
+
+.prenatal-risk-info-card .card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f4f6f9;
+}
+
+.prenatal-risk-info-card .card-header h3 {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0;
+    color: var(--color-text, #2d2234);
+}
+
+.prenatal-risk-info-card.risk-info--high .card-header h3 {
+    color: #b73a52;
+}
+
+.prenatal-risk-info-card.risk-info--low .card-header h3 {
+    color: #3d8870;
+}
+
+.prenatal-risk-info-card .icon-high {
+    color: #b73a52;
+}
+
+.prenatal-risk-info-card .icon-low {
+    color: #3d8870;
+}
+
+.prenatal-risk-info-card .card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: #4a5568;
+}
+
+.prenatal-risk-info-card .card-body p {
+    margin: 0;
+    text-transform: none;
+}
+
+.prenatal-risk-info-card .risk-status-text {
+    font-weight: 500;
+}
+
+.prenatal-risk-info-card .risk-instruction-text {
+    color: #64748b;
+}
+
+.prenatal-risk-info-card .risk-action-text {
+    background-color: rgba(224, 92, 115, 0.05);
+    padding: 10px 12px;
+    border-radius: var(--radius-sm, 8px);
+    font-size: 13px;
+    color: #8c2a3c;
+    border: 1px dashed rgba(183, 58, 82, 0.2);
 }

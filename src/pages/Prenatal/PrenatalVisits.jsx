@@ -361,10 +361,12 @@ const PrenatalVisits = () => {
         if (!visibleDays || visibleDays.length === 0) return '';
         const start = new Date(visibleDays[0].date);
         const end = new Date(visibleDays[visibleDays.length - 1].date);
-        return calendarView === 'week' 
-            ? `${formatReadableDate(start)} – ${formatReadableDate(end)}`
-            : formatReadableDate(start);
+        if (calendarView === 'month') {
+            return start.toLocaleDateString('en-US', { month: 'long' });
+        }
+        return `${formatReadableDate(start)} – ${formatReadableDate(end)}`;
     };
+
 
     const getSlotStatus = useCallback((date, time) => {
         const visitsForSlot = visitsTable.filter(v => {
