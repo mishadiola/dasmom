@@ -47,7 +47,8 @@ const Inventory = () => {
     destination_station: '',
     distribution_date: new Date().toISOString().split('T')[0],
     released_by: '',
-    remarks: ''
+    remarks: '',
+    station_batch: ''
   });
 
   // History section filters state
@@ -188,21 +189,27 @@ const Inventory = () => {
     const vaxSub = inventoryService.subscribeToInventory('vaccine_inventory', () => fetchData());
     const suppSub = inventoryService.subscribeToInventory('supplement_inventory', () => fetchData());
 
-    // Load distribution history from localStorage and remove legacy mock entries
-    const stored = localStorage.getItem('dasmom_station_distributions');
-    if (stored) {
+    // Load distribution history from DB, fallback to localStorage if the DB call fails
+    (async () => {
       try {
-        const parsed = JSON.parse(stored) || [];
-        const filtered = parsed.filter(record => !record.id?.toString().startsWith('dist-mock-'));
-        if (filtered.length !== parsed.length) {
-          localStorage.setItem('dasmom_station_distributions', JSON.stringify(filtered));
-        }
-        setDistributionHistory(filtered);
+        const history = await inventoryService.getStationDistributionHistory();
+        setDistributionHistory(history || []);
+        try { localStorage.setItem('dasmom_station_distributions', JSON.stringify(history || [])); } catch (e) {}
       } catch (err) {
-        console.error('Failed to load distribution history from localStorage:', err);
-        setDistributionHistory([]);
+        console.warn('Failed to fetch distribution history from DB, falling back to localStorage:', err);
+        const stored = localStorage.getItem('dasmom_station_distributions');
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored) || [];
+            const filtered = parsed.filter(record => !record.id?.toString().startsWith('dist-mock-'));
+            setDistributionHistory(filtered);
+          } catch (e) {
+            console.error('Failed to load distribution history from localStorage:', e);
+            setDistributionHistory([]);
+          }
+        }
       }
-    }
+    })();
 
     return () => {
       vaxSub.unsubscribe();
@@ -538,22 +545,44 @@ const Inventory = () => {
         return;
       }
 
-      const newQuantity = selectedItem.quantity - qtyToDistribute;
-      await inventoryService.updateInventoryQuantity(table, selectedItem.id, newQuantity, selectedItem.max_stock || selectedItem.max_quantity || selectedItem.max_quant);
+      // Prefer using the service so DB inserts happen (distribution + station inventory)
+      let distributedById = user?.id;
+      if (!distributedById) {
+        try {
+          const authUser = await inventoryService.auth.getAuthUser();
+          distributedById = authUser?.id;
+        } catch (err) {
+          // ignore - will still proceed without a user id
+        }
+      }
 
-      const releasedBy = user?.fullName || user?.email?.split('@')[0] || 'Local User';
+      const result = await inventoryService.distributeInventory({
+        itemType: distForm.item_type,
+        itemId: distForm.item_id,
+        quantity: qtyToDistribute,
+        destinationStation: distForm.destination_station,
+        distributedBy: distributedById || null,
+        distributedDate: distForm.distribution_date,
+        remarks: distForm.remarks || null,
+        stationBatch: distForm.station_batch || null
+      });
+
+      // Build a UI record (prefer DB-provided fields when available)
+      const distData = result?.distribution || result?.distribution?.[0] || null;
+      const releasedBy = user?.fullName || user?.email?.split('@')[0] || distData?.distributed_by || 'Local User';
+
       const newRecord = {
-        id: `dist-${Date.now()}`,
-        distribution_date: distForm.distribution_date,
+        id: distData?.id || `dist-${Date.now()}`,
+        distribution_date: distData?.distributed_date || distForm.distribution_date,
         item_name: selectedItem.item_name,
         brand: selectedItem.brand || '',
-        batch: String(selectedItem.batch || selectedItem.batch_number || 'N/A'),
+        batch: distForm.station_batch || String(selectedItem.batch || selectedItem.batch_number || 'N/A'),
         item_type: distForm.item_type === 'vaccine' ? 'Vaccine' : 'Supplement',
-        quantity: qtyToDistribute,
+        quantity: distData?.quantity || qtyToDistribute,
         unit: selectedItem.unit,
         destination_station: distForm.destination_station,
         released_by: releasedBy,
-        remarks: distForm.remarks || ''
+        remarks: distData?.remarks || distForm.remarks || ''
       };
 
       const updatedHistory = [newRecord, ...distributionHistory];
@@ -569,7 +598,8 @@ const Inventory = () => {
         destination_station: '',
         distribution_date: new Date().toISOString().split('T')[0],
         released_by: user?.fullName || user?.email?.split('@')[0] || '',
-        remarks: ''
+        remarks: '',
+        station_batch: ''
       });
 
       // Refresh stats and inventory immediately
@@ -1730,6 +1760,18 @@ const Inventory = () => {
                     <option value="">— Select station —</option>
                     {availableStations.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
+                </div>
+
+                {/* Station Batch (station-specific) */}
+                <div className="form-group">
+                  <label>Station Batch <span style={{ color: '#999', fontWeight: 400 }}>(optional)</span></label>
+                  <input
+                    type="text"
+                    value={distForm.station_batch}
+                    onChange={e => setDistForm({ ...distForm, station_batch: e.target.value })}
+                    placeholder="e.g. Batch A-2026"
+                    className="form-control"
+                  />
                 </div>
 
                 {/* Distribution Date & Released By */}
