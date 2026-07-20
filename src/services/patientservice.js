@@ -1078,6 +1078,8 @@ export default class PatientService {
       });
     }
 
+    await this.schedulePrenatalVaccinations(patientId, patientData.lmp, createdBy);
+
     return await this.getPatientById(patientId);
   }
 
@@ -1141,6 +1143,92 @@ async smartSemesterScheduling({ patientId, lmp, createdBy, maxPerDay = 35, retai
 
       console.log(`✅ Scheduled: ${visitDateStr} (Week ${actualWeek}) → Next: ${nextDateStr}`);
     }
+  }
+}
+
+async schedulePrenatalVaccinations(patientId, lmp, createdBy) {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+
+    const { data: visits, error: visitsError } = await this.supabase
+      .from('prenatal_visits')
+      .select('visit_date, status')
+      .eq('patient_id', patientId)
+      .in('status', ['Scheduled', 'Attended'])
+      .order('visit_date', { ascending: true });
+
+    if (visitsError) {
+      console.error('Error fetching prenatal visits for vaccine scheduling:', visitsError);
+      return;
+    }
+
+    const upcomingVisits = (visits || [])
+      .filter(v => v && v.visit_date)
+      .map(v => ({
+        date: v.visit_date,
+        week: lmp ? this.calculateWeeksAtDate(lmp, v.visit_date) : null
+      }))
+      .filter(v => v.date >= today);
+
+    const firstUpcoming = upcomingVisits[0];
+    const tdapVisit = upcomingVisits.find(v => v.week !== null && v.week >= 27 && v.week <= 36) || firstUpcoming;
+    const fluVisit = upcomingVisits.length >= 2 ? upcomingVisits[1] : firstUpcoming;
+
+    const tdapDate = tdapVisit ? tdapVisit.date : today;
+    const fluDate = fluVisit ? fluVisit.date : today;
+
+    const { data: existingVaccines, error: existingError } = await this.supabase
+      .from('vaccinations')
+      .select('id, notes')
+      .eq('patient_id', patientId);
+
+    if (existingError) {
+      console.error('Error checking existing vaccinations for patient:', existingError);
+    }
+
+    const existingNotes = (existingVaccines || []).map(r => (r.notes || '').toLowerCase());
+    const hasTdap = existingNotes.some(note => note.includes('tetanus') || note.includes('tdap') || note.includes('td')); 
+    const hasFlu = existingNotes.some(note => note.includes('influenza') || note.includes('flu'));
+
+    const inserts = [];
+    if (!hasTdap) {
+      inserts.push({
+        patient_id: patientId,
+        vaccine_inventory_id: null,
+        dose_number: 1,
+        status: 'Pending',
+        scheduled_vaccination: tdapDate,
+        vaccinated_date: null,
+        created_by: createdBy,
+        notes: 'Tdap (Tetanus-Diphtheria) prenatal vaccine - target 27 to 36 weeks'
+      });
+    }
+    if (!hasFlu) {
+      inserts.push({
+        patient_id: patientId,
+        vaccine_inventory_id: null,
+        dose_number: 1,
+        status: 'Pending',
+        scheduled_vaccination: fluDate,
+        vaccinated_date: null,
+        created_by: createdBy,
+        notes: 'Influenza (Flu) prenatal vaccine - any time during pregnancy'
+      });
+    }
+
+    if (inserts.length === 0) {
+      return;
+    }
+
+    const { error: insertError } = await this.supabase.from('vaccinations').insert(inserts);
+    if (insertError) {
+      console.error('Error scheduling prenatal vaccinations:', insertError);
+      return;
+    }
+
+    console.log(`✅ Scheduled prenatal vaccines for patient ${patientId}:`, inserts.map(i => i.notes));
+  } catch (error) {
+    console.error('Error in schedulePrenatalVaccinations:', error);
   }
 }
 

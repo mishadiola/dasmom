@@ -1289,36 +1289,40 @@ const AddPatient = () => {
                                         </p>
                                         {formData.lmp && !loadingSchedule ? (
                                             (() => {
-                                                const lmpDate = new Date(formData.lmp);
-                                                if (isNaN(lmpDate.getTime())) {
-                                                    return <div className="no-lmp">Enter LMP to see vaccination schedule</div>;
+                                                const previewVisits = Array.isArray(schedulePreview)
+                                                    ? schedulePreview.map((visit) => ({
+                                                        ...visit,
+                                                        week: patientService.calculateWeeksAtDate(formData.lmp, visit.date)
+                                                      }))
+                                                    : [];
+
+                                                if (previewVisits.length === 0) {
+                                                    return <div className="no-lmp">No future prenatal visits available yet. The vaccination dates will be scheduled once a future visit is created.</div>;
                                                 }
-                                                
-                                                // Td1: LMP + 4 weeks (28 days)
-                                                const td1Date = new Date(lmpDate);
-                                                td1Date.setDate(td1Date.getDate() + 28);
-                                                
-                                                // Td2: Td1 + 4 weeks (28 days)
-                                                const td2Date = new Date(td1Date);
-                                                td2Date.setDate(td2Date.getDate() + 28);
-                                                
+
+                                                const tdapVisit = previewVisits.find(v => v.week !== null && v.week >= 27 && v.week <= 36) || previewVisits[0];
+                                                const fluVisit = previewVisits[1] || previewVisits[0];
+
                                                 const vaccSchedule = [
                                                     {
-                                                        name: 'Td1',
-                                                        date: td1Date,
-                                                        week: 4,
-                                                        stage: 'First Prenatal Visit',
-                                                        trimester: 1
-                                                    },
-                                                    {
-                                                        name: 'Td2',
-                                                        date: td2Date,
-                                                        week: 8,
-                                                        stage: 'Second Maternal Vaccination',
-                                                        trimester: 1
+                                                        name: 'Tdap',
+                                                        date: new Date(tdapVisit.date),
+                                                        week: tdapVisit.week,
+                                                        stage: 'Tdap prenatal vaccination',
+                                                        trimester: patientService.getTrimesterFromWeek(tdapVisit.week)
                                                     }
                                                 ];
-                                                
+
+                                                if (fluVisit && fluVisit.date !== tdapVisit.date) {
+                                                    vaccSchedule.push({
+                                                        name: 'Flu',
+                                                        date: new Date(fluVisit.date),
+                                                        week: fluVisit.week,
+                                                        stage: 'Influenza prenatal vaccination',
+                                                        trimester: patientService.getTrimesterFromWeek(fluVisit.week)
+                                                    });
+                                                }
+
                                                 return (
                                                     <div className="visit-calendar visit-calendar--preview vacc-calendar">
                                                         {vaccSchedule.map((vacc, i) => (
