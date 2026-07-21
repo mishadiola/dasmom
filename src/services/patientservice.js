@@ -360,11 +360,36 @@ export default class PatientService {
       }
     }
 
-    return uniquePatients.map(patient => ({
-      id: patient.id,
-      name: `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
-      station: `${patient.stations?.station_name || 'No Station'}, ${patient.province || 'N/A'}`
-    }));
+    const stationFallbackIds = [...new Set(
+      uniquePatients
+        .filter(patient => !patient.stations?.station_name && patient.station_ass)
+        .map(patient => patient.station_ass)
+    )];
+
+    const stationNamesById = {};
+    if (stationFallbackIds.length > 0) {
+      const { data: stationRows, error: stationError } = await this.supabase
+        .from('stations')
+        .select('id, station_name')
+        .in('id', stationFallbackIds);
+
+      if (!stationError && stationRows) {
+        stationRows.forEach(row => {
+          if (row?.id && row?.station_name) {
+            stationNamesById[row.id] = row.station_name;
+          }
+        });
+      }
+    }
+
+    return uniquePatients.map(patient => {
+      const stationName = patient.stations?.station_name || stationNamesById[patient.station_ass];
+      return {
+        id: patient.id,
+        name: `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
+        station: stationName ? `${stationName}, ${patient.province || 'N/A'}` : (patient.province || 'N/A')
+      };
+    });
   }
 
   generateVisitSchedule(lmp, { visitCount = 9, time = '09:00' } = {}) {
