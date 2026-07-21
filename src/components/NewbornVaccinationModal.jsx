@@ -9,6 +9,7 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
     const [staff, setStaff] = useState('');
     const [staffList, setStaffList] = useState([]);
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [remarks, setRemarks] = useState('');
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -51,10 +52,10 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
                 const mappedVaccines = (pending || []).map(v => ({
                     id: v.id,
                     vaccine: v.vaccine_inventory?.vaccine_name || (v.notes ? v.notes.match(/(\d+)(?:st|nd|rd|th) dose of (.+)/)?.[2] : null) || 'Unknown Vaccine',
+                    notes: v.notes,
                     dose_number: v.dose_number,
                     scheduled_vaccination: v.scheduled_vaccination
                 }));
-
                 const uniqueVaccines = [];
                 const seenKeys = new Set();
 
@@ -128,7 +129,8 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
                 const updateData = { 
                     vaccinated_date: date, 
                     status: 'Completed', 
-                    created_by: currentUser 
+                    created_by: currentUser,
+                    remarks: remarks || null
                 };
                 if (vaccineInvId) {
                     updateData.vaccine_inventory_id = vaccineInvId;
@@ -242,6 +244,7 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
                                             <div className="vaccine-details">
                                                 <span className="vaccine-name">{v.vaccine}</span>
                                                 <span className="vaccine-dose">Dose {v.dose_number}</span>
+                                                {v.notes && <div className="vaccine-notes-hint" style={{ fontSize: '0.8rem', color: '#666' }}>{v.notes}</div>}
                                             </div>
                                             <div className="vaccine-schedule">
                                                 <span className="schedule-label">Scheduled</span>
@@ -255,6 +258,16 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
                             <div className="form-group">
                                 <label>Date Administered <span className="req">*</span></label>
                                 <input type="date" value={date} onChange={e => setDate(e.target.value)} />
+                            </div>
+                            <div className="form-group">
+                                <label>Remarks</label>
+                                <textarea 
+                                    placeholder="Doctor's observations or remarks..." 
+                                    value={remarks} 
+                                    onChange={e => setRemarks(e.target.value)} 
+                                    rows="2"
+                                    style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                                />
                             </div>
                         </>
                     )}

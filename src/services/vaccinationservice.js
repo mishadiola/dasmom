@@ -106,14 +106,9 @@ class VaccinationService {
 
         // 9 months
         { months: 9, vaccines: [
+            'Inactivated Polio Vaccine (IPV)',
             'Measles, Mumps, Rubella Vaccine (MMR)'
-          ], doses: [1] },
-
-        // 12 months (1 year)
-        { months: 12, vaccines: [
-            'Measles, Mumps, Rubella Vaccine (MMR)',
-            'Inactivated Polio Vaccine (IPV)'
-          ], doses: [2, 2] }
+          ], doses: [2, 1] }
       ];
 
       const birthDateObj = new Date(birthDate);
@@ -183,7 +178,7 @@ class VaccinationService {
       const currentUser = await this.getCurrentUserId();
       if (!currentUser) throw new Error('No logged-in user');
 
-      const { vaccineId, vaccineName, doseNumber, date, staff, notes, lmpDate } = vaccineData;
+      const { vaccineId, vaccineName, doseNumber, date, staff, notes, remarks, lmpDate } = vaccineData;
 
       // Get vaccine inventory items with the same name, sorted by expiration date (nearest first)
       const { data: vaccInvItems, error: invError } = await this.supabase
@@ -209,7 +204,9 @@ class VaccinationService {
             vaccinated_date: date,
             status: 'Completed',
             created_by: currentUser,
-            notes: notes || null
+            vaccinated_by: currentUser,
+            notes: notes || null,
+            remarks: remarks || null
           })
           .eq('id', vaccineId);
 
@@ -225,7 +222,9 @@ class VaccinationService {
           scheduled_vaccination: date,
           status: 'Completed',
           created_by: currentUser,
-          notes: notes || null
+          vaccinated_by: currentUser,
+          notes: notes || null,
+          remarks: remarks || null
         };
 
         const { error: insertError } = await this.supabase

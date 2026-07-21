@@ -25,11 +25,11 @@ const SUPPLEMENT_TYPES = [
 
 const STAFF_LIST = ['Nurse Ana', 'Nurse Bea', 'Midwife Elena', 'Midwife Ana', 'Dr. Reyes (OB)'];
 
-const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, onSave }) => {
+const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAutoSelectId, onClose, onSave }) => {
     const babyService = new BabyService();
     const [form, setForm] = useState({
         patientType: initialPatientType || 'Mother', patientName: initialPatientName || '', vaccine: '',
-        supplement: '', dose: '', date: new Date().toISOString().split('T')[0], nextDue: '', staff: '', notes: ''
+        supplement: '', dose: '', date: new Date().toISOString().split('T')[0], nextDue: '', staff: '', notes: '', remarks: ''
     });
     const [isSaving, setIsSaving] = useState(false);
     const [selectedPatient, setSelectedPatient] = useState(null);
@@ -167,15 +167,15 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                         // Auto-select the single match
                         setSelectedPatient({ id: newborns[0].id, label: newborns[0].name, type: 'Newborn' });
                         console.log('✅ Auto-selected single newborn match:', newborns[0].name);
-                        // For newborns, get the mother's barangay
-                        const { data: motherData } = await supabase
+                        // For newborns, get the mother's barangay (station_name)
+                        const { data: motherData, error: mError } = await supabase
                             .from('newborns')
-                            .select('mother_id, patient_basic_info!mother_id (barangay)')
+                            .select('mother_id, patient_basic_info!mother_id (station_ass, stations:station_ass (station_name))')
                             .eq('id', patientId)
                             .single();
-                        
-                        if (motherData && motherData.patient_basic_info) {
-                            barangay = motherData.patient_basic_info.barangay;
+                            
+                        if (!mError && motherData?.patient_basic_info?.stations) {
+                            barangay = motherData.patient_basic_info.stations.station_name;
                         }
                     }
                 }
@@ -255,7 +255,11 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                 }));
 
                 setPendingVaccines(pending);
-                setSelectedVaccines({});
+                if (initialAutoSelectId) {
+                    setSelectedVaccines({ [initialAutoSelectId]: true });
+                } else {
+                    setSelectedVaccines({});
+                }
             } catch (err) {
                 console.error('Error loading patient vaccination schedule:', err);
                 setSelectedPatient(null);
@@ -377,7 +381,9 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                             vaccinated_date: form.date,
                             status: 'Completed',
                             created_by: currentUser,
-                            notes: form.notes || null
+                            vaccinated_by: currentUser,
+                            notes: form.notes || null,
+                            remarks: form.remarks || null
                         };
                         
                         // Add patient or newborn ID based on type
@@ -478,7 +484,9 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                         const updateData = {
                             vaccinated_date: form.date,
                             status: 'Completed',
-                            notes: form.notes || null
+                            vaccinated_by: currentUser,
+                            notes: form.notes || null,
+                            remarks: form.remarks || null
                         };
                         if (vaccineInvId) {
                             updateData.vaccine_inventory_id = vaccineInvId;
@@ -556,7 +564,9 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                         scheduled_vaccination: form.date,
                         status: 'Completed',
                         created_by: currentUser,
-                        notes: form.notes || `${doseOrdinal} dose of ${form.vaccine}`
+                        vaccinated_by: currentUser,
+                        notes: form.notes || `${doseOrdinal} dose of ${form.vaccine}`,
+                        remarks: form.remarks || null
                     };
 
                     // If vaccine found in inventory, link it and decrement
@@ -804,6 +814,10 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                             <label>Notes (optional)</label>
                             <input type="text" placeholder="Any relevant notes..." value={form.notes} onChange={e => updateForm('notes', e.target.value)} />
                         </div>
+                        <div className="form-group">
+                            <label>Remarks</label>
+                            <input type="text" placeholder="Doctor's observations or remarks..." value={form.remarks} onChange={e => updateForm('remarks', e.target.value)} />
+                        </div>
                     </div>
                 </div>
                 <div className="modal-footer">
@@ -869,7 +883,7 @@ const Vaccinations = () => {
                     created_by,
                     staff_profiles!vaccinations_created_by_fkey (full_name),
                     vaccine_inventory (vaccine_name),
-                    patient_basic_info!vaccinations_patient_id_fkey (id, first_name, last_name, barangay, province)
+                    patient_basic_info!vaccinations_patient_id_fkey (id, first_name, last_name, station_ass, stations:station_ass (station_name), province)
                 `)
                 .order('created_at', { ascending: false });
             console.log('💉 Fetched vaccination records:', vaccRecords?.length || 0);
@@ -888,14 +902,13 @@ const Vaccinations = () => {
             const { data: staff } = await supabase.from('staff_profiles').select('id, full_name');
             const staffMap = new Map(staff.map(s => [s.id, s.full_name]));
             
-            // Fetch all patients to create a map for names
             const { data: allPatients } = await supabase
                 .from('patient_basic_info')
-                .select('id, first_name, last_name, barangay, province');
+                .select('id, first_name, last_name, station_ass, stations:station_ass (station_name), province');
             console.log('📋 Fetched patients:', allPatients?.length || 0);
             const patientMap = new Map(allPatients?.map(p => [p.id, {
                 name: `${p.first_name || ''} ${p.last_name || ''}`.trim(),
-                station: `${p.barangay || 'N/A'}, ${p.province || 'N/A'}`
+                station: `${p.stations?.station_name || 'N/A'}, ${p.province || 'N/A'}`
             }]) || []);
             console.log('🗺️ PatientMap size:', patientMap.size);
             console.log('🗺️ Sample PatientMap entries:', Array.from(patientMap.entries()).slice(0, 5));
@@ -1473,6 +1486,7 @@ const Vaccinations = () => {
                                                                             <th>Date Given</th>
                                                                             <th>Scheduled</th>
                                                                             <th>Status</th>
+                                                                            <th>Actions</th>
                                                                         </tr>
                                                                     </thead>
                                                                     <tbody>
@@ -1483,6 +1497,17 @@ const Vaccinations = () => {
                                                                                 <td>{record.date || <span className="not-yet">Not given</span>}</td>
                                                                                 <td>{record.nextDue || <span className="not-yet">—</span>}</td>
                                                                                 <td><span className={`vacc-status ${vaccineStatusClass(record.status)}`}>{record.status}</span></td>
+                                                                                <td>
+                                                                                    {record.status === 'Pending' && (
+                                                                                        <button 
+                                                                                            className="action-btn record-btn" 
+                                                                                            style={{ fontSize: '0.75rem', padding: '2px 6px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                                                                            onClick={() => setRecordModal({ mode: 'vaccine', initialPatientType: item.type, initialPatientName: item.patientName, initialAutoSelectId: record.id })}
+                                                                                        >
+                                                                                            <Syringe size={12} /> Administer Now
+                                                                                        </button>
+                                                                                    )}
+                                                                                </td>
                                                                             </tr>
                                                                         ))}
                                                                     </tbody>
