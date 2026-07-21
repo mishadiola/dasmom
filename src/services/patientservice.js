@@ -864,38 +864,33 @@ export default class PatientService {
     const createdBy = await this.getCurrentUserId();
     if (!createdBy) throw new Error("No logged-in user");
 
-    const patientId = crypto.randomUUID();
+    const currentUser = await authService.getAuthUser();
+    const currentUserRole = (currentUser?.role || '').toLowerCase();
+    const enforceCurrentStation = currentUserRole === 'staff' || currentUserRole === 'cho personnel';
 
-    const { data: typeData, error: typeError } = await this.supabase
-      .from('user_type')
-      .select('id')
-      .ilike('user_type', '%patient%')
-      .maybeSingle();
+    let stationId = null;
+    if (enforceCurrentStation) {
+      const { data: currentStaffProfile } = await this.supabase
+        .from('staff_profiles')
+        .select('station_ass')
+        .eq('id', currentUser.id)
+        .maybeSingle();
 
-    if (typeError) {
-      console.error('Error fetching patient user type:', typeError);
-      throw typeError;
+      stationId = currentStaffProfile?.station_ass || null;
+    } else if (patientData.station) {
+      stationId = await authService.getOrCreateStationId(patientData.station);
     }
 
-    if (!typeData) {
-      throw new Error("Patient usertype not found");
-    }
-
-    const { error: userInsertError } = await this.supabase.from('users').insert({
-      id: patientId,
-      email_address: patientData.email,
-      password: 'Patient123!',
-      usertype: typeData.id
+    const authUser = await authService.createUserAccount({
+      email: patientData.email,
+      password: patientData.password || 'Patient123!',
+      role: 'patient',
+      metadata: {
+        full_name: `${patientData.firstName || ''} ${patientData.lastName || ''}`.trim(),
+      }
     });
 
-    if (userInsertError) {
-      console.error('Error inserting user account for patient:', userInsertError);
-      throw userInsertError;
-    }
-
-    const stationId = patientData.station
-      ? await authService.getOrCreateStationId(patientData.station)
-      : null;
+    const patientId = authUser.id;
 
     const { error: patientInsertError } = await this.supabase.from('patient_basic_info').insert({
       id: patientId,
@@ -1775,48 +1770,72 @@ async getHighRiskPatients() {
     return [...new Set(data?.map(s => s.station_name) || [])];
   }
 
-  async getDoctorsByStation(station) {
+  normalizeStationName(stationName) {
+    return String(stationName || '')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '');
+  }
+
+  async getStationIdByName(stationName) {
+    const normalized = String(stationName || '').trim();
+    if (!normalized) return null;
+
+    const { data, error } = await this.supabase
+      .from('stations')
+      .select('id, station_name');
+
+    if (error) throw error;
+
+    const target = this.normalizeStationName(normalized);
+    const matchedStation = (data || []).find((station) => {
+      return this.normalizeStationName(station.station_name) === target;
+    });
+
+    return matchedStation?.id || null;
+  }
+
+  async getStaffByStation(station) {
     const normalized = station?.trim() || '';
     if (!normalized) return [];
 
-    const { data } = await this.supabase
-      .from('staff_profiles')
-      .select(`
-        id,
-        full_name,
-        station_ass,
-        stations:station_ass (
-          station_name
-        )
-      `)
-      .ilike('stations.station_name', normalized)
-      .order('full_name');
-    
-    return data || [];
+    try {
+      const stationId = await this.getStationIdByName(normalized);
+
+      let query = this.supabase
+        .from('staff_profiles')
+        .select(`
+          id,
+          full_name,
+          station_ass,
+          stations:station_ass (
+            station_name
+          )
+        `)
+        .order('full_name');
+
+      if (stationId) {
+        query = query.eq('station_ass', stationId);
+      } else {
+        query = query.ilike('stations.station_name', `%${normalized}%`);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error getting staff by station:', error);
+      return [];
+    }
+  }
+
+  async getDoctorsByStation(station) {
+    return this.getStaffByStation(station);
   }
 
   async getRetainedStaff(station) {
-    try {
-        const normalized = station?.trim() || '';
-        const { data, error } = await this.supabase
-            .from('staff_profiles')
-            .select(`
-                id,
-                full_name,
-                station_ass,
-                stations:station_ass (
-                  station_name
-                )
-            `)
-            .ilike('stations.station_name', normalized)
-            .order('full_name');
-        if (error) throw error;
-        return data || [];
-    } catch (error) {
-        console.error('Error getting retained staff:', error);
-        return [];
-    }
-}
+    return this.getStaffByStation(station);
+  }
 
   /**
    * BRIDGE METHODS FOR INVENTORY & STATS

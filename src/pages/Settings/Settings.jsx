@@ -56,11 +56,33 @@ const formatStationName = (station) => {
 /* ════════════════════════════
    ADD USER MODAL
 ════════════════════════════ */
+const normalizeRoleValue = (role) => {
+    const value = String(role || '').trim().toLowerCase();
+    if (!value) return 'staff';
+    if (value === 'super admin' || value === 'admin') return 'admin';
+    if (value === 'cho personnel' || value === 'cho personnel') return 'cho personnel';
+    if (value === 'midwife') return 'midwife';
+    if (value === 'doctor') return 'doctor';
+    if (value === 'staff') return 'staff';
+    return value;
+};
+
+const formatRoleLabel = (role) => {
+    const value = normalizeRoleValue(role);
+    if (value === 'cho personnel') return 'CHO Personnel';
+    if (value === 'admin') return 'Admin';
+    if (value === 'staff') return 'Staff';
+    if (value === 'midwife') return 'Midwife';
+    if (value === 'doctor') return 'Doctor';
+    return value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+};
+
 const AddUserModal = ({ onClose, onSuccess }) => {
     const staffService = new StaffService();
     const [showPwd, setShowPwd] = useState(false);
-    const [form, setForm] = useState({ name: '', email: '', password: '', role: 'Staff', station: '' });
+    const [form, setForm] = useState({ name: '', email: '', password: '', role: 'staff', station: '' });
     const [stations, setStations] = useState([]);
+    const [roles, setRoles] = useState([]);
     const [showStationDropdown, setShowStationDropdown] = useState(false);
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -79,7 +101,24 @@ const AddUserModal = ({ onClose, onSuccess }) => {
                 setLoading(false);
             }
         };
+
+        const fetchRoles = async () => {
+            try {
+                const roleList = await staffService.getAllUserRoles();
+                setRoles(roleList);
+                setForm(prev => ({
+                    ...prev,
+                    role: prev.role && roleList.some(role => role.value === normalizeRoleValue(prev.role))
+                        ? prev.role
+                        : (roleList[0]?.value || 'staff')
+                }));
+            } catch (err) {
+                console.error('Failed to fetch roles:', err);
+            }
+        };
+
         fetchStations();
+        fetchRoles();
     }, []);
 
     const genPassword = () => {
@@ -147,11 +186,16 @@ const AddUserModal = ({ onClose, onSuccess }) => {
                         </div>
                         <div className="form-group">
                             <label>Role <span className="req">*</span></label>
-                            <select value={form.role} onChange={e => update('role', e.target.value)}>
-                                <option value="Staff">Staff</option>
-                                <option value="Admin">Admin</option>
-                                <option value="Midwife">Midwife</option>
-                                <option value="Doctor">Doctor</option>
+                            <select value={normalizeRoleValue(form.role)} onChange={e => update('role', e.target.value)}>
+                                {roles.length > 0 ? roles.map(role => (
+                                    <option key={role.id} value={role.value}>{formatRoleLabel(role.value)}</option>
+                                )) : (
+                                    <>
+                                        <option value="staff">Staff</option>
+                                        <option value="admin">Admin</option>
+                                        <option value="cho personnel">CHO Personnel</option>
+                                    </>
+                                )}
                             </select>
                         </div>
                         <div className="form-group">
@@ -258,8 +302,9 @@ const AddUserModal = ({ onClose, onSuccess }) => {
 ════════════════════════════ */
 const EditUserModal = ({ staff, onClose, onSuccess }) => {
     const staffService = new StaffService();
-    const [form, setForm] = useState({ name: staff.name, email: staff.email, role: staff.role, station: staff.station });
+    const [form, setForm] = useState({ name: staff.name, email: staff.email, role: normalizeRoleValue(staff.role), station: staff.station });
     const [stations, setStations] = useState([]);
+    const [roles, setRoles] = useState([]);
     const [showStationDropdown, setShowStationDropdown] = useState(false);
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -278,7 +323,24 @@ const EditUserModal = ({ staff, onClose, onSuccess }) => {
                 setLoading(false);
             }
         };
+
+        const fetchRoles = async () => {
+            try {
+                const roleList = await staffService.getAllUserRoles();
+                setRoles(roleList);
+                setForm(prev => ({
+                    ...prev,
+                    role: prev.role && roleList.some(role => role.value === normalizeRoleValue(prev.role))
+                        ? prev.role
+                        : (roleList[0]?.value || 'staff')
+                }));
+            } catch (err) {
+                console.error('Failed to fetch roles:', err);
+            }
+        };
+
         fetchStations();
+        fetchRoles();
     }, []);
 
     const handleSubmit = async (e) => {
@@ -326,11 +388,16 @@ const EditUserModal = ({ staff, onClose, onSuccess }) => {
                         </div>
                         <div className="form-group">
                             <label>Role <span className="req">*</span></label>
-                            <select value={form.role} onChange={e => update('role', e.target.value)}>
-                                <option value="Staff">Staff</option>
-                                <option value="Admin">Admin</option>
-                                <option value="Midwife">Midwife</option>
-                                <option value="Doctor">Doctor</option>
+                            <select value={normalizeRoleValue(form.role)} onChange={e => update('role', e.target.value)}>
+                                {roles.length > 0 ? roles.map(role => (
+                                    <option key={role.id} value={role.value}>{formatRoleLabel(role.value)}</option>
+                                )) : (
+                                    <>
+                                        <option value="staff">Staff</option>
+                                        <option value="admin">Admin</option>
+                                        <option value="cho personnel">CHO Personnel</option>
+                                    </>
+                                )}
                             </select>
                         </div>
                         <div className="form-group">
@@ -425,6 +492,7 @@ const UserAccountsTab = () => {
     const [showEditModal, setShowEditModal] = useState(false);
     const [selectedStaff, setSelectedStaff] = useState(null);
     const [staff, setStaff] = useState([]);
+    const [roleOptions, setRoleOptions] = useState([]);
     const [loading, setLoading] = useState(true);
 
     const fetchStaff = async () => {
@@ -440,13 +508,23 @@ const UserAccountsTab = () => {
     };
 
     useEffect(() => {
+        const fetchRoles = async () => {
+            try {
+                const roles = await staffService.getAllUserRoles();
+                setRoleOptions(roles);
+            } catch (err) {
+                console.error('Failed to fetch roles:', err);
+            }
+        };
+
         fetchStaff();
+        fetchRoles();
     }, []);
 
     const filtered = staff.filter(u => {
         const s = search.toLowerCase();
         const matchS = u.name.toLowerCase().includes(s) || u.email.toLowerCase().includes(s);
-        const matchR = roleFilter === 'All' || u.role === roleFilter;
+        const matchR = roleFilter === 'All' || normalizeRoleValue(u.role) === normalizeRoleValue(roleFilter);
         const matchSt = statusFilter === 'All' || u.status === statusFilter;
         const matchArchive = archiveFilter === 'all' || (u.archiveStatus || 'active') === archiveFilter;
         return matchS && matchR && matchSt && matchArchive;
@@ -492,11 +570,9 @@ const UserAccountsTab = () => {
                 </div>
                 <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)} className="set-select">
                     <option value="All">All Roles</option>
-                    <option>Super Admin</option>
-                    <option>Admin</option>
-                    <option>Midwife</option>
-                    <option>Doctor</option>
-                    <option>Staff</option>
+                    {roleOptions.map(role => (
+                        <option key={role.id} value={role.value}>{formatRoleLabel(role.value)}</option>
+                    ))}
                 </select>
                 <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="set-select">
                     <option value="All">All Statuses</option>

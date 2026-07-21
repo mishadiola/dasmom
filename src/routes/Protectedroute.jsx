@@ -3,10 +3,14 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext'; 
 
 export default function ProtectedRoute({ pageKey, children }) {
-  const { user } = useContext(AuthContext); 
+  const { user, isAuthLoading } = useContext(AuthContext); 
   const location = useLocation();
 
-  console.log('ProtectedRoute: checking access', { pageKey, user });
+  console.log('ProtectedRoute: checking access', { pageKey, user, isAuthLoading });
+
+  if (isAuthLoading) {
+    return null;
+  }
 
   if (!user) {
     // Redirect to appropriate login page based on current path

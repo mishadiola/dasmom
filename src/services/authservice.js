@@ -40,6 +40,114 @@ export default class AuthService {
     return inserted?.id || null;
   }
 
+  async getUserTypeIdByRole(role) {
+    const normalizedRole = String(role || '').trim().toLowerCase();
+    if (!normalizedRole) {
+      throw new Error('Role is required');
+    }
+
+    const { data, error } = await this.supabase
+      .from('user_type')
+      .select('id, user_type')
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    const userType = (data || []).find(
+      item => item.user_type?.toLowerCase().trim() === normalizedRole
+    );
+
+    if (userType?.id) return userType.id;
+
+    const { data: insertedRole, error: insertError } = await this.supabase
+      .from('user_type')
+      .insert({ user_type: normalizedRole })
+      .select('id')
+      .single();
+
+    if (insertError) throw insertError;
+    return insertedRole?.id;
+  }
+
+  async ensurePublicUserRecord({ userId, email, role }) {
+    const normalizedEmail = (email || '').trim().toLowerCase();
+    const normalizedRole = String(role || '').trim().toLowerCase();
+
+    if (!userId) throw new Error('User ID is required');
+
+    const userTypeId = await this.getUserTypeIdByRole(normalizedRole);
+
+    const payload = {
+      id: userId,
+      email_address: normalizedEmail,
+      usertype: userTypeId,
+    };
+
+    const { error: directInsertError } = await this.supabase
+      .from('users')
+      .upsert(payload, { onConflict: 'id' });
+
+    if (!directInsertError) return;
+
+    console.warn('Direct users upsert failed, trying database helper fallback:', directInsertError);
+
+    const { error: rpcError } = await this.supabase.rpc('ensure_public_user_row', {
+      p_user_id: userId,
+      p_email: normalizedEmail,
+      p_role: normalizedRole,
+    });
+
+    if (rpcError) {
+      const { data: existingUser, error: lookupError } = await this.supabase
+        .from('users')
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (lookupError || !existingUser) {
+        throw directInsertError;
+      }
+    }
+  }
+
+  async createUserAccount({ email, password, role, metadata = {} }) {
+    const normalizedEmail = (email || '').trim().toLowerCase();
+    if (!normalizedEmail || !password) {
+      throw new Error('Email and password are required');
+    }
+
+    const { data: authData, error: authError } = await this.supabase.auth.signUp({
+      email: normalizedEmail,
+      password,
+      options: {
+        data: {
+          role: String(role || '').trim().toLowerCase(),
+          ...(metadata || {})
+        }
+      }
+    });
+
+    if (authError) throw authError;
+
+    const authUser = authData?.user;
+    if (!authUser?.id) {
+      throw new Error('Failed to create auth user');
+    }
+
+    try {
+      await this.ensurePublicUserRecord({
+        userId: authUser.id,
+        email: normalizedEmail,
+        role,
+      });
+    } catch (userInsertError) {
+      console.error('Failed to create public users row for auth account:', userInsertError);
+      throw userInsertError;
+    }
+
+    return authUser;
+  }
+
   async login(email, password) {
     const { data: authData, error: authError } = await this.supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
@@ -81,6 +189,7 @@ export default class AuthService {
       fullName: profile.fullName,
     };
 
+    this.saveUser(this._currentUser);
     return this._currentUser;
   }
 
@@ -89,7 +198,7 @@ export default class AuthService {
     let displayName = null;
 
     try {
-      if (role === 'admin' || role.includes('staff') || role.includes('midwife') || role.includes('doctor')) {
+      if (role === 'admin' || role.includes('staff') || role === 'cho personnel' || role.includes('midwife') || role.includes('doctor')) {
         const { data, error } = await this.supabase
           .from('staff_profiles')
           .select('full_name')
@@ -157,15 +266,19 @@ export default class AuthService {
       fullName: profile.fullName,
     };
 
+    this.saveUser(this._currentUser);
     return this._currentUser;
   }
 
-
   async logout() {
     await this.supabase.auth.signOut();
+    this.clearUser();
+    console.log('User logged out');
+  }
+
+  clearUser() {
     this._currentUser = null;
     localStorage.removeItem('user');
-    console.log('User logged out');
   }
 
   saveUser(user) {
