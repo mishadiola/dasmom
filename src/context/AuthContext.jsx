@@ -19,13 +19,31 @@ export const AuthProvider = ({ children }) => {
 
     const initAuth = async () => {
       try {
-        const current = await authService.getAuthUser();
-        if (isMounted) {
-          setUser(current);
-          console.log('AuthContext: User re-hydrated from session', current);
+        // Clear any stale cached user
+        authService.clearUser();
+        
+        // Only try to load user if there's an active Supabase session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError || !session?.user) {
+          // No valid session - don't auto-restore user
+          if (isMounted) {
+            setUser(null);
+            console.log('AuthContext: No active session, user not loaded');
+          }
+        } else {
+          // Valid session exists - load full user data
+          const current = await authService.getAuthUser();
+          if (isMounted) {
+            setUser(current);
+            console.log('AuthContext: User loaded from active session', current);
+          }
         }
       } catch (err) {
-        console.error('AuthContext: Error re-hydrating user', err);
+        console.error('AuthContext: Error during auth init', err);
+        if (isMounted) {
+          setUser(null);
+        }
       } finally {
         if (isMounted) {
           setIsAuthLoading(false);
@@ -35,7 +53,7 @@ export const AuthProvider = ({ children }) => {
 
     initAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         setUser(null);
         setIsAuthLoading(false);
@@ -43,7 +61,12 @@ export const AuthProvider = ({ children }) => {
       }
 
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
-        initAuth();
+        if (session?.user) {
+          initAuth();
+        } else {
+          setUser(null);
+          setIsAuthLoading(false);
+        }
       }
     });
 

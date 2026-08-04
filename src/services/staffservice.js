@@ -153,6 +153,66 @@ export default class StaffService {
         throw new Error('Missing required fields');
       }
 
+      // Ensure caller has permission to add staff
+      const caller = await authService.getAuthUser();
+      if (!caller) throw new Error('Not authenticated');
+
+      // Determine caller role from users table (fallback to staff_profiles if usertype missing)
+      let callerRole = 'user';
+      try {
+        const { data: userRow } = await this.supabase
+          .from('users')
+          .select('id, usertype')
+          .eq('id', caller.id)
+          .maybeSingle();
+
+        if (userRow?.usertype) {
+          const { data: t } = await this.supabase
+            .from('user_type')
+            .select('user_type')
+            .eq('id', userRow.usertype)
+            .maybeSingle();
+          if (t?.user_type) callerRole = String(t.user_type).toLowerCase();
+        } else {
+          // fallback: if staff_profiles exists assume 'staff'
+          const { data: sp } = await this.supabase
+            .from('staff_profiles')
+            .select('station_ass')
+            .eq('id', caller.id)
+            .maybeSingle();
+          if (sp) callerRole = 'staff';
+        }
+      } catch (err) {
+        console.warn('Failed to resolve caller role from DB, falling back to session role:', err);
+        callerRole = (caller.role || 'user').toLowerCase();
+      }
+
+      console.debug('addStaff called by:', { callerId: caller.id, callerRole });
+
+      if (!['admin', 'cho personnel'].includes(callerRole)) {
+        throw new Error('Insufficient permissions to add staff');
+      }
+
+      // If caller is cho personnel, they can only add limited roles and must assign to their station
+      let stationId = null;
+      if (callerRole === 'cho personnel') {
+        const allowed = ['staff', 'patient', 'mother'];
+        if (!allowed.includes(role.toLowerCase())) {
+          throw new Error('CHO Personnel can only add staff or patient accounts');
+        }
+        const { data: callerProfile } = await this.supabase
+          .from('staff_profiles')
+          .select('station_ass')
+          .eq('id', caller.id)
+          .maybeSingle();
+        stationId = callerProfile?.station_ass || null;
+      } else {
+        // admin may specify station
+        stationId = station && station.trim()
+          ? await authService.getOrCreateStationId(station.trim())
+          : null;
+      }
+
       const authUser = await authService.createUserAccount({
         email,
         password,
@@ -163,10 +223,6 @@ export default class StaffService {
       });
 
       const staffId = authUser.id;
-
-      const stationId = station && station.trim()
-        ? await authService.getOrCreateStationId(station.trim())
-        : null;
 
       const { data: staffData, error: staffError } = await this.supabase
         .from('staff_profiles')

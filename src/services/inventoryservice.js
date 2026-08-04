@@ -14,7 +14,36 @@ class InventoryService {
   async _ensureAdmin() {
     const user = await this.auth.getAuthUser();
     if (!user) throw new Error('No user session');
-    if (user.role !== 'admin') throw new Error('Only admins can modify inventory');
+
+    // Resolve authoritative role from DB (users.usertype) with fallback to staff_profiles
+    let role = (user.role || '').toLowerCase();
+    try {
+      const { data: userRow } = await this.supabase
+        .from('users')
+        .select('id, usertype')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (userRow?.usertype) {
+        const { data: t } = await this.supabase
+          .from('user_type')
+          .select('user_type')
+          .eq('id', userRow.usertype)
+          .maybeSingle();
+        if (t?.user_type) role = String(t.user_type).toLowerCase();
+      } else {
+        const { data: sp } = await this.supabase
+          .from('staff_profiles')
+          .select('station_ass')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (sp) role = 'staff';
+      }
+    } catch (err) {
+      console.warn('Failed to resolve role from DB, falling back to session role:', err);
+    }
+
+    if (role !== 'admin') throw new Error('Only admins can modify inventory');
+    console.debug('Inventory._ensureAdmin resolved role=', role, 'for user=', user?.id);
   }
 
   async _resolveStationId(stationName) {
@@ -270,18 +299,20 @@ class InventoryService {
   }
 
   async getVaccineInventory() {
-    const { data, error } = await supabase
-      .from('vaccine_inventory')
-      .select('id, vaccine_name, quantity, unit, max_quantity, created_by, created_at, brand, expiration_date, doses, batch, manufactured_date');
+    try {
+      const { data, error } = await supabase
+        .from('vaccine_inventory')
+        .select('id, vaccine_name, quantity, unit, max_quantity, created_by, created_at, brand, expiration_date, doses, batch, manufactured_date')
+        .limit(200);
 
-    if (error) {
-      console.error('Error fetching vaccine inventory:', error);
-      throw error;
-    }
+      if (error) {
+        console.error('Error fetching vaccine inventory:', error);
+        return [];
+      }
 
-    console.log('Vaccine inventory raw data:', data?.length || 0, data);
+      console.log('Vaccine inventory raw data:', data?.length || 0);
 
-    return (data || []).map(row => {
+      return (data || []).map(row => {
       // Calculate status based on stock level
       const percentage = row.max_quantity ? Math.round((row.quantity / row.max_quantity) * 100) : 0;
       let status = 'ok';
@@ -306,22 +337,28 @@ class InventoryService {
         batch: row.batch,
         manufactured_date: row.manufactured_date
       };
-    });
+      });
+    } catch (err) {
+      console.error('Vaccine inventory query failed:', err);
+      return [];
+    }
   }
 
   async getSupplementInventory() {
-    const { data, error } = await supabase
-      .from('supplement_inventory')
-      .select('id, supplement_name, quantity, unit, max_quant, created_by, created_at, brand, expiration_date, batch_number, manufactured_date');
+    try {
+      const { data, error } = await supabase
+        .from('supplement_inventory')
+        .select('id, supplement_name, quantity, unit, max_quant, created_by, created_at, brand, expiration_date, batch_number, manufactured_date')
+        .limit(200);
 
-    if (error) {
-      console.error('Error fetching supplement inventory:', error);
-      throw error;
-    }
+      if (error) {
+        console.error('Error fetching supplement inventory:', error);
+        return [];
+      }
 
-    console.log('Supplement inventory raw data:', data?.length || 0, data);
+      console.log('Supplement inventory raw data:', data?.length || 0);
 
-    return (data || []).map(row => {
+      return (data || []).map(row => {
       // Calculate status based on stock level
       const percentage = row.max_quant ? Math.round((row.quantity / row.max_quant) * 100) : 0;
       let status = 'ok';
@@ -345,7 +382,11 @@ class InventoryService {
         batch_number: row.batch_number,
         manufactured_date: row.manufactured_date
       };
-    });
+      });
+    } catch (err) {
+      console.error('Supplement inventory query failed:', err);
+      return [];
+    }
   }
 
   async addInventoryItem(table, { item_name, quantity, max_stock, unit, brand, expiration_date, batch_number, manufactured_date }) {
