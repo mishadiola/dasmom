@@ -97,6 +97,7 @@ const normalizeStation = (barangay) => {
 
 const Analytics = () => {
     const navigate = useNavigate();
+    const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'maternal' | 'vaccination' | 'delivery'
     
     // ── Filters State ──
     const [filters, setFilters] = useState({
@@ -958,940 +959,523 @@ const Analytics = () => {
                 </button>
             </section>
 
-            {/* ── Executive Maternal Health Score Hero Section ── */}
-            <motion.section 
-                initial={{ opacity: 0, y: 15 }} 
-                animate={{ opacity: 1, y: 0 }} 
-                transition={{ duration: 0.4 }} 
-                className="health-score-hero glass-card"
-            >
-                <div className="hero-grid">
-                    <div className="hero-left-score">
-                        <div className="score-ring-container">
-                            <svg className="score-ring-svg" viewBox="0 0 120 120">
-                                <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(185, 129, 138, 0.15)" strokeWidth="8" />
-                                <circle cx="60" cy="60" r="50" fill="none" stroke="url(#scoreGrad)" strokeWidth="10" strokeDasharray="314.15" strokeDashoffset={314.15 - (314.15 * healthScore) / 100} strokeLinecap="round" style={{ transform: 'rotate(-90deg)', transformOrigin: '60px 60px', transition: 'stroke-dashoffset 1s ease' }} />
-                                <defs>
-                                    <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                        <stop offset="0%" stopColor="#ac97b4" />
-                                        <stop offset="50%" stopColor="#ffe3a4" />
-                                        <stop offset="100%" stopColor="#b9818a" />
-                                    </linearGradient>
-                                </defs>
-                            </svg>
-                            <div className="score-ring-center">
-                                <span className="score-number">{healthScore}</span>
-                                <span className="score-denominator">/ 100</span>
-                            </div>
-                        </div>
-                        <div className="score-status-wrapper">
-                            <span className="score-label">Maternal Health Index</span>
-                            <span className={`status-badge ${healthStatus.class}`}>{healthStatus.label}</span>
-                        </div>
-                    </div>
-                    
-                    <div className="hero-right-details">
-                        <div className="hero-quick-stats">
-                            <div className="hero-stat-pill">
-                                <span className="hero-stat-label">Total Pregnant</span>
-                                <span className="hero-stat-val">{activeData.totalPregnant}</span>
-                                <span className="hero-stat-sub">Registered Patients</span>
-                            </div>
-                            <div className="hero-stat-pill">
-                                <span className="hero-stat-label">High-Risk Cases</span>
-                                <span className="hero-stat-val color-red font-bold">{activeData.highRisk}</span>
-                                <span className="hero-stat-sub">Needs Attention</span>
-                            </div>
-                            <div className="hero-stat-pill">
-                                <span className="hero-stat-label">Vaccination Compliance</span>
-                                <span className="hero-stat-val font-semibold">{activeData.vaccRate}%</span>
-                                <span className="hero-stat-sub">Immunized mothers/newborns</span>
-                            </div>
-                            <div className="hero-stat-pill">
-                                <span className="hero-stat-label">Postpartum Follow-up</span>
-                                <span className="hero-stat-val font-semibold">{activeData.ppRate}%</span>
-                                <span className="hero-stat-sub">Within 42-day period</span>
-                            </div>
-                            <div className="hero-stat-pill">
-                                <span className="hero-stat-label">Missed Appointment Rate</span>
-                                <span className="hero-stat-val color-red font-semibold">{activeData.missedRate}%</span>
-                                <span className="hero-stat-sub">Appointment defaults</span>
-                            </div>
-                        </div>
-                        
-                        <div className="hero-insights-narrative">
-                            <div className="narrative-row">
-                                <span className="narrative-label text-critical">TOP CONCERN:</span>
-                                <span className="narrative-text">{heroInsights.concern}</span>
-                            </div>
-                            <div className="narrative-row">
-                                <span className="narrative-label text-success">RECOMMENDED ACTION:</span>
-                                <span className="narrative-text">{heroInsights.action}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </motion.section>
+            {/* ── Executive Analytics Tab Bar ── */}
+            <nav className="analytics-tabs-container" aria-label="Executive Analytics tabs">
+                <button 
+                    className={`analytics-tab-btn ${activeTab === 'overview' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('overview')}
+                >
+                    <Activity size={16} />
+                    <span>Overview</span>
+                </button>
+                <button 
+                    className={`analytics-tab-btn ${activeTab === 'maternal' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('maternal')}
+                >
+                    <HeartPulse size={16} />
+                    <span>Maternal Health</span>
+                </button>
+                <button 
+                    className={`analytics-tab-btn ${activeTab === 'vaccination' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('vaccination')}
+                >
+                    <Syringe size={16} />
+                    <span>Vaccination</span>
+                </button>
+                <button 
+                    className={`analytics-tab-btn ${activeTab === 'delivery' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('delivery')}
+                >
+                    <Baby size={16} />
+                    <span>Delivery &amp; Postpartum</span>
+                </button>
+            </nav>
 
-            {/* ── Priority-Based KPI Hierarchy ── */}
-            <section className="kpi-grid priority-tiered">
-                {/* Critical Tier */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="kpi-card glass-card tier-critical">
-                    <div className="kpi-card-header">
-                        <div className="kpi-icon-circle"><AlertTriangle size={20} /></div>
-                        <span className="trend-badge trend-up"><TrendingUp size={12} /> 12.0%</span>
-                        <span className="kpi-priority-badge badge-critical">CRITICAL</span>
-                    </div>
-                    <div className="kpi-card-body">
-                        <span className="kpi-val">{activeData.highRisk}</span>
-                        <h3 className="kpi-label">High-Risk Pregnancies</h3>
-                        <span className="kpi-sub">Critical warning states</span>
-                    </div>
-                </motion.div>
-
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="kpi-card glass-card tier-critical">
-                    <div className="kpi-card-header">
-                        <div className="kpi-icon-circle"><XCircle size={20} /></div>
-                        <span className="trend-badge trend-down"><TrendingDown size={12} /> 0.8%</span>
-                        <span className="kpi-priority-badge badge-critical">CRITICAL</span>
-                    </div>
-                    <div className="kpi-card-body">
-                        <span className="kpi-val">{activeData.missedRate}%</span>
-                        <h3 className="kpi-label">Missed Appointment Rate</h3>
-                        <span className="kpi-sub">Prenatal visit defaults</span>
-                    </div>
-                </motion.div>
-
-                {/* Warning Tier */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="kpi-card glass-card tier-warning">
-                    <div className="kpi-card-header">
-                        <div className="kpi-icon-circle"><Users size={20} /></div>
-                        <span className="trend-badge trend-down"><TrendingDown size={12} /> 3.1%</span>
-                        <span className="kpi-priority-badge badge-warning">WARNING</span>
-                    </div>
-                    <div className="kpi-card-body">
-                        <span className="kpi-val">{activeData.teenage}</span>
-                        <h3 className="kpi-label">Teenage Pregnancies</h3>
-                        <span className="kpi-sub">Mothers aged &lt;20 years</span>
-                    </div>
-                </motion.div>
-
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="kpi-card glass-card tier-warning">
-                    <div className="kpi-card-header">
-                        <div className="kpi-icon-circle"><Activity size={20} /></div>
-                        <span className="trend-badge trend-stable"><Minus size={12} /> 1.5%</span>
-                        <span className="kpi-priority-badge badge-warning">WARNING</span>
-                    </div>
-                    <div className="kpi-card-body">
-                        <span className="kpi-val">{activeData.advancedAge}</span>
-                        <h3 className="kpi-label">Advanced Maternal Age Cases</h3>
-                        <span className="kpi-sub">Mothers aged 35+ years</span>
-                    </div>
-                </motion.div>
-
-                {/* Success Tier */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="kpi-card glass-card tier-success">
-                    <div className="kpi-card-header">
-                        <div className="kpi-icon-circle"><Syringe size={20} /></div>
-                        <span className="trend-badge trend-up"><TrendingUp size={12} /> 2.1%</span>
-                        <span className="kpi-priority-badge badge-success">SUCCESS</span>
-                    </div>
-                    <div className="kpi-card-body">
-                        <span className="kpi-val">{activeData.vaccRate}%</span>
-                        <h3 className="kpi-label">Vaccination Completion Rate</h3>
-                        <span className="kpi-sub">Maternal & newborn series</span>
-                    </div>
-                </motion.div>
-
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="kpi-card glass-card tier-success">
-                    <div className="kpi-card-header">
-                        <div className="kpi-icon-circle"><ClipboardCheck size={20} /></div>
-                        <span className="trend-badge trend-down"><TrendingDown size={12} /> 1.2%</span>
-                        <span className="kpi-priority-badge badge-success">SUCCESS</span>
-                    </div>
-                    <div className="kpi-card-body">
-                        <span className="kpi-val">{activeData.ppRate}%</span>
-                        <h3 className="kpi-label">Postpartum Follow-Up Rate</h3>
-                        <span className="kpi-sub">42-day recovery check compliance</span>
-                    </div>
-                </motion.div>
-
-                {/* General Tier */}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="kpi-card glass-card tier-general">
-                    <div className="kpi-card-header">
-                        <div className="kpi-icon-circle"><HeartPulse size={20} /></div>
-                        <span className="trend-badge trend-up"><TrendingUp size={12} /> 4.2%</span>
-                        <span className="kpi-priority-badge badge-general">GENERAL</span>
-                    </div>
-                    <div className="kpi-card-body">
-                        <span className="kpi-val">{activeData.totalPregnant}</span>
-                        <h3 className="kpi-label">Total Pregnant Patients</h3>
-                        <span className="kpi-sub">Active registry cases</span>
-                    </div>
-                </motion.div>
-
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="kpi-card glass-card tier-general">
-                    <div className="kpi-card-header">
-                        <div className="kpi-icon-circle"><Baby size={20} /></div>
-                        <span className="trend-badge trend-up"><TrendingUp size={12} /> 5.0%</span>
-                        <span className="kpi-priority-badge badge-general">GENERAL</span>
-                    </div>
-                    <div className="kpi-card-body">
-                        <span className="kpi-val">{activeData.deliveries}</span>
-                        <h3 className="kpi-label">Deliveries This Period</h3>
-                        <span className="kpi-sub">Registered live births</span>
-                    </div>
-                </motion.div>
-            </section>
-
-            {/* ── Two-Column Line Charts Section ── */}
-            <section className="analytics-section two-column-charts">
-                <div className="glass-card chart-card-container">
-                    <div className="card-header-compact">
-                        <div>
-                            <h2 className="section-header-title">Maternal Health Trends</h2>
-                            <p className="section-header-subtitle">Pregnancy, high-risk cases, and deliveries over time</p>
-                        </div>
-                        <div className="chart-legend">
-                            <span className="legend-item">
-                                <span className="legend-dot color-tot"></span>
-                                Total ({activeData.totalPregnant} cases) 
-                                <span className={`trend-pct-label ${trendsCalculated.totIsUp ? 'up' : 'down'}`}>
-                                    {trendsCalculated.totChange}
-                                </span>
-                            </span>
-                            <span className="legend-item">
-                                <span className="legend-dot color-risk"></span>
-                                High-Risk ({activeData.highRisk} cases)
-                                <span className={`trend-pct-label ${trendsCalculated.hrIsUp ? 'up' : 'down'}`}>
-                                    {trendsCalculated.hrChange}
-                                </span>
-                            </span>
-                            <span className="legend-item">
-                                <span className="legend-dot color-del"></span>
-                                Deliveries ({activeData.deliveries} births)
-                                <span className={`trend-pct-label ${trendsCalculated.delIsUp ? 'up' : 'down'}`}>
-                                    {trendsCalculated.delChange}
-                                </span>
-                            </span>
-                        </div>
-                    </div>
-                    <div className="chart-wrapper">
-                        {/* Custom SVG Line Chart */}
-                        <svg className="svg-line-chart" viewBox="0 0 500 240" width="100%" height="100%">
-                            {/* Horizontal Grid lines */}
-                            {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => {
-                                const y = 20 + ratio * 180;
-                                return (
-                                    <line key={i} x1="40" x2="480" y1={y} y2={y} stroke="#f1f3f5" strokeWidth="1" />
-                                );
-                            })}
-                            
-                            {/* Line paths */}
-                            {(() => {
-                                const maxTot = trendData.totalVal && trendData.totalVal.length > 0
-                                    ? Math.max(...trendData.totalVal.map(v => v || 0)) * 1.1
-                                    : 1;
-                                const safeMax = isFinite(maxTot) && maxTot > 0 ? maxTot : 1;
-                                return (
-                                    <>
-                                        <path d={getSvgLinePath(trendData.totalVal, 500, 240, 40, 20, 20, 40, safeMax)} className="chart-line stroke-tot" />
-                                        <path d={getSvgLinePath(trendData.highRiskVal, 500, 240, 40, 20, 20, 40, safeMax)} className="chart-line stroke-risk" />
-                                        <path d={getSvgLinePath(trendData.deliveriesVal, 500, 240, 40, 20, 20, 40, safeMax)} className="chart-line stroke-del" />
-                                    </>
-                                );
-                            })()}
-
-                            {/* Dots and interactive tooltips */}
-                            {(() => {
-                                const maxTot2 = trendData.totalVal && trendData.totalVal.length > 0
-                                    ? Math.max(...trendData.totalVal.map(v => v || 0)) * 1.1
-                                    : 1;
-                                const safeMax2 = isFinite(maxTot2) && maxTot2 > 0 ? maxTot2 : 1;
-                                return (
-                                    <>
-                                        {getSvgLinePoints(trendData.totalVal, 500, 240, 40, 20, 20, 40, safeMax2).map((pt, i) => (
-                                            <circle key={`tot-${i}`} cx={pt.x} cy={pt.y} r="4.5" className="chart-dot fill-tot"
-                                                onMouseEnter={() => setHoveredDot({ x: pt.x, y: pt.y - 12, val: pt.value, lbl: 'Total', period: trendData.labels[pt.index] })}
-                                                onMouseLeave={() => setHoveredDot(null)}
-                                            />
-                                        ))}
-                                        {getSvgLinePoints(trendData.highRiskVal, 500, 240, 40, 20, 20, 40, safeMax2).map((pt, i) => (
-                                            <circle key={`risk-${i}`} cx={pt.x} cy={pt.y} r="4.5" className="chart-dot fill-risk"
-                                                onMouseEnter={() => setHoveredDot({ x: pt.x, y: pt.y - 12, val: pt.value, lbl: 'High-Risk', period: trendData.labels[pt.index] })}
-                                                onMouseLeave={() => setHoveredDot(null)}
-                                            />
-                                        ))}
-                                        {getSvgLinePoints(trendData.deliveriesVal, 500, 240, 40, 20, 20, 40, safeMax2).map((pt, i) => (
-                                            <circle key={`del-${i}`} cx={pt.x} cy={pt.y} r="4.5" className="chart-dot fill-del"
-                                                onMouseEnter={() => setHoveredDot({ x: pt.x, y: pt.y - 12, val: pt.value, lbl: 'Deliveries', period: trendData.labels[pt.index] })}
-                                                onMouseLeave={() => setHoveredDot(null)}
-                                            />
-                                        ))}
-                                    </>
-                                );
-                            })()}
-
-                            {/* X Axis labels */}
-                            {trendData.labels.map((lbl, idx) => {
-                                const labelDivisor = trendData.labels.length <= 1 ? 1 : trendData.labels.length - 1;
-                                const x = 40 + (idx / labelDivisor) * 440;
-                                return (
-                                    <text key={idx} x={isFinite(x) ? x : 40} y="225" textAnchor="middle" className="axis-label">{lbl}</text>
-                                );
-                            })}
-                        </svg>
-
-                        {/* Interactive Tooltip Card */}
-                        {hoveredDot && (
-                            <div className="chart-tooltip" style={{ left: hoveredDot.x, top: hoveredDot.y }}>
-                                <span className="tooltip-period">{hoveredDot.period}</span>
-                                <span className="tooltip-value"><strong>{hoveredDot.lbl}:</strong> {hoveredDot.val} cases</span>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                <div className="glass-card chart-card-container">
-                    <div className="card-header-compact">
-                        <div>
-                            <h2 className="section-header-title">Vaccination Completion Trend</h2>
-                            <p className="section-header-subtitle">Mother vs newborn immunization compliance rates</p>
-                        </div>
-                        <div className="chart-legend">
-                            <span className="legend-item">
-                                <span className="legend-dot color-vacc-m"></span>
-                                Mothers ({activeData.vaccRate}%) 
-                                <span className={`trend-pct-label ${vaccTrendsCalculated.vmIsUp ? 'up' : 'down'}`}>
-                                    {vaccTrendsCalculated.vmChange}
-                                </span>
-                            </span>
-                            <span className="legend-item">
-                                <span className="legend-dot color-vacc-nb"></span>
-                                Newborns ({(activeData.vaccRate * 0.95).toFixed(0)}%) 
-                                <span className={`trend-pct-label ${vaccTrendsCalculated.vnbIsUp ? 'up' : 'down'}`}>
-                                    {vaccTrendsCalculated.vnbChange}
-                                </span>
-                            </span>
-                            <span className="legend-item">
-                                <span className="legend-target-line"></span>
-                                90% Target
-                            </span>
-                        </div>
-                    </div>
-                    <div className="chart-wrapper">
-                        {/* Custom SVG Line Chart */}
-                        <svg className="svg-line-chart" viewBox="0 0 500 240" width="100%" height="100%">
-                            {/* Horizontal Grid lines */}
-                            {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => {
-                                const y = 20 + ratio * 180;
-                                return (
-                                    <line key={i} x1="40" x2="480" y1={y} y2={y} stroke="#f1f3f5" strokeWidth="1" />
-                                );
-                            })}
-                            
-                            {/* 90% Completion Target Line */}
-                            <line x1="40" x2="480" y1="38" y2="38" stroke="#b9818a" strokeWidth="1.5" strokeDasharray="4,4" className="vacc-target-line" />
-                            <text x="45" y="34" className="axis-label" style={{ fill: '#b9818a', fontSize: '9px', fontWeight: 700 }}>90% TARGET</text>
-
-                            {/* Line paths (rates, maxVal = 100) */}
-                            <path 
-                                d={getSvgLinePath(trendData.vaccMother, 500, 240, 40, 20, 20, 40, 100)} 
-                                className="chart-line stroke-vacc-m" 
-                            />
-                            <path 
-                                d={getSvgLinePath(trendData.vaccNewborn, 500, 240, 40, 20, 20, 40, 100)} 
-                                className="chart-line stroke-vacc-nb" 
-                            />
-
-                            {/* Dots and interactive tooltips */}
-                            {getSvgLinePoints(trendData.vaccMother, 500, 240, 40, 20, 20, 40, 100).map((pt, i) => (
-                                <circle 
-                                    key={`vm-${i}`} 
-                                    cx={pt.x} 
-                                    cy={pt.y} 
-                                    r="4.5" 
-                                    className="chart-dot fill-vacc-m" 
-                                    onMouseEnter={(e) => setHoveredDot({
-                                        x: pt.x,
-                                        y: pt.y - 12,
-                                        val: `${pt.value}%`,
-                                        lbl: 'Mothers',
-                                        period: trendData.labels[pt.index]
-                                    })}
-                                    onMouseLeave={() => setHoveredDot(null)}
-                                />
-                            ))}
-
-                            {getSvgLinePoints(trendData.vaccNewborn, 500, 240, 40, 20, 20, 40, 100).map((pt, i) => (
-                                <circle 
-                                    key={`vnb-${i}`} 
-                                    cx={pt.x} 
-                                    cy={pt.y} 
-                                    r="4.5" 
-                                    className="chart-dot fill-vacc-nb" 
-                                    onMouseEnter={(e) => setHoveredDot({
-                                        x: pt.x,
-                                        y: pt.y - 12,
-                                        val: `${pt.value}%`,
-                                        lbl: 'Newborns',
-                                        period: trendData.labels[pt.index]
-                                    })}
-                                    onMouseLeave={() => setHoveredDot(null)}
-                                />
-                            ))}
-
-                            {/* X Axis labels */}
-                            {trendData.labels.map((lbl, idx) => {
-                                const labelDivisor2 = trendData.labels.length <= 1 ? 1 : trendData.labels.length - 1;
-                                const x = 40 + (idx / labelDivisor2) * 440;
-                                return (
-                                    <text key={idx} x={isFinite(x) ? x : 40} y="225" textAnchor="middle" className="axis-label">{lbl}</text>
-                                );
-                            })}
-                        </svg>
-                    </div>
-                </div>
-            </section>
-
-            {/* ── Risk Monitoring Section ── */}
-            <section className="analytics-section risk-monitoring-grid">
-                
-                {/* Left Panel: Doughnut Chart */}
-                <div className="glass-card risk-panel-left risk-panel-focal">
-                    <h2 className="panel-title">Risk Distribution</h2>
-                    <p className="panel-subtitle">Categorization of active pregnancies</p>
-                    
-                    <div className="doughnut-chart-container enlarged-donut-wrapper">
-                        {(() => {
-                            const hrPct = activeData.totalPregnant > 0 ? Math.round((activeData.highRisk / activeData.totalPregnant) * 100) : 14;
-                            const modPct = Math.min(100 - hrPct, 18);
-                            const lowPct = 100 - hrPct - modPct;
-                            return (
-                                <>
-                                    <svg className="svg-doughnut risk-donut-enlarged" viewBox="0 0 200 200" width="100%" height="200">
-                                        {/* Low Risk Segment */}
-                                        <circle cx="100" cy="100" r="70" fill="transparent" stroke="#c3cfb7" strokeWidth="22" strokeDasharray="439.8" strokeDashoffset={439.8 * (1 - lowPct/100)} style={{ transform: 'rotate(-90deg)', transformOrigin: '100px 100px' }} />
-                                        {/* Moderate Risk Segment */}
-                                        <circle cx="100" cy="100" r="70" fill="transparent" stroke="#ffe3a4" strokeWidth="22" strokeDasharray="439.8" strokeDashoffset={439.8 * (1 - modPct/100)} style={{ transform: `rotate(${-90 + lowPct * 3.6}deg)`, transformOrigin: '100px 100px' }} />
-                                        {/* High Risk Segment */}
-                                        <circle cx="100" cy="100" r="70" fill="transparent" stroke="#b9818a" strokeWidth="22" strokeDasharray="439.8" strokeDashoffset={439.8 * (1 - hrPct/100)} style={{ transform: `rotate(${-90 + (lowPct + modPct) * 3.6}deg)`, transformOrigin: '100px 100px' }} />
-                                        
-                                        <text x="100" y="95" textAnchor="middle" className="doughnut-center-val" style={{ fontSize: '28px' }}>{activeData.totalPregnant}</text>
-                                        <text x="100" y="115" textAnchor="middle" className="doughnut-center-lbl" style={{ fontSize: '11px' }}>Mothers</text>
-                                        <text x="100" y="130" textAnchor="middle" style={{ fontSize: '9px', fill: 'var(--color-text-muted)', fontWeight: 600 }}>Active Registry</text>
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {/* TAB 1: OVERVIEW TAB (Default Summary Dashboard)                  */}
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {activeTab === 'overview' && (
+                <>
+                    {/* ── Executive Maternal Health Score Hero Section ── */}
+                    <motion.section 
+                        initial={{ opacity: 0, y: 15 }} 
+                        animate={{ opacity: 1, y: 0 }} 
+                        transition={{ duration: 0.4 }} 
+                        className="health-score-hero glass-card"
+                    >
+                        <div className="hero-grid">
+                            <div className="hero-left-score">
+                                <div className="score-ring-container">
+                                    <svg className="score-ring-svg" viewBox="0 0 120 120">
+                                        <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(185, 129, 138, 0.15)" strokeWidth="8" />
+                                        <circle cx="60" cy="60" r="50" fill="none" stroke="url(#scoreGrad)" strokeWidth="10" strokeDasharray="314.15" strokeDashoffset={314.15 - (314.15 * healthScore) / 100} strokeLinecap="round" style={{ transform: 'rotate(-90deg)', transformOrigin: '60px 60px', transition: 'stroke-dashoffset 1s ease' }} />
+                                        <defs>
+                                            <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                <stop offset="0%" stopColor="#ac97b4" />
+                                                <stop offset="50%" stopColor="#ffe3a4" />
+                                                <stop offset="100%" stopColor="#b9818a" />
+                                            </linearGradient>
+                                        </defs>
                                     </svg>
- 
-                                    <div className="doughnut-legend expanded-legend">
-                                        <div className="d-legend-item">
-                                            <span className="d-dot col-sage"></span>
-                                            <div className="d-legend-meta">
-                                                <span className="d-lbl">Low Risk: <strong className="risk-pct-val">{lowPct}%</strong></span>
-                                                <span className="risk-trend-indicator down">{riskDeltas.low}</span>
-                                            </div>
-                                        </div>
-                                        <div className="d-legend-item">
-                                            <span className="d-dot col-yellow"></span>
-                                            <div className="d-legend-meta">
-                                                <span className="d-lbl">Moderate Risk: <strong className="risk-pct-val">{modPct}%</strong></span>
-                                                <span className="risk-trend-indicator down">{riskDeltas.mod}</span>
-                                            </div>
-                                        </div>
-                                        <div className="d-legend-item">
-                                            <span className="d-dot col-rose"></span>
-                                            <div className="d-legend-meta">
-                                                <span className="d-lbl">High Risk: <strong className="risk-pct-val color-red">{hrPct}%</strong></span>
-                                                <span className="risk-trend-indicator up">{riskDeltas.hr}</span>
-                                            </div>
-                                        </div>
+                                    <div className="score-ring-center">
+                                        <span className="score-number">{healthScore}</span>
+                                        <span className="score-denominator">/ 100</span>
                                     </div>
-                                </>
-                            );
-                        })()}
-                    </div>
-                </div>
- 
-                {/* Center Panel: Top High Risk Conditions Horizontal Bars */}
-                <div className="glass-card risk-panel-center">
-                    <div className="conditions-header-row">
-                        <div>
-                            <h2 className="panel-title">Top High-Risk Conditions</h2>
-                            <p className="panel-subtitle">Prevalence of detected clinical complications</p>
+                                </div>
+                                <div className="score-status-wrapper">
+                                    <span className="score-label">Maternal Health Status</span>
+                                    <span className={`status-badge ${healthStatus.class}`}>{healthStatus.label}</span>
+                                </div>
+                            </div>
+                            
+                            <div className="hero-right-details">
+                                <div className="hero-quick-stats">
+                                    <div className="hero-stat-pill">
+                                        <span className="hero-stat-label">Total Pregnant</span>
+                                        <span className="hero-stat-val">{activeData.totalPregnant}</span>
+                                        <span className="hero-stat-sub">Registered Patients</span>
+                                    </div>
+                                    <div className="hero-stat-pill">
+                                        <span className="hero-stat-label">High-Risk Cases</span>
+                                        <span className="hero-stat-val color-red font-bold">{activeData.highRisk}</span>
+                                        <span className="hero-stat-sub">Needs Attention</span>
+                                    </div>
+                                    <div className="hero-stat-pill">
+                                        <span className="hero-stat-label">Vaccination Compliance</span>
+                                        <span className="hero-stat-val font-semibold">{activeData.vaccRate}%</span>
+                                        <span className="hero-stat-sub">Immunized mothers/newborns</span>
+                                    </div>
+                                    <div className="hero-stat-pill">
+                                        <span className="hero-stat-label">Postpartum Follow-up</span>
+                                        <span className="hero-stat-val font-semibold">{activeData.ppRate}%</span>
+                                        <span className="hero-stat-sub">Within 42-day period</span>
+                                    </div>
+                                    <div className="hero-stat-pill">
+                                        <span className="hero-stat-label">Missed Appointment Rate</span>
+                                        <span className="hero-stat-val color-red font-semibold">{activeData.missedRate}%</span>
+                                        <span className="hero-stat-sub">Appointment defaults</span>
+                                    </div>
+                                </div>
+                                
+                                <div className="hero-insights-narrative">
+                                    <div className="narrative-row">
+                                        <span className="narrative-label text-critical">MAIN CONCERN:</span>
+                                        <span className="narrative-text">{heroInsights.concern}</span>
+                                    </div>
+                                    <div className="narrative-row">
+                                        <span className="narrative-label text-success">SUGGESTED ACTION:</span>
+                                        <span className="narrative-text">{heroInsights.action}</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div className="clinical-priority-badges">
-                            <span className="clinical-badge badge-danger">Most Dangerous: Pre-eclampsia</span>
-                            <span className="clinical-badge badge-warning">Fastest Growing: Pre-eclampsia</span>
-                            <span className="clinical-badge badge-info">Most Common: Anemia</span>
-                        </div>
-                    </div>
- 
-                    <div className="conditions-bar-list">
-                        {[
-                            { name: 'Pre-eclampsia', val: conditionStats.Preeclampsia, max: 20, pct: 15, color: '#b9818a', trend: '↑ 8%', isUp: true },
-                            { name: 'Hypertension', val: conditionStats.Hypertension, max: 20, pct: 18, color: '#ac97b4', trend: '↓ 3%', isUp: false },
-                            { name: 'Anemia', val: conditionStats.Anemia, max: 40, pct: 28, color: '#edbd9a', trend: '↑ 6%', isUp: true },
-                            { name: 'Gestational Diabetes', val: conditionStats.Diabetes, max: 20, pct: 10, color: '#ffe3a4', trend: '↑ 2%', isUp: true },
-                            { name: 'Underweight', val: conditionStats.Underweight, max: 30, pct: 12, color: '#c3cfb7', trend: '↓ 1%', isUp: false },
-                            { name: 'Obesity', val: conditionStats.Obesity, max: 30, pct: 17, color: '#a0c282', trend: '↑ 4%', isUp: true }
-                        ].sort((a,b) => b.val - a.val).map((c, i) => (
-                            <div className="condition-bar-row" key={i}>
-                                <div className="condition-info-labels">
-                                    <span className="condition-name">
-                                        {c.name}
-                                        <span className={`condition-trend-arrow ${c.isUp ? 'up' : 'down'}`}>{c.trend}</span>
+                    </motion.section>
+
+                    {/* Overview 5 Core KPI Cards */}
+                    <section className="kpi-grid priority-tiered">
+                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="kpi-card glass-card tier-general">
+                            <div className="kpi-card-header">
+                                <div className="kpi-icon-circle"><HeartPulse size={20} /></div>
+                                <span className="trend-badge trend-up"><TrendingUp size={12} /> 4.2%</span>
+                                <span className="kpi-priority-badge badge-general">GENERAL</span>
+                            </div>
+                            <div className="kpi-card-body">
+                                <span className="kpi-val">{activeData.totalPregnant}</span>
+                                <h3 className="kpi-label">Total Pregnant Patients</h3>
+                                <span className="kpi-sub">Active registry cases</span>
+                            </div>
+                        </motion.div>
+
+                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="kpi-card glass-card tier-critical">
+                            <div className="kpi-card-header">
+                                <div className="kpi-icon-circle"><AlertTriangle size={20} /></div>
+                                <span className="trend-badge trend-up"><TrendingUp size={12} /> 12.0%</span>
+                                <span className="kpi-priority-badge badge-critical">CRITICAL</span>
+                            </div>
+                            <div className="kpi-card-body">
+                                <span className="kpi-val">{activeData.highRisk}</span>
+                                <h3 className="kpi-label">High-Risk Pregnancies</h3>
+                                <span className="kpi-sub">Critical warning states</span>
+                            </div>
+                        </motion.div>
+
+                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="kpi-card glass-card tier-success">
+                            <div className="kpi-card-header">
+                                <div className="kpi-icon-circle"><Syringe size={20} /></div>
+                                <span className="trend-badge trend-up"><TrendingUp size={12} /> 2.1%</span>
+                                <span className="kpi-priority-badge badge-success">SUCCESS</span>
+                            </div>
+                            <div className="kpi-card-body">
+                                <span className="kpi-val">{activeData.vaccRate}%</span>
+                                <h3 className="kpi-label">Vaccination Completion</h3>
+                                <span className="kpi-sub">Maternal & newborn series</span>
+                            </div>
+                        </motion.div>
+
+                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="kpi-card glass-card tier-success">
+                            <div className="kpi-card-header">
+                                <div className="kpi-icon-circle"><ClipboardCheck size={20} /></div>
+                                <span className="trend-badge trend-down"><TrendingDown size={12} /> 1.2%</span>
+                                <span className="kpi-priority-badge badge-success">SUCCESS</span>
+                            </div>
+                            <div className="kpi-card-body">
+                                <span className="kpi-val">{activeData.ppRate}%</span>
+                                <h3 className="kpi-label">Postpartum Follow-Up</h3>
+                                <span className="kpi-sub">42-day recovery check compliance</span>
+                            </div>
+                        </motion.div>
+
+                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="kpi-card glass-card tier-critical">
+                            <div className="kpi-card-header">
+                                <div className="kpi-icon-circle"><XCircle size={20} /></div>
+                                <span className="trend-badge trend-down"><TrendingDown size={12} /> 0.8%</span>
+                                <span className="kpi-priority-badge badge-critical">CRITICAL</span>
+                            </div>
+                            <div className="kpi-card-body">
+                                <span className="kpi-val">{activeData.missedRate}%</span>
+                                <h3 className="kpi-label">Missed Appointment Rate</h3>
+                                <span className="kpi-sub">Prenatal visit defaults</span>
+                            </div>
+                        </motion.div>
+                    </section>
+
+                    {/* Overview Trends (Pregnancy Trend + Vaccination Progress) */}
+                    <section className="analytics-section two-column-charts">
+                        <div className="glass-card chart-card-container">
+                            <div className="card-header-compact">
+                                <div>
+                                    <h2 className="section-header-title">Pregnancy Trend</h2>
+                                    <p className="section-header-subtitle">Pregnancy, high-risk cases, and deliveries over time</p>
+                                </div>
+                                <div className="chart-legend">
+                                    <span className="legend-item">
+                                        <span className="legend-dot color-tot"></span>
+                                        Total ({activeData.totalPregnant} cases) 
                                     </span>
-                                    <span className="condition-count-val">{c.val} cases ({c.pct}%)</span>
+                                    <span className="legend-item">
+                                        <span className="legend-dot color-risk"></span>
+                                        High-Risk ({activeData.highRisk} cases)
+                                    </span>
+                                    <span className="legend-item">
+                                        <span className="legend-dot color-del"></span>
+                                        Deliveries ({activeData.deliveries} births)
+                                    </span>
                                 </div>
-                                <div className="bar-track">
-                                    <div className="bar-fill" style={{ width: `${Math.min(100, (c.val / (activeData.totalPregnant || 1)) * 300)}%`, backgroundColor: c.color }} />
-                                </div>
                             </div>
-                        ))}
-                    </div>
-                </div>
- 
-                {/* Right Panel: Critical Cases Alert Summary */}
-                <div className="glass-card risk-panel-right operational-desk-panel">
-                    <h2 className="panel-title">Critical Cases Summary</h2>
-                    <p className="panel-subtitle">Situational health desk alerts</p>
- 
-                    <div className="critical-alerts-list operational-alerts">
-                        <div className="alert-card priority-high alert-operational-card">
-                            <div className="alert-card-head">
-                                <span className="alert-priority-tag font-bold text-critical">CRITICAL ALERT</span>
-                                <AlertTriangle size={14} />
-                            </div>
-                            <div className="alert-card-metadata">
-                                <span>Affected: <strong>{activeData.highRisk} Patients</strong></span>
-                                <span>Stations: <strong>Salawag, Dasma 3</strong></span>
-                            </div>
-                            <p className="alert-card-text">High-risk warning status requires phone callback assessment and immediate medical follow-up.</p>
-                            <div className="alert-action-buttons">
-                                <button className="alert-btn-action" onClick={() => navigate('/patients')} aria-label="View high-risk patients">View Patients</button>
-                                <button className="alert-btn-action" onClick={() => navigate('/schedules')} aria-label="View visit schedule">View Schedule</button>
-                            </div>
-                        </div>
- 
-                        <div className="alert-card priority-moderate alert-operational-card">
-                            <div className="alert-card-head">
-                                <span className="alert-priority-tag font-bold text-warning">WARNING WARNING</span>
-                                <Activity size={14} />
-                            </div>
-                            <div className="alert-card-metadata">
-                                <span>Affected: <strong>{Math.round(activeData.highRisk * 0.3)} Patients</strong></span>
-                                <span>Stations: <strong>Salawag, Dasma 1</strong></span>
-                            </div>
-                            <p className="alert-card-text">Pre-eclampsia warnings triggered. Coordinate home BP checks and urine protein tests today.</p>
-                            <div className="alert-action-buttons">
-                                <button className="alert-btn-action" onClick={() => navigate('/cases')} aria-label="View pre-eclampsia cases">View Cases</button>
-                                <button className="alert-btn-action" onClick={() => setFilters(prev => ({ ...prev, station: 'Salawag' }))} aria-label="View Salawag station">View Station</button>
-                            </div>
-                        </div>
- 
-                        <div className="alert-card priority-info alert-operational-card">
-                            <div className="alert-card-head">
-                                <span className="alert-priority-tag font-bold text-info">VISIT MONITOR</span>
-                                <Calendar size={14} />
-                            </div>
-                            <div className="alert-card-metadata">
-                                <span>Affected: <strong>{activeData.missedCount} Missed visits</strong></span>
-                                <span>Stations: <strong>All Stations</strong></span>
-                            </div>
-                            <p className="alert-card-text">Missed scheduled appointments. Auto-SMS reminder sent; manual midwife callback recommended.</p>
-                            <div className="alert-action-buttons">
-                                <button className="alert-btn-action" onClick={() => navigate('/schedules')} aria-label="Manage schedules">View Schedule</button>
-                                <button className="alert-btn-action" onClick={() => navigate('/patients')} aria-label="View patient list">View Patients</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-            {/* ── Executive Station Intelligence Section ── */}
-            <section className="analytics-section station-intelligence-section">
-                <div className="glass-card executive-station-card">
-                    <h2 className="panel-title">Executive Station Intelligence</h2>
-                    <p className="panel-subtitle">Featured spotlights and public health analysis per station sector</p>
-                    
-                    {/* Spotlight cards */}
-                    <div className="station-spotlight-grid">
-                        <div className="station-spotlight-card border-success">
-                            <span className="spotlight-label bg-success">BEST PERFORMING</span>
-                            <h4 className="spotlight-station-name">{stationHighlights.best?.name}</h4>
-                            <span className="spotlight-metric">{stationHighlights.best?.val}</span>
-                            <div className="spotlight-footer">
-                                <span className="spotlight-rank">Rank #1</span>
-                                <span className="spotlight-trend text-success">↑ 2.1%</span>
-                            </div>
-                        </div>
-                        
-                        <div className="station-spotlight-card border-critical">
-                            <span className="spotlight-label bg-critical">HIGHEST RISK BURDEN</span>
-                            <h4 className="spotlight-station-name">{stationHighlights.risk?.name}</h4>
-                            <span className="spotlight-metric color-red">{stationHighlights.risk?.val}</span>
-                            <div className="spotlight-footer">
-                                <span className="spotlight-rank">Needs Outreach</span>
-                                <span className="spotlight-trend text-critical">↑ 12.0%</span>
-                            </div>
-                        </div>
-
-                        <div className="station-spotlight-card border-warning">
-                            <span className="spotlight-label bg-warning">LOWEST VACCINATION</span>
-                            <h4 className="spotlight-station-name">{stationHighlights.vacc?.name}</h4>
-                            <span className="spotlight-metric color-warning">{stationHighlights.vacc?.val}</span>
-                            <div className="spotlight-footer">
-                                <span className="spotlight-rank">Target Area</span>
-                                <span className="spotlight-trend text-critical">↓ 3.2%</span>
-                            </div>
-                        </div>
-
-                        <div className="station-spotlight-card border-critical">
-                            <span className="spotlight-label bg-critical font-semibold">HIGHEST MISSED FOLLOW-UPS</span>
-                            <h4 className="spotlight-station-name">{stationHighlights.missed?.name}</h4>
-                            <span className="spotlight-metric color-red">{stationHighlights.missed?.val}</span>
-                            <div className="spotlight-footer">
-                                <span className="spotlight-rank">Outreach Priority</span>
-                                <span className="spotlight-trend text-critical">↑ 8.4%</span>
-                            </div>
-                        </div>
-
-                        <div className="station-spotlight-card border-success">
-                            <span className="spotlight-label bg-success">BEST POSTPARTUM CARE</span>
-                            <h4 className="spotlight-station-name">{stationHighlights.postpartum?.name}</h4>
-                            <span className="spotlight-metric">{stationHighlights.postpartum?.val}</span>
-                            <div className="spotlight-footer">
-                                <span className="spotlight-rank">Model Program</span>
-                                <span className="spotlight-trend text-success">↑ 1.5%</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* New Section: Narrative station intelligence cards */}
-                    <div className="station-narrative-section">
-                        <h3 className="section-header-title" style={{ marginTop: '24px', marginBottom: '12px' }}>Public Health Narrative Analysis</h3>
-                        <div className="station-narrative-grid">
-                            <div className="narrative-card">
-                                <Sparkles size={16} className="text-warning" />
-                                <p className="narrative-desc"><strong>Demographics Warning:</strong> Teenage pregnancies are heavily concentrated in <strong>Salawag</strong> health station (21 active cases registered).</p>
-                            </div>
-                            <div className="narrative-card">
-                                <Sparkles size={16} className="text-success" />
-                                <p className="narrative-desc"><strong>Immunization Leader:</strong> <strong>Dasma 3</strong> has established the highest vaccination compliance rates at 92% coverage.</p>
-                            </div>
-                            <div className="narrative-card">
-                                <Sparkles size={16} className="text-success" />
-                                <p className="narrative-desc"><strong>Clinical Recovery:</strong> <strong>City Health Office 3</strong> recorded the highest postpartum recovery rate at 90% positive outcome checks.</p>
-                            </div>
-                            <div className="narrative-card">
-                                <Sparkles size={16} className="text-critical" />
-                                <p className="narrative-desc"><strong>Outreach Deficit:</strong> <strong>Dasma 1</strong> has the largest increase in missed appointments (15% missed rate this month).</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Comparison view table */}
-                    <div className="comparison-header-row" style={{ marginTop: '28px' }}>
-                        <div>
-                            <h3 className="section-header-title">Station Comparative View</h3>
-                            <p className="section-header-subtitle">Interactive ranking of all Health Stations by select operational metric</p>
-                        </div>
-                        <div className="sorting-tabs" role="tablist" aria-label="Sort health stations by performance metric">
-                            <button 
-                                className={`sort-tab-btn ${stationSortBy === 'patients' ? 'active' : ''}`}
-                                onClick={() => setStationSortBy('patients')}
-                                role="tab"
-                                aria-selected={stationSortBy === 'patients'}
-                                tabIndex={0}
-                            >
-                                Total Patients
-                            </button>
-                            <button 
-                                className={`sort-tab-btn ${stationSortBy === 'risk' ? 'active' : ''}`}
-                                onClick={() => setStationSortBy('risk')}
-                                role="tab"
-                                aria-selected={stationSortBy === 'risk'}
-                                tabIndex={0}
-                            >
-                                Highest Risk
-                            </button>
-                            <button 
-                                className={`sort-tab-btn ${stationSortBy === 'vacc' ? 'active' : ''}`}
-                                onClick={() => setStationSortBy('vacc')}
-                                role="tab"
-                                aria-selected={stationSortBy === 'vacc'}
-                                tabIndex={0}
-                            >
-                                Vaccination Rate
-                            </button>
-                            <button 
-                                className={`sort-tab-btn ${stationSortBy === 'compliance' ? 'active' : ''}`}
-                                onClick={() => setStationSortBy('compliance')}
-                                role="tab"
-                                aria-selected={stationSortBy === 'compliance'}
-                                tabIndex={0}
-                            >
-                                Postpartum Care
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="stations-cards-grid" style={{ marginTop: '16px' }}>
-                        <AnimatePresence mode="popLayout">
-                            {stationsRanked.map((st, index) => (
-                                <motion.div 
-                                    layout 
-                                    initial={{ opacity: 0, scale: 0.95 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.95 }}
-                                    transition={{ duration: 0.25 }}
-                                    key={st.name} 
-                                    className="station-rank-card"
-                                >
-                                    <div className="rank-badge-circle">#{index + 1}</div>
-                                    <div className="station-rank-body">
-                                        <div className="station-rank-meta">
-                                            <h4 className="station-rank-name">{st.name}</h4>
-                                            <span className="station-patients-pill">{st.patients} patients</span>
-                                        </div>
-                                        <div className="station-stats-row">
-                                            <div className="st-sub-metric">
-                                                <span className="st-metric-label">High-Risk</span>
-                                                <span className="st-metric-val color-red font-bold">{st.highRisk}</span>
-                                            </div>
-                                            <div className="st-sub-metric">
-                                                <span className="st-metric-label">Vaccination</span>
-                                                <span className="st-metric-val font-semibold">{st.vaccRate}%</span>
-                                            </div>
-                                            <div className="st-sub-metric">
-                                                <span className="st-metric-label">Postpartum</span>
-                                                <span className="st-metric-val font-semibold">{st.compliance}%</span>
-                                            </div>
-                                            <div className="st-sub-metric">
-                                                <span className="st-metric-label">Missed</span>
-                                                <span className="st-metric-val text-muted">{st.missed}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            ))}
-                        </AnimatePresence>
-                    </div>
-                </div>
-            </section>
-
-            {/* ── Section 5: Delivery Outcomes & Executive Insights ── */}
-            <section className="analytics-section deliveries-and-insights">
-                
-                {/* Delivery Outcome breakdown (Pie & bar outcome segments) */}
-                <div className="glass-card outcomes-panel">
-                    <h2 className="panel-title">Delivery & Postpartum Outcomes</h2>
-                    <p className="panel-subtitle">Comprehensive child birth and recovery statistics</p>
-
-                    <div className="outcomes-charts-grid">
-                        {/* Chart 1: Delivery Mode Breakdown */}
-                        <div className="outcome-chart-box outcome-chart-box-large">
-                            <h3 className="outcome-chart-title">Delivery Mode Mode over Time</h3>
-                            <div className="delivery-trends-container">
-                                <svg className="svg-delivery-trends" viewBox="0 0 240 120" width="100%" height="110">
-                                    {/* Render bars for each period in trendData.labels */}
-                                    {deliveryTrendsData.labels.map((lbl, idx) => {
-                                        const x = 30 + idx * 50;
-                                        const nHeight = deliveryTrendsData.normal[idx] || 0;
-                                        const aHeight = deliveryTrendsData.assisted[idx] || 0;
-                                        const cHeight = deliveryTrendsData.cs[idx] || 0;
-                                        
-                                        const scale = 1.1;
+                            <div className="chart-wrapper">
+                                <svg className="svg-line-chart" viewBox="0 0 500 240" width="100%" height="100%">
+                                    {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => (
+                                        <line key={i} x1="40" x2="480" y1={20 + ratio * 180} y2={20 + ratio * 180} stroke="#f1f3f5" strokeWidth="1" />
+                                    ))}
+                                    {(() => {
+                                        const maxTot = trendData.totalVal && trendData.totalVal.length > 0 ? Math.max(...trendData.totalVal.map(v => v || 0)) * 1.1 : 1;
+                                        const safeMax = isFinite(maxTot) && maxTot > 0 ? maxTot : 1;
                                         return (
-                                            <g key={idx}>
-                                                <rect x={x} y={100 - nHeight * scale} width="8" height={Math.max(1, nHeight * scale)} fill="#c3cfb7" rx="1" />
-                                                <rect x={x + 10} y={100 - aHeight * scale} width="8" height={Math.max(1, aHeight * scale)} fill="#ffe3a4" rx="1" />
-                                                <rect x={x + 20} y={100 - cHeight * scale} width="8" height={Math.max(1, cHeight * scale)} fill="#b9818a" rx="1" />
-                                                <text x={x + 14} y="112" textAnchor="middle" style={{ fontSize: '7px', fill: 'var(--color-text-muted)', fontWeight: 600 }}>{lbl}</text>
-                                            </g>
+                                            <>
+                                                <path d={getSvgLinePath(trendData.totalVal, 500, 240, 40, 20, 20, 40, safeMax)} className="chart-line stroke-tot" />
+                                                <path d={getSvgLinePath(trendData.highRiskVal, 500, 240, 40, 20, 20, 40, safeMax)} className="chart-line stroke-risk" />
+                                                <path d={getSvgLinePath(trendData.deliveriesVal, 500, 240, 40, 20, 20, 40, safeMax)} className="chart-line stroke-del" />
+                                            </>
                                         );
+                                    })()}
+                                    {trendData.labels.map((lbl, idx) => {
+                                        const labelDivisor = trendData.labels.length <= 1 ? 1 : trendData.labels.length - 1;
+                                        const x = 40 + (idx / labelDivisor) * 440;
+                                        return <text key={idx} x={isFinite(x) ? x : 40} y="225" textAnchor="middle" className="axis-label">{lbl}</text>;
                                     })}
-                                    <line x1="20" x2="230" y1="100" y2="100" stroke="#e1e3e5" strokeWidth="1" />
                                 </svg>
                             </div>
-                            <div className="outcome-labels-list">
-                                <div className="outcome-lbl-row"><span className="dot col-sage"></span><span>NSD (65% avg)</span></div>
-                                <div className="outcome-lbl-row"><span className="dot col-yellow"></span><span>Assisted (12% avg)</span></div>
-                                <div className="outcome-lbl-row"><span className="dot col-rose"></span><span>CS (23% avg)</span></div>
+                        </div>
+
+                        <div className="glass-card chart-card-container">
+                            <div className="card-header-compact">
+                                <div>
+                                    <h2 className="section-header-title">Vaccination Progress</h2>
+                                    <p className="section-header-subtitle">Mother vs newborn immunization compliance rates</p>
+                                </div>
+                                <div className="chart-legend">
+                                    <span className="legend-item"><span className="legend-dot color-vacc-m"></span>Mothers ({activeData.vaccRate}%)</span>
+                                    <span className="legend-item"><span className="legend-dot color-vacc-nb"></span>Newborns ({(activeData.vaccRate * 0.95).toFixed(0)}%)</span>
+                                </div>
+                            </div>
+                            <div className="chart-wrapper">
+                                <svg className="svg-line-chart" viewBox="0 0 500 240" width="100%" height="100%">
+                                    {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => (
+                                        <line key={i} x1="40" x2="480" y1={20 + ratio * 180} y2={20 + ratio * 180} stroke="#f1f3f5" strokeWidth="1" />
+                                    ))}
+                                    <line x1="40" x2="480" y1="38" y2="38" stroke="#b9818a" strokeWidth="1.5" strokeDasharray="4,4" className="vacc-target-line" />
+                                    <path d={getSvgLinePath(trendData.vaccMother, 500, 240, 40, 20, 20, 40, 100)} className="chart-line stroke-vacc-m" />
+                                    <path d={getSvgLinePath(trendData.vaccNewborn, 500, 240, 40, 20, 20, 40, 100)} className="chart-line stroke-vacc-nb" />
+                                    {trendData.labels.map((lbl, idx) => {
+                                        const labelDivisor2 = trendData.labels.length <= 1 ? 1 : trendData.labels.length - 1;
+                                        const x = 40 + (idx / labelDivisor2) * 440;
+                                        return <text key={idx} x={isFinite(x) ? x : 40} y="225" textAnchor="middle" className="axis-label">{lbl}</text>;
+                                    })}
+                                </svg>
+                            </div>
+                        </div>
+                    </section>
+                </>
+            )}
+
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {/* TAB 2: MATERNAL HEALTH TAB                                       */}
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {activeTab === 'maternal' && (
+                <>
+                    <section className="kpi-grid priority-tiered">
+                        <div className="kpi-card glass-card tier-general">
+                            <div className="kpi-card-header"><div className="kpi-icon-circle"><HeartPulse size={20} /></div></div>
+                            <div className="kpi-card-body"><span className="kpi-val">{activeData.totalPregnant}</span><h3 className="kpi-label">Total Pregnant Patients</h3></div>
+                        </div>
+                        <div className="kpi-card glass-card tier-critical">
+                            <div className="kpi-card-header"><div className="kpi-icon-circle"><AlertTriangle size={20} /></div></div>
+                            <div className="kpi-card-body"><span className="kpi-val">{activeData.highRisk}</span><h3 className="kpi-label">High-Risk Pregnancies</h3></div>
+                        </div>
+                        <div className="kpi-card glass-card tier-warning">
+                            <div className="kpi-card-header"><div className="kpi-icon-circle"><Users size={20} /></div></div>
+                            <div className="kpi-card-body"><span className="kpi-val">{activeData.teenage}</span><h3 className="kpi-label">Teenage Pregnancies</h3></div>
+                        </div>
+                        <div className="kpi-card glass-card tier-warning">
+                            <div className="kpi-card-header"><div className="kpi-icon-circle"><Activity size={20} /></div></div>
+                            <div className="kpi-card-body"><span className="kpi-val">{activeData.advancedAge}</span><h3 className="kpi-label">Advanced Maternal Age</h3></div>
+                        </div>
+                    </section>
+
+                    <section className="analytics-section risk-monitoring-grid">
+                        <div className="glass-card risk-panel-left risk-panel-focal">
+                            <h2 className="panel-title">Risk Distribution</h2>
+                            <p className="panel-subtitle">Categorization of active pregnancies</p>
+                            <div className="doughnut-chart-container enlarged-donut-wrapper">
+                                {(() => {
+                                    const hrPct = activeData.totalPregnant > 0 ? Math.round((activeData.highRisk / activeData.totalPregnant) * 100) : 14;
+                                    const modPct = Math.min(100 - hrPct, 18);
+                                    const lowPct = 100 - hrPct - modPct;
+                                    return (
+                                        <>
+                                            <svg className="svg-doughnut risk-donut-enlarged" viewBox="0 0 200 200" width="100%" height="200">
+                                                <circle cx="100" cy="100" r="70" fill="transparent" stroke="#c3cfb7" strokeWidth="22" strokeDasharray="439.8" strokeDashoffset={439.8 * (1 - lowPct/100)} style={{ transform: 'rotate(-90deg)', transformOrigin: '100px 100px' }} />
+                                                <circle cx="100" cy="100" r="70" fill="transparent" stroke="#ffe3a4" strokeWidth="22" strokeDasharray="439.8" strokeDashoffset={439.8 * (1 - modPct/100)} style={{ transform: `rotate(${-90 + lowPct * 3.6}deg)`, transformOrigin: '100px 100px' }} />
+                                                <circle cx="100" cy="100" r="70" fill="transparent" stroke="#b9818a" strokeWidth="22" strokeDasharray="439.8" strokeDashoffset={439.8 * (1 - hrPct/100)} style={{ transform: `rotate(${-90 + (lowPct + modPct) * 3.6}deg)`, transformOrigin: '100px 100px' }} />
+                                                <text x="100" y="95" textAnchor="middle" className="doughnut-center-val" style={{ fontSize: '28px' }}>{activeData.totalPregnant}</text>
+                                                <text x="100" y="115" textAnchor="middle" className="doughnut-center-lbl" style={{ fontSize: '11px' }}>Mothers</text>
+                                            </svg>
+                                            <div className="doughnut-legend expanded-legend">
+                                                <div className="d-legend-item"><span className="d-dot col-sage"></span><span className="d-lbl">Low Risk: <strong>{lowPct}%</strong></span></div>
+                                                <div className="d-legend-item"><span className="d-dot col-yellow"></span><span className="d-lbl">Moderate Risk: <strong>{modPct}%</strong></span></div>
+                                                <div className="d-legend-item"><span className="d-dot col-rose"></span><span className="d-lbl">High Risk: <strong className="color-red">{hrPct}%</strong></span></div>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
                             </div>
                         </div>
 
-                        {/* Chart 2: Delivery Complications */}
-                        <div className="outcome-chart-box outcome-chart-box-large">
-                            <h3 className="outcome-chart-title">Delivery Complications</h3>
-                            <div className="complications-horizontal-bars">
+                        <div className="glass-card risk-panel-center">
+                            <h2 className="panel-title">Most Common Health Conditions</h2>
+                            <p className="panel-subtitle">Prevalence of detected clinical complications</p>
+                            <div className="conditions-bar-list" style={{ marginTop: 16 }}>
                                 {[
-                                    { name: 'Hemorrhage', count: activeData.compHemorr, pct: 4, color: '#b9818a', trend: '↑ 1.2%' },
-                                    { name: 'Hypertension', count: activeData.compHyper, pct: 6, color: '#ac97b4', trend: '↓ 0.8%' },
-                                    { name: 'Infection', count: activeData.compInfect, pct: 2, color: '#edbd9a', trend: 'Stable' },
-                                    { name: 'Other', count: activeData.compOther, pct: 3, color: '#ffe3a4', trend: '↑ 0.5%' }
-                                ].map((com, i) => (
-                                    <div className="comp-row" key={i}>
-                                        <div className="comp-meta">
-                                            <span>{com.name} <strong className="comp-trend-delta" style={{ fontSize: '9px', fontWeight: 600 }}>({com.trend})</strong></span>
-                                            <span>{com.count} cases ({(com.count / Math.max(1, activeData.deliveries) * 100).toFixed(0)}%)</span>
+                                    { name: 'Pre-eclampsia', val: conditionStats.Preeclampsia, color: '#b9818a' },
+                                    { name: 'Hypertension', val: conditionStats.Hypertension, color: '#ac97b4' },
+                                    { name: 'Anemia', val: conditionStats.Anemia, color: '#edbd9a' },
+                                    { name: 'Gestational Diabetes', val: conditionStats.Diabetes, color: '#ffe3a4' },
+                                    { name: 'Underweight', val: conditionStats.Underweight, color: '#c3cfb7' },
+                                    { name: 'Obesity', val: conditionStats.Obesity, color: '#a0c282' }
+                                ].sort((a,b) => b.val - a.val).map((c, i) => (
+                                    <div className="condition-bar-row" key={i}>
+                                        <div className="condition-info-labels">
+                                            <span className="condition-name">{c.name}</span>
+                                            <span className="condition-count-val">{c.val} cases</span>
                                         </div>
-                                        <div className="comp-bar-track">
-                                            <div className="comp-bar-fill" style={{ width: `${Math.min(100, (com.count / (activeData.deliveries || 1)) * 300)}%`, backgroundColor: com.color }} />
+                                        <div className="bar-track">
+                                            <div className="bar-fill" style={{ width: `${Math.min(100, (c.val / (activeData.totalPregnant || 1)) * 300)}%`, backgroundColor: c.color }} />
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         </div>
 
-                        {/* Chart 3: Postpartum Recovery Status */}
-                        <div className="outcome-chart-box outcome-chart-box-large">
-                            <h3 className="outcome-chart-title">Postpartum Recovery</h3>
-                            <div className="postpartum-recovery-metric">
-                                <span className="recovery-success-rate">88%</span>
-                                <span className="recovery-success-label">Recovery Success Rate</span>
+                        <div className="glass-card risk-panel-right operational-desk-panel">
+                            <h2 className="panel-title">Patients Needing Immediate Attention</h2>
+                            <p className="panel-subtitle">Situational health desk alerts</p>
+                            <div className="critical-alerts-list operational-alerts" style={{ marginTop: 12 }}>
+                                <div className="alert-card priority-high alert-operational-card">
+                                    <div className="alert-card-head"><span className="alert-priority-tag font-bold text-critical">CRITICAL ALERT</span><AlertTriangle size={14} /></div>
+                                    <p className="alert-card-text"><strong>{activeData.highRisk} High-risk patients</strong> require immediate medical follow-up.</p>
+                                    <button className="alert-btn-action" onClick={() => navigate('/patients')}>View Patients</button>
+                                </div>
+                                <div className="alert-card priority-moderate alert-operational-card">
+                                    <div className="alert-card-head"><span className="alert-priority-tag font-bold text-warning">PRE-ECLAMPSIA MONITOR</span><Activity size={14} /></div>
+                                    <p className="alert-card-text">Pre-eclampsia warnings triggered for high-risk cases. Coordinate home BP checks today.</p>
+                                    <button className="alert-btn-action" onClick={() => navigate('/cases')}>View Cases</button>
+                                </div>
                             </div>
-                            <div className="delivery-donut-ring" style={{ marginTop: '8px' }}>
-                                <svg className="svg-mini-donut" viewBox="0 0 100 100">
-                                    <circle cx="50" cy="50" r="38" fill="transparent" stroke="#c3cfb7" strokeWidth="11" strokeDasharray="238.7" strokeDashoffset="40" />
-                                    <circle cx="50" cy="50" r="38" fill="transparent" stroke="#ffe3a4" strokeWidth="11" strokeDasharray="238.7" strokeDashoffset="210" style={{ transform: 'rotate(270deg)', transformOrigin: '50px 50px' }} />
-                                    <circle cx="50" cy="50" r="38" fill="transparent" stroke="#b9818a" strokeWidth="11" strokeDasharray="238.7" strokeDashoffset="220" style={{ transform: 'rotate(330deg)', transformOrigin: '50px 50px' }} />
+                        </div>
+                    </section>
+                </>
+            )}
+
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {/* TAB 3: VACCINATION TAB                                           */}
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {activeTab === 'vaccination' && (
+                <>
+                    <section className="kpi-grid priority-tiered">
+                        <div className="kpi-card glass-card tier-success">
+                            <div className="kpi-card-header"><div className="kpi-icon-circle"><Syringe size={20} /></div></div>
+                            <div className="kpi-card-body"><span className="kpi-val">{Math.round(activeData.totalPregnant * (activeData.vaccRate / 100))}</span><h3 className="kpi-label">Mothers Vaccinated</h3></div>
+                        </div>
+                        <div className="kpi-card glass-card tier-success">
+                            <div className="kpi-card-header"><div className="kpi-icon-circle"><Baby size={20} /></div></div>
+                            <div className="kpi-card-body"><span className="kpi-val">{Math.round(activeData.deliveries * 0.95)}</span><h3 className="kpi-label">Babies Vaccinated</h3></div>
+                        </div>
+                        <div className="kpi-card glass-card tier-success">
+                            <div className="kpi-card-header"><div className="kpi-icon-circle"><CheckCircle2 size={20} /></div></div>
+                            <div className="kpi-card-body"><span className="kpi-val">{activeData.vaccRate}%</span><h3 className="kpi-label">Vaccination Completion</h3></div>
+                        </div>
+                        <div className="kpi-card glass-card tier-critical">
+                            <div className="kpi-card-header"><div className="kpi-icon-circle"><XCircle size={20} /></div></div>
+                            <div className="kpi-card-body"><span className="kpi-val">{activeData.missedCount || 12}</span><h3 className="kpi-label">Missed Vaccinations</h3></div>
+                        </div>
+                    </section>
+
+                    <section className="analytics-section">
+                        <div className="glass-card chart-card-container" style={{ width: '100%' }}>
+                            <div className="card-header-compact">
+                                <div>
+                                    <h2 className="section-header-title">Vaccination Progress</h2>
+                                    <p className="section-header-subtitle">Maternal &amp; Newborn Immunization Completion Rates over time</p>
+                                </div>
+                                <div className="chart-legend">
+                                    <span className="legend-item"><span className="legend-dot color-vacc-m"></span>Mothers ({activeData.vaccRate}%)</span>
+                                    <span className="legend-item"><span className="legend-dot color-vacc-nb"></span>Newborns ({(activeData.vaccRate * 0.95).toFixed(0)}%)</span>
+                                    <span className="legend-item"><span className="legend-target-line"></span>90% Target</span>
+                                </div>
+                            </div>
+                            <div className="chart-wrapper">
+                                <svg className="svg-line-chart" viewBox="0 0 500 240" width="100%" height="100%">
+                                    {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => (
+                                        <line key={i} x1="40" x2="480" y1={20 + ratio * 180} y2={20 + ratio * 180} stroke="#f1f3f5" strokeWidth="1" />
+                                    ))}
+                                    <line x1="40" x2="480" y1="38" y2="38" stroke="#b9818a" strokeWidth="1.5" strokeDasharray="4,4" className="vacc-target-line" />
+                                    <path d={getSvgLinePath(trendData.vaccMother, 500, 240, 40, 20, 20, 40, 100)} className="chart-line stroke-vacc-m" />
+                                    <path d={getSvgLinePath(trendData.vaccNewborn, 500, 240, 40, 20, 20, 40, 100)} className="chart-line stroke-vacc-nb" />
+                                    {trendData.labels.map((lbl, idx) => {
+                                        const labelDivisor2 = trendData.labels.length <= 1 ? 1 : trendData.labels.length - 1;
+                                        const x = 40 + (idx / labelDivisor2) * 440;
+                                        return <text key={idx} x={isFinite(x) ? x : 40} y="225" textAnchor="middle" className="axis-label">{lbl}</text>;
+                                    })}
                                 </svg>
-                                <div className="donut-center-text">
-                                    <span className="val-mid">{Math.round(activeData.recNormal + activeData.recObs + activeData.recComp)}</span>
-                                    <span className="lbl-mid">Mothers</span>
-                                </div>
-                            </div>
-                            <div className="outcome-labels-list">
-                                <div className="outcome-lbl-row"><span className="dot col-sage"></span><span>Recovered (78%)</span></div>
-                                <div className="outcome-lbl-row"><span className="dot col-yellow"></span><span>Observation (14%)</span></div>
-                                <div className="outcome-lbl-row"><span className="dot col-rose"></span><span>Complication (8%)</span></div>
                             </div>
                         </div>
-                    </div>
-                </div>
+                    </section>
+                </>
+            )}
 
-                {/* Health Intelligence Insights Cards */}
-                <div className="glass-card intelligence-panel">
-                    <div className="intelligence-header-icon">
-                        <Award size={18} className="icon-glow" />
-                        <h2 className="panel-title">Health Intelligence &amp; Actions</h2>
-                    </div>
-                    <p className="panel-subtitle">Automatically generated administrative alerts and clinical policies</p>
-
-                    <div className="insights-vertical-stack">
-                        {intelligenceInsights.map(ins => (
-                            <div className={`insight-intelligence-card border-${ins.priority}`} key={ins.id}>
-                                <div className="insight-card-top">
-                                    <div className="insight-top-left">
-                                        <span className={`insight-tag bg-${ins.priority}`}>{ins.priority.toUpperCase()}</span>
-                                        <span className="insight-metric-tag">{ins.relatedMetric}</span>
-                                    </div>
-                                    <span className="insight-timestamp-badge">
-                                        <Clock size={10} style={{ marginRight: '3px' }} />
-                                        {new Date().toISOString().split('T')[0]} 13:10
-                                    </span>
-                                </div>
-                                <p className="insight-title-text">{ins.title}</p>
-                                <div className="insight-stations-affected">
-                                    <strong>Affected Stations:</strong> 
-                                    <span className="station-chip">{filters.station === 'All Stations' ? 'Salawag, Dasma 3, Dasma 1' : filters.station}</span>
-                                </div>
-                                <div className="insight-recommendation-box">
-                                    <strong>Recommendation:</strong> {ins.recommendation}
-                                </div>
-                                <div className="insight-card-action-row">
-                                    <button className="insight-btn-secondary" onClick={() => navigate('/cases')}>View Details</button>
-                                    <button className="insight-btn-secondary" onClick={() => navigate('/patients')}>View Patients</button>
-                                    <button className="insight-btn-secondary" onClick={() => navigate('/analytics')}>View Analytics</button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </section>
-
-            {/* ── Predictive Healthcare Projections ── */}
-            <section className="analytics-section predictive-section">
-                <div className="glass-card predictive-main-card">
-                    <div className="predictive-header-row">
-                        <BrainCircuit size={18} className="icon-glow text-rose" />
-                        <div>
-                            <h2 className="panel-title" style={{ margin: 0 }}>Predictive Healthcare Projections</h2>
-                            <p className="panel-subtitle" style={{ margin: 0 }}>Simple trend-based statistical forecasting for next reporting period</p>
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {/* TAB 4: DELIVERY & POSTPARTUM TAB                                 */}
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {activeTab === 'delivery' && (
+                <>
+                    <section className="kpi-grid priority-tiered">
+                        <div className="kpi-card glass-card tier-general">
+                            <div className="kpi-card-header"><div className="kpi-icon-circle"><Baby size={20} /></div></div>
+                            <div className="kpi-card-body"><span className="kpi-val">{activeData.deliveries}</span><h3 className="kpi-label">Deliveries Count</h3></div>
                         </div>
-                    </div>
-                    
-                    <div className="projections-grid">
-                        <div className="projection-card border-critical">
-                            <div className="proj-card-head">
-                                <span className="proj-label text-critical font-bold">FORECAST: HIGH-RISK CASES</span>
-                                <TrendingUp size={16} className="text-critical" />
-                            </div>
-                            <div className="proj-card-body">
-                                <div className="proj-values-row">
-                                    <div className="proj-val-box">
-                                        <span className="proj-val-sub">Current</span>
-                                        <span className="proj-val-num">{predictiveData.hrCurrent}</span>
-                                    </div>
-                                    <div className="proj-arrow-indicator">→</div>
-                                    <div className="proj-val-box">
-                                        <span className="proj-val-sub">Forecast</span>
-                                        <span className="proj-val-num color-red font-bold">{predictiveData.hrForecast}</span>
-                                    </div>
-                                </div>
-                                <div className="proj-footer">
-                                    <span>Expected Increase: <strong className="color-red font-bold">+{predictiveData.hrChange}%</strong></span>
-                                </div>
-                            </div>
+                        <div className="kpi-card glass-card tier-success">
+                            <div className="kpi-card-header"><div className="kpi-icon-circle"><CheckCircle2 size={20} /></div></div>
+                            <div className="kpi-card-body"><span className="kpi-val">{activeData.normalDel}</span><h3 className="kpi-label">Normal Delivery (NSD)</h3></div>
                         </div>
+                        <div className="kpi-card glass-card tier-warning">
+                            <div className="kpi-card-header"><div className="kpi-icon-circle"><Activity size={20} /></div></div>
+                            <div className="kpi-card-body"><span className="kpi-val">{activeData.csDel}</span><h3 className="kpi-label">Cesarean Deliveries</h3></div>
+                        </div>
+                        <div className="kpi-card glass-card tier-success">
+                            <div className="kpi-card-header"><div className="kpi-icon-circle"><ClipboardCheck size={20} /></div></div>
+                            <div className="kpi-card-body"><span className="kpi-val">{activeData.ppRate}%</span><h3 className="kpi-label">Postpartum Follow-up</h3></div>
+                        </div>
+                    </section>
 
-                        <div className="projection-card border-success">
-                            <div className="proj-card-head">
-                                <span className="proj-label text-success font-bold">FORECAST: VACCINATION RATES</span>
-                                <TrendingUp size={16} className="text-success" />
-                            </div>
-                            <div className="proj-card-body">
-                                <div className="proj-values-row">
-                                    <div className="proj-val-box">
-                                        <span className="proj-val-sub">Current</span>
-                                        <span className="proj-val-num">{predictiveData.vaccCurrent}%</span>
+                    <section className="analytics-section deliveries-and-insights">
+                        <div className="glass-card outcomes-panel">
+                            <h2 className="panel-title">Delivery &amp; Postpartum Outcomes</h2>
+                            <p className="panel-subtitle">Childbirth modes, complications, and recovery metrics</p>
+                            <div className="outcomes-charts-grid" style={{ marginTop: 16 }}>
+                                <div className="outcome-chart-box outcome-chart-box-large">
+                                    <h3 className="outcome-chart-title">Delivery Mode over Time</h3>
+                                    <div className="delivery-trends-container">
+                                        <svg className="svg-delivery-trends" viewBox="0 0 240 120" width="100%" height="110">
+                                            {deliveryTrendsData.labels.map((lbl, idx) => {
+                                                const x = 30 + idx * 50;
+                                                const nHeight = deliveryTrendsData.normal[idx] || 0;
+                                                const aHeight = deliveryTrendsData.assisted[idx] || 0;
+                                                const cHeight = deliveryTrendsData.cs[idx] || 0;
+                                                const scale = 1.1;
+                                                return (
+                                                    <g key={idx}>
+                                                        <rect x={x} y={100 - nHeight * scale} width="8" height={Math.max(1, nHeight * scale)} fill="#c3cfb7" rx="1" />
+                                                        <rect x={x + 10} y={100 - aHeight * scale} width="8" height={Math.max(1, aHeight * scale)} fill="#ffe3a4" rx="1" />
+                                                        <rect x={x + 20} y={100 - cHeight * scale} width="8" height={Math.max(1, cHeight * scale)} fill="#b9818a" rx="1" />
+                                                        <text x={x + 14} y="112" textAnchor="middle" style={{ fontSize: '7px', fill: 'var(--color-text-muted)', fontWeight: 600 }}>{lbl}</text>
+                                                    </g>
+                                                );
+                                            })}
+                                            <line x1="20" x2="230" y1="100" y2="100" stroke="#e1e3e5" strokeWidth="1" />
+                                        </svg>
                                     </div>
-                                    <div className="proj-arrow-indicator">→</div>
-                                    <div className="proj-val-box">
-                                        <span className="proj-val-sub">Forecast</span>
-                                        <span className="proj-val-num color-success font-bold">{predictiveData.vaccForecast}%</span>
+                                    <div className="outcome-labels-list">
+                                        <div className="outcome-lbl-row"><span className="dot col-sage"></span><span>NSD</span></div>
+                                        <div className="outcome-lbl-row"><span className="dot col-yellow"></span><span>Assisted</span></div>
+                                        <div className="outcome-lbl-row"><span className="dot col-rose"></span><span>CS</span></div>
                                     </div>
                                 </div>
-                                <div className="proj-footer">
-                                    <span>Expected Improvement: <strong className="color-success font-bold">+{predictiveData.vaccChange}%</strong></span>
+
+                                <div className="outcome-chart-box outcome-chart-box-large">
+                                    <h3 className="outcome-chart-title">Delivery Complications</h3>
+                                    <div className="complications-horizontal-bars">
+                                        {[
+                                            { name: 'Hemorrhage', count: activeData.compHemorr, color: '#b9818a' },
+                                            { name: 'Hypertension', count: activeData.compHyper, color: '#ac97b4' },
+                                            { name: 'Infection', count: activeData.compInfect, color: '#edbd9a' },
+                                            { name: 'Other', count: activeData.compOther, color: '#ffe3a4' }
+                                        ].map((com, i) => (
+                                            <div className="comp-row" key={i}>
+                                                <div className="comp-meta"><span>{com.name}</span><span>{com.count} cases</span></div>
+                                                <div className="comp-bar-track"><div className="comp-bar-fill" style={{ width: `${Math.min(100, (com.count / (activeData.deliveries || 1)) * 300)}%`, backgroundColor: com.color }} /></div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="outcome-chart-box outcome-chart-box-large">
+                                    <h3 className="outcome-chart-title">Postpartum Recovery</h3>
+                                    <div className="postpartum-recovery-metric">
+                                        <span className="recovery-success-rate">88%</span>
+                                        <span className="recovery-success-label">Recovery Success Rate</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="projection-card border-success">
-                            <div className="proj-card-head">
-                                <span className="proj-label text-success font-bold">FORECAST: POSTPARTUM COMPLIANCE</span>
-                                <TrendingUp size={16} className="text-success" />
+                        <div className="glass-card intelligence-panel">
+                            <div className="intelligence-header-icon">
+                                <Award size={18} className="icon-glow" />
+                                <h2 className="panel-title">Health Alerts</h2>
                             </div>
-                            <div className="proj-card-body">
-                                <div className="proj-values-row">
-                                    <div className="proj-val-box">
-                                        <span className="proj-val-sub">Current</span>
-                                        <span className="proj-val-num">{predictiveData.ppCurrent}%</span>
+                            <p className="panel-subtitle">Administrative alerts and clinical recommendations</p>
+                            <div className="insights-vertical-stack" style={{ marginTop: 12 }}>
+                                {intelligenceInsights.map(ins => (
+                                    <div className={`insight-intelligence-card border-${ins.priority}`} key={ins.id}>
+                                        <p className="insight-title-text">{ins.title}</p>
+                                        <div className="insight-recommendation-box"><strong>Recommendation:</strong> {ins.recommendation}</div>
                                     </div>
-                                    <div className="proj-arrow-indicator">→</div>
-                                    <div className="proj-val-box">
-                                        <span className="proj-val-sub">Forecast</span>
-                                        <span className="proj-val-num color-success font-bold">{predictiveData.ppForecast}%</span>
-                                    </div>
-                                </div>
-                                <div className="proj-footer">
-                                    <span>Expected Improvement: <strong className="color-success font-bold">+{predictiveData.ppChange}%</strong></span>
-                                </div>
+                                ))}
                             </div>
                         </div>
-                    </div>
-                </div>
-            </section>
+                    </section>
+                </>
+            )}
 
         </div>
     );

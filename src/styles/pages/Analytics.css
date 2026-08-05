@@ -71,6 +71,48 @@
     box-shadow: 0 8px 32px rgba(185, 129, 138, 0.04);
 }
 
+/* ══════════════════════════════════════════
+   EXECUTIVE ANALYTICS TAB NAVIGATION
+   ══════════════════════════════════════════ */
+.analytics-tabs-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f0f2f5;
+    padding: 6px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-border);
+    overflow-x: auto;
+}
+
+.analytics-tab-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.analytics-tab-btn:hover {
+    color: var(--color-text);
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.analytics-tab-btn.active {
+    background: #ffffff;
+    color: var(--color-rose, #b9818a);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    font-weight: 700;
+}
+
 .filters-group-left {
     display: flex;
     flex-wrap: wrap;
