@@ -25,11 +25,11 @@ const SUPPLEMENT_TYPES = [
 
 const STAFF_LIST = ['Nurse Ana', 'Nurse Bea', 'Midwife Elena', 'Midwife Ana', 'Dr. Reyes (OB)'];
 
-const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, onSave }) => {
+const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAutoSelectId, onClose, onSave }) => {
     const babyService = new BabyService();
     const [form, setForm] = useState({
         patientType: initialPatientType || 'Mother', patientName: initialPatientName || '', vaccine: '',
-        supplement: '', dose: '', date: new Date().toISOString().split('T')[0], nextDue: '', staff: '', notes: ''
+        supplement: '', dose: '', date: new Date().toISOString().split('T')[0], nextDue: '', staff: '', remarks: ''
     });
     const [isSaving, setIsSaving] = useState(false);
     const [selectedPatient, setSelectedPatient] = useState(null);
@@ -43,7 +43,71 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
     const [supplementTypes, setSupplementTypes] = useState([]);
     const [vaccineTypes, setVaccineTypes] = useState([]);
     const [isPregnant, setIsPregnant] = useState(false);
+    const [patientStationId, setPatientStationId] = useState(null);
+    const [vaccineSearchQuery, setVaccineSearchQuery] = useState('');
     const updateForm = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+
+    const resolvePatientStation = async (patientId, patientType, fallbackStationName = '') => {
+        try {
+            let stationId = null;
+            let stationName = null;
+
+            if (patientType === 'Mother') {
+                const { data, error } = await supabase
+                    .from('patient_basic_info')
+                    .select('station_ass, stations:station_ass (station_name)')
+                    .eq('id', patientId)
+                    .maybeSingle();
+
+                if (error) throw error;
+                stationId = data?.station_ass ?? null;
+                stationName = data?.stations?.station_name ?? null;
+
+                if (stationId && !stationName) {
+                    const { data: stationRow, error: stationError } = await supabase
+                        .from('stations')
+                        .select('station_name')
+                        .eq('id', stationId)
+                        .maybeSingle();
+                    if (!stationError) {
+                        stationName = stationRow?.station_name || stationName;
+                    }
+                }
+            } else {
+                const { data, error } = await supabase
+                    .from('newborns')
+                    .select('mother_id, patient_basic_info!mother_id (station_ass, stations:station_ass (station_name))')
+                    .eq('id', patientId)
+                    .maybeSingle();
+
+                if (error) throw error;
+                const pInfo = Array.isArray(data?.patient_basic_info) ? data?.patient_basic_info[0] : data?.patient_basic_info;
+                stationId = pInfo?.station_ass ?? null;
+                stationName = pInfo?.stations?.station_name ?? null;
+            }
+
+            if (!stationId && fallbackStationName) {
+                const stationLookup = fallbackStationName.split(',')[0].trim();
+                if (stationLookup) {
+                    const { data: stationRow, error: stationError } = await supabase
+                        .from('stations')
+                        .select('id, station_name')
+                        .ilike('station_name', `%${stationLookup}%`)
+                        .maybeSingle();
+
+                    if (!stationError && stationRow?.id) {
+                        stationId = stationRow.id;
+                        stationName = stationRow.station_name || stationLookup;
+                    }
+                }
+            }
+
+            return { stationId, stationName };
+        } catch (error) {
+            console.error('Error resolving patient station:', error);
+            return { stationId: null, stationName: null };
+        }
+    };
 
     useEffect(() => {
         const handleClickOutside = (e) => {
@@ -75,31 +139,41 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
             };
             fetchSupplementTypes();
         }
-        // Fetch vaccine types from inventory when in vaccine mode
-        if (mode === 'vaccine') {
+        // Fetch vaccine types from station inventory when in vaccine mode and patient is selected
+        if (mode === 'vaccine' && patientStationId) {
             const fetchVaccineTypes = async () => {
                 try {
-                    const { data, error } = await supabase
-                        .from('vaccine_inventory')
-                        .select('vaccine_name')
-                        .gt('quantity', 0)
-                        .order('vaccine_name', { ascending: true });
+                    console.log('🔍 Fetching vaccines for station:', patientStationId);
                     
-                    if (error) throw error;
-                    
-                    // Filter vaccine types based on pregnancy status
-                    let filteredVaccines = data?.map(item => item.vaccine_name) || [];
-                    if (form.patientType === 'Mother' && isPregnant) {
-                        // Only show Td and Influenza vaccines during pregnancy
-                        filteredVaccines = filteredVaccines.filter(v => 
-                            v.toLowerCase().includes('tetanus') || 
-                            v.toLowerCase().includes('td') ||
-                            v.toLowerCase().includes('influenza') ||
-                            v.toLowerCase().includes('flu')
-                        );
+                    // DEBUG: Fetch all to see what's in the table
+                    const { data: allSvi } = await supabase.from('station_vaccine_inventory').select('*');
+                    console.log('🐞 ALL station_vaccine_inventory records:', allSvi);
+
+                    const { data: stationRows, error: stationError } = await supabase
+                        .from('station_vaccine_inventory')
+                        .select('vaccine_id, quantity')
+                        .eq('station_id', patientStationId)
+                        .gt('quantity', 0);
+
+                    console.log('📦 Station vaccine inventory rows:', stationRows, 'Error:', stationError);
+                    if (stationError) throw stationError;
+
+                    const vaccineIds = [...new Set((stationRows || []).map(item => item.vaccine_id).filter(Boolean))];
+                    if (vaccineIds.length === 0) {
+                        setVaccineTypes([]);
+                        return;
                     }
-                    // Deduplicate vaccine names to avoid React key warnings
-                    const uniqueVaccines = [...new Set(filteredVaccines)];
+
+                    const { data: vaccineRows, error: vaccineError } = await supabase
+                        .from('vaccine_inventory')
+                        .select('id, vaccine_name')
+                        .in('id', vaccineIds)
+                        .order('vaccine_name', { ascending: true });
+
+                    console.log('📦 Resolved vaccine inventory names:', vaccineRows, 'Error:', vaccineError);
+                    if (vaccineError) throw vaccineError;
+
+                    const uniqueVaccines = [...new Set((vaccineRows || []).map(item => item.vaccine_name).filter(Boolean))];
                     setVaccineTypes(uniqueVaccines);
                 } catch (error) {
                     console.error('Error fetching vaccine types:', error);
@@ -107,18 +181,20 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                 }
             };
             fetchVaccineTypes();
+        } else if (mode === 'vaccine') {
+            setVaccineTypes([]);
         }
-    }, [mode, form.patientType, isPregnant]);
+    }, [mode, form.patientType, isPregnant, patientStationId]);
 
     useEffect(() => {
         console.log('✅ RecordModal useEffect triggered!', form.patientName, form.patientType);
         const searchPendingVaccines = async () => {
             console.log('🔍 Searching for patient:', form.patientName);
-            // Don't reset selectedPatient if it's already set and matches the current name
-            if (selectedPatient && selectedPatient.label === form.patientName) {
-                console.log('✅ Keeping existing selectedPatient:', selectedPatient);
-                return;
-            }
+            let patientId = selectedPatient?.id || null;
+            let patientLabel = selectedPatient?.label || null;
+            let stationHint = selectedPatient?.station || '';
+            let barangay = '';
+
             if (!form.patientName || form.patientName.trim().length < 3) {
                 console.log('⏸️ Patient name too short or empty');
                 setSelectedPatient(null);
@@ -127,60 +203,57 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                 setStaffList(STAFF_LIST);
                 setSuggestions([]);
                 setShowSuggestions(false);
+                setPatientStationId(null);
                 return;
             }
 
             try {
                 const patientService = new PatientService();
-                let patientId = null;
-                let patientLabel = null;
-                let barangay = '';
-                
-                // Generate suggestions for dropdown
                 let allMatches = [];
-                if (form.patientType === 'Mother') {
-                    const mothers = await patientService.searchPatients(form.patientName);
-                    allMatches = mothers.map(m => ({
-                        id: m.id,
-                        name: m.name,
-                        station: m.station,
-                        type: 'Mother'
-                    }));
-                    if (mothers.length === 1) {
-                        patientId = mothers[0].id;
-                        patientLabel = mothers[0].name;
-                        barangay = mothers[0].station.split(',')[0].trim();
-                        // Auto-select the single match
-                        setSelectedPatient({ id: mothers[0].id, label: mothers[0].name, type: 'Mother' });
-                        console.log('✅ Auto-selected single mother match:', mothers[0].name);
-                    }
-                } else {
-                    const newborns = await babyService.searchNewborns(form.patientName);
-                    allMatches = newborns.map(n => ({
-                        id: n.id,
-                        name: n.name,
-                        type: 'Newborn'
-                    }));
-                    if (newborns.length === 1) {
-                        patientId = newborns[0].id;
-                        patientLabel = newborns[0].name;
-                        // Auto-select the single match
-                        setSelectedPatient({ id: newborns[0].id, label: newborns[0].name, type: 'Newborn' });
-                        console.log('✅ Auto-selected single newborn match:', newborns[0].name);
-                        // For newborns, get the mother's barangay
-                        const { data: motherData } = await supabase
-                            .from('newborns')
-                            .select('mother_id, patient_basic_info!mother_id (barangay)')
-                            .eq('id', patientId)
-                            .single();
-                        
-                        if (motherData && motherData.patient_basic_info) {
-                            barangay = motherData.patient_basic_info.barangay;
+                if (!patientId) {
+                    if (form.patientType === 'Mother') {
+                        const mothers = await patientService.searchPatients(form.patientName);
+                        allMatches = mothers.map(m => ({
+                            id: m.id,
+                            name: m.name,
+                            station: m.station,
+                            type: 'Mother'
+                        }));
+                        if (mothers.length === 1) {
+                            patientId = mothers[0].id;
+                            patientLabel = mothers[0].name;
+                            stationHint = mothers[0].station || '';
+                            barangay = mothers[0].station.split(',')[0].trim();
+                            setSelectedPatient({ id: mothers[0].id, label: mothers[0].name, type: 'Mother', station: mothers[0].station });
+                            console.log('✅ Auto-selected single mother match:', mothers[0].name);
+                        }
+                    } else {
+                        const newborns = await babyService.searchNewborns(form.patientName);
+                        allMatches = newborns.map(n => ({
+                            id: n.id,
+                            name: n.name,
+                            station: n.station,
+                            type: 'Newborn'
+                        }));
+                        if (newborns.length === 1) {
+                            patientId = newborns[0].id;
+                            patientLabel = newborns[0].name;
+                            stationHint = newborns[0].station || '';
+                            setSelectedPatient({ id: newborns[0].id, label: newborns[0].name, type: 'Newborn', station: newborns[0].station });
+                            console.log('✅ Auto-selected single newborn match:', newborns[0].name);
+                            const { data: motherData, error: mError } = await supabase
+                                .from('newborns')
+                                .select('mother_id, patient_basic_info!mother_id (station_ass, stations:station_ass (station_name))')
+                                .eq('id', patientId)
+                                .maybeSingle();
+
+                            if (!mError && motherData?.patient_basic_info?.stations) {
+                                barangay = motherData.patient_basic_info.stations.station_name;
+                            }
                         }
                     }
                 }
 
-                // Show suggestions if matches found
                 setSuggestions(allMatches);
                 setShowSuggestions(allMatches.length > 0);
                 console.log('📊 Suggestions to show:', allMatches, 'Show:', allMatches.length > 0);
@@ -189,12 +262,12 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                     setSelectedPatient(null);
                     setPendingVaccines([]);
                     setSelectedVaccines({});
+                    setPatientStationId(null);
                     return;
                 }
 
-                setSelectedPatient({ id: patientId, label: patientLabel, type: form.patientType });
+                setSelectedPatient(prev => prev ? { ...prev, id: patientId, label: patientLabel || prev.label, type: form.patientType, station: stationHint || prev.station } : { id: patientId, label: patientLabel || form.patientName, type: form.patientType, station: stationHint });
 
-                // Check pregnancy status for mothers
                 if (form.patientType === 'Mother') {
                     const { data: pregInfo } = await supabase
                         .from('pregnancy_info')
@@ -203,7 +276,7 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                         .order('created_at', { ascending: false })
                         .limit(1)
                         .maybeSingle();
-                    
+
                     const isCurrentlyPregnant = pregInfo?.pregn_postp === 'Pregnant';
                     setIsPregnant(isCurrentlyPregnant);
                     console.log('🤰 Pregnancy status for mother:', isCurrentlyPregnant);
@@ -211,16 +284,18 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                     setIsPregnant(false);
                 }
 
-                // Fetch staff for the patient's barangay - match barangay_assignment
-                console.log('🏥 RecordModal - Barangay before staff fetch:', barangay);
-                    if (barangay) {
+                const { stationId } = await resolvePatientStation(patientId, form.patientType, stationHint);
+                console.log('🏢 Final resolved station ID:', stationId, 'hint:', stationHint);
+                setPatientStationId(stationId);
+
+                if (barangay) {
                     const { data: staffData, error: staffError } = await supabase
                         .from('staff_profiles')
                         .select('full_name, station_ass, stations:station_ass (station_name)')
                         .ilike('stations.station_name', `%${barangay}%`);
-                    
+
                     console.log('👨‍⚕️ RecordModal - Staff Data:', staffData, 'Error:', staffError);
-                    
+
                     const staffOptions = staffData ? staffData.map(s => s.full_name) : [];
                     console.log('📋 RecordModal - Staff Options:', staffOptions);
                     setStaffList(staffOptions);
@@ -248,31 +323,43 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
 
                 const pending = (pendingRows || []).map(row => ({
                     id: row.id,
-                    vaccine: row.vaccine_inventory?.vaccine_name || (row.notes ? row.notes.match(/(\d+)(?:st|nd|rd|th) dose of (.+)/)?.[2] : null) || 'Unknown Vaccine',
+                    vaccine: row.vaccine_inventory?.vaccine_name || row.notes?.trim() || 'Unknown Vaccine',
                     dose_number: row.dose_number,
                     scheduled_vaccination: row.scheduled_vaccination,
                     status: row.status
                 }));
 
                 setPendingVaccines(pending);
-                setSelectedVaccines({});
+                if (initialAutoSelectId) {
+                    setSelectedVaccines({ [initialAutoSelectId]: true });
+                } else {
+                    setSelectedVaccines({});
+                }
             } catch (err) {
                 console.error('Error loading patient vaccination schedule:', err);
                 setSelectedPatient(null);
+                setPatientStationId(null);
                 setPendingVaccines([]);
                 setSelectedVaccines({});
             }
         };
 
         searchPendingVaccines();
-    }, [form.patientName, form.patientType]);
+    }, [form.patientName, form.patientType, selectedPatient?.id, selectedPatient?.label]);
 
-    const handleSelectSuggestion = (suggestion) => {
+    const handleSelectSuggestion = async (suggestion) => {
         console.log('🎯 handleSelectSuggestion called with:', suggestion);
         updateForm('patientName', suggestion.name);
-        setSelectedPatient({ id: suggestion.id, label: suggestion.name, type: suggestion.type });
+
+        let station = suggestion.station;
+        if (!station || station.toLowerCase().startsWith('no station')) {
+            const { stationName } = await resolvePatientStation(suggestion.id, suggestion.type);
+            station = stationName || station || '';
+        }
+
+        setSelectedPatient({ id: suggestion.id, label: suggestion.name, type: suggestion.type, station });
         setShowSuggestions(false);
-        console.log('✅ selectedPatient set to:', { id: suggestion.id, label: suggestion.name, type: suggestion.type });
+        console.log('✅ selectedPatient set to:', { id: suggestion.id, label: suggestion.name, type: suggestion.type, station });
     };
 
     const handleSave = async () => {
@@ -328,6 +415,129 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
 
             if (mode === 'vaccine') {
                 // Handle checkbox-selected vaccines (new multi-vaccine selection)
+                const selectedScheduledIds = Object.entries(selectedVaccines)
+                    .filter(([, checked]) => checked)
+                    .map(([id]) => id);
+
+                if (selectedScheduledIds.length > 0) {
+                    // Only update checked scheduled vaccination records, do not insert new rows.
+                    for (const [index, scheduledId] of selectedScheduledIds.entries()) {
+                        const { data: vaccRecord } = await supabase
+                            .from('vaccinations')
+                            .select('id, vaccine_inventory_id, notes')
+                            .eq('id', scheduledId)
+                            .single();
+
+                        let vaccineInvId = vaccRecord?.vaccine_inventory_id;
+                        const selectedVaccineName = selectedVaccineNames.length > 0
+                            ? (selectedVaccineNames[index] || selectedVaccineNames[0])
+                            : null;
+
+                        if (selectedVaccineName) {
+                            const { data: exactItems, error: exactError } = await supabase
+                                .from('vaccine_inventory')
+                                .select('id, quantity, vaccine_name')
+                                .eq('vaccine_name', selectedVaccineName)
+                                .gt('quantity', 0)
+                                .order('expiration_date', { ascending: true, nullsFirst: false })
+                                .limit(1);
+
+                            if (!exactError && exactItems && exactItems.length > 0) {
+                                vaccineInvId = exactItems[0].id;
+                            } else {
+                                const { data: fuzzyItems, error: fuzzyError } = await supabase
+                                    .from('vaccine_inventory')
+                                    .select('id, quantity, vaccine_name')
+                                    .gt('quantity', 0)
+                                    .order('expiration_date', { ascending: true, nullsFirst: false });
+
+                                if (!fuzzyError && fuzzyItems) {
+                                    const searchTerm = selectedVaccineName.toLowerCase().replace(/[^a-z0-9]/g, '');
+                                    const match = fuzzyItems.find(item => {
+                                        const normalizedItem = item.vaccine_name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                                        return normalizedItem.includes(searchTerm) || searchTerm.includes(normalizedItem);
+                                    });
+                                    if (match) vaccineInvId = match.id;
+                                }
+                            }
+                        }
+
+                        if (!vaccineInvId && vaccRecord?.notes) {
+                            const vaccineMatch = vaccRecord.notes.match(/(\d+)(?:st|nd|rd|th) dose of (.+)/);
+                            if (vaccineMatch) {
+                                const extractedName = vaccineMatch[2].trim();
+                                const { data: fuzzyItems, error: fuzzyError } = await supabase
+                                    .from('vaccine_inventory')
+                                    .select('id, quantity, vaccine_name')
+                                    .gt('quantity', 0)
+                                    .order('expiration_date', { ascending: true, nullsFirst: false });
+
+                                if (!fuzzyError && fuzzyItems) {
+                                    const searchTerm = extractedName.toLowerCase().replace(/[^a-z0-9]/g, '');
+                                    const match = fuzzyItems.find(item => {
+                                        const normalizedItem = item.vaccine_name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                                        return normalizedItem.includes(searchTerm) || searchTerm.includes(normalizedItem);
+                                    });
+                                    if (match) vaccineInvId = match.id;
+                                }
+                            }
+                        }
+
+                        const updateData = {
+                            vaccinated_date: form.date,
+                            status: 'Completed',
+                            vaccinated_by: currentUser,
+                            remarks: form.remarks || null
+                        };
+
+                        if (vaccineInvId) {
+                            updateData.vaccine_inventory_id = vaccineInvId;
+                        }
+
+                        await supabase.from('vaccinations').update(updateData).eq('id', scheduledId);
+
+                        if (vaccineInvId) {
+                            const { data: vaccInv } = await supabase
+                                .from('vaccine_inventory')
+                                .select('id, quantity, vaccine_name')
+                                .eq('id', vaccineInvId)
+                                .single();
+
+                            if (vaccInv && vaccInv.quantity > 0) {
+                                await supabase
+                                    .from('vaccine_inventory')
+                                    .update({ quantity: vaccInv.quantity - 1 })
+                                    .eq('id', vaccInv.id);
+                                console.log(`✅ Decremented vaccine: ${vaccInv.vaccine_name}`);
+
+                                if (patientStationId) {
+                                    const { data: stationInv, error: stationInvError } = await supabase
+                                        .from('station_vaccine_inventory')
+                                        .select('id, quantity')
+                                        .eq('station_id', patientStationId)
+                                        .eq('vaccine_id', vaccInv.id)
+                                        .maybeSingle();
+
+                                    if (!stationInvError && stationInv && stationInv.quantity > 0) {
+                                        await supabase
+                                            .from('station_vaccine_inventory')
+                                            .update({ quantity: stationInv.quantity - 1 })
+                                            .eq('id', stationInv.id);
+                                        console.log(`✅ Decremented station vaccine inventory for ${vaccInv.vaccine_name} at station ${patientStationId}`);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (onSave) {
+                        onSave();
+                    } else {
+                        onClose();
+                    }
+                    return;
+                }
+
                 if (selectedVaccineNames.length > 0) {
                     for (const vaccineName of selectedVaccineNames) {
                         const dose = vaccineDoses[vaccineName];
@@ -377,7 +587,8 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                             vaccinated_date: form.date,
                             status: 'Completed',
                             created_by: currentUser,
-                            notes: form.notes || null
+                            vaccinated_by: currentUser,
+                            remarks: form.remarks || null
                         };
                         
                         // Add patient or newborn ID based on type
@@ -406,6 +617,23 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                         await supabase.from('vaccine_inventory')
                             .update({ quantity: newQuantity })
                             .eq('id', vaccInv.id);
+
+                        if (patientStationId) {
+                            const { data: stationInv, error: stationInvError } = await supabase
+                                .from('station_vaccine_inventory')
+                                .select('id, quantity')
+                                .eq('station_id', patientStationId)
+                                .eq('vaccine_id', vaccInv.id)
+                                .maybeSingle();
+
+                            if (!stationInvError && stationInv && stationInv.quantity > 0) {
+                                await supabase
+                                    .from('station_vaccine_inventory')
+                                    .update({ quantity: stationInv.quantity - 1 })
+                                    .eq('id', stationInv.id);
+                                console.log(`✅ Decremented station vaccine inventory for ${vaccInv.vaccine_name} at station ${patientStationId}`);
+                            }
+                        }
 
                         // Auto-schedule maternal vaccinations for pregnant mothers - ONLY on first Td dose
                         if (form.patientType === 'Mother' && isPregnant && doseNumber === 1) {
@@ -439,92 +667,8 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                     }
                 }
 
-                const selectedScheduledIds = Object.entries(selectedVaccines)
-                    .filter(([, checked]) => checked)
-                    .map(([id]) => id);
-
-                if (selectedScheduledIds.length > 0) {
-                    // Mark existing scheduled vaccine records as completed
-                    for (const scheduledId of selectedScheduledIds) {
-                        // First get the vaccine record to find the vaccine name
-                        const { data: vaccRecord } = await supabase
-                            .from('vaccinations')
-                            .select('id, notes, vaccine_inventory_id')
-                            .eq('id', scheduledId)
-                            .single();
-
-                        let vaccineInvId = vaccRecord?.vaccine_inventory_id;
-
-                        // If no vaccine_inventory_id, try to find it from notes using nearest expiration date
-                        if (!vaccineInvId && vaccRecord?.notes) {
-                            const vaccineMatch = vaccRecord.notes.match(/(\d+)(?:st|nd|rd|th) dose of (.+)/);
-                            if (vaccineMatch) {
-                                const vaccineName = vaccineMatch[2].trim();
-                                const { data: vaccInv } = await supabase
-                                    .from('vaccine_inventory')
-                                    .select('id, quantity, vaccine_name, expiration_date')
-                                    .or(`vaccine_name.ilike.%${vaccineName}%,vaccine_name.ilike.%${vaccineName.replace(/ \(.+\)/, '')}%`)
-                                    .gt('quantity', 0)
-                                    .order('expiration_date', { ascending: true, nullsFirst: false })
-                                    .limit(1);
-
-                                if (vaccInv && vaccInv.length > 0) {
-                                    vaccineInvId = vaccInv[0].id;
-                                }
-                            }
-                        }
-
-                        // Update the vaccination record with vaccine_inventory_id
-                        const updateData = {
-                            vaccinated_date: form.date,
-                            status: 'Completed',
-                            notes: form.notes || null
-                        };
-                        if (vaccineInvId) {
-                            updateData.vaccine_inventory_id = vaccineInvId;
-                        }
-
-                        await supabase.from('vaccinations').update(updateData).eq('id', scheduledId);
-
-                        // Decrement vaccine inventory
-                        if (vaccineInvId) {
-                            const { data: vaccInv } = await supabase
-                                .from('vaccine_inventory')
-                                .select('id, quantity, vaccine_name')
-                                .eq('id', vaccineInvId)
-                                .single();
-
-                            if (vaccInv && vaccInv.quantity > 0) {
-                                await supabase
-                                    .from('vaccine_inventory')
-                                    .update({ quantity: vaccInv.quantity - 1 })
-                                    .eq('id', vaccInv.id);
-                                console.log(`✅ Decremented vaccine: ${vaccInv.vaccine_name}`);
-                            }
-                        } else if (vaccRecord?.notes) {
-                            // Fallback: try to find by name in notes using nearest expiration date
-                            const vaccineMatch = vaccRecord.notes.match(/(\d+)(?:st|nd|rd|th) dose of (.+)/);
-                            if (vaccineMatch) {
-                                const extractedName = vaccineMatch[2].trim();
-                                const { data: vaccInv } = await supabase
-                                    .from('vaccine_inventory')
-                                    .select('id, quantity, vaccine_name, expiration_date')
-                                    .or(`vaccine_name.ilike.%${extractedName}%,vaccine_name.ilike.%${extractedName.replace(/ \(.+\)/, '')}%`)
-                                    .gt('quantity', 0)
-                                    .order('expiration_date', { ascending: true, nullsFirst: false })
-                                    .limit(1);
-
-                                if (vaccInv && vaccInv.length > 0 && vaccInv[0].quantity > 0) {
-                                    await supabase
-                                        .from('vaccine_inventory')
-                                        .update({ quantity: vaccInv[0].quantity - 1 })
-                                        .eq('id', vaccInv[0].id);
-                                    console.log(`✅ Decremented vaccine (by name, nearest exp): ${vaccInv[0].vaccine_name}`);
-                                }
-                            }
-                        }
-                    }
-                } else {
+                // Manual entry route when no scheduled rows are checked
+                if (selectedVaccineNames.length === 0 && selectedScheduledIds.length === 0) {
                     // Manual entry: try to find in inventory first, otherwise create without inventory
                     const { data: vaccInvItems } = await supabase
                         .from('vaccine_inventory')
@@ -547,7 +691,6 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                     }
 
                     const doseNumber = form.dose === '1st Dose' ? 1 : form.dose === '2nd Dose' ? 2 : form.dose === '3rd Dose' ? 3 : form.dose === 'Booster' ? 4 : 5;
-                    const doseOrdinal = doseNumber === 1 ? '1st' : doseNumber === 2 ? '2nd' : doseNumber === 3 ? '3rd' : `${doseNumber}th`;
 
                     const vaccinationRecord = {
                         patient_id: patientId,
@@ -556,15 +699,14 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                         scheduled_vaccination: form.date,
                         status: 'Completed',
                         created_by: currentUser,
-                        notes: form.notes || `${doseOrdinal} dose of ${form.vaccine}`
+                        vaccinated_by: currentUser,
+                        remarks: form.remarks || null
                     };
 
-                    // If vaccine found in inventory, link it and decrement
                     if (vaccInv) {
                         vaccinationRecord.vaccine_inventory_id = vaccInv.id;
                         await supabase.from('vaccinations').insert([vaccinationRecord]);
 
-                        // Decrement vaccine inventory
                         if (vaccInv.quantity > 0) {
                             await supabase
                                 .from('vaccine_inventory')
@@ -572,16 +714,30 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                                 .eq('id', vaccInv.id);
                             console.log(`✅ Decremented vaccine: ${form.vaccine}`);
                         }
+
+                        if (patientStationId) {
+                            const { data: stationInv, error: stationInvError } = await supabase
+                                .from('station_vaccine_inventory')
+                                .select('id, quantity')
+                                .eq('station_id', patientStationId)
+                                .eq('vaccine_id', vaccInv.id)
+                                .maybeSingle();
+
+                            if (!stationInvError && stationInv && stationInv.quantity > 0) {
+                                await supabase
+                                    .from('station_vaccine_inventory')
+                                    .update({ quantity: stationInv.quantity - 1 })
+                                    .eq('id', stationInv.id);
+                                console.log(`✅ Decremented station vaccine inventory for ${form.vaccine} at station ${patientStationId}`);
+                            }
+                        }
                     } else {
-                        // Manual entry method: create record without inventory link
                         console.log(`⚠️ Vaccine not in inventory, creating manual record for: ${form.vaccine}`);
                         await supabase.from('vaccinations').insert([vaccinationRecord]);
                     }
 
-                    // Auto-schedule maternal vaccinations for pregnant mothers
                     if (form.patientType === 'Mother' && isPregnant) {
                         const vaccService = new VaccinationService();
-                        // Get patient's LMP for influenza scheduling
                         const { data: patientData } = await supabase
                             .from('patient_basic_info')
                             .select('pregnancy_info (lmd)')
@@ -589,7 +745,6 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                             .single();
                         const lmpDate = patientData?.pregnancy_info?.[0]?.lmd || null;
 
-                        // Check if this is the first Td vaccine
                         const { data: existingTdVaccines } = await supabase
                             .from('vaccinations')
                             .select('id')
@@ -620,8 +775,7 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                     dosage: form.dose,
                     start_date: form.date,
                     end_date: form.date,
-                    created_by: currentUser,
-                    notes: form.notes || null
+                    created_by: currentUser
                 };
 
                 // If supplement found in inventory, link it and decrement
@@ -726,10 +880,20 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                     )}
                     {mode === 'vaccine' ? (
                         <>
-                            <div className="form-group">
-                                <label>Select Vaccines <span className="req">*</span></label>
-                                <div className="vaccine-checkbox-list">
-                                    {vaccineTypes.map(vaccine => (
+                            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                <label>Search & Select Vaccines <span className="req">*</span></label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Search vaccines available at patient's station..." 
+                                    value={vaccineSearchQuery} 
+                                    onChange={(e) => setVaccineSearchQuery(e.target.value)} 
+                                    style={{ marginBottom: '10px', width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                                />
+                                {patientStationId ? (
+                                    <div className="vaccine-checkbox-list">
+                                        {vaccineTypes
+                                            .filter(v => v.toLowerCase().includes(vaccineSearchQuery.toLowerCase()))
+                                            .map(vaccine => (
                                         <div key={vaccine} className="vaccine-checkbox-item">
                                             <label className="checkbox-label">
                                                 <input
@@ -762,8 +926,11 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                                                 </div>
                                             )}
                                         </div>
-                                    ))}
-                                </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p style={{ color: '#666', fontStyle: 'italic', fontSize: '0.9rem' }}>Please select a valid patient to view available vaccines at their station.</p>
+                                )}
                             </div>
                             <div className="form-grid-2">
                                 <div className="form-group">
@@ -801,8 +968,8 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, onClose, on
                     )}
                     <div className="form-grid-2">
                         <div className="form-group">
-                            <label>Notes (optional)</label>
-                            <input type="text" placeholder="Any relevant notes..." value={form.notes} onChange={e => updateForm('notes', e.target.value)} />
+                            <label>Remarks</label>
+                            <input type="text" placeholder="Doctor's observations or remarks..." value={form.remarks} onChange={e => updateForm('remarks', e.target.value)} />
                         </div>
                     </div>
                 </div>
@@ -869,7 +1036,7 @@ const Vaccinations = () => {
                     created_by,
                     staff_profiles!vaccinations_created_by_fkey (full_name),
                     vaccine_inventory (vaccine_name),
-                    patient_basic_info!vaccinations_patient_id_fkey (id, first_name, last_name, barangay, province)
+                    patient_basic_info!vaccinations_patient_id_fkey (id, first_name, last_name, station_ass, stations:station_ass (station_name), province)
                 `)
                 .order('created_at', { ascending: false });
             console.log('💉 Fetched vaccination records:', vaccRecords?.length || 0);
@@ -888,14 +1055,13 @@ const Vaccinations = () => {
             const { data: staff } = await supabase.from('staff_profiles').select('id, full_name');
             const staffMap = new Map(staff.map(s => [s.id, s.full_name]));
             
-            // Fetch all patients to create a map for names
             const { data: allPatients } = await supabase
                 .from('patient_basic_info')
-                .select('id, first_name, last_name, barangay, province');
+                .select('id, first_name, last_name, station_ass, stations:station_ass (station_name), province');
             console.log('📋 Fetched patients:', allPatients?.length || 0);
             const patientMap = new Map(allPatients?.map(p => [p.id, {
                 name: `${p.first_name || ''} ${p.last_name || ''}`.trim(),
-                station: `${p.barangay || 'N/A'}, ${p.province || 'N/A'}`
+                station: `${p.stations?.station_name || 'N/A'}, ${p.province || 'N/A'}`
             }]) || []);
             console.log('🗺️ PatientMap size:', patientMap.size);
             console.log('🗺️ Sample PatientMap entries:', Array.from(patientMap.entries()).slice(0, 5));
@@ -1473,6 +1639,7 @@ const Vaccinations = () => {
                                                                             <th>Date Given</th>
                                                                             <th>Scheduled</th>
                                                                             <th>Status</th>
+                                                                            <th>Actions</th>
                                                                         </tr>
                                                                     </thead>
                                                                     <tbody>
@@ -1483,6 +1650,17 @@ const Vaccinations = () => {
                                                                                 <td>{record.date || <span className="not-yet">Not given</span>}</td>
                                                                                 <td>{record.nextDue || <span className="not-yet">—</span>}</td>
                                                                                 <td><span className={`vacc-status ${vaccineStatusClass(record.status)}`}>{record.status}</span></td>
+                                                                                <td>
+                                                                                    {record.status === 'Pending' && (
+                                                                                        <button 
+                                                                                            className="action-btn record-btn" 
+                                                                                            style={{ fontSize: '0.75rem', padding: '2px 6px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                                                                            onClick={() => setRecordModal({ mode: 'vaccine', initialPatientType: item.type, initialPatientName: item.patientName, initialAutoSelectId: record.id })}
+                                                                                        >
+                                                                                            <Syringe size={12} /> Administer Now
+                                                                                        </button>
+                                                                                    )}
+                                                                                </td>
                                                                             </tr>
                                                                         ))}
                                                                     </tbody>

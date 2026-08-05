@@ -11,7 +11,7 @@ const MAX_ATTEMPTS = 5;
 
 export default function Login() {
   const navigate = useNavigate();
-  const { setUser } = useContext(AuthContext);
+  const { user, setUser, isAuthLoading } = useContext(AuthContext);
 
   const emailRef = useRef(null);
   const forgotBtnRef = useRef(null);
@@ -21,6 +21,19 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
 
   const [lastLogin, setLastLogin] = useState({ time: 'Checking...', device: '...' });
+
+  useEffect(() => {
+    if (isAuthLoading) return;
+    if (!user) return;
+
+    const role = String(user.role || '').toLowerCase();
+    let redirect = '/';
+    if (role === 'admin') redirect = '/dashboard';
+    else if (role === 'mother') redirect = '/mother-home';
+    else redirect = '/dashboard';
+
+    navigate(redirect, { replace: true });
+  }, [user, isAuthLoading, navigate]);
 
   useEffect(() => {
     try {

@@ -145,14 +145,19 @@ const AddPatient = () => {
 
     useEffect(() => {
         const filterStaff = async () => {
-            if (!formData.station || loadingStations) return;
+            if (!formData.station || loadingStations) {
+                setDoctorList([]);
+                setMidwifeList([]);
+                setRetainedStaffList([]);
+                setFormData(prev => ({ ...prev, retained_staff: '' }));
+                return;
+            }
+
             try {
-                // Get all staff at the selected station
                 const staffAtStation = await patientService.getDoctorsByStation(formData.station);
                 setDoctorList(staffAtStation);
                 setMidwifeList(staffAtStation);
 
-                // Get retained staff for the selected station
                 const retainedStaff = await patientService.getRetainedStaff(formData.station);
                 const staffList = Array.isArray(retainedStaff) ? retainedStaff : (retainedStaff ? [retainedStaff] : []);
                 setRetainedStaffList(staffList);

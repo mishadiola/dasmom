@@ -6,6 +6,7 @@ export default class AuthService {
   constructor() {
     this.supabase = supabase;
     this._currentUser = null; 
+    this.defaultTimeout = 15000;
   }
 
   async getOrCreateStationId(stationName) {
@@ -40,35 +41,193 @@ export default class AuthService {
     return inserted?.id || null;
   }
 
-  async login(email, password) {
-    const { data: authData, error: authError } = await this.supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
-      password: password.trim(),
-    });
+  // Helper to guard long-running requests
+  async _withTimeout(promise, ms) {
+    const timeoutMs = typeof ms === 'number' ? ms : this.defaultTimeout;
+    let timer;
+    return Promise.race([
+      promise,
+      new Promise((_, rej) => timer = setTimeout(() => rej(new Error('Request timed out')), timeoutMs))
+    ]).finally(() => clearTimeout(timer));
+  }
+
+  async getUserTypeIdByRole(role) {
+    const normalizedRole = String(role || '').trim().toLowerCase();
+    if (!normalizedRole) {
+      throw new Error('Role is required');
+    }
+
+    const { data, error } = await this.supabase
+      .from('user_type')
+      .select('id, user_type')
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    const userType = (data || []).find(
+      item => item.user_type?.toLowerCase().trim() === normalizedRole
+    );
+
+    if (userType?.id) return userType.id;
+
+    const { data: insertedRole, error: insertError } = await this.supabase
+      .from('user_type')
+      .insert({ user_type: normalizedRole })
+      .select('id')
+      .single();
+
+    if (insertError) throw insertError;
+    return insertedRole?.id;
+  }
+
+  async ensurePublicUserRecord({ userId, email, role }) {
+    const normalizedEmail = (email || '').trim().toLowerCase();
+    const normalizedRole = String(role || '').trim().toLowerCase();
+
+    if (!userId) throw new Error('User ID is required');
+
+    // Use SECURITY DEFINER function to create/update user record
+    // This bypasses RLS to allow staff/CHO to create patient accounts
+    try {
+      const { error: rpcError } = await this.supabase.rpc('create_patient_user_record', {
+        p_user_id: userId,
+        p_email: normalizedEmail,
+        p_role: normalizedRole,
+      });
+
+      if (rpcError) {
+        console.error('create_patient_user_record failed:', rpcError);
+        throw rpcError;
+      }
+
+      console.log('✅ Created/updated user record via SECURITY DEFINER function for role:', normalizedRole);
+    } catch (err) {
+      console.error('❌ ensurePublicUserRecord error:', err);
+      throw err;
+    }
+  }
+
+  async createUserAccount({ email, password, role, metadata = {} }) {
+    const normalizedEmail = (email || '').trim().toLowerCase();
+    if (!normalizedEmail || !password) {
+      throw new Error('Email and password are required');
+    }
+
+    // Save current admin session BEFORE creating new auth account
+    const currentSessionRes = await this._withTimeout(this.supabase.auth.getSession(), 5000);
+    const adminSession = currentSessionRes?.data?.session;
+
+    const { data: authData, error: authError } = await this._withTimeout(this.supabase.auth.signUp({
+      email: normalizedEmail,
+      password,
+      options: {
+        data: {
+          role: String(role || '').trim().toLowerCase(),
+          ...(metadata || {})
+        }
+      }
+    }), 10000);
+
     if (authError) throw authError;
 
-    const { data: { user: authUser } } = await this.supabase.auth.getUser();
+    const authUser = authData?.user;
+    if (!authUser?.id) {
+      throw new Error('Failed to create auth user');
+    }
+
+    try {
+      await this.ensurePublicUserRecord({
+        userId: authUser.id,
+        email: normalizedEmail,
+        role,
+      });
+    } catch (userInsertError) {
+      console.error('Failed to create public users row for auth account:', userInsertError);
+      throw userInsertError;
+    }
+
+    // CRITICAL: Sign out the newly created patient to prevent auth listener from hijacking context
+    try {
+      await this._withTimeout(this.supabase.auth.signOut(), 3000);
+      console.log('✅ Signed out patient account');
+    } catch (signOutErr) {
+      console.error('⚠️ Failed to sign out patient:', signOutErr);
+    }
+
+    // Restore admin/original session if one existed before (don't stay logged in as the new patient)
+    if (adminSession) {
+      try {
+        await this._withTimeout(this.supabase.auth.setSession(adminSession), 5000);
+        console.log('✅ Restored original session after creating patient account');
+      } catch (sessionErr) {
+        console.error('⚠️ Failed to restore session:', sessionErr);
+        // If restore fails, at least we're signed out (safer than staying as patient)
+      }
+    }
+
+    return authUser;
+  }
+
+  async login(email, password) {
+    let authData, authError;
+    try {
+      ({ data: authData, error: authError } = await this._withTimeout(this.supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password: password.trim(),
+      }), 12000));
+    } catch (err) {
+      console.error('Auth signIn timed out or failed:', err);
+      if (err instanceof TypeError || String(err).toLowerCase().includes('failed to fetch') || String(err).toLowerCase().includes('network')) {
+        throw new Error('Network/CORS error contacting Supabase. Check VITE_SUPABASE_URL and VITE_SUPABASE_KEY, ensure the project allows CORS from http://localhost:5173, and use the anon/public key (not the service_role key). Original: ' + err.message);
+      }
+      throw err;
+    }
+    if (authError) {
+      console.error('Auth signIn error:', authError);
+      throw authError;
+    }
+
+    let authUser;
+    try {
+      const userRes = await this._withTimeout(this.supabase.auth.getUser(), 8000);
+      authUser = userRes?.data?.user;
+    } catch (err) {
+      console.error('Failed to get auth user:', err);
+      if (err instanceof TypeError || String(err).toLowerCase().includes('failed to fetch')) {
+        throw new Error('Network/CORS error while retrieving auth user. Check Supabase CORS and keys. Original: ' + err.message);
+      }
+      throw err;
+    }
     if (!authUser) throw new Error('Session not established');
 
-    const { data: userData, error: userError } = await this.supabase
-      .from('users')
-      .select('id, email_address, usertype')
-      .eq('id', authUser.id)
-      .maybeSingle();
+    const { data: userData, error: userError } = await this._withTimeout(
+      this.supabase
+        .from('users')
+        .select('id, email_address, usertype')
+        .eq('id', authUser.id)
+        .maybeSingle(),
+      8000
+    );
 
     if (userError) throw userError;
     if (!userData) throw new Error('User record not found in database');
 
     let role = 'user';
     if (userData.usertype) {
-      const { data: typeData, error: typeError } = await this.supabase
-        .from('user_type')
-        .select('user_type')
-        .eq('id', userData.usertype)
-        .maybeSingle();
-
-      if (typeError) console.error('Error fetching user_type:', typeError);
-      if (typeData && typeData.user_type) role = typeData.user_type.toLowerCase();
+      try {
+        const { data: typeData, error: typeError } = await this._withTimeout(
+          this.supabase
+            .from('user_type')
+            .select('user_type')
+            .eq('id', userData.usertype)
+            .maybeSingle(),
+          5000
+        );
+        if (typeError) console.error('Error fetching user_type:', typeError);
+        if (typeData && typeData.user_type) role = typeData.user_type.toLowerCase();
+      } catch (err) {
+        console.error('user_type lookup timed out:', err);
+      }
     }
 
     const profile = await this.fetchProfileName(userData.id, role);
@@ -81,6 +240,7 @@ export default class AuthService {
       fullName: profile.fullName,
     };
 
+    this.saveUser(this._currentUser);
     return this._currentUser;
   }
 
@@ -89,7 +249,7 @@ export default class AuthService {
     let displayName = null;
 
     try {
-      if (role === 'admin' || role.includes('staff') || role.includes('midwife') || role.includes('doctor')) {
+      if (role === 'admin' || role.includes('staff') || role === 'cho personnel' || role.includes('midwife') || role.includes('doctor')) {
         const { data, error } = await this.supabase
           .from('staff_profiles')
           .select('full_name')
@@ -126,29 +286,68 @@ export default class AuthService {
   }
 
   async getAuthUser() {
-    if (this._currentUser) return this._currentUser;
-    const { data: { session } } = await this.supabase.auth.getSession();
-    if (!session?.user) return null;
-    const authUser = session.user;
+    // Only return cached user if it has a valid ID
+    if (this._currentUser && this._currentUser.id) {
+      return this._currentUser;
+    }
     
-    const { data: userData } = await this.supabase
-      .from('users')
-      .select('id, email_address, usertype')
-      .eq('id', authUser.id)
-      .maybeSingle();
+    let session;
+    try {
+      const sessRes = await this._withTimeout(this.supabase.auth.getSession(), 8000);
+      session = sessRes?.data?.session || sessRes?.session || sessRes;
+    } catch (err) {
+      console.error('getSession timed out or failed:', err);
+      this._currentUser = null;
+      return null;
+    }
+    if (!session?.user) {
+      this._currentUser = null;
+      return null;
+    }
+    const authUser = session.user;
 
-    if (!userData) return null;
+    let userData;
+    try {
+      const res = await this._withTimeout(
+        this.supabase
+          .from('users')
+          .select('id, email_address, usertype')
+          .eq('id', authUser.id)
+          .maybeSingle(),
+        8000
+      );
+      userData = res.data || res;
+    } catch (err) {
+      console.error('users lookup timed out or failed:', err);
+      this._currentUser = null;
+      return null;
+    }
+
+    if (!userData || !userData.id) {
+      console.warn('No valid user data found');
+      this._currentUser = null;
+      return null;
+    }
 
     let role = 'user';
-    const { data: typeData } = await this.supabase
-      .from('user_type')
-      .select('user_type')
-      .eq('id', userData.usertype)
-      .maybeSingle();
-    if (typeData?.user_type) role = typeData.user_type.toLowerCase();
+    try {
+      const typeRes = await this._withTimeout(
+        this.supabase
+          .from('user_type')
+          .select('user_type')
+          .eq('id', userData.usertype)
+          .maybeSingle(),
+        5000
+      );
+      const typeData = typeRes.data || typeRes;
+      if (typeData?.user_type) role = typeData.user_type.toLowerCase();
+    } catch (err) {
+      console.error('user_type lookup timed out or failed:', err);
+    }
 
     const profile = await this.fetchProfileName(userData.id, role);
 
+    // Only cache if we have valid data
     this._currentUser = {
       id: userData.id,
       email: userData.email_address,
@@ -157,27 +356,27 @@ export default class AuthService {
       fullName: profile.fullName,
     };
 
+    this.saveUser(this._currentUser);
     return this._currentUser;
   }
 
-
   async logout() {
     await this.supabase.auth.signOut();
-    this._currentUser = null;
-    localStorage.removeItem('user');
+    this.clearUser();
     console.log('User logged out');
   }
 
+  // Keep user in-memory only; do not persist to localStorage
+  clearUser() {
+    this._currentUser = null;
+  }
+
   saveUser(user) {
-    localStorage.setItem('user', JSON.stringify(user));
+    this._currentUser = user;
   }
 
   getUser() {
-    try {
-      return JSON.parse(localStorage.getItem('user'));
-    } catch {
-      return null;
-    }
+    return this._currentUser || null;
   }
 
   accessCheck(user, pageKey) {

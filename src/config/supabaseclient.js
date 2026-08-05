@@ -9,7 +9,7 @@ console.log('URL:', supabaseUrl)
 console.log('KEY:', supabaseKey)
 
 if (!supabaseUrl || !supabaseKey) {
-    throw new Error('putangina ok ka naman last time')
+    throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_KEY. Add them to your .env and restart the dev server.')
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey)

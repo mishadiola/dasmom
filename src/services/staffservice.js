@@ -36,6 +36,39 @@ export default class StaffService {
     }
   }
 
+  async getAllUserRoles() {
+    try {
+      const { data, error } = await this.supabase
+        .from('user_type')
+        .select('id, user_type')
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      return (data || []).map(role => ({
+        id: role.id,
+        value: role.user_type?.trim() || '',
+        label: this.formatRoleLabel(role.user_type),
+      })).filter(role => role.value);
+    } catch (error) {
+      console.error('❌ getAllUserRoles:', error);
+      return [];
+    }
+  }
+
+  formatRoleLabel(role) {
+    const value = String(role || '').trim();
+    if (!value) return 'Staff';
+    const normalized = value.toLowerCase();
+    if (normalized === 'cho personnel') return 'CHO Personnel';
+    if (normalized === 'admin') return 'Admin';
+    if (normalized === 'staff') return 'Staff';
+    if (normalized === 'midwife') return 'Midwife';
+    if (normalized === 'doctor') return 'Doctor';
+    if (normalized === 'patient') return 'Patient';
+    return value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+  }
+
   /**
    * Fetch all staff members with their details
    */
@@ -67,7 +100,7 @@ export default class StaffService {
         id: staff.id,
         name: staff.full_name,
         email: staff.users?.email_address || 'N/A',
-        role: staff.users?.user_type?.user_type || 'Staff',
+        role: this.formatRoleLabel(staff.users?.user_type?.user_type || 'Staff'),
         station: staff.stations?.station_name || 'No Assignment',
         employeeId: staff.employee_id,
         status: 'Active',
@@ -120,25 +153,76 @@ export default class StaffService {
         throw new Error('Missing required fields');
       }
 
-      // 1. Get user type ID by role
-      const userTypeId = await this.getUserTypeIdByRole(role);
+      // Ensure caller has permission to add staff
+      const caller = await authService.getAuthUser();
+      if (!caller) throw new Error('Not authenticated');
 
-      // 2. Create user in auth (users table)
-      const staffId = crypto.randomUUID();
+      // Determine caller role from users table (fallback to staff_profiles if usertype missing)
+      let callerRole = 'user';
+      try {
+        const { data: userRow } = await this.supabase
+          .from('users')
+          .select('id, usertype')
+          .eq('id', caller.id)
+          .maybeSingle();
 
-      const { error: userError } = await this.supabase.from('users').insert({
-        id: staffId,
-        email_address: email.trim().toLowerCase(),
-        password: password, // Note: This should be hashed in production
-        usertype: userTypeId,
+        if (userRow?.usertype) {
+          const { data: t } = await this.supabase
+            .from('user_type')
+            .select('user_type')
+            .eq('id', userRow.usertype)
+            .maybeSingle();
+          if (t?.user_type) callerRole = String(t.user_type).toLowerCase();
+        } else {
+          // fallback: if staff_profiles exists assume 'staff'
+          const { data: sp } = await this.supabase
+            .from('staff_profiles')
+            .select('station_ass')
+            .eq('id', caller.id)
+            .maybeSingle();
+          if (sp) callerRole = 'staff';
+        }
+      } catch (err) {
+        console.warn('Failed to resolve caller role from DB, falling back to session role:', err);
+        callerRole = (caller.role || 'user').toLowerCase();
+      }
+
+      console.debug('addStaff called by:', { callerId: caller.id, callerRole });
+
+      if (!['admin', 'cho personnel'].includes(callerRole)) {
+        throw new Error('Insufficient permissions to add staff');
+      }
+
+      // If caller is cho personnel, they can only add limited roles and must assign to their station
+      let stationId = null;
+      if (callerRole === 'cho personnel') {
+        const allowed = ['staff', 'patient', 'mother'];
+        if (!allowed.includes(role.toLowerCase())) {
+          throw new Error('CHO Personnel can only add staff or patient accounts');
+        }
+        const { data: callerProfile } = await this.supabase
+          .from('staff_profiles')
+          .select('station_ass')
+          .eq('id', caller.id)
+          .maybeSingle();
+        stationId = callerProfile?.station_ass || null;
+      } else {
+        // admin may specify station
+        stationId = station && station.trim()
+          ? await authService.getOrCreateStationId(station.trim())
+          : null;
+      }
+
+      const authUser = await authService.createUserAccount({
+        email,
+        password,
+        role,
+        metadata: {
+          full_name: fullName,
+        }
       });
 
-      if (userError) throw userError;
-
-      // 3. Create staff profile (barangay_assignment can be new or existing)
-      const stationId = station && station.trim()
-        ? await authService.getOrCreateStationId(station.trim())
-        : null;
+      const staffId = authUser.id;
 
       const { data: staffData, error: staffError } = await this.supabase
         .from('staff_profiles')
@@ -268,7 +352,7 @@ export default class StaffService {
       id: data.id,
       name: data.full_name,
       email: data.users?.email_address || 'N/A',
-      role: data.users?.user_type?.user_type || 'Staff',
+      role: this.formatRoleLabel(data.users?.user_type?.user_type || 'Staff'),
       station: data.stations?.station_name || data.barangay_assignment || 'No Assignment',
       employeeId: data.employee_id,
       status: 'Active',
