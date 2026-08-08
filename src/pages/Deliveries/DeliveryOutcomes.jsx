@@ -626,6 +626,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
             patientId: patient.id,
             patientName: patient.name,
             station: patient.station,
+            facility: patient.station || prev.facility,
             riskLevel: patient.riskLevel,
             pregnancyType: patient.pregnancyType || 'Singleton',
             gestationalAge: patient.gestationalAge || '',
@@ -698,7 +699,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                 risk_level: form.riskLevel || 'Normal',
                 complications: form.complications.filter(c => c !== 'None'),
                 attending_staff: form.attendingStaffId || null,
-                facility: form.facility || null,
+                facility: form.facility || form.station || null,
                 postpartum_visit_date: form.postpartumDate || null,
                 notes: form.notes || null
             };

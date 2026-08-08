@@ -304,14 +304,12 @@ const PatientsList = () => {
         const matchesType = filters.patientType === 'All' || (p.patientType || p.type) === filters.patientType;
         const matchesStation = filters.stations.length === 0 || filters.stations.includes(p.station);
         
-        // Filter out postpartum patients - they should not appear in patient list
-        // as they are now managed through DeliveryOutcomes
-        const isPostpartum = p.archiveStatus === 'postpartum';
-        const matchesArchive = archiveFilter === 'all' 
-            ? !isPostpartum  // In 'all' mode, exclude postpartum by default
-            : archiveFilter === 'active' 
-                ? !isPostpartum  // In 'active' mode, exclude postpartum
-                : isPostpartum; // In 'archived' mode, only show postpartum
+        const isArchived = (p.archiveStatus || 'active') === 'archived';
+        const matchesArchive = archiveFilter === 'all'
+            ? true
+            : archiveFilter === 'archived'
+                ? isArchived
+                : !isArchived;
 
         return matchesSearch && matchesTri && matchesRisk && matchesType && matchesStation && matchesArchive;
     });
@@ -421,19 +419,33 @@ const PatientsList = () => {
         );
     };
 
-    const handleArchive = (patientId) => {
+    const handleArchive = async (patientId) => {
         if (window.confirm('Are you sure you want to archive this patient? It will be removed from active lists but can be restored.')) {
-            setPatients(prevPatients => 
-                prevPatients.map(p => p.id === patientId ? { ...p, archiveStatus: 'archived' } : p)
-            );
+            try {
+                const patientService = new PatientService();
+                await patientService.archivePatient(patientId);
+                setPatients(prevPatients => 
+                    prevPatients.map(p => p.id === patientId ? { ...p, archiveStatus: 'archived' } : p)
+                );
+            } catch (err) {
+                console.error('Error archiving patient:', err);
+                alert('Unable to archive patient right now.');
+            }
         }
     };
 
-    const handleRestore = (patientId) => {
+    const handleRestore = async (patientId) => {
         if (window.confirm('Are you sure you want to restore this patient? It will be moved back to active lists.')) {
-            setPatients(prevPatients => 
-                prevPatients.map(p => p.id === patientId ? { ...p, archiveStatus: 'active' } : p)
-            );
+            try {
+                const patientService = new PatientService();
+                await patientService.restorePatient(patientId);
+                setPatients(prevPatients => 
+                    prevPatients.map(p => p.id === patientId ? { ...p, archiveStatus: 'active' } : p)
+                );
+            } catch (err) {
+                console.error('Error restoring patient:', err);
+                alert('Unable to restore patient right now.');
+            }
         }
     };
 
@@ -654,7 +666,7 @@ const PatientsList = () => {
                                                 </div>
                                                 <div>
                                                     <span className="patient-name-link">{p.name}</span>
-                                                    <span className="patient-status-note">Active</span>
+                                                    <span className="patient-status-note">{(p.archiveStatus || 'active') === 'archived' ? 'Archived' : 'Active'}</span>
                                                 </div>
                                             </div>
                                         </td>

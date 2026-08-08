@@ -32,6 +32,110 @@ export default class PatientService {
     return user?.id || null;
   }
 
+  async getCurrentUserAccess() {
+    const currentUser = await authService.getAuthUser();
+    const role = (currentUser?.role || '').toLowerCase();
+    let stationId = null;
+
+    if (role === 'cho personnel' || role === 'staff') {
+      const { data } = await this.supabase
+        .from('staff_profiles')
+        .select('station_ass')
+        .eq('id', currentUser?.id)
+        .maybeSingle();
+
+      stationId = data?.station_ass || null;
+    }
+
+    return { role, stationId, currentUser };
+  }
+
+  getArchiveStateFromPatient(patient) {
+    const rawContact = patient?.emergency_contact;
+    if (rawContact && typeof rawContact === 'object' && !Array.isArray(rawContact)) {
+      const metadata = rawContact.__system_metadata || rawContact.system_metadata || {};
+      if (metadata.archive_status === 'archived' || metadata.archiveStatus === 'archived') {
+        return 'archived';
+      }
+      if (metadata.archive_status === 'active' || metadata.archiveStatus === 'active') {
+        return 'active';
+      }
+    }
+    return 'active';
+  }
+
+  async archivePatient(patientId) {
+    const currentUserId = await this.getCurrentUserId();
+    if (!currentUserId) throw new Error('No logged-in user');
+
+    const { data: patientRow, error: fetchError } = await this.supabase
+      .from('patient_basic_info')
+      .select('emergency_contact')
+      .eq('id', patientId)
+      .maybeSingle();
+
+    if (fetchError) throw fetchError;
+
+    const existingContact = (patientRow?.emergency_contact && typeof patientRow.emergency_contact === 'object' && !Array.isArray(patientRow.emergency_contact))
+      ? patientRow.emergency_contact
+      : {};
+
+    const nextContact = {
+      ...existingContact,
+      __system_metadata: {
+        ...(existingContact.__system_metadata || existingContact.system_metadata || {}),
+        archive_status: 'archived',
+        archived_at: new Date().toISOString(),
+        archived_by: currentUserId,
+      },
+    };
+
+    const { error } = await this.supabase
+      .from('patient_basic_info')
+      .update({ emergency_contact: nextContact })
+      .eq('id', patientId);
+
+    if (error) throw error;
+    return true;
+  }
+
+  async restorePatient(patientId) {
+    const { data: patientRow, error: fetchError } = await this.supabase
+      .from('patient_basic_info')
+      .select('emergency_contact')
+      .eq('id', patientId)
+      .maybeSingle();
+
+    if (fetchError) throw fetchError;
+
+    const existingContact = (patientRow?.emergency_contact && typeof patientRow.emergency_contact === 'object' && !Array.isArray(patientRow.emergency_contact))
+      ? patientRow.emergency_contact
+      : {};
+
+    const nextContact = { ...existingContact };
+    if (nextContact.__system_metadata) {
+      const metadata = { ...(nextContact.__system_metadata || {}) };
+      delete metadata.archive_status;
+      delete metadata.archiveStatus;
+      delete metadata.archived_at;
+      delete metadata.archived_by;
+
+      if (Object.keys(metadata).length > 0) {
+        nextContact.__system_metadata = metadata;
+      } else {
+        delete nextContact.__system_metadata;
+      }
+    }
+
+    const { error } = await this.supabase
+      .from('patient_basic_info')
+      .update({ emergency_contact: nextContact })
+      .eq('id', patientId);
+
+    if (error) throw error;
+    return true;
+  }
+
   getEarliestTodayOrFutureVisitDate(schedulePreview) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -70,11 +174,18 @@ export default class PatientService {
 
   async getAllPatients() {
     try {
-      // 1. Get all patients
-      const { data: patients, error: err1 } = await this.supabase
+      const { role, stationId } = await this.getCurrentUserAccess();
+
+      let patientsQuery = this.supabase
         .from('patient_basic_info')
-        .select('id, first_name, last_name, station_ass, municipality, date_of_birth, created_at, stations:station_ass (station_name)')
-        .order('created_at', { ascending: false });
+        .select('id, first_name, last_name, station_ass, municipality, date_of_birth, created_at, emergency_contact, stations:station_ass (station_name)');
+
+      if (role === 'cho personnel' || role === 'staff') {
+        if (!stationId) return [];
+        patientsQuery = patientsQuery.eq('station_ass', stationId);
+      }
+
+      const { data: patients, error: err1 } = await patientsQuery.order('created_at', { ascending: false });
 
       if (err1) throw err1;
 
@@ -177,9 +288,13 @@ export default class PatientService {
         // Check if patient has delivered (postpartum)
         const hasDelivered = deliveredPatients.has(p.id);
         
+        const archiveState = this.getArchiveStateFromPatient(p);
+
         // Determine archive status
         let archiveStatus = 'active';
-        if (hasDelivered) {
+        if (archiveState === 'archived') {
+          archiveStatus = 'archived';
+        } else if (hasDelivered) {
           archiveStatus = 'postpartum';
         } else if (isMissedDelivery) {
           archiveStatus = 'missed_delivery';
@@ -316,35 +431,47 @@ export default class PatientService {
     const term = (query || '').trim();
     if (!term || term.length < 2) return [];
 
+    const { role, stationId } = await this.getCurrentUserAccess();
     const safeTerm = term.trim().replace(/%/g, '\\%');
 
+    const applyStationFilter = (baseQuery) => {
+      if (role === 'cho personnel' || role === 'staff') {
+        if (!stationId) return null;
+        return baseQuery.eq('station_ass', stationId);
+      }
+      return baseQuery;
+    };
+
     // Search by first_name
-    const { data: byFirstName, error: firstNameError } = await this.supabase
+    const firstNameQuery = applyStationFilter(this.supabase
       .from('patient_basic_info')
       .select('id, first_name, last_name, station_ass, province, stations:station_ass (station_name)')
       .ilike('first_name', `%${safeTerm}%`)
       .order('created_at', { ascending: false })
-      .limit(10);
+      .limit(10));
+    const { data: byFirstName, error: firstNameError } = await firstNameQuery;
 
     if (firstNameError) throw firstNameError;
 
     // Search by last_name
-    const { data: byLastName, error: lastNameError } = await this.supabase
+    const lastNameQuery = applyStationFilter(this.supabase
       .from('patient_basic_info')
       .select('id, first_name, last_name, station_ass, province, stations:station_ass (station_name)')
       .ilike('last_name', `%${safeTerm}%`)
       .order('created_at', { ascending: false })
-      .limit(10);
+      .limit(10));
+    const { data: byLastName, error: lastNameError } = await lastNameQuery;
 
     if (lastNameError) throw lastNameError;
 
     // Search by station label stored via stations relationship
-    const { data: byStation, error: stationError } = await this.supabase
+    const stationQuery = applyStationFilter(this.supabase
       .from('patient_basic_info')
       .select('id, first_name, last_name, station_ass, province, stations:station_ass (station_name)')
       .ilike('stations.station_name', `%${safeTerm}%`)
       .order('created_at', { ascending: false })
-      .limit(10);
+      .limit(10));
+    const { data: byStation, error: stationError } = await stationQuery;
 
     if (stationError) throw stationError;
 
@@ -1576,6 +1703,8 @@ async getHighRiskPatients() {
   }
 
   async getPatientById(patientId) {
+    const { role, stationId } = await this.getCurrentUserAccess();
+
     // Fetch patient basic info
     const { data: patientData } = await this.supabase
       .from('patient_basic_info')
@@ -1584,6 +1713,12 @@ async getHighRiskPatients() {
       .single();
 
     if (!patientData) return null;
+
+    if (role === 'cho personnel' || role === 'staff') {
+      if (!stationId || patientData.station_ass !== stationId) {
+        return null;
+      }
+    }
 
     // Fetch pregnancy info
     const { data: pregnancyData } = await this.supabase
@@ -1649,8 +1784,11 @@ async getHighRiskPatients() {
       phone: rawEmergencyContact.phone || rawEmergencyContact.contact_no || ''
     };
 
+    const archiveStatus = this.getArchiveStateFromPatient(patientData) === 'archived' ? 'archived' : 'active';
+
     return {
       ...patientData,
+      archiveStatus,
       name: `${patientData.first_name || ''} ${patientData.last_name || ''}`.trim(),
       age: this.calculateAge(patientData.date_of_birth),
         station: patientData.stations?.station_name || 'N/A',

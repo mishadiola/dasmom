@@ -661,6 +661,8 @@ const AddPatient = () => {
     
     console.log('🎉 Patient created:', newPatient.id, `${newPatient.first_name || formData.firstName} ${newPatient.last_name || formData.lastName}`);
     
+    const profileId = newPatient?.id || newPatient?.patient_id || newPatient?.user?.id;
+
     setToast({ 
         type: 'success', 
         message: `✅ Patient saved successfully!
@@ -669,7 +671,11 @@ const AddPatient = () => {
         🏘️ ${newPatient.barangay || formData.station}` 
     });
     
-    navigate(`/dashboard/patients/${newPatient.id}`);  
+    if (profileId) {
+        navigate(`/dashboard/patients/${profileId}`, { replace: true });
+    } else {
+        navigate('/dashboard/patients', { replace: true });
+    }
 } 
         catch (err) {
             console.error('💥 Save failed:', err);
