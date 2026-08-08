@@ -313,6 +313,7 @@ export default class PatientService {
           weeks,
           risk,
           edd: pgi?.edd || null,
+          lmp: pgi?.lmd || null,
           createdAt: p.created_at,
           nextAppt,
           totalVisits: attendedCountMap.get(p.id) || 0,
