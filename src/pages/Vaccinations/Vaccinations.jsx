@@ -29,7 +29,7 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAuto
     const babyService = new BabyService();
     const [form, setForm] = useState({
         patientType: initialPatientType || 'Mother', patientName: initialPatientName || '', vaccine: '',
-        supplement: '', dose: '', date: new Date().toISOString().split('T')[0], nextDue: '', staff: '', remarks: ''
+        supplement: '', dose: '', date: new Date().toISOString().split('T')[0], nextDue: '', staff: '', remarks: '', brand: ''
     });
     const [isSaving, setIsSaving] = useState(false);
     const [selectedPatient, setSelectedPatient] = useState(null);
@@ -37,6 +37,10 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAuto
     const [selectedVaccines, setSelectedVaccines] = useState({});
     const [selectedVaccineNames, setSelectedVaccineNames] = useState([]);
     const [vaccineDoses, setVaccineDoses] = useState({});
+    const [selectedVaccineBrands, setSelectedVaccineBrands] = useState({});
+    const [vaccineBrandOptions, setVaccineBrandOptions] = useState({});
+    const [supplementBrandOptions, setSupplementBrandOptions] = useState([]);
+    const [selectedSupplementBrand, setSelectedSupplementBrand] = useState('');
     const [staffList, setStaffList] = useState([]);
     const [suggestions, setSuggestions] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
@@ -120,7 +124,6 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAuto
     }, []);
 
     useEffect(() => {
-        // Fetch supplement types from inventory when in supplement mode
         if (mode === 'supplement') {
             const fetchSupplementTypes = async () => {
                 try {
@@ -139,6 +142,49 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAuto
             };
             fetchSupplementTypes();
         }
+
+        if (mode === 'supplement' && patientStationId && form.supplement) {
+            const fetchSupplementBrands = async () => {
+                try {
+                    const { data: stationRows, error: stationError } = await supabase
+                        .from('station_supplement_inventory')
+                        .select('supplement_inventory_id, quantity')
+                        .eq('station_id', patientStationId)
+                        .gt('quantity', 0);
+
+                    if (stationError) throw stationError;
+                    const supplementIds = [...new Set((stationRows || []).map(item => item.supplement_inventory_id).filter(Boolean))];
+                    if (supplementIds.length === 0) {
+                        setSupplementBrandOptions([]);
+                        setSelectedSupplementBrand('');
+                        return;
+                    }
+
+                    const { data, error } = await supabase
+                        .from('supplement_inventory')
+                        .select('brand')
+                        .in('id', supplementIds)
+                        .eq('supplement_name', form.supplement)
+                        .gt('quantity', 0)
+                        .not('brand', 'is', null)
+                        .order('brand', { ascending: true });
+
+                    if (error) throw error;
+                    const brands = [...new Set((data || []).map(item => item.brand).filter(Boolean))];
+                    setSupplementBrandOptions(brands);
+                    setSelectedSupplementBrand(prev => prev && brands.includes(prev) ? prev : (brands[0] || ''));
+                } catch (error) {
+                    console.error('Error fetching supplement brands:', error);
+                    setSupplementBrandOptions([]);
+                    setSelectedSupplementBrand('');
+                }
+            };
+            fetchSupplementBrands();
+        } else if (mode === 'supplement') {
+            setSupplementBrandOptions([]);
+            setSelectedSupplementBrand('');
+        }
+
         // Fetch vaccine types from station inventory when in vaccine mode and patient is selected
         if (mode === 'vaccine' && patientStationId) {
             const fetchVaccineTypes = async () => {
@@ -184,7 +230,62 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAuto
         } else if (mode === 'vaccine') {
             setVaccineTypes([]);
         }
-    }, [mode, form.patientType, isPregnant, patientStationId]);
+    }, [mode, form.patientType, form.supplement, isPregnant, patientStationId]);
+
+    useEffect(() => {
+        const loadVaccineBrands = async () => {
+            if (mode !== 'vaccine' || !patientStationId) {
+                setVaccineBrandOptions({});
+                return;
+            }
+
+            const selectedNames = [...new Set(selectedVaccineNames.filter(Boolean))];
+            if (selectedNames.length === 0) {
+                setVaccineBrandOptions({});
+                return;
+            }
+
+            try {
+                const { data: stationRows, error: stationError } = await supabase
+                    .from('station_vaccine_inventory')
+                    .select('vaccine_id')
+                    .eq('station_id', patientStationId)
+                    .gt('quantity', 0);
+
+                if (stationError) throw stationError;
+
+                const vaccineIds = [...new Set((stationRows || []).map(item => item.vaccine_id).filter(Boolean))];
+                if (vaccineIds.length === 0) {
+                    setVaccineBrandOptions({});
+                    return;
+                }
+
+                const { data: vaccineRows, error: vaccineError } = await supabase
+                    .from('vaccine_inventory')
+                    .select('id, vaccine_name, brand')
+                    .in('id', vaccineIds)
+                    .gt('quantity', 0)
+                    .not('brand', 'is', null)
+                    .order('vaccine_name', { ascending: true });
+
+                if (vaccineError) throw vaccineError;
+
+                const nextOptions = {};
+                for (const vaccineName of selectedNames) {
+                    nextOptions[vaccineName] = [...new Set((vaccineRows || [])
+                        .filter(item => item.vaccine_name === vaccineName)
+                        .map(item => item.brand)
+                        .filter(Boolean))];
+                }
+                setVaccineBrandOptions(nextOptions);
+            } catch (error) {
+                console.error('Error fetching vaccine brands:', error);
+                setVaccineBrandOptions({});
+            }
+        };
+
+        loadVaccineBrands();
+    }, [mode, selectedVaccineNames, patientStationId]);
 
     useEffect(() => {
         console.log('✅ RecordModal useEffect triggered!', form.patientName, form.patientType);
@@ -362,6 +463,11 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAuto
         console.log('✅ selectedPatient set to:', { id: suggestion.id, label: suggestion.name, type: suggestion.type, station });
     };
 
+    const resolveInventoryBatch = async (itemType, itemName, brand, stationId = null) => {
+        const vaccinationService = new VaccinationService();
+        return vaccinationService.resolveInventoryItem({ itemType, itemName, brand, stationId });
+    };
+
     const handleSave = async () => {
         const hasPendingSelection = mode === 'vaccine' && Object.values(selectedVaccines).some(Boolean);
         const hasCheckboxSelection = mode === 'vaccine' && selectedVaccineNames.length > 0;
@@ -432,33 +538,12 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAuto
                         const selectedVaccineName = selectedVaccineNames.length > 0
                             ? (selectedVaccineNames[index] || selectedVaccineNames[0])
                             : null;
+                        const selectedBrand = selectedVaccineName ? (selectedVaccineBrands[selectedVaccineName] || null) : null;
 
                         if (selectedVaccineName) {
-                            const { data: exactItems, error: exactError } = await supabase
-                                .from('vaccine_inventory')
-                                .select('id, quantity, vaccine_name')
-                                .eq('vaccine_name', selectedVaccineName)
-                                .gt('quantity', 0)
-                                .order('expiration_date', { ascending: true, nullsFirst: false })
-                                .limit(1);
-
-                            if (!exactError && exactItems && exactItems.length > 0) {
-                                vaccineInvId = exactItems[0].id;
-                            } else {
-                                const { data: fuzzyItems, error: fuzzyError } = await supabase
-                                    .from('vaccine_inventory')
-                                    .select('id, quantity, vaccine_name')
-                                    .gt('quantity', 0)
-                                    .order('expiration_date', { ascending: true, nullsFirst: false });
-
-                                if (!fuzzyError && fuzzyItems) {
-                                    const searchTerm = selectedVaccineName.toLowerCase().replace(/[^a-z0-9]/g, '');
-                                    const match = fuzzyItems.find(item => {
-                                        const normalizedItem = item.vaccine_name.toLowerCase().replace(/[^a-z0-9]/g, '');
-                                        return normalizedItem.includes(searchTerm) || searchTerm.includes(normalizedItem);
-                                    });
-                                    if (match) vaccineInvId = match.id;
-                                }
+                            const inventoryItem = await resolveInventoryBatch('vaccine', selectedVaccineName, selectedBrand, patientStationId);
+                            if (inventoryItem?.id) {
+                                vaccineInvId = inventoryItem.id;
                             }
                         }
 
@@ -547,31 +632,8 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAuto
                             return;
                         }
 
-                        // Get vaccine inventory ID with better matching - use earliest expiration
-                        const { data: vaccInvItems, error: invError } = await supabase
-                            .from('vaccine_inventory')
-                            .select('id, quantity, vaccine_name, expiration_date')
-                            .gt('quantity', 0)
-                            .order('expiration_date', { ascending: true, nullsFirst: false });
-                        
-                        if (invError) {
-                            console.error('Error fetching vaccine inventory:', invError);
-                            throw new Error('Failed to fetch vaccine inventory: ' + invError.message);
-                        }
-                        
-                        let vaccInv = null;
-                        if (vaccInvItems && vaccInvItems.length > 0) {
-                            // Try exact match first
-                            vaccInv = vaccInvItems.find(item => item.vaccine_name === vaccineName);
-                            // If no exact match, try fuzzy matching
-                            if (!vaccInv) {
-                                const searchTerm = vaccineName.toLowerCase().replace(/[^a-z0-9]/g, '');
-                                vaccInv = vaccInvItems.find(item => {
-                                    const itemName = item.vaccine_name.toLowerCase().replace(/[^a-z0-9]/g, '');
-                                    return itemName.includes(searchTerm) || searchTerm.includes(itemName);
-                                });
-                            }
-                        }
+                        const selectedBrand = selectedVaccineBrands[vaccineName] || null;
+                        const vaccInv = await resolveInventoryBatch('vaccine', vaccineName, selectedBrand, patientStationId);
 
                         if (!vaccInv) {
                             alert(`No stock available for ${vaccineName}`);
@@ -670,28 +732,7 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAuto
                 // Manual entry route when no scheduled rows are checked
                 if (selectedVaccineNames.length === 0 && selectedScheduledIds.length === 0) {
                     // Manual entry: try to find in inventory first, otherwise create without inventory
-                    const { data: vaccInvItems } = await supabase
-                        .from('vaccine_inventory')
-                        .select('id, quantity, vaccine_name, expiration_date')
-                        .gt('quantity', 0)
-                        .order('expiration_date', { ascending: true, nullsFirst: false });
-
-                    let vaccInv = null;
-                    if (vaccInvItems && vaccInvItems.length > 0) {
-                        // Try exact match first
-                        vaccInv = vaccInvItems.find(item => item.vaccine_name === form.vaccine);
-                        // If no exact match, try fuzzy matching
-                        if (!vaccInv) {
-                            const searchTerm = form.vaccine.toLowerCase().replace(/[^a-z0-9]/g, '');
-                            vaccInv = vaccInvItems.find(item => {
-                                const itemName = item.vaccine_name.toLowerCase().replace(/[^a-z0-9]/g, '');
-                                return itemName.includes(searchTerm) || searchTerm.includes(itemName);
-                            });
-                        }
-                    }
-
-                    const doseNumber = form.dose === '1st Dose' ? 1 : form.dose === '2nd Dose' ? 2 : form.dose === '3rd Dose' ? 3 : form.dose === 'Booster' ? 4 : 5;
-
+                    const vaccInv = await resolveInventoryBatch('vaccine', form.vaccine, form.brand || null, patientStationId);
                     const vaccinationRecord = {
                         patient_id: patientId,
                         dose_number: doseNumber,
@@ -762,13 +803,7 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAuto
                 }
             } else {
                 // Supplement handling: try to find in inventory first, otherwise create manual record
-                const { data: suppInvItems } = await supabase
-                    .from('supplement_inventory')
-                    .select('id, quantity, expiration_date')
-                    .eq('supplement_name', form.supplement)
-                    .gt('quantity', 0)
-                    .order('expiration_date', { ascending: true, nullsFirst: false })
-                    .limit(1);
+                const suppInv = await resolveInventoryBatch('supplement', form.supplement, selectedSupplementBrand || null, patientStationId);
 
                 const supplementRecord = {
                     patient_id: patientId,
@@ -779,8 +814,7 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAuto
                 };
 
                 // If supplement found in inventory, link it and decrement
-                if (suppInvItems && suppInvItems.length > 0) {
-                    const suppInv = suppInvItems[0];
+                if (suppInv) {
                     supplementRecord.supplement_inventory_id = suppInv.id;
 
                     // Decrement supplement inventory
@@ -912,6 +946,16 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAuto
                                             {selectedVaccineNames.includes(vaccine) && (
                                                 <div className="vaccine-dose-info">
                                                     <select
+                                                        value={selectedVaccineBrands[vaccine] || ''}
+                                                        onChange={(e) => setSelectedVaccineBrands({ ...selectedVaccineBrands, [vaccine]: e.target.value })}
+                                                        className="dose-select"
+                                                    >
+                                                        <option value="">Select Brand</option>
+                                                        {(vaccineBrandOptions[vaccine] || []).map(brand => (
+                                                            <option key={brand} value={brand}>{brand}</option>
+                                                        ))}
+                                                    </select>
+                                                    <select
                                                         value={vaccineDoses[vaccine] || ''}
                                                         onChange={(e) => setVaccineDoses({...vaccineDoses, [vaccine]: e.target.value})}
                                                         className="dose-select"
@@ -947,6 +991,13 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAuto
                                     <select value={form.supplement} onChange={e => updateForm('supplement', e.target.value)}>
                                         <option value="">Select Supplement</option>
                                         {supplementTypes.map(s => <option key={s}>{s}</option>)}
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label>Brand</label>
+                                    <select value={selectedSupplementBrand} onChange={e => setSelectedSupplementBrand(e.target.value)}>
+                                        <option value="">Select Brand</option>
+                                        {supplementBrandOptions.map(brand => <option key={brand} value={brand}>{brand}</option>)}
                                     </select>
                                 </div>
                                 <div className="form-group">

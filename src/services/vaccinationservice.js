@@ -27,6 +27,85 @@ class VaccinationService {
   };
 
   /**
+   * Resolve the best inventory batch for a vaccine/supplement.
+   * Preference is exact name + brand, and the earliest expiration date wins.
+   * When a station is provided, only stock that was distributed to that station is considered.
+   */
+  async resolveInventoryItem({ itemType, itemName, brand = null, stationId = null }) {
+    const normalizedName = String(itemName || '').trim();
+    if (!normalizedName) return null;
+
+    const isVaccine = itemType === 'vaccine';
+    const table = isVaccine ? 'vaccine_inventory' : 'supplement_inventory';
+    const stationTable = isVaccine ? 'station_vaccine_inventory' : 'station_supplement_inventory';
+    const idField = isVaccine ? 'vaccine_id' : 'supplement_inventory_id';
+    const nameField = isVaccine ? 'vaccine_name' : 'supplement_name';
+    const selectClause = isVaccine
+      ? 'id, quantity, vaccine_name, brand, expiration_date'
+      : 'id, quantity, supplement_name, brand, expiration_date';
+
+    let query = this.supabase
+      .from(table)
+      .select(selectClause)
+      .gt('quantity', 0)
+      .order('expiration_date', { ascending: true, nullsFirst: false });
+
+    query = query.eq(nameField, normalizedName);
+    if (brand) {
+      query = query.eq('brand', brand);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    let eligibleItems = data || [];
+
+    if (stationId) {
+      const { data: stationRows, error: stationError } = await this.supabase
+        .from(stationTable)
+        .select(`id, station_id, ${idField}, quantity`)
+        .eq('station_id', stationId)
+        .gt('quantity', 0);
+
+      if (stationError) throw stationError;
+
+      const stationItemIds = new Set(
+        (stationRows || [])
+          .map(row => row[idField])
+          .filter(Boolean)
+      );
+
+      if (stationItemIds.size > 0) {
+        eligibleItems = eligibleItems.filter(item => stationItemIds.has(item.id));
+      } else {
+        eligibleItems = [];
+      }
+    }
+
+    if (eligibleItems.length > 0) {
+      return eligibleItems[0];
+    }
+
+    if (brand) {
+      return null;
+    }
+
+    const { data: fallbackData, error: fallbackError } = await this.supabase
+      .from(table)
+      .select(selectClause)
+      .gt('quantity', 0)
+      .order('expiration_date', { ascending: true, nullsFirst: false });
+
+    if (fallbackError) throw fallbackError;
+
+    const normalizedSearch = normalizedName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return (fallbackData || []).find(item => {
+      const candidateName = String(item[nameField] || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      return candidateName.includes(normalizedSearch) || normalizedSearch.includes(candidateName);
+    }) || null;
+  }
+
+  /**
    * Get vaccine_inventory_id by vaccine name (with fuzzy matching)
    */
   async getVaccineInventoryId(vaccineName) {

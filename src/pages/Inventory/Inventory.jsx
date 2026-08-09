@@ -34,6 +34,7 @@ const Inventory = () => {
   const [activeSummaryFilter, setActiveSummaryFilter] = useState(null);
   const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
   const [vaccStats, setVaccStats] = useState({ mothersPending: 0, newbornsPending: 0 });
+  const [pendingStockAlerts, setPendingStockAlerts] = useState({ count: 0, stations: [] });
 
   // Station Distribution states
   const [showDistributionModal, setShowDistributionModal] = useState(false);
@@ -122,6 +123,79 @@ const Inventory = () => {
   const supplementUnitOptions = ['tablets', 'capsules', 'sachets', 'bottles'];
   const unitOptions = activeTab === 'vaccines' ? vaccineUnitOptions : supplementUnitOptions;
 
+  const loadPendingStockAlerts = async () => {
+    try {
+      const { data: pendingRows, error: pendingError } = await inventoryService.supabase
+        .from('vaccinations')
+        .select('id, patient_id, newborn_id, vaccine_inventory_id, status')
+        .in('status', ['Pending', 'Overdue']);
+
+      if (pendingError) throw pendingError;
+
+      const { data: patientRows, error: patientError } = await inventoryService.supabase
+        .from('patient_basic_info')
+        .select('id, station_ass');
+
+      if (patientError) throw patientError;
+
+      const { data: newbornRows, error: newbornError } = await inventoryService.supabase
+        .from('newborns')
+        .select('id, mother_id');
+
+      if (newbornError) throw newbornError;
+
+      const { data: stationRows, error: stationError } = await inventoryService.supabase
+        .from('station_vaccine_inventory')
+        .select('station_id, vaccine_id, quantity')
+        .gt('quantity', 0);
+
+      if (stationError) throw stationError;
+
+      const { data: stationLookupRows, error: stationLookupError } = await inventoryService.supabase
+        .from('stations')
+        .select('id, station_name');
+
+      if (stationLookupError) throw stationLookupError;
+
+      const patientStationMap = new Map((patientRows || []).map(row => [row.id, row.station_ass]));
+      const newbornStationMap = new Map((newbornRows || []).map(row => [row.id, patientStationMap.get(row.mother_id)]));
+      const stationStockMap = new Map();
+      (stationRows || []).forEach(row => {
+        if (!row.station_id || !row.vaccine_id) return;
+        const existing = stationStockMap.get(row.station_id) || new Set();
+        existing.add(row.vaccine_id);
+        stationStockMap.set(row.station_id, existing);
+      });
+      const stationNameMap = new Map((stationLookupRows || []).map(row => [row.id, row.station_name]));
+
+      const alerts = [];
+      for (const row of pendingRows || []) {
+        const stationId = row.patient_id
+          ? patientStationMap.get(row.patient_id)
+          : row.newborn_id
+            ? newbornStationMap.get(row.newborn_id)
+            : null;
+
+        const stationStock = stationId ? (stationStockMap.get(stationId) || new Set()) : new Set();
+        const hasStock = Boolean(row.vaccine_inventory_id && stationStock.has(row.vaccine_inventory_id));
+        const needsStock = !stationId || !row.vaccine_inventory_id || !hasStock;
+
+        if (needsStock) {
+          alerts.push({
+            id: row.id,
+            stationName: stationId ? stationNameMap.get(stationId) || 'Unassigned station' : 'Unassigned station'
+          });
+        }
+      }
+
+      const stations = [...new Set(alerts.map(alert => alert.stationName).filter(Boolean))];
+      setPendingStockAlerts({ count: alerts.length, stations });
+    } catch (error) {
+      console.error('Error loading pending stock alerts:', error);
+      setPendingStockAlerts({ count: 0, stations: [] });
+    }
+  };
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -145,6 +219,7 @@ const Inventory = () => {
       console.log('Inventory data fetched - vaccines:', vaxData?.length || 0, 'supplements:', suppData?.length || 0, 'stats:', statsData);
 
       setVaccStats(statsData || { mothersPending: 0, newbornsPending: 0 });
+      await loadPendingStockAlerts();
 
       const mappedVaccines = (vaxData || []).map(row => ({
         id: row?.id || '',
@@ -1220,6 +1295,17 @@ const Inventory = () => {
                 </h2>
             </div>
             <div className="alerts-list" style={{ padding: '8px 16px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {pendingStockAlerts.count > 0 && (
+                    <div className="alert-item alert-warning" style={{ background: 'rgba(232,184,75,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px' }}>
+                        <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', marginTop: '4px', flexShrink: 0, background: '#e8b84b' }}></div>
+                        <div className="alert-body">
+                            <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Pending Vaccines Need Stock</p>
+                            <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                                {pendingStockAlerts.count} pending vaccination(s) need stock{pendingStockAlerts.stations.length > 0 ? ` for ${pendingStockAlerts.stations.join(', ')}` : ''}.
+                            </span>
+                        </div>
+                    </div>
+                )}
                 {lowStockCount > 0 && (
                     <div className="alert-item alert-warning" style={{ background: 'rgba(232,184,75,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px' }}>
                         <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', marginTop: '4px', flexShrink: 0, background: '#e8b84b' }}></div>
@@ -1238,7 +1324,7 @@ const Inventory = () => {
                         </div>
                     </div>
                 )}
-                {lowStockCount === 0 && outOfStockCount === 0 && (
+                {pendingStockAlerts.count === 0 && lowStockCount === 0 && outOfStockCount === 0 && (
                     <div style={{ textAlign: 'center', padding: '20px', fontSize: '12px', fontStyle: 'italic', color: 'var(--color-text-muted)' }}>
                         No urgent alerts.
                     </div>
