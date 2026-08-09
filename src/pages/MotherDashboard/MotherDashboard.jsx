@@ -57,7 +57,7 @@ const MotherDashboard = () => {
             {/* ── Welcome Banner ── */}
             <div className="mother-welcome-banner">
                 <div className="welcome-content">
-                    <div className="welcome-emoji">🤰</div>
+                    <div className="welcome-emoji"><img src="/assets/images/dashboard/greeting-icon.png" alt="Greeting Icon" className="welcome-emoji-img" /></div>
                     <div>
                         <p className="welcome-greeting">Hello, Mommy! 👋</p>
                         <h1>Your Pregnancy Journey</h1>

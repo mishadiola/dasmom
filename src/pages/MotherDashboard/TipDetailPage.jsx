@@ -5,7 +5,7 @@ import {
     CheckCircle2, Clock, ChevronRight, Heart,
     Star, Share2, ShieldCheck, ExternalLink
 } from 'lucide-react';
-import { TIPS_DATA } from './PregnancyTips';
+import { TIPS_DATA, CATEGORY_IMAGES, CATEGORY_COLOR_CLASSES } from './PregnancyTips';
 import '../../styles/pages/TipDetailPage.css';
 
 const LS_BOOKMARKS = 'pt_bookmarks';
@@ -184,7 +184,14 @@ const TipDetailPage = () => {
                             className="tdp-related-card"
                             onClick={() => navigate(`/mother-home/user-tips/${rel.id}`)}
                         >
-                            <div className={`tdp-related-cover ${rel.colorClass}`}>
+                            <div className={`tdp-related-cover ${CATEGORY_COLOR_CLASSES[rel.category] || rel.colorClass}`}>
+                                {CATEGORY_IMAGES[rel.category] && (
+                                    <img
+                                        src={CATEGORY_IMAGES[rel.category]}
+                                        alt={rel.category}
+                                        className="tdp-related-cover-img"
+                                    />
+                                )}
                                 <div className="tdp-related-icon">{rel.icon}</div>
                             </div>
                             <div className="tdp-related-body">

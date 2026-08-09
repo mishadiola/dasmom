@@ -41,7 +41,7 @@ export const TIPS_DATA = [
         ],
         readTime: '3 min read',
         icon: <Apple size={22} />,
-        colorClass: 'cat-nutrition',
+        colorClass: 'cat-prenatal',
         sources: [
             { name: 'DOH Philippines', title: 'Booklet of Healthy Buntis, Happy Baby', url: 'https://doh.gov.ph' }
         ]
@@ -441,7 +441,7 @@ export const TIPS_DATA = [
     {
         id: '17',
         title: 'Tagubilin sa Pagpapakain ng Baby',
-        category: 'Newborn Care',
+        category: 'Nutrition',
         description: 'Wastong gabay sa pagpapakain mula 0 hanggang 12 buwan.',
         fullContent: [
             {
@@ -496,6 +496,29 @@ const CATEGORIES = [
     'Postpartum Care',
     'Newborn Care',
 ];
+
+export const CATEGORY_IMAGES = {
+    'Nutrition': '/assets/images/pregnancy-tips/nutrition.png',
+    'Mental Health & Wellness': '/assets/images/pregnancy-tips/mental-health.png',
+    'Prenatal Care': '/assets/images/pregnancy-tips/prenatal.png',
+    'Postpartum Care': '/assets/images/pregnancy-tips/postpartum.png',
+    'Newborn Care': '/assets/images/pregnancy-tips/newborn.png',
+};
+
+export const CATEGORY_COLOR_CLASSES = {
+    'Nutrition': 'cat-nutrition',
+    'Mental Health & Wellness': 'cat-mental',
+    'Prenatal Care': 'cat-prenatal',
+    'Postpartum Care': 'cat-postpartum',
+    'Newborn Care': 'cat-newborn',
+};
+export const CATEGORY_OVERLAY_COLORS = {
+    'Nutrition': 'rgba(168, 197, 138, 0.4)', // soft sage green
+    'Mental Health & Wellness': 'rgba(169, 139, 184, 0.4)', // muted lavender
+    'Prenatal Care': 'rgba(185, 130, 141, 0.4)', // dusty mauve/rose
+    'Postpartum Care': 'rgba(217, 154, 130, 0.4)', // muted peach/coral
+    'Newborn Care': 'rgba(255, 182, 193, 0.4)', // soft pink
+};
 
 const CAT_ICONS = {
     'Nutrition': <Apple size={14} />,
@@ -660,9 +683,19 @@ const PregnancyTips = () => {
                                 onClick={() => handleTipClick(tip.id)}
                             >
                                 {/* Card Header / Cover */}
-                                <div className={`pt-card-cover ${tip.colorClass}`}>
-                                    <div className="pt-card-cover-icon">{tip.icon}</div>
-                                    <span className="pt-card-badge">{tip.category}</span>
+                                <div className={`pt-card-cover ${CATEGORY_COLOR_CLASSES[tip.category] || tip.colorClass}`}>
+                                    {CATEGORY_IMAGES[tip.category] && (
+                                        <img
+                                            src={CATEGORY_IMAGES[tip.category]}
+                                            alt={tip.category}
+                                            className="pt-card-cover-img"
+                                        />
+                                    )}
+                                    <div className="pt-card-cover-overlay" style={{ backgroundColor: CATEGORY_OVERLAY_COLORS[tip.category] || 'rgba(0,0,0,0.2)' }} />
+                                    <div className="pt-card-header-content">
+                                        <div className="pt-card-cover-icon">{tip.icon}</div>
+                                        <span className="pt-card-category-title">{tip.category}</span>
+                                    </div>
                                     {isRead && (
                                         <span className="pt-card-read-badge">
                                             <CheckCircle2 size={11} /> Read
