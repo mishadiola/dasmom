@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import AuthService from '../../services/authservice';
+import PatientService from '../../services/patientservice';
 import { 
     Calendar as CalendarIcon, List, ChevronLeft, ChevronRight, 
     Clock, MapPin, Info, ArrowLeft, Download, Printer,
@@ -10,18 +12,64 @@ import '../../styles/pages/MyAppointments.css';
 const MyAppointments = () => {
     const navigate = useNavigate();
     const [viewMode, setViewMode] = useState('calendar'); // 'calendar' or 'list'
-    const [currentMonth, setCurrentMonth] = useState(new Date(2026, 2, 1)); // March 2026
+    const [currentMonth, setCurrentMonth] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState(null);
     const [filterTab, setFilterTab] = useState('All'); // 'All', 'Upcoming', 'Past' for list view
     const [calendarFilter, setCalendarFilter] = useState('All Events'); // 'All Events', 'Appointments', 'Prenatal Visits', 'Vaccinations', 'Other Health Records' for calendar view
 
-    const APPOINTMENTS = [
-        { id: 1, date: '2026-03-10', time: '08:00 AM', type: 'Prenatal', location: 'Station 3 Health Center', status: 'Upcoming', notes: 'Routine 2nd trimester checkup', color: 'green' },
-        { id: 2, date: '2026-03-15', time: '09:30 AM', type: 'Vaccination', location: 'City Health Office', status: 'Completed', notes: 'TT Vaccine (Tetanus Toxoid)', color: 'yellow' },
-        { id: 3, date: '2026-03-22', time: '10:00 AM', type: 'Postpartum', location: 'Station 3 Health Center', status: 'Upcoming', notes: 'Post-delivery follow-up', color: 'blue' },
-        { id: 4, date: '2026-02-15', time: '08:30 AM', type: 'Prenatal', location: 'Station 3 Health Center', status: 'Completed', notes: 'Initial prenatal visit', color: 'green' },
-        { id: 5, date: '2026-03-28', time: '01:00 PM', type: 'Prenatal', location: 'Station 3 Health Center', status: 'Upcoming', notes: 'Follow-up ultrasound review', color: 'green' },
-    ];
+    const [appointmentsData, setAppointmentsData] = useState([]);
+
+    useEffect(() => {
+        const loadAppointments = async () => {
+            const auth = new AuthService();
+            const patientService = new PatientService();
+            try {
+                const authUser = await auth.getAuthUser();
+                if (!authUser?.id) return;
+
+                const patient = await patientService.getPatientById(authUser.id);
+                if (!patient) {
+                    setAppointmentsData([]);
+                    return;
+                }
+
+                // Map prenatal visits to unified appointment objects
+                const visitAppts = (patient.visits || [])
+                    .filter(v => v.visit_date)
+                    .map(v => ({
+                        id: v.id,
+                        date: v.visit_date,
+                        time: v.visit_date ? new Date(v.visit_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '',
+                        type: 'Prenatal',
+                        status: v.status || 'Scheduled',
+                        location: patient.station || '',
+                        notes: v.clinical_notes || '',
+                        color: 'green'
+                    }));
+
+                // Map vaccinations to appointment-like events (use vaccine name in notes)
+                const vacAppts = (patient.vaccines || [])
+                    .filter(v => v.scheduled_vaccination || v.vaccinated_date)
+                    .map((v, idx) => ({
+                        id: v.id || `vac-${idx}`,
+                        date: v.scheduled_vaccination || v.vaccinated_date,
+                        time: '',
+                        type: 'Vaccination',
+                        status: v.status || 'Scheduled',
+                        location: patient.station || '',
+                        notes: v.notes || v.vaccine_name || '',
+                        color: 'yellow'
+                    }));
+
+                const combined = [...visitAppts, ...vacAppts];
+                setAppointmentsData(combined);
+            } catch (err) {
+                console.error('Failed to load appointments:', err);
+                setAppointmentsData([]);
+            }
+        };
+        loadAppointments();
+    }, [currentMonth]);
 
     const getDaysInMonth = (date) => {
         const year = date.getFullYear();
@@ -55,21 +103,22 @@ const MyAppointments = () => {
 
     const getAppointmentsForDay = (day, isCurrentMonth) => {
         if (!isCurrentMonth) return [];
-        const dateStr = `2026-03-${day.toString().padStart(2, '0')}`;
-        let appointments = APPOINTMENTS.filter(a => a.date === dateStr);
+        const year = currentMonth.getFullYear();
+        const month = (currentMonth.getMonth() + 1).toString().padStart(2, '0');
+        const dateStr = `${year}-${month}-${day.toString().padStart(2, '0')}`;
         
-        // Filter by calendar filter
-        if (calendarFilter === 'All Events') {
-            return appointments;
-        } else if (calendarFilter === 'Appointments') {
-            return appointments.filter(a => a.type === 'Prenatal' || a.type === 'Postpartum');
-        } else if (calendarFilter === 'Prenatal Visits') {
-            return appointments.filter(a => a.type === 'Prenatal');
-        } else if (calendarFilter === 'Vaccinations') {
-            return appointments.filter(a => a.type === 'Vaccination');
-        } else if (calendarFilter === 'Other Health Records') {
-            return appointments.filter(a => a.type === 'Postpartum');
-        }
+        let appointments = (appointmentsData || []).filter(a => {
+            if (!a.date) return false;
+            // Handle both YYYY-MM-DD format and Date objects
+            const apptDate = typeof a.date === 'string' ? a.date.split('T')[0] : new Date(a.date).toISOString().split('T')[0];
+            return apptDate === dateStr;
+        });
+
+        if (calendarFilter === 'All Events') return appointments;
+        if (calendarFilter === 'Appointments') return appointments.filter(a => a.type === 'Prenatal' || a.type === 'Postpartum' || a.type === undefined);
+        if (calendarFilter === 'Prenatal Visits') return appointments.filter(a => a.type === 'Prenatal');
+        if (calendarFilter === 'Vaccinations') return appointments.filter(a => a.type === 'Vaccination');
+        if (calendarFilter === 'Other Health Records') return appointments.filter(a => a.type === 'Postpartum');
         return appointments;
     };
 
@@ -85,14 +134,26 @@ const MyAppointments = () => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         
-        if (filterTab === 'All') {
-            return APPOINTMENTS;
-        } else if (filterTab === 'Upcoming') {
-            return APPOINTMENTS.filter(a => new Date(a.date) >= today && a.status === 'Upcoming');
-        } else if (filterTab === 'Past') {
-            return APPOINTMENTS.filter(a => new Date(a.date) < today || a.status === 'Completed');
+        if (filterTab === 'All') return appointmentsData;
+        if (filterTab === 'Upcoming') {
+            return (appointmentsData || [])
+                .filter(a => {
+                    const apptDate = new Date(a.date);
+                    apptDate.setHours(0, 0, 0, 0);
+                    return apptDate >= today && (a.status === 'Upcoming' || a.status === 'Scheduled' || a.status === 'Attended');
+                })
+                .sort((a, b) => new Date(a.date) - new Date(b.date));
         }
-        return APPOINTMENTS;
+        if (filterTab === 'Past') {
+            return (appointmentsData || [])
+                .filter(a => {
+                    const apptDate = new Date(a.date);
+                    apptDate.setHours(0, 0, 0, 0);
+                    return apptDate < today || a.status === 'Completed' || a.status === 'Missed';
+                })
+                .sort((a, b) => new Date(b.date) - new Date(a.date));
+        }
+        return appointmentsData;
     };
 
     const filteredAppointments = getFilteredAppointments();
@@ -101,7 +162,7 @@ const MyAppointments = () => {
         <div className="my-appointments-page">
             <header className="mother-page-header">
                 <div className="mother-page-header-content">
-                    <button className="back-btn" onClick={() => navigate('/dashboard/user-home')}>
+                    <button className="back-btn" onClick={() => navigate('/mother-home')}>
                         <ArrowLeft size={18} />
                     </button>
                     <div className="mother-page-header-text">
@@ -208,7 +269,7 @@ const MyAppointments = () => {
                         {selectedDate && (
                             <div className="day-detail-panel">
                                 <div className="panel-header">
-                                    <h3>March {selectedDate}, 2026</h3>
+                                     <h3>{new Date(currentMonth.getFullYear(), currentMonth.getMonth(), selectedDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</h3>
                                     <button className="close-panel" onClick={() => setSelectedDate(null)}>&times;</button>
                                 </div>
                                 <div className="panel-body">
@@ -219,7 +280,7 @@ const MyAppointments = () => {
                                                 <div className="appt-info-mini">
                                                     <div className="appt-type-row">
                                                         <span className="appt-type">{a.type}</span>
-                                                        <span className={`appt-status-tag ${a.status.toLowerCase()}`}>{a.status}</span>
+                                                        <span className={`appt-status-tag ${String(a.status || '').toLowerCase()}`}>{a.status || 'Unknown'}</span>
                                                     </div>
                                                     <div className="appt-meta-mini">
                                                         <span><Clock size={12} /> {a.time}</span>
@@ -267,15 +328,15 @@ const MyAppointments = () => {
                                 filteredAppointments.sort((a, b) => new Date(b.date) - new Date(a.date)).map(a => (
                                 <div key={a.id} className="appt-list-item">
                                     <div className={`appt-date-box ${a.color}`}>
-                                        <span className="m">MAR</span>
-                                        <span className="d">{a.date.split('-')[2]}</span>
+                                        <span className="m">{new Date(a.date || a.visit_date || Date.now()).toLocaleString('default', { month: 'short' }).toUpperCase()}</span>
+                                        <span className="d">{(a.date || a.visit_date || '').split('-')[2] || ''}</span>
                                     </div>
                                     <div className="appt-main-info">
                                         <div className="appt-title-row">
                                             <h3>{a.type} Visit</h3>
                                             <span className={`status-badge ${a.status.toLowerCase()}`}>
-                                                {a.status === 'Completed' ? <CheckCircle2 size={12} /> : <Clock size={12} />}
-                                                {a.status}
+                                                   {String(a.status || '').toLowerCase() === 'completed' ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                                                   {a.status || 'Unknown'}
                                             </span>
                                         </div>
                                         <div className="appt-meta-row">

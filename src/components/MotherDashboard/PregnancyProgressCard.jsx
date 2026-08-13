@@ -10,16 +10,38 @@ import {
     getWeeklyMilestone
 } from '../../utils/pregnancyUtils';
 
-const PregnancyProgressCard = ({ lmpDate }) => {
-    // If no LMP date provided, we can't calculate. For mock, we'll use a default.
-    const lmp = lmpDate || '2025-08-20'; // Default for demo if not provided
-    
-    const edd = calculateEDD(lmp);
-    const gestAge = calculateGestationalAge(lmp);
-    const timeRem = calculateTimeRemaining(edd);
-    const progress = calculateProgress(lmp);
-    const trimester = getTrimester(gestAge.weeks);
-    const milestone = getWeeklyMilestone(gestAge.weeks);
+const PregnancyProgressCard = ({ lmpDate, weeks: propWeeks, trimester: propTrimester, edd: propEdd }) => {
+    const hasLmp = lmpDate && !Number.isNaN(new Date(lmpDate).getTime());
+
+    let edd = null;
+    let gestAge = { weeks: propWeeks || 0, days: 0 };
+    let timeRem = { weeks: 0, days: 0, totalDays: 0 };
+    let progress = 0;
+    let trimester = propTrimester || 'N/A';
+    let milestone = getWeeklyMilestone(gestAge.weeks || 0);
+
+    if (hasLmp) {
+        edd = calculateEDD(lmpDate);
+        gestAge = calculateGestationalAge(lmpDate);
+        timeRem = calculateTimeRemaining(edd);
+        progress = calculateProgress(lmpDate);
+        trimester = getTrimester(gestAge.weeks);
+        milestone = getWeeklyMilestone(gestAge.weeks);
+    } else if (propEdd) {
+        // If EDD provided without LMP, use it to compute remaining time and display weeks if available
+        edd = new Date(propEdd);
+        timeRem = calculateTimeRemaining(edd);
+        if (propWeeks) {
+            progress = Math.min(Math.max((propWeeks / 40) * 100, 0), 100);
+            milestone = getWeeklyMilestone(propWeeks);
+        }
+    } else {
+        // No reliable pregnancy dates available, keep safe defaults
+        edd = null;
+        gestAge = { weeks: propWeeks || 0, days: 0 };
+        progress = propWeeks ? Math.min(Math.max((propWeeks / 40) * 100, 0), 100) : 0;
+        milestone = getWeeklyMilestone(gestAge.weeks);
+    }
 
     return (
         <div className="mother-card pregnancy-progress-card">
@@ -27,7 +49,7 @@ const PregnancyProgressCard = ({ lmpDate }) => {
                 <div className="due-date-section">
                     <span className="section-label">Expected Due Date</span>
                     <h2 className="due-date-val">
-                        <Calendar size={20} className="icon-inline" /> {formatDateLong(edd)}
+                        <Calendar size={20} className="icon-inline" /> {edd ? formatDateLong(edd) : 'Not available'}
                     </h2>
                 </div>
 
@@ -57,7 +79,7 @@ const PregnancyProgressCard = ({ lmpDate }) => {
                         </div>
                         <div className="gest-content">
                             <span className="gest-label">Remaining:</span>
-                            <p className="gest-val">{timeRem.weeks} weeks to go!</p>
+                            <p className="gest-val">{timeRem.totalDays ? `${timeRem.weeks} weeks to go!` : 'N/A'}</p>
                         </div>
                     </div>
                 </div>
@@ -96,7 +118,7 @@ const PregnancyProgressCard = ({ lmpDate }) => {
 
             <div className="countdown-banner">
                 <Timer size={16} />
-                <span>{timeRem.totalDays} Days Until You Meet Your Baby</span>
+                <span>{timeRem.totalDays ? `${timeRem.totalDays} Days Until You Meet Your Baby` : 'Date not available'}</span>
             </div>
         </div>
     );

@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import AuthService from '../../services/authservice';
+import PatientService from '../../services/patientservice';
 import { 
     Activity, Heart, Thermometer, Weight, TrendingUp, 
     Download, ArrowLeft, Filter, AlertCircle, 
@@ -10,19 +12,43 @@ import '../../styles/pages/MyVitals.css';
 const MyVitals = () => {
     const navigate = useNavigate();
     const [filterTrimester, setFilterTrimester] = useState('All');
+    const [vitalsData, setVitalsData] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    const VITALS_DATA = [
-        { date: 'Feb 20, 2026', weight: 62, bp: '120/80', pulse: 78, temp: 36.5, notes: 'Normal', trimester: '2nd' },
-        { date: 'Feb 26, 2026', weight: 63, bp: '130/85', pulse: 82, temp: 36.6, notes: 'Slightly high BP', trimester: '2nd' },
-        { date: 'Mar 05, 2026', weight: 64, bp: '122/82', pulse: 80, temp: 36.4, notes: 'Doing well', trimester: '3rd' },
-        { date: 'Mar 12, 2026', weight: 64.5, bp: '118/78', pulse: 76, temp: 36.5, notes: 'Stable', trimester: '3rd' },
-    ];
+    useEffect(() => {
+        const loadVitals = async () => {
+            const auth = new AuthService();
+            const patientService = new PatientService();
+            try {
+                const authUser = await auth.getAuthUser();
+                if (!authUser?.id) return;
+                const patient = await patientService.getPatientById(authUser.id);
+                // Only include visits that have actual vital records (not pending/incomplete)
+                const visits = (patient?.visits || [])
+                    .filter(v => v.visit_date && (v.weight_kg || (v.bp_systolic && v.bp_diastolic) || v.pulse_bpm || v.temp_c))
+                    .map(v => ({
+                        id: v.id,
+                        date: v.visit_date,
+                        weight: v.weight_kg,
+                        bp: v.bp_systolic && v.bp_diastolic ? `${v.bp_systolic}/${v.bp_diastolic}` : null,
+                        pulse: v.pulse_bpm,
+                        temp: v.temp_c,
+                        notes: v.clinical_notes || '',
+                        trimester: v.trimester ? `Trimester ${v.trimester}` : patient?.trimester || 'N/A'
+                    }))
+                    .sort((a, b) => new Date(b.date) - new Date(a.date));
+                setVitalsData(visits);
+            } catch (err) {
+                console.error('Failed to load vitals:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadVitals();
+    }, []);
 
-    const CURRENT_VITALS = VITALS_DATA[VITALS_DATA.length - 1];
-
-    const filteredVitals = filterTrimester === 'All' 
-        ? VITALS_DATA 
-        : VITALS_DATA.filter(v => v.trimester === filterTrimester);
+    const CURRENT_VITALS = vitalsData[0] || {};
+    const filteredVitals = filterTrimester === 'All' ? vitalsData : vitalsData.filter(v => v.trimester === filterTrimester);
 
     const handleDownloadPDF = () => {
         window.print();
@@ -30,19 +56,24 @@ const MyVitals = () => {
 
     // Simple SVG Line Chart Component
     const VitalsChart = ({ data, dataKey, color, label, icon: Icon }) => {
+        if (!data || data.length === 0) return null;
         const padding = 40;
         const width = 500;
         const height = 200;
         const chartWidth = width - padding * 2;
         const chartHeight = height - padding * 2;
 
-        const values = data.map(d => typeof d[dataKey] === 'string' ? parseInt(d[dataKey].split('/')[0]) : d[dataKey]);
-        const minVal = Math.min(...values) * 0.9;
-        const maxVal = Math.max(...values) * 1.1;
-        const range = maxVal - minVal;
+        const rawValues = data.map(d => {
+            const v = d[dataKey];
+            if (typeof v === 'string' && v.includes('/')) return parseInt(v.split('/')[0]) || 0;
+            return typeof v === 'number' ? v : (parseFloat(v) || 0);
+        }).filter(n => typeof n === 'number' && !Number.isNaN(n));
+        const minVal = rawValues.length ? Math.min(...rawValues) * 0.9 : 0;
+        const maxVal = rawValues.length ? Math.max(...rawValues) * 1.1 : minVal + 1;
+        const range = maxVal - minVal || 1;
 
-        const points = values.map((val, i) => {
-            const x = padding + (i / (values.length - 1)) * chartWidth;
+        const points = rawValues.map((val, i) => {
+            const x = padding + (i / (rawValues.length - 1)) * chartWidth;
             const y = height - padding - ((val - minVal) / range) * chartHeight;
             return `${x},${y}`;
         }).join(' ');
@@ -79,8 +110,8 @@ const MyVitals = () => {
                             points={points}
                         />
                         {/* Data Points */}
-                        {values.map((val, i) => {
-                            const x = padding + (i / (values.length - 1)) * chartWidth;
+                        {rawValues.map((val, i) => {
+                            const x = padding + (i / (rawValues.length - 1)) * chartWidth;
                             const y = height - padding - ((val - minVal) / range) * chartHeight;
                             return (
                                 <g key={i} className="chart-point-group">
@@ -187,14 +218,14 @@ const MyVitals = () => {
                     <h2 className="section-title"><TrendingUp size={18} /> Health Trends</h2>
                     <div className="charts-grid">
                         <VitalsChart 
-                            data={VITALS_DATA} 
+                            data={vitalsData.length ? vitalsData : []} 
                             dataKey="weight" 
                             color="#b9818a" 
                             label="Weight" 
                             icon={Weight} 
                         />
                         <VitalsChart 
-                            data={VITALS_DATA} 
+                            data={vitalsData.length ? vitalsData : []} 
                             dataKey="bp" 
                             color="#6db8a0" 
                             label="Systolic BP" 
@@ -223,34 +254,43 @@ const MyVitals = () => {
                     </div>
 
                     <div className="v-table-wrap">
-                        <table className="v-table">
-                            <thead>
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Weight</th>
-                                    <th>BP</th>
-                                    <th>Pulse</th>
-                                    <th>Temp</th>
-                                    <th>Status/Notes</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filteredVitals.map((v, i) => (
-                                    <tr key={i} className="v-table-row">
-                                        <td><strong>{v.date}</strong></td>
-                                        <td>{v.weight} kg</td>
-                                        <td>{v.bp}</td>
-                                        <td>{v.pulse} bpm</td>
-                                        <td>{v.temp}°C</td>
-                                        <td>
-                                            <span className={`v-note-tag ${v.notes.includes('high') ? 'v-note-tag--warn' : ''}`}>
-                                                {v.notes}
-                                            </span>
-                                        </td>
+                        {filteredVitals.length > 0 ? (
+                            <table className="v-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Weight</th>
+                                        <th>BP</th>
+                                        <th>Pulse</th>
+                                        <th>Temp</th>
+                                        <th>Trimester</th>
+                                        <th>Status/Notes</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {filteredVitals.map((v) => (
+                                        <tr key={v.id} className="v-table-row">
+                                            <td><strong>{new Date(v.date).toLocaleDateString('en-PH')}</strong></td>
+                                            <td>{v.weight ? `${v.weight} kg` : 'N/A'}</td>
+                                            <td>{v.bp || 'N/A'}</td>
+                                            <td>{v.pulse ? `${v.pulse} bpm` : 'N/A'}</td>
+                                            <td>{v.temp ? `${v.temp}°C` : 'N/A'}</td>
+                                            <td>{v.trimester}</td>
+                                            <td>
+                                                <span className={`v-note-tag ${(v.notes || '').includes('high') || (v.notes || '').includes('alert') ? 'v-note-tag--warn' : ''}`}>
+                                                    {v.notes || 'Normal'}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        ) : (
+                            <div className="empty-vitals-message">
+                                <AlertCircle size={32} />
+                                <p>No vital records available yet. Your vitals will be recorded during prenatal visits.</p>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

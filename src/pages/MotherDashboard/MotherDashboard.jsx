@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Calendar, Clock, Heart, Activity, 
     Baby, Star, ChevronRight, Bell,
@@ -8,6 +8,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/MotherDashboard.css';
 import PregnancyProgressCard from '../../components/MotherDashboard/PregnancyProgressCard';
+import AuthService from '../../services/authservice';
+import PatientService from '../../services/patientservice';
 
 const MotherDashboard = () => {
     const navigate = useNavigate();
@@ -19,24 +21,89 @@ const MotherDashboard = () => {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
     });
 
-    const pregnancyData = {
-        lmp: '2025-08-20',
-        weeks: 28,
-        trimester: '3rd Trimester'
-    };
+    const [pregnancyData, setPregnancyData] = useState({ lmp: null, weeks: null, trimester: null });
+    const [appointments, setAppointments] = useState([]);
+    const [healthRecords, setHealthRecords] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    const appointments = [
-        { id: 1, date: 'Mar 15, 2026', time: '9:00 AM', type: 'Prenatal Checkup', staff: 'Midwife Elena P.', status: 'Upcoming', location: 'Station 3 Health Center' },
-        { id: 2, date: 'Mar 22, 2026', time: '10:00 AM', type: 'Vaccination', staff: 'Nurse Ana M.', status: 'Scheduled', location: 'City Health Office' },
-        { id: 3, date: 'Feb 28, 2026', time: '8:30 AM', type: 'Prenatal Checkup', staff: 'Midwife Elena P.', status: 'Completed', location: 'Station 3 Health Center' },
-    ];
+    useEffect(() => {
+        const auth = new AuthService();
+        const patientService = new PatientService();
 
-    const healthRecords = [
-        { label: 'Blood Pressure', value: '110/70', status: 'Normal', trend: 'stable', icon: Heart },
-        { label: 'Weight', value: '62 kg', status: 'Normal', trend: '+2kg', icon: TrendingUp },
-        { label: 'Heart Rate', value: '78 bpm', status: 'Normal', trend: 'stable', icon: Activity },
-        { label: 'Temperature', value: '36.5°C', status: 'Normal', trend: 'stable', icon: Sparkles },
-    ];
+        const load = async () => {
+            setLoading(true);
+            try {
+                const authUser = await auth.getAuthUser();
+                if (!authUser?.id) return;
+
+                const patient = await patientService.getPatientById(authUser.id);
+                if (patient && patient.lmp) {
+                    // Calculate weeks pregnant from LMP
+                    const lmpDate = new Date(patient.lmp);
+                    const today = new Date();
+                    const diffTime = today - lmpDate;
+                    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                    const weeksPregnant = Math.floor(diffDays / 7);
+                    
+                    // Calculate expected due date (LMP + 280 days = 40 weeks)
+                    const eddDate = new Date(lmpDate);
+                    eddDate.setDate(eddDate.getDate() + 280);
+                    const daysUntilDue = Math.floor((eddDate - today) / (1000 * 60 * 60 * 24));
+                    
+                    // Calculate trimester
+                    let trimester = 'N/A';
+                    if (weeksPregnant < 13) trimester = '1st Trimester';
+                    else if (weeksPregnant < 28) trimester = '2nd Trimester';
+                    else if (weeksPregnant <= 40) trimester = '3rd Trimester';
+                    
+                    setPregnancyData({ 
+                        lmp: patient.lmp, 
+                        edd: eddDate.toISOString().split('T')[0], 
+                        weeks: weeksPregnant,
+                        daysUntilDue: Math.max(0, daysUntilDue),
+                        trimester: trimester 
+                    });
+                    
+                    // map visits to appointment-like objects for display (next 3 upcoming)
+                    const now = new Date();
+                    const appts = (patient.visits || [])
+                        .filter(v => v.visit_date && new Date(v.visit_date) >= now)
+                        .sort((a, b) => new Date(a.visit_date) - new Date(b.visit_date))
+                        .slice(0, 3)
+                        .map(v => ({
+                            id: v.id,
+                            date: v.visit_date,
+                            time: new Date(v.visit_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                            type: v.next_appt_type || 'Prenatal Checkup',
+                            staff: v.assigned_staff || 'N/A',
+                            status: v.status || 'Scheduled',
+                            location: patient.station || ''
+                        }));
+                    setAppointments(appts);
+
+                    // health records: latest vitals from visits
+                    const records = (patient.visits || [])
+                        .filter(v => v.visit_date)
+                        .sort((a, b) => new Date(b.visit_date) - new Date(a.visit_date))
+                        .slice(0, 4)
+                        .map(v => ({
+                            label: v.bp_systolic && v.bp_diastolic ? 'Blood Pressure' : 'Weight',
+                            value: v.bp_systolic && v.bp_diastolic ? `${v.bp_systolic}/${v.bp_diastolic}` : (v.weight_kg ? `${v.weight_kg} kg` : 'N/A'),
+                            status: 'Normal',
+                            trend: v.weight_kg ? `Δ ${v.weight_kg}` : 'stable',
+                            icon: Heart
+                        }));
+                    setHealthRecords(records);
+                }
+            } catch (err) {
+                console.error('Error loading mother dashboard data:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        load();
+    }, []);
 
     const healthTips = [
         { id: 1, title: '⚠️ Mga Babala sa Kalusugan', text: 'Pumunta agad sa health center kung may pamamanas, sakit ng ulo, o pagdurugo.', icon: AlertCircle, color: 'warning' },
@@ -60,8 +127,8 @@ const MotherDashboard = () => {
                     <div className="welcome-emoji"><img src="/assets/images/dashboard/greeting-icon.png" alt="Greeting Icon" className="welcome-emoji-img" /></div>
                     <div>
                         <p className="welcome-greeting">Hello, Mommy! 👋</p>
-                        <h1>Your Pregnancy Journey</h1>
-                        <p className="welcome-sub">Welcome to your personal maternal health portal. Here's your update for today.</p>
+                        <h1>You are {pregnancyData.weeks || '?'} weeks pregnant</h1>
+                        <p className="welcome-sub">Welcome to your personal maternal health portal. {pregnancyData.daysUntilDue !== undefined && `Your baby is expected in ${pregnancyData.daysUntilDue} days.`}</p>
                     </div>
                 </div>
                 <div className="welcome-meta">
@@ -77,9 +144,15 @@ const MotherDashboard = () => {
             </div>
 
             {/* ── Pregnancy Progress Section ── */}
-            <PregnancyProgressCard 
-                lmpDate={pregnancyData.lmp} 
-            />
+            {pregnancyData.lmp && (
+                <PregnancyProgressCard 
+                    lmpDate={pregnancyData.lmp}
+                    edd={pregnancyData.edd}
+                    weeks={pregnancyData.weeks}
+                    trimester={pregnancyData.trimester}
+                    daysUntilDue={pregnancyData.daysUntilDue}
+                />
+            )}
 
             <div className="mother-dash-grid modern-grid">
                 {/* ── Left Column ── */}
@@ -101,15 +174,15 @@ const MotherDashboard = () => {
                             {appointments.map((appt, index) => (
                                 <div 
                                     key={appt.id} 
-                                    className={`timeline-item ${appt.status.toLowerCase()}`}
+                                    className={`timeline-item ${String(appt.status || '').toLowerCase()}`}
                                     onClick={() => navigate('/mother-home/user-appointments')}
                                 >
                                     <div className="timeline-dot"></div>
                                     <div className="timeline-content">
                                         <div className="timeline-header">
                                             <span className="timeline-type">{appt.type}</span>
-                                            <span className={`timeline-status status-${appt.status.toLowerCase()}`}>
-                                                {appt.status}
+                                            <span className={`timeline-status status-${String(appt.status || '').toLowerCase()}`}>
+                                                {appt.status || 'Unknown'}
                                             </span>
                                         </div>
                                         <div className="timeline-details">
@@ -157,8 +230,8 @@ const MotherDashboard = () => {
                                         <div className="health-record-info">
                                             <span className="health-record-label">{record.label}</span>
                                             <span className="health-record-value">{record.value}</span>
-                                            <span className={`health-record-status ${record.status.toLowerCase()}`}>
-                                                <CheckCircle2 size={12} /> {record.status}
+                                            <span className={`health-record-status ${String(record.status || '').toLowerCase()}`}>
+                                                <CheckCircle2 size={12} /> {record.status || 'Unknown'}
                                             </span>
                                             {record.trend !== 'stable' && (
                                                 <span className="health-record-trend">

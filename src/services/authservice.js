@@ -80,7 +80,7 @@ export default class AuthService {
     return insertedRole?.id;
   }
 
-  async ensurePublicUserRecord({ userId, email, role }) {
+  async ensurePublicUserRecord({ userId, email, role, password = null }) {
     const normalizedEmail = (email || '').trim().toLowerCase();
     const normalizedRole = String(role || '').trim().toLowerCase();
 
@@ -93,6 +93,7 @@ export default class AuthService {
         p_user_id: userId,
         p_email: normalizedEmail,
         p_role: normalizedRole,
+        p_password: password,
       });
 
       if (rpcError) {
@@ -109,8 +110,17 @@ export default class AuthService {
 
   async createUserAccount({ email, password, role, metadata = {} }) {
     const normalizedEmail = (email || '').trim().toLowerCase();
-    if (!normalizedEmail || !password) {
-      throw new Error('Email and password are required');
+    if (!normalizedEmail) {
+      throw new Error('Email is required');
+    }
+
+    const normalizedRole = String(role || '').trim().toLowerCase();
+    // Provide a default password for mothers/patients when not supplied
+    if (!password && (normalizedRole === 'patient' || normalizedRole === 'mother')) {
+      password = 'mother123!';
+    }
+    if (!password) {
+      throw new Error('Password is required');
     }
 
     // Save current admin session BEFORE creating new auth account
@@ -140,6 +150,7 @@ export default class AuthService {
         userId: authUser.id,
         email: normalizedEmail,
         role,
+        password,
       });
     } catch (userInsertError) {
       console.error('Failed to create public users row for auth account:', userInsertError);

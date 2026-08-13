@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Baby, Heart, ChevronDown, ChevronUp, Plus, Trash2, Edit2,
     Printer, Save, Check, X, Info, AlertTriangle, FileText,
     MapPin, Users, ShieldCheck, ClipboardList, CheckSquare, Square, ArrowLeft
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import AuthService from '../../services/authservice';
+import PatientService from '../../services/patientservice';
 import '../../styles/pages/PregnancyDeliveryInfo.css';
 
 // ─── Complication options ────────────────────────────────────────────
@@ -24,6 +26,7 @@ const COMPLICATION_OPTIONS = [
 const DELIVERY_TYPES = ['Normal Spontaneous Delivery (NSD)', 'Cesarean Section (C-section)', 'Assisted Delivery (Forceps/Vacuum)', 'Home Delivery', 'Other'];
 
 const BLANK_PREGNANCY = {
+    id: null,
     year: '',
     outcome: 'Live Birth',
     deliveryType: 'Normal Spontaneous Delivery (NSD)',
@@ -111,20 +114,16 @@ const PastPregnancyCard = ({ index, data, onChange, onRemove }) => {
                     <div className="pdi-field">
                         <label>Complications (select all that apply)</label>
                         <div className="pdi-comp-grid">
-                            {COMPLICATION_OPTIONS.map(comp => {
-                                const checked = data.complications.includes(comp);
-                                return (
-                                    <button
-                                        key={comp}
-                                        type="button"
-                                        className={`pdi-comp-chip ${checked ? 'pdi-comp-chip--checked' : ''}`}
-                                        onClick={() => toggleComp(comp)}
-                                    >
-                                        {checked ? <CheckSquare size={13} /> : <Square size={13} />}
-                                        {comp}
-                                    </button>
-                                );
-                            })}
+                            {COMPLICATION_OPTIONS.map(comp => (
+                                <label key={comp} className="pdi-comp-checkbox">
+                                    <input
+                                        type="checkbox"
+                                        checked={data.complications.includes(comp)}
+                                        onChange={() => toggleComp(comp)}
+                                    />
+                                    <span>{comp}</span>
+                                </label>
+                            ))}
                         </div>
                     </div>
 
@@ -148,45 +147,160 @@ const PregnancyDeliveryInfo = () => {
     const navigate = useNavigate();
     const [saved, setSaved] = useState(false);
     const [agreed, setAgreed] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const authService = new AuthService();
+    const patientService = new PatientService();
 
     // ── Section A — Past Pregnancies ──────────────────────────────
-    const [gravida, setGravida] = useState('2');
-    const [para, setPara]       = useState('2');
-    const [pastPregnancies, setPastPregnancies] = useState([
-        { year: '2019', outcome: 'Live Birth', deliveryType: 'Normal Spontaneous Delivery (NSD)', complications: ['None'], notes: '', expanded: false },
-        { year: '2021', outcome: 'Live Birth', deliveryType: 'Normal Spontaneous Delivery (NSD)', complications: ['Anemia'], notes: 'Required iron supplementation', expanded: false },
-    ]);
+    const [gravida, setGravida] = useState('0');
+    const [para, setPara] = useState('0');
+    const [pastPregnancies, setPastPregnancies] = useState([]);
 
     // ── Section B — Current Delivery Preferences ──────────────────
     const [prefs, setPrefs] = useState({
         assistedBy: '',
         facility: '',
         philhealthFacility: false,
-        philhealthMember: true,
+        philhealthMember: false,
         birthPlan: '',
         allergies: '',
     });
     const setP = (k, v) => setPrefs(p => ({ ...p, [k]: v }));
 
+    // Load data from Supabase on mount
+    useEffect(() => {
+        const loadData = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const authUser = await authService.getAuthUser();
+                if (!authUser?.id) {
+                    setError('Not authenticated');
+                    return;
+                }
+
+                const patient = await patientService.getPatientById(authUser.id);
+                if (!patient) {
+                    setError('Patient not found');
+                    return;
+                }
+
+                // Load pregnancy info
+                if (patient.pregnancy_info) {
+                    setGravida(String(patient.pregnancy_info.gravida || '0'));
+                    setPara(String(patient.pregnancy_info.para || '0'));
+                }
+
+                // Load past pregnancies from deliveries
+                if (patient.deliveries && patient.deliveries.length > 0) {
+                    const pastPregnancies = patient.deliveries.map((delivery, idx) => ({
+                        id: delivery.id,
+                        year: delivery.delivery_date ? new Date(delivery.delivery_date).getFullYear().toString() : '',
+                        outcome: delivery.delivery_type ? (delivery.delivery_type.includes('Live') ? 'Live Birth' : 'Other') : 'Live Birth',
+                        deliveryType: delivery.delivery_mode || 'Normal Spontaneous Delivery (NSD)',
+                        complications: delivery.complications ? (Array.isArray(delivery.complications) ? delivery.complications : []) : [],
+                        notes: delivery.notes || '',
+                        expanded: false,
+                    }));
+                    setPastPregnancies(pastPregnancies);
+                }
+
+                // Load delivery preferences from pregnancy_info notes or separate field
+                if (patient.pregnancy_info) {
+                    const preferences = patient.pregnancy_info.delivery_preferences || {};
+                    setPrefs({
+                        assistedBy: preferences.assistedBy || '',
+                        facility: preferences.facility || patient.pregnancy_info.place_of_delivery || '',
+                        philhealthFacility: preferences.philhealthFacility || false,
+                        philhealthMember: preferences.philhealthMember || false,
+                        birthPlan: preferences.birthPlan || '',
+                        allergies: preferences.allergies || '',
+                    });
+                }
+            } catch (err) {
+                console.error('Failed to load pregnancy delivery info:', err);
+                setError('Failed to load data. Please try again.');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadData();
+    }, []);
+
     // ── Past Pregnancy handlers ───────────────────────────────────
     const addPastPregnancy = () => {
         setPastPregnancies(prev => [...prev, { ...BLANK_PREGNANCY }]);
-        setGravida(g => String(Number(g) + 1));
     };
+
     const updatePastPregnancy = (i, data) => {
         setPastPregnancies(prev => { const n = [...prev]; n[i] = data; return n; });
     };
+
     const removePastPregnancy = (i) => {
         setPastPregnancies(prev => prev.filter((_, idx) => idx !== i));
-        setGravida(g => String(Math.max(0, Number(g) - 1)));
     };
 
-    const handleSave = () => {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 3000);
+    const handleSave = async () => {
+        try {
+            setError(null);
+            const authUser = await authService.getAuthUser();
+            if (!authUser?.id) {
+                setError('Not authenticated');
+                return;
+            }
+
+            // Save pregnancy info and delivery preferences to Supabase
+            const pregnancyData = {
+                gravida: parseInt(gravida) || 0,
+                para: parseInt(para) || 0,
+                place_of_delivery: prefs.facility,
+                delivery_preferences: {
+                    assistedBy: prefs.assistedBy,
+                    facility: prefs.facility,
+                    philhealthFacility: prefs.philhealthFacility,
+                    philhealthMember: prefs.philhealthMember,
+                    birthPlan: prefs.birthPlan,
+                    allergies: prefs.allergies,
+                }
+            };
+
+            await patientService.updatePatient(authUser.id, {
+                pregnancy_info: pregnancyData,
+                delivery_preferences: prefs
+            });
+
+            setSaved(true);
+            setTimeout(() => setSaved(false), 3000);
+        } catch (err) {
+            console.error('Failed to save pregnancy delivery info:', err);
+            setError('Failed to save data. Please try again.');
+        }
     };
 
     const handlePrint = () => window.print();
+
+    if (loading) {
+        return (
+            <div className="pdi-page">
+                <header className="mother-page-header">
+                    <div className="mother-page-header-content">
+                        <button className="back-btn" onClick={() => navigate('/mother-home')}>
+                            <ArrowLeft size={18} />
+                        </button>
+                        <div className="mother-page-header-text">
+                            <h1>Delivery Info</h1>
+                            <p>Loading your pregnancy and delivery information...</p>
+                        </div>
+                    </div>
+                </header>
+                <div style={{ padding: '40px', textAlign: 'center' }}>
+                    <p>Loading...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="pdi-page">
@@ -214,6 +328,13 @@ const PregnancyDeliveryInfo = () => {
                     </button>
                 </div>
             </header>
+
+            {error && (
+                <div className="pdi-error-banner">
+                    <AlertTriangle size={18} />
+                    <p>{error}</p>
+                </div>
+            )}
 
             {/* ── Progress Indicator ── */}
             <div className="pdi-progress-bar-wrap">
@@ -291,6 +412,12 @@ const PregnancyDeliveryInfo = () => {
                         />
                     ))}
                 </div>
+
+                {pastPregnancies.length === 0 && (
+                    <div className="pdi-no-past-pregnancies">
+                        <p>No past pregnancies recorded yet.</p>
+                    </div>
+                )}
 
                 <button className="pdi-add-btn" onClick={addPastPregnancy}>
                     <Plus size={16} /> Add Past Pregnancy

@@ -1,9 +1,7 @@
 import React from 'react';
 import { 
-    X, Syringe, Shield, Activity, 
-    AlertTriangle, HeartPulse, Send, 
-    Calendar, CheckCircle2, Clock, BookOpen,
-    ExternalLink
+    X, Syringe, Calendar, 
+    CheckCircle2, Clock, AlertTriangle, Info
 } from 'lucide-react';
 import '../../styles/components/VaccineDetailModal.css';
 
@@ -19,17 +17,20 @@ const VaccineDetailModal = ({ vaccine, onClose }) => {
         }
     };
 
+    const displayName = vaccine.notes || vaccine.vaccine_name || vaccine.name || 'Vaccine';
+    const status = vaccine.status || 'Unknown';
+
     return (
         <div className="vdm-modal-overlay" onClick={onClose}>
             <div className="vdm-modal" onClick={e => e.stopPropagation()}>
-                <div className={`vdm-header status-${vaccine.status.toLowerCase()}`}>
+                <div className={`vdm-header status-${String(status).toLowerCase()}`}>
                     <div className="vdm-header-content">
                         <div className="vdm-icon-wrap">
                             <Syringe size={32} />
                         </div>
                         <div className="vdm-title-area">
-                            <h2>{vaccine.name}</h2>
-                            <span className="vdm-category">{vaccine.category} Vaccine</span>
+                            <h2>{displayName}</h2>
+                            <span className="vdm-category">{vaccine.category || vaccine.vaccine_category || 'Vaccine'}</span>
                         </div>
                     </div>
                     <button className="vdm-close-btn" onClick={onClose}>
@@ -39,78 +40,54 @@ const VaccineDetailModal = ({ vaccine, onClose }) => {
 
                 <div className="vdm-body">
                     <div className="vdm-status-shelf">
-                        <div className={`vdm-status-indicator status-${vaccine.status.toLowerCase()}`}>
-                            {getStatusIcon(vaccine.status)}
-                            <span>{vaccine.status}</span>
+                        <div className={`vdm-status-indicator status-${String(status).toLowerCase()}`}>
+                            {getStatusIcon(status)}
+                            <span>{status}</span>
                         </div>
                         <div className="vdm-quick-meta">
                             <div className="vdm-meta-item">
-                                <span className="label">Recommended Schedule</span>
-                                <span className="value">{vaccine.schedule}</span>
+                                <span className="label">Schedule</span>
+                                <span className="value">{vaccine.schedule || 'As advised'}</span>
                             </div>
                         </div>
                     </div>
 
+                    {/* Vaccination Schedule/Dates */}
                     <div className="vdm-section">
-                        <h3><Shield size={18} /> Why is this important?</h3>
-                        <p>{vaccine.importance}</p>
-                    </div>
-
-                    <div className="vdm-section">
-                        <h3><Activity size={18} /> Possible Side Effects</h3>
-                        <p>{vaccine.sideEffects}</p>
-                    </div>
-
-                    <div className="vdm-section">
-                        <h3><HeartPulse size={18} /> Care Tips & Notes</h3>
-                        <div className="vdm-tips-box">
-                            <p>{vaccine.tips}</p>
-                        </div>
-                    </div>
-
-                    {vaccine.lastTaken && (
-                        <div className="vdm-history-section">
-                            <h3><Calendar size={18} /> Vaccination History</h3>
-                            <div className="vdm-history-item">
-                                <div className="history-dot completed"></div>
-                                <div className="history-info">
-                                    <span className="history-action">Dose administered</span>
-                                    <span className="history-date">{vaccine.lastTaken}</span>
+                        <h3><Calendar size={18} /> Vaccination Details</h3>
+                        <div className="vdm-details-grid">
+                            {vaccine.scheduled_vaccination && vaccine.status !== 'Completed' && (
+                                <div className="vdm-detail-item">
+                                    <span className="label">Scheduled Date</span>
+                                    <span className="value">{new Date(vaccine.scheduled_vaccination).toLocaleDateString('en-PH')}</span>
                                 </div>
-                            </div>
+                            )}
+                            {vaccine.vaccinated_date && (
+                                <div className="vdm-detail-item">
+                                    <span className="label">Vaccinated Date</span>
+                                    <span className="value">{new Date(vaccine.vaccinated_date).toLocaleDateString('en-PH')}</span>
+                                </div>
+                            )}
+                            {vaccine.dose_number && (
+                                <div className="vdm-detail-item">
+                                    <span className="label">Dose Number</span>
+                                    <span className="value">Dose {vaccine.dose_number}</span>
+                                </div>
+                            )}
                         </div>
-                    )}
+                    </div>
 
-                    {/* Sources Section */}
-                    {vaccine.sources && vaccine.sources.length > 0 && (
-                        <div className="vdm-section vdm-sources-section">
-                            <h3><BookOpen size={18} /> Sources & References</h3>
-                            <div className="vdm-sources-list">
-                                {vaccine.sources.map((source, i) => (
-                                    <a 
-                                        key={i} 
-                                        href={source.url} 
-                                        target="_blank" 
-                                        rel="noopener noreferrer" 
-                                        className="vdm-source-item"
-                                    >
-                                        <div className="source-info">
-                                            <strong>{source.name}</strong>
-                                            <span>{source.title}</span>
-                                        </div>
-                                        <ExternalLink size={14} />
-                                    </a>
-                                ))}
-                            </div>
+                    {/* Additional Info */}
+                    {vaccine.remarks && (
+                        <div className="vdm-section">
+                            <h3><Info size={18} /> Notes</h3>
+                            <p>{vaccine.remarks}</p>
                         </div>
                     )}
                 </div>
 
                 <div className="vdm-footer">
-                    <button className="vdm-btn-secondary" onClick={onClose}>Close</button>
-                    <button className="vdm-btn-primary">
-                        <Send size={16} /> Add to Calendar
-                    </button>
+                    <button className="vdm-btn-primary" onClick={onClose}>Close</button>
                 </div>
             </div>
         </div>

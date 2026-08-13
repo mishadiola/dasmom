@@ -24,22 +24,6 @@ const MotherLogin = () => {
     setIsLoading(true);
 
     try {
-        // Check for mock credentials first (temporary testing)
-        if (email === 'mother@gmail.com' && password === 'mother123') {
-            const mockUser = {
-                id: 'mock-mother-001',
-                email: 'mother@gmail.com',
-                fullName: 'Test Mother',
-                role: 'mother',
-                station: 'Station 1',
-                barangay_assignment: 'Poblacion'
-            };
-            setUser(mockUser);
-            navigate('/mother-home');
-            return;
-        }
-
-        // Original backend authentication
         const user = await authService.login(email, password);
 
         if (!authService.accessCheck(user, 'mother')) {

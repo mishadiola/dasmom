@@ -1011,7 +1011,7 @@ export default class PatientService {
 
     const authUser = await authService.createUserAccount({
       email: patientData.email,
-      password: patientData.password || 'Patient123!',
+      password: patientData.password || 'mother123!',
       role: 'patient',
       metadata: {
         full_name: `${patientData.firstName || ''} ${patientData.lastName || ''}`.trim(),
