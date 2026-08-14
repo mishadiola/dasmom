@@ -91,12 +91,12 @@ const Dashboard = () => {
             const todayStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
             
             // Fetch high risk stats using PatientService (same logic as HighRiskCases page)
+            const archivedPatientIds = await patientService.getArchivedPatientIds();
             const highRiskStats = await patientService.getHighRiskStats();
             
-            const [{ count: totalPatients }, { count: newborns }, { count: apptToday }, { data: apptData }, { data: pregnancyData }] = await Promise.all([
-                // Count only pregnant patients (not postpartum)
-                supabase.from('pregnancy_info').select('patient_id', { count: 'exact', head: true }).eq('pregn_postp', 'Pregnant'),
-                supabase.from('newborns').select('id', { count: 'exact', head: true }),
+            const [{ data: patientRows }, { data: newbornRows }, { count: apptToday }, { data: apptData }, { data: pregnancyData }] = await Promise.all([
+                supabase.from('patient_basic_info').select('id, emergency_contact'),
+                supabase.from('newborns').select('id, mother_id'),
                 supabase.from('prenatal_visits').select('id', { count: 'exact', head: true }).eq('visit_date', todayStr),
                 
                 // 🔥 NEW: Fetch full rich relational data for Today's Appointments table dynamic rendering
@@ -111,10 +111,17 @@ const Dashboard = () => {
                 supabase.from('pregnancy_info').select('patient_id, lmd, created_at').eq('pregn_postp', 'Pregnant').order('created_at', { ascending: false })
             ]);
 
+            const activePatientIds = new Set((patientRows || []).filter((row) => !archivedPatientIds.has(row.id)).map((row) => row.id));
+            const activeNewbornIds = new Set(
+                (newbornRows || [])
+                    .filter((row) => row.mother_id && !archivedPatientIds.has(row.mother_id))
+                    .map((row) => row.id)
+            );
+
             setLiveStats({
-                totalPatients: totalPatients ?? 0,
+                totalPatients: activePatientIds.size,
                 highRisk: highRiskStats?.highRiskCount ?? 0,
-                newborns: newborns ?? 0,
+                newborns: activeNewbornIds.size,
                 apptToday: apptToday ?? 0,
             });
 
@@ -131,7 +138,7 @@ const Dashboard = () => {
 
                 // Additional client-side filtering to ensure only today's appointments
                 const todayFiltered = apptData.filter(v => {
-                    if (!v.visit_date) return false;
+                    if (!v.visit_date || archivedPatientIds.has(v.patient_id)) return false;
                     const visitDate = new Date(v.visit_date);
                     const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
                     const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate());
@@ -205,21 +212,22 @@ const Dashboard = () => {
 
             // Fetch Health Snapshot Data
             setLoadingHealth(true);
-            const [{ data: prenatalVisits, error: visitsError }, { data: pregnancies, error: pregError }] = await Promise.all([
-                supabase.from('prenatal_visits').select('bp_systolic, bp_diastolic, risk_factors, calculated_risk'),
+            const [{ data: healthPrenatalVisits, error: visitsError }, { data: healthPregnancies, error: pregError }] = await Promise.all([
+                supabase.from('prenatal_visits').select('patient_id, bp_systolic, bp_diastolic, risk_factors, calculated_risk'),
                 supabase.from('pregnancy_info').select('patient_id, lmd, created_at').eq('pregn_postp', 'Pregnant').order('created_at', { ascending: false })
             ]);
 
             if (visitsError) console.error('Error fetching prenatal visits for health snapshot:', visitsError);
             if (pregError) console.error('Error fetching pregnancies for health snapshot:', pregError);
 
-            console.log('Health snapshot data - prenatalVisits:', prenatalVisits?.length || 0, 'pregnancies:', pregnancies?.length || 0);
+            console.log('Health snapshot data - prenatalVisits:', healthPrenatalVisits?.length || 0, 'pregnancies:', healthPregnancies?.length || 0);
 
             // Calculate health conditions
             let normalBP = 0, preEclampsia = 0, anaemia = 0, gestationalDiabetes = 0;
-            const totalVisits = prenatalVisits?.length || 0;
+            const totalVisits = healthPrenatalVisits?.filter(visit => !archivedPatientIds.has(visit.patient_id)).length || 0;
 
-            prenatalVisits?.forEach(visit => {
+            healthPrenatalVisits?.forEach(visit => {
+                if (archivedPatientIds.has(visit.patient_id)) return;
                 const sys = visit.bp_systolic;
                 const dia = visit.bp_diastolic;
                 
@@ -257,7 +265,8 @@ const Dashboard = () => {
 
             // Build map of latest pregnancy info per patient (first occurrence is latest due to ordering)
             const latestPregMap = new Map();
-            (pregnancies || []).forEach(p => {
+            (healthPregnancies || []).forEach(p => {
+                if (archivedPatientIds.has(p.patient_id)) return;
                 if (p.patient_id && !latestPregMap.has(p.patient_id)) {
                     latestPregMap.set(p.patient_id, p);
                 }

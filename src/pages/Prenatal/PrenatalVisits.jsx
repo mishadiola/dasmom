@@ -4,7 +4,7 @@ import {
     Search, Plus, Eye, Edit2, Trash2, CalendarCheck,
     AlertTriangle, HeartPulse, Filter, Clock, ChevronLeft,
     ChevronRight, Calendar as CalendarIcon, Users, MapPin, X,
-    CheckCircle2, Zap, RotateCcw, Syringe
+    CheckCircle2, Zap, RotateCcw, Syringe, ArchiveRestore
 } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
 import ScheduledVisitModal from '../../components/Prenatal/ScheduledVisitModal';
@@ -130,6 +130,7 @@ const PrenatalVisits = () => {
 
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('All');
+    const [archiveFilter, setArchiveFilter] = useState('active');
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 20;
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -139,6 +140,7 @@ const PrenatalVisits = () => {
     const [appointments, setAppointments] = useState([]);
     const [vaccinationsTable, setVaccinationsTable] = useState([]);
     const [visitsTable, setVisitsTable] = useState([]);
+    const [archivedPatientIds, setArchivedPatientIds] = useState(new Set());
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [visitTypeTab, setVisitTypeTab] = useState('prenatal'); // 'prenatal' | 'vaccination' | 'postpartum'
     const [visitCategoryTab, setVisitCategoryTab] = useState('upcoming'); // 'upcoming' | 'missed' | 'completed'
@@ -209,13 +211,16 @@ const PrenatalVisits = () => {
             const vDays = getVisibleDays(currentDate, calendarView);
             if (vDays.length === 0) return;
             
+            const archivedIds = await patientService.getArchivedPatientIds();
+            setArchivedPatientIds(archivedIds);
+
             // Fetch perfectly aligned with the visual grid columns
             const startDate = vDays[0].date;
             const endDate = vDays[vDays.length - 1].date;
 
             const [visitsData, apptsData, vaccData] = await Promise.all([
-                patientService.getPrenatalVisits(),
-                patientService.getAppointments(startDate, endDate, calendarView),
+                patientService.getPrenatalVisits({ includeArchived: true }),
+                patientService.getAppointments(startDate, endDate, calendarView, { includeArchived: true }),
                 patientService.supabase
                     .from('vaccinations')
                     .select(`
@@ -270,7 +275,7 @@ const PrenatalVisits = () => {
         } catch (error) {
             console.error(error);
         }
-    }, [currentDate, calendarView, patientService]);
+    }, [currentDate, calendarView, archiveFilter, patientService]);
 
     const handleUpdateVisitStatus = async (visitId, updates) => {
         try {
@@ -554,11 +559,15 @@ const PrenatalVisits = () => {
     };
 
     const visibleDays = getVisibleDays(currentDate, calendarView);
-    const filteredVisits = visitsTable.filter(v =>
-        (v.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-         v.patientId?.toLowerCase().includes(searchTerm.toLowerCase())) &&
-        (filterStatus === 'All' || v.status === filterStatus)
-    );
+    const filteredVisits = visitsTable.filter(v => {
+        const matchesSearch = (v.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            v.patientId?.toLowerCase().includes(searchTerm.toLowerCase()));
+        const matchesStatus = (filterStatus === 'All' || v.status === filterStatus);
+        const matchesArchive =
+            archiveFilter === 'all' ||
+            (archiveFilter === 'archived' ? archivedPatientIds.has(v.patientId) : !archivedPatientIds.has(v.patientId));
+        return matchesSearch && matchesStatus && matchesArchive;
+    });
 
     const todayOnly = new Date().toISOString().split('T')[0];
     // Group visits by patient
@@ -600,13 +609,19 @@ const PrenatalVisits = () => {
     const TODAY = new Date().toISOString().split('T')[0];
 
     // Filtering for vaccination records
-    const filteredVaccinations = vaccinationsTable.filter(v =>
-        (v.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-         v.patientId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-         v.vaccineName?.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
+    const filteredVaccinations = vaccinationsTable.filter(v => {
+        const matchesSearch = (v.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            v.patientId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            v.vaccineName?.toLowerCase().includes(searchTerm.toLowerCase()));
+        const matchesArchive =
+            archiveFilter === 'all' ||
+            (archiveFilter === 'archived' ? archivedPatientIds.has(v.patientId) : !archivedPatientIds.has(v.patientId));
+        return matchesSearch && matchesArchive;
+    });
 
     // Category filtering for tabbed table view
+    const archivedVisitRows = visitsTable.filter(v => archivedPatientIds.has(v.patientId));
+
     const categorizeVisits = () => {
         const today = new Date().toISOString().split('T')[0];
         
@@ -984,6 +999,56 @@ const PrenatalVisits = () => {
                     </div>
                 )}
             </div>
+
+            {archiveFilter !== 'archived' && archivedVisitRows.length > 0 && (
+                <div className="pv-table-section" style={{ marginTop: '18px' }}>
+                    <div className="section-header-row">
+                        <h2 className="section-title">
+                            <ArchiveRestore size={18} /> Archived Patients
+                        </h2>
+                    </div>
+                    <div className="table-responsive">
+                        <table className="pv-table">
+                            <thead>
+                                <tr>
+                                    <th>Patient Name</th>
+                                    <th>Risk Level</th>
+                                    <th>Last Visit</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {archivedVisitRows.slice(0, 5).map(visit => (
+                                    <tr key={`archived-${visit.id}`}>
+                                        <td>
+                                            <div className="p-info">
+                                                <span className="p-name">{visit.patientName}</span>
+                                                <span className="p-id">{visit.patientId}</span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span className={`risk-tag risk-${visit.risk?.replace(' ', '-').toLowerCase() || 'normal'}`}>
+                                                {visit.risk || 'Normal'}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div className="visit-datetime">
+                                                <span className="visit-date">{formatReadableDate(visit.visitDateOnly)}</span>
+                                                <span className="visit-time">{visit.visitTime || 'TBD'}</span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span className={`status-badge status-${visit.status?.toLowerCase() || 'scheduled'}`}>
+                                                {visit.status || 'Scheduled'}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
 
             {/* VISITS TABLE */}
             <div className="pv-table-section">

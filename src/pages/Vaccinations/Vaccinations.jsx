@@ -1055,10 +1055,12 @@ const Vaccinations = () => {
     const [inventory, setInventory] = useState([]);
     const [vaccinationRecords, setVaccinationRecords] = useState([]);
     const [supplementRecords, setSupplementRecords] = useState([]);
+    const [archivedPatientIds, setArchivedPatientIds] = useState(new Set());
     const [loading, setLoading] = useState(true);
 
     const [activeTab, setActiveTab] = useState('vaccines');    // 'vaccines' | 'supplements'
     const [searchTerm, setSearchTerm] = useState('');
+    const [archiveFilter, setArchiveFilter] = useState('active');
     const [filters, setFilters] = useState({ patientType: 'All', status: 'All', item: 'All' });
     const [recordModal, setRecordModal] = useState(null);      // null | { mode: 'vaccine' | 'supplement', initialPatientType?, initialPatientName? }
     const [newbornVaccinationModal, setNewbornVaccinationModal] = useState(null);  // null | newborn object
@@ -1070,6 +1072,9 @@ const Vaccinations = () => {
     const fetchData = async () => {
         try {
             setLoading(true);
+
+            const archivedIds = await patientService.getArchivedPatientIds();
+            setArchivedPatientIds(archivedIds);
 
             const { data: vaccRecords, error: vaccError } = await supabase
                 .from('vaccinations')
@@ -1098,6 +1103,21 @@ const Vaccinations = () => {
             })));
             const { data: suppRecords } = await supabase.from('supplements').select('*').order('created_at', { ascending: false });
 
+            const { data: allPatients } = await supabase
+                .from('patient_basic_info')
+                .select('id, first_name, last_name, station_ass, stations:station_ass (station_name), province');
+
+            // Fetch all newborns to create a map
+            const { data: allNewborns } = await supabase
+                .from('newborns')
+                .select('id, baby_name, mother_id, created_at');
+
+            const archivedNewbornIds = new Set(
+                (allNewborns || [])
+                    .filter((newborn) => archivedIds.has(newborn.mother_id))
+                    .map((newborn) => newborn.id)
+            );
+
             // Get maps for names
             const { data: vaccineInv } = await supabase.from('vaccine_inventory').select('id, vaccine_name');
             const vaccineMap = new Map(vaccineInv.map(v => [v.id, v.vaccine_name]));
@@ -1106,9 +1126,6 @@ const Vaccinations = () => {
             const { data: staff } = await supabase.from('staff_profiles').select('id, full_name');
             const staffMap = new Map(staff.map(s => [s.id, s.full_name]));
             
-            const { data: allPatients } = await supabase
-                .from('patient_basic_info')
-                .select('id, first_name, last_name, station_ass, stations:station_ass (station_name), province');
             console.log('📋 Fetched patients:', allPatients?.length || 0);
             const patientMap = new Map(allPatients?.map(p => [p.id, {
                 name: `${p.first_name || ''} ${p.last_name || ''}`.trim(),
@@ -1118,10 +1135,6 @@ const Vaccinations = () => {
             console.log('🗺️ Sample PatientMap entries:', Array.from(patientMap.entries()).slice(0, 5));
             console.log('🗺️ All PatientMap keys:', Array.from(patientMap.keys()).slice(0, 20));
 
-            // Fetch all newborns to create a map
-            const { data: allNewborns } = await supabase
-                .from('newborns')
-                .select('id, baby_name, mother_id, created_at');
             console.log('👶 Fetched newborns:', allNewborns?.length || 0);
             console.log('👶 Sample newborn records:', allNewborns?.slice(0, 5).map(n => ({
                 id: n.id,
@@ -1142,10 +1155,18 @@ const Vaccinations = () => {
             console.log('🗺️ NewbornMap size:', newbornMap.size);
             console.log('🗺️ Sample NewbornMap entries:', Array.from(newbornMap.entries()).slice(0, 3));
 
+            const isVisiblePatientRecord = (patientId, newbornId) => {
+                if (archiveFilter === 'all') return true;
+                if (archiveFilter === 'archived') {
+                    return (patientId && archivedIds.has(patientId)) || (newbornId && archivedNewbornIds.has(newbornId));
+                }
+                return !(patientId && archivedIds.has(patientId)) && !(newbornId && archivedNewbornIds.has(newbornId));
+            };
+
             // Transform vaccination records
             const transformedVaccRecords = (vaccRecords || [])
                 .filter(record => {
-                    // Filter out records with invalid patient IDs
+                    if (!isVisiblePatientRecord(record.patient_id, record.newborn_id)) return false;
                     if (record.patient_id && !patientMap.has(record.patient_id)) {
                         console.warn('Filtering out record with invalid patient_id:', record.patient_id);
                         return false;
@@ -1229,7 +1250,9 @@ const Vaccinations = () => {
             });
 
             // Transform supplement records
-            const transformedSuppRecords = (suppRecords || []).map(record => {
+            const transformedSuppRecords = (suppRecords || [])
+                .filter(record => isVisiblePatientRecord(record.patient_id, null))
+                .map(record => {
                 const expirationDate = calculateExpirationDate(record.start_date, 'supplement');
                 const expStatus = getExpirationStatus(expirationDate);
                 return {
@@ -1323,7 +1346,7 @@ const Vaccinations = () => {
 
     useEffect(() => {
         fetchData();
-    }, []);
+    }, [archiveFilter]);
 
     // Refresh data when modal closes (assuming new record was added)
     const handleModalClose = () => {
@@ -1589,6 +1612,11 @@ const Vaccinations = () => {
                             ? <><option value="Completed">Completed</option><option value="Pending">Pending</option><option value="Overdue">Overdue</option></>
                             : <><option value="Ongoing">Ongoing</option><option value="Completed">Completed</option><option value="Missed">Missed</option></>
                         }
+                    </select>
+                    <select value={archiveFilter} onChange={e => setArchiveFilter(e.target.value)}>
+                        <option value="active">Active</option>
+                        <option value="archived">Archived</option>
+                        <option value="all">All</option>
                     </select>
                 </div>
             </div>

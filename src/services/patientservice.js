@@ -50,6 +50,21 @@ export default class PatientService {
     return { role, stationId, currentUser };
   }
 
+  async getArchivedPatientIds() {
+    const { data, error } = await this.supabase
+      .from('patient_basic_info')
+      .select('id, emergency_contact');
+
+    if (error) throw error;
+
+    return new Set(
+      (data || [])
+        .filter((patient) => this.getArchiveStateFromPatient(patient) === 'archived')
+        .map((patient) => patient.id)
+        .filter(Boolean)
+    );
+  }
+
   getArchiveStateFromPatient(patient) {
     const rawContact = patient?.emergency_contact;
     if (rawContact && typeof rawContact === 'object' && !Array.isArray(rawContact)) {
@@ -172,9 +187,10 @@ export default class PatientService {
       }));
   }
 
-  async getAllPatients() {
+  async getAllPatients({ includeArchived = false } = {}) {
     try {
       const { role, stationId } = await this.getCurrentUserAccess();
+      const archivedPatientIds = includeArchived ? new Set() : await this.getArchivedPatientIds();
 
       let patientsQuery = this.supabase
         .from('patient_basic_info')
@@ -326,9 +342,10 @@ export default class PatientService {
         };
       };
 
-      // Return all patients including postpartum and missed delivery
-      // Filter out only archived (not pregnant and not delivered and not missed)
+      // Return all patients including postpartum and missed delivery,
+      // but hide archived patients by default unless explicitly requested.
       return patients
+        .filter((patient) => includeArchived || !archivedPatientIds.has(patient.id))
         .map(mapPatient)
         .filter(p => p && p.id && p.name !== 'Unknown Patient');
     } catch (error) {
@@ -792,8 +809,10 @@ export default class PatientService {
     }
   }
 
-  async getPrenatalVisits() {
+  async getPrenatalVisits({ includeArchived = false } = {}) {
   try {
+    const archivedPatientIds = includeArchived ? new Set() : await this.getArchivedPatientIds();
+
     // Get all deliveries to identify postpartum patients
     const { data: deliveries } = await this.supabase
       .from('deliveries')
@@ -865,6 +884,8 @@ export default class PatientService {
       risk: visit.calculated_risk || 'Normal',
       riskFactors: visit.risk_factors || ''
     })).filter(visit => {
+      // Skip archived records by default unless the caller explicitly asks for them
+      if (!includeArchived && archivedPatientIds.has(visit.patientId)) return false;
       // Skip postpartum patients
       if (deliveredPatients.has(visit.patientId)) return false;
       // Skip patients who are no longer pregnant
@@ -878,8 +899,11 @@ export default class PatientService {
   }
 }
 
-  async getAppointments(startDate, endDate, view = 'day') {
+  async getAppointments(startDate, endDate, view = 'day', options = {}) {
   try {
+    const { includeArchived = false } = options;
+    const archivedPatientIds = includeArchived ? new Set() : await this.getArchivedPatientIds();
+
     // Get all deliveries to identify postpartum patients
     const { data: deliveries } = await this.supabase
       .from('deliveries')
@@ -944,6 +968,7 @@ export default class PatientService {
       risk: appointment.next_appt_type === 'Postpartum Visit' ? 'Postpartum' : 'Normal',
       nextAppt: appointment.next_appt_date
     })).filter(appointment => {
+      if (!includeArchived && archivedPatientIds.has(appointment.patientId)) return false;
       // Skip postpartum patients
       if (deliveredPatients.has(appointment.patientId)) return false;
       // Skip patients who are no longer pregnant
@@ -1389,8 +1414,10 @@ async getSlotCount(dateStr, timeSlot) {
   return count || 0;
 }
 
-  async getHighRiskStats() {
+  async getHighRiskStats({ includeArchived = false } = {}) {
     try {
+      const archivedPatientIds = includeArchived ? new Set() : await this.getArchivedPatientIds();
+
       // Get all deliveries to identify postpartum patients
       const { data: deliveries } = await this.supabase
         .from('deliveries')
@@ -1433,6 +1460,7 @@ async getSlotCount(dateStr, timeSlot) {
       const latestVisitMap = new Map();
       (visits || []).forEach(v => {
         if (!v.patient_id) return;
+        if (!includeArchived && archivedPatientIds.has(v.patient_id)) return;
         // Skip postpartum patients
         if (deliveredPatients.has(v.patient_id)) return;
         const preg = latestPregMap.get(v.patient_id);
@@ -1458,8 +1486,10 @@ async getSlotCount(dateStr, timeSlot) {
     }
   }
 
-async getHighRiskPatients() {
+async getHighRiskPatients({ includeArchived = false } = {}) {
   try {
+    const archivedPatientIds = includeArchived ? new Set() : await this.getArchivedPatientIds();
+
     // First get all deliveries to identify postpartum patients
     const { data: deliveries } = await this.supabase
       .from('deliveries')
@@ -1518,6 +1548,7 @@ async getHighRiskPatients() {
     const latestAttendedByPatient = new Map();
     (data || []).forEach((visit) => {
       if (!visit.patient_id || visit.status !== 'Attended') return;
+      if (!includeArchived && archivedPatientIds.has(visit.patient_id)) return;
       // Only consider patients who haven't delivered
       if (deliveredPatients.has(visit.patient_id)) return;
       // Only consider patients who are still pregnant
