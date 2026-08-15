@@ -428,7 +428,7 @@ const Dashboard = () => {
                 <div className="dash-col-left">
 
                     {/* UPCOMING APPOINTMENTS */}
-                    <div className="card">
+                    <div className="card clickable-card" onClick={() => navigate('/dashboard/prenatal')}>
                         <div className="card-header">
                             <h2 className="card-title">
                                 <CalendarCheck size={16} />
@@ -485,7 +485,7 @@ const Dashboard = () => {
                     </div>
 
                     {/* VACCINE & SUPPLEMENT STOCK */}
-                    <div className="card">
+                    <div className="card clickable-card" onClick={() => navigate('/dashboard/inventory')}>
                         <div className="card-header">
                             <h2 className="card-title">
                                 <Syringe size={16} />Vaccine &amp; Supplement
@@ -563,53 +563,30 @@ const Dashboard = () => {
                 {/* ── Right Column ── */}
                 <div className="dash-col-right">
 
-                    {/* MATERNAL HEALTH SNAPSHOT */}
+                    {/* PATIENT OVERVIEW */}
                     <div className="card">
                         <div className="card-header">
-                            <h2 className="card-title"><Activity size={16} />Health Snapshot</h2>
+                            <h2 className="card-title"><Users size={16} />Patient Overview</h2>
                         </div>
-                        <p className="card-description">Shows the common pregnancy conditions for easier monitoring.</p>
-                        <div className="snapshot-list">
+                        <div className="patient-overview-list">
                             {loadingHealth ? (
-                                <div style={{textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)'}}>
-                                    Loading health data...
-                                </div>
-                            ) : healthSnapshot.conditions.length > 0 ? (
-                                healthSnapshot.conditions.map((m) => (
-                                    <div key={m.label} className="snapshot-item">
-                                        <div className="snapshot-label-row">
-                                            <span className="snapshot-label">{m.label}</span>
-                                            <span className="snapshot-pct">{m.pct}%</span>
-                                        </div>
-                                        <MiniBar value={m.pct} max={100} color={m.color} />
-                                    </div>
-                                ))
-                            ) : (
-                                <div style={{textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)'}}>
-                                    No health data available.
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Trimester Distribution */}
-                        <div className="section-divider" />
-                        <p className="section-sub-title">Trimester Distribution</p>
-                        <div className="tri-dist">
-                            {loadingHealth ? (
-                                <div style={{textAlign: 'center', padding: '16px', color: 'var(--color-text-muted)'}}>
+                                <div style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
                                     Loading...
                                 </div>
-                            ) : healthSnapshot.trimesterDist.length > 0 ? (
-                                healthSnapshot.trimesterDist.map((t) => (
-                                    <div key={t.label} className={`tri-block tri-block--${t.color}`}>
-                                        <span className="tri-count">{t.count}</span>
-                                        <span className="tri-label">{t.label}</span>
-                                    </div>
-                                ))
                             ) : (
-                                <div style={{textAlign: 'center', padding: '16px', color: 'var(--color-text-muted)'}}>
-                                    No data available.
-                                </div>
+                                <>
+                                    <div className="po-row po-row--total">
+                                        <span className="po-count">{liveStats.totalPatients}</span>
+                                        <span className="po-label">Total Patients</span>
+                                    </div>
+                                    <div className="po-divider" />
+                                    {healthSnapshot.trimesterDist.map(t => (
+                                        <div key={t.label} className={`po-row po-row--${t.color}`}>
+                                            <span className="po-count">{t.count}</span>
+                                            <span className="po-label">{t.label}</span>
+                                        </div>
+                                    ))}
+                                </>
                             )}
                         </div>
                     </div>

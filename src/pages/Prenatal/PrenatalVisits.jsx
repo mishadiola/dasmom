@@ -1000,55 +1000,6 @@ const PrenatalVisits = () => {
                 )}
             </div>
 
-            {archiveFilter !== 'archived' && archivedVisitRows.length > 0 && (
-                <div className="pv-table-section" style={{ marginTop: '18px' }}>
-                    <div className="section-header-row">
-                        <h2 className="section-title">
-                            <ArchiveRestore size={18} /> Archived Patients
-                        </h2>
-                    </div>
-                    <div className="table-responsive">
-                        <table className="pv-table">
-                            <thead>
-                                <tr>
-                                    <th>Patient Name</th>
-                                    <th>Risk Level</th>
-                                    <th>Last Visit</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {archivedVisitRows.slice(0, 5).map(visit => (
-                                    <tr key={`archived-${visit.id}`}>
-                                        <td>
-                                            <div className="p-info">
-                                                <span className="p-name">{visit.patientName}</span>
-                                                <span className="p-id">{visit.patientId}</span>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <span className={`risk-tag risk-${visit.risk?.replace(' ', '-').toLowerCase() || 'normal'}`}>
-                                                {visit.risk || 'Normal'}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <div className="visit-datetime">
-                                                <span className="visit-date">{formatReadableDate(visit.visitDateOnly)}</span>
-                                                <span className="visit-time">{visit.visitTime || 'TBD'}</span>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <span className={`status-badge status-${visit.status?.toLowerCase() || 'scheduled'}`}>
-                                                {visit.status || 'Scheduled'}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            )}
 
             {/* VISITS TABLE */}
             <div className="pv-table-section">

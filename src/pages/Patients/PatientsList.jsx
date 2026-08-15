@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import {
     Search, Filter, Plus, ChevronLeft, ChevronRight, ChevronDown, Check,
     Eye, Edit, Archive, ArchiveRestore, Activity, CalendarPlus,
-    FileText, User, MapPin, Clock, AlertTriangle,
+    FileText, User, Users, MapPin, Clock, AlertTriangle,
     X, CheckCircle2
 } from 'lucide-react';
 import '../../styles/pages/PatientsList.css';
@@ -455,7 +455,12 @@ const PatientsList = () => {
 
             <div className="page-header">
                 <div>
-                    <h1 className="page-title">Patient Profiles</h1>
+                    <div className="page-title-row">
+                        <h1 className="page-title">Patient Profiles</h1>
+                        <span className="title-statistic-badge">
+                            Total Patients: <strong>{patients.length}</strong>
+                        </span>
+                    </div>
                     <p className="page-subtitle">Manage and monitor all registered pregnant patients</p>
                 </div>
                 <div className="header-actions">
@@ -709,30 +714,30 @@ const PatientsList = () => {
                                         <td>
                                             <div className="actions-group">
                                                 <button type="button" className="action-btn view-btn" data-tooltip="View Profile" onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/${p.id}?from=patients`); }}>
-                                                <Eye size={16} />
+                                                    <Eye size={16} />
                                                 </button>
 
                                                 <button type="button" className="action-btn vitals-btn" data-tooltip="Record Vitals" onClick={(e) => { e.stopPropagation(); openVitalsModal(p.id); }} disabled={modalLoading.vitals}>
-                                                <Activity size={16} />
+                                                    <Activity size={16} />
                                                 </button>
 
                                                 <button type="button" className="action-btn edit-btn" data-tooltip="Edit Patient" onClick={(e) => { e.stopPropagation(); openEditModal(p.id); }} disabled={modalLoading.edit}>
-                                                <Edit size={16} />
+                                                    <Edit size={16} />
                                                 </button>
 
                                                 {(p.archiveStatus || 'active') === 'archived' ? (
                                                     <button type="button" className="action-btn restore-btn" data-tooltip="Restore Patient" onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleRestore(p.id);
+                                                        e.stopPropagation();
+                                                        handleRestore(p.id);
                                                     }}>
-                                                    <ArchiveRestore size={16} />
+                                                        <ArchiveRestore size={16} />
                                                     </button>
                                                 ) : (
                                                     <button type="button" className="action-btn archive-btn" data-tooltip="Archive Patient" onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleArchive(p.id);
+                                                        e.stopPropagation();
+                                                        handleArchive(p.id);
                                                     }}>
-                                                    <Archive size={16} />
+                                                        <Archive size={16} />
                                                     </button>
                                                 )}
                                             </div>

@@ -697,3 +697,44 @@
     .detail-grid { grid-template-columns: 1fr; }
     .mh-checklist { grid-template-columns: 1fr; }
 }
+
+/* ════════════════════════════
+   STATION DISTRIBUTION
+════════════════════════════ */
+.station-dist-list {
+    padding: 12px 16px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.station-dist-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.station-dist-item > span {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--color-text);
+}
+
+.station-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 6px;
+    background: #f0f2f5;
+    border-radius: 4px;
+    overflow: hidden;
+    flex: 1;
+    position: relative;
+}
+
+.station-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--color-rose), var(--color-rose-dark));
+    transition: width 0.5s ease;
+}

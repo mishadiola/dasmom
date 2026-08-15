@@ -421,6 +421,63 @@ const DeliveryOutcomes = () => {
                         </div>
                     </div>
                 </div>
+                {/* ── Right Column: Panels ── */}
+                <div className="do-side-col" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {/* Station Distribution */}
+                    <div className="do-card">
+                        <div className="do-card-head">
+                            <h2>
+                                <MapPin size={16} /> Station Distribution
+                            </h2>
+                        </div>
+                        <div className="station-dist-list">
+                            {(() => {
+                                const counts = {};
+                                filtered.forEach((p) => {
+                                    const st = p.station || 'Unassigned';
+                                    counts[st] = (counts[st] || 0) + 1;
+                                });
+                                const dist = Object.entries(counts)
+                                    .map(([name, count]) => ({ name, count }))
+                                    .sort((a, b) => b.count - a.count);
+                                
+                                return (
+                                    <>
+                                        {dist.map((b) => (
+                                            <div key={b.name} className="station-dist-item">
+                                                <span>{b.name}</span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <div className="station-bar-wrap">
+                                                        <div
+                                                            className="station-bar-fill"
+                                                            style={{
+                                                                width: `${(b.count / Math.max(filtered.length, 1)) * 100}%`,
+                                                            }}
+                                                        ></div>
+                                                    </div>
+                                                    <span
+                                                        style={{
+                                                            fontSize: '12px',
+                                                            fontWeight: 700,
+                                                            color: 'var(--color-rose)',
+                                                            minWidth: '20px',
+                                                            textAlign: 'right',
+                                                        }}
+                                                    >
+                                                        {b.count}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {dist.length === 0 && (
+                                            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', textAlign: 'center', margin: '20px 0' }}>No records found.</p>
+                                        )}
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     );
@@ -434,6 +491,8 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
     const [searchResults, setSearchResults] = useState([]);
     const [localStaff, setLocalStaff] = useState(staffList);
     const [staffLoading, setStaffLoading] = useState(true);
+    const [validationErrors, setValidationErrors] = useState([]);
+    const [touchedFields, setTouchedFields] = useState(new Set());
     const [form, setForm] = useState({
         patientId: '',
         patientName: '',
@@ -461,6 +520,101 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
         postpartumDate: '',
         notes: ''
     });
+    const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
+
+    // Validation logic per section
+    const validateSection = (sectionId, formData = form) => {
+        const errors = [];
+        if (sectionId === 'patient') {
+            if (!formData.patientId) errors.push('Patient');
+        }
+        if (sectionId === 'delivery') {
+            if (!formData.deliveryDate) errors.push('Delivery Date');
+            if (!formData.deliveryType) errors.push('Delivery Type');
+        }
+        if (sectionId === 'baby') {
+            formData.newborns.forEach((nb, i) => {
+                const label = formData.newborns.length > 1 ? ` (Newborn ${i + 1})` : '';
+                if (!nb.babyName?.trim()) errors.push(`Baby Name${label}`);
+                if (!nb.babyCondition) errors.push(`Baby Condition${label}`);
+            });
+        }
+        // complications and plan have no required fields
+        return errors;
+    };
+
+    const validateAllSections = (formData = form) => {
+        const sectionOrder = ['patient', 'delivery', 'complications', 'baby', 'plan'];
+        for (const sec of sectionOrder) {
+            const errors = validateSection(sec, formData);
+            if (errors.length > 0) {
+                return { valid: false, firstFailSection: sec, errors };
+            }
+        }
+        return { valid: true, firstFailSection: null, errors: [] };
+    };
+
+    const handleNextClick = () => {
+        const SECTIONS_LIST = [
+            { id: 'patient' }, { id: 'delivery' }, { id: 'complications' }, { id: 'baby' }, { id: 'plan' }
+        ];
+        const currentErrors = validateSection(section);
+        if (currentErrors.length > 0) {
+            setValidationErrors(currentErrors);
+            // Mark all relevant fields as touched
+            const newTouched = new Set(touchedFields);
+            currentErrors.forEach(e => newTouched.add(e));
+            setTouchedFields(newTouched);
+            return;
+        }
+        setValidationErrors([]);
+        const idx = SECTIONS_LIST.findIndex(s => s.id === section);
+        if (idx < SECTIONS_LIST.length - 1) {
+            setSection(SECTIONS_LIST[idx + 1].id);
+        }
+    };
+
+    const handleTabClick = (targetSectionId) => {
+        const SECTIONS_LIST = [
+            { id: 'patient' }, { id: 'delivery' }, { id: 'complications' }, { id: 'baby' }, { id: 'plan' }
+        ];
+        const currentIdx = SECTIONS_LIST.findIndex(s => s.id === section);
+        const targetIdx = SECTIONS_LIST.findIndex(s => s.id === targetSectionId);
+
+        // Going backward is always allowed
+        if (targetIdx <= currentIdx) {
+            setValidationErrors([]);
+            setSection(targetSectionId);
+            return;
+        }
+
+        // Going forward: validate all sections between current and target
+        for (let i = currentIdx; i < targetIdx; i++) {
+            const errors = validateSection(SECTIONS_LIST[i].id);
+            if (errors.length > 0) {
+                setValidationErrors(errors);
+                setSection(SECTIONS_LIST[i].id);
+                const newTouched = new Set(touchedFields);
+                errors.forEach(e => newTouched.add(e));
+                setTouchedFields(newTouched);
+                return;
+            }
+        }
+
+        setValidationErrors([]);
+        setSection(targetSectionId);
+    };
+
+    // Helper: check if a specific field should show error state
+    const hasFieldError = (fieldName) => {
+        return validationErrors.includes(fieldName) || touchedFields.has(fieldName);
+    };
+
+    // Check live field validity for red-border display
+    const isFieldInvalid = (fieldName, value) => {
+        if (!touchedFields.has(fieldName) && !validationErrors.includes(fieldName)) return false;
+        return !value || (typeof value === 'string' && !value.trim());
+    };
      useEffect(() => {
         const loadStaff = async () => {
             setStaffLoading(true);
@@ -501,6 +655,10 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
 
     const updateForm = (key, value) => {
         setForm(prev => ({ ...prev, [key]: value }));
+        // Clear validation errors when user fills in a field
+        if (value && validationErrors.length > 0) {
+            setValidationErrors(prev => prev.filter(e => !e.toLowerCase().includes(key.toLowerCase())));
+        }
         if (key === 'patientName' && value.length > 2) {
             handleSearch(value);
         }
@@ -586,6 +744,9 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                 notes: ''
             });
             setSection('patient');
+            setValidationErrors([]);
+            setTouchedFields(new Set());
+            setSaveSuccessMsg('');
         }
     }, [editDelivery, show]);
     const handleSearch = async (query) => {
@@ -634,6 +795,13 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
             attendingStaffName: ''
         }));
         setSearchResults([]);
+        // Clear patient-related validation errors
+        setValidationErrors(prev => prev.filter(e => e !== 'Patient'));
+        setTouchedFields(prev => {
+            const next = new Set(prev);
+            next.delete('Patient');
+            return next;
+        });
     };
 
     const updateNewborn = (index, key, value) => {
@@ -641,6 +809,17 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
             ...prev,
             newborns: prev.newborns.map((n, i) => i === index ? { ...n, [key]: value } : n)
         }));
+        // Clear related validation errors when filling baby fields
+        if (value && (key === 'babyName' || key === 'babyCondition')) {
+            const label = form.newborns.length > 1 ? ` (Newborn ${index + 1})` : '';
+            const fieldLabel = key === 'babyName' ? `Baby Name${label}` : `Baby Condition${label}`;
+            setValidationErrors(prev => prev.filter(e => e !== fieldLabel));
+            setTouchedFields(prev => {
+                const next = new Set(prev);
+                next.delete(fieldLabel);
+                return next;
+            });
+        }
     };
 
     const addNewborn = () => {
@@ -683,11 +862,18 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
     };
 
     const handleSave = async () => {
-        if (!form.patientId || !form.deliveryDate) {
-            alert('Please select a patient and delivery date.');
+        // Final cross-section validation
+        const result = validateAllSections();
+        if (!result.valid) {
+            setValidationErrors(result.errors);
+            setSection(result.firstFailSection);
+            const newTouched = new Set(touchedFields);
+            result.errors.forEach(e => newTouched.add(e));
+            setTouchedFields(newTouched);
             return;
         }
 
+        setValidationErrors([]);
         setLoading(true);
         try {
             const deliveryData = {
@@ -732,11 +918,11 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
             }
             
             onSuccess();
-            onClose();
-            alert(deliveryId ? '✅ Delivery updated successfully!' : '✅ Delivery recorded and vaccinations scheduled successfully!');
+            setSaveSuccessMsg(deliveryId ? 'Delivery updated successfully!' : 'Delivery recorded and vaccinations scheduled successfully!');
+            setTimeout(() => { setSaveSuccessMsg(''); onClose(); }, 1800);
         } catch (err) {
             console.error('Save failed:', err);
-            alert(`❌ Save failed: ${err.message}`);
+            setValidationErrors([`Save failed: ${err.message}`]);
         } finally {
             setLoading(false);
         }
@@ -771,13 +957,34 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                             <button
                                 key={s.id}
                                 className={`modal-nav-btn ${section === s.id ? 'active' : ''}`}
-                                onClick={() => setSection(s.id)}
+                                onClick={() => handleTabClick(s.id)}
                             >
                                 <Icon size={14} /> {s.label}
                             </button>
                         );
                     })}
                 </div>
+
+                {/* Validation error banner */}
+                {validationErrors.length > 0 && (
+                    <div className="delivery-validation-banner">
+                        <div className="delivery-validation-banner-content">
+                            <AlertTriangle size={15} />
+                            <div>
+                                <span className="delivery-validation-title">Please complete the required fields before continuing.</span>
+                                <span className="delivery-validation-missing">Missing: {validationErrors.join(', ')}</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Success banner */}
+                {saveSuccessMsg && (
+                    <div className="delivery-success-banner">
+                        <CheckCircle2 size={15} />
+                        <span>{saveSuccessMsg}</span>
+                    </div>
+                )}
 
                 <div className="modal-body">
                     {section === 'patient' && (
@@ -790,6 +997,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                                     value={form.patientName}
                                     onChange={e => updateForm('patientName', e.target.value)}
                                     autoComplete="off"
+                                    className={isFieldInvalid('Patient', form.patientId) ? 'field-error' : ''}
                                 />
                                 {searchResults.length > 0 && (
                                     <div className="search-results-dropdown">
@@ -816,7 +1024,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                         <div className="form-grid-2">
                             <div className="form-group">
                                 <label>Date <span className="req">*</span></label>
-                                <input type="date" value={form.deliveryDate} onChange={e => updateForm('deliveryDate', e.target.value)} />
+                                <input type="date" value={form.deliveryDate} onChange={e => updateForm('deliveryDate', e.target.value)} className={isFieldInvalid('Delivery Date', form.deliveryDate) ? 'field-error' : ''} />
                             </div>
                             <div className="form-group">
                                 <label>Time</label>
@@ -824,7 +1032,8 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                             </div>
                             <div className="form-group">
                                 <label>Type <span className="req">*</span></label>
-                                <select value={form.deliveryType} onChange={e => updateForm('deliveryType', e.target.value)}>
+                                <select value={form.deliveryType} onChange={e => updateForm('deliveryType', e.target.value)} className={isFieldInvalid('Delivery Type', form.deliveryType) ? 'field-error' : ''}>
+                                    <option value="">Select type...</option>
                                     <option value="NSD">NSD (Normal)</option>
                                     <option value="CS">CS (Cesarean)</option>
                                     <option value="Breech">Breech</option>
@@ -885,8 +1094,8 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                                     </div>
                                     <div className="form-grid-2">
                                         <div className="form-group">
-                                            <label>Baby Name</label>
-                                            <input type="text" value={newborn.babyName} onChange={e => updateNewborn(index, 'babyName', e.target.value)} placeholder="Optional" />
+                                            <label>Baby Name <span className="req">*</span></label>
+                                            <input type="text" value={newborn.babyName} onChange={e => updateNewborn(index, 'babyName', e.target.value)} placeholder="Enter baby name" className={isFieldInvalid(form.newborns.length > 1 ? `Baby Name (Newborn ${index + 1})` : 'Baby Name', newborn.babyName?.trim()) ? 'field-error' : ''} />
                                         </div>
                                         <div className="form-group">
                                             <label>Birth Weight (kg)</label>
@@ -916,12 +1125,13 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                                             <input type="number" min="0" max="10" value={newborn.apgar5} onChange={e => updateNewborn(index, 'apgar5', e.target.value)} />
                                         </div>
                                         <div className="form-group">
-                                            <label>Baby Condition</label>
-                                            <select value={newborn.babyCondition} onChange={e => updateNewborn(index, 'babyCondition', e.target.value)}>
-                                                <option>Healthy</option>
-                                                <option>NICU</option>
-                                                <option>Special Care</option>
-                                                <option>Stillbirth</option>
+                                            <label>Baby Condition <span className="req">*</span></label>
+                                            <select value={newborn.babyCondition} onChange={e => updateNewborn(index, 'babyCondition', e.target.value)} className={isFieldInvalid(form.newborns.length > 1 ? `Baby Condition (Newborn ${index + 1})` : 'Baby Condition', newborn.babyCondition) ? 'field-error' : ''}>
+                                                <option value="">Select condition...</option>
+                                                <option value="Healthy">Healthy</option>
+                                                <option value="NICU">NICU</option>
+                                                <option value="Special Care">Special Care</option>
+                                                <option value="Stillbirth">Stillbirth</option>
                                             </select>
                                         </div>
                                     </div>
@@ -963,10 +1173,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                     {section !== 'plan' ? (
                         <button 
                             className="btn btn-primary" 
-                            onClick={() => {
-                                const idx = SECTIONS.findIndex(s => s.id === section);
-                                setSection(SECTIONS[idx + 1].id);
-                            }}
+                            onClick={handleNextClick}
                         >
                             Next →
                         </button>

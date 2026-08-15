@@ -527,15 +527,48 @@
 .vacc-expanded-row td { padding: 0 !important; border: none; }
 .expand-detail {
     background: #fafbfc;
-    border-top: 1px solid #f0f2f5;
-    border-bottom: 1px solid #f0f2f5;
-    padding: 12px 20px;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    font-size: 12px;
+    border: 1px solid #eef0f4;
+    border-radius: 8px;
+    margin: 8px 16px 16px 16px;
+    padding: 16px 20px;
+    display: block;
+    font-size: 13px;
     color: var(--color-text-muted);
 }
+.expand-detail h4 {
+    margin: 0 0 12px 0;
+    color: var(--color-text);
+    font-size: 14px;
+    font-weight: 700;
+}
+.mini-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+}
+.mini-table th {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid #eef0f4;
+    font-weight: 700;
+}
+.mini-table td {
+    padding: 10px 12px;
+    font-size: 13px;
+    color: var(--color-text);
+    border-bottom: 1px solid #f4f6f9;
+    word-break: break-word;
+}
+.mini-col-item { width: 35%; min-width: 180px; }
+.mini-col-dose { width: 12%; }
+.mini-col-date { width: 15%; }
+.mini-col-exp { width: 15%; }
+.mini-col-status { width: 13%; }
+.mini-col-actions { width: 10%; }
+
 .expand-detail strong { color: var(--color-text); }
 
 /* Empty state */
@@ -547,6 +580,23 @@
 .vacc-empty svg { color: #d1d5db; }
 .vacc-empty h4 { font-size: 16px; font-weight: 700; color: var(--color-text); margin: 12px 0 6px; }
 .vacc-empty p { margin: 0; font-size: 13.5px; }
+
+/* Specific Column Widths for Main Table */
+.col-num { width: 3%; padding-right: 4px !important; }
+.col-patient { width: 28%; min-width: 250px; }
+.col-type { width: 7%; }
+.col-admin { width: 10%; }
+.col-pending { width: 9%; }
+.col-date { width: 12%; }
+.col-status { width: 10%; }
+.col-staff { width: 12%; }
+.col-actions { width: 7%; min-width: 60px; text-align: center !important; }
+
+.patient-col-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
 
 /* Table responsive */
 .table-responsive {

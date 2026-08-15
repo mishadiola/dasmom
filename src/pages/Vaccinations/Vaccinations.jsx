@@ -7,7 +7,8 @@ import { useNavigate } from 'react-router-dom';
 import {
     Search, Filter, Plus, X, Syringe, Pill, Package,
     AlertTriangle, CheckCircle2, Clock, XCircle,
-    Eye, Edit2, Calendar, Download, RefreshCw, ChevronDown, ChevronUp, AlertCircle, Baby
+    Eye, Edit2, Calendar, Download, RefreshCw, ChevronDown, ChevronUp, AlertCircle, Baby,
+    ChevronLeft, ChevronRight
 } from 'lucide-react';
 import NewbornVaccinationModal from '../../components/NewbornVaccinationModal';
 import '../../styles/pages/Vaccinations.css';
@@ -1069,6 +1070,15 @@ const Vaccinations = () => {
     const [sortField, setSortField] = useState('');
     const [sortAsc, setSortAsc] = useState(true);
 
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
+
+    // Reset pagination on filter changes
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [activeTab, searchTerm, filters, archiveFilter]);
+
     const fetchData = async () => {
         try {
             setLoading(true);
@@ -1502,6 +1512,13 @@ const Vaccinations = () => {
     })));
     patientEntries.forEach(p => displayList.push(p));
 
+    // Pagination logic for Vaccines
+    const totalVaccinePages = Math.ceil(displayList.length / itemsPerPage);
+    const paginatedVaccines = displayList.slice(
+        (currentPage - 1) * itemsPerPage,
+        currentPage * itemsPerPage
+    );
+
     // ── Filter + sort supplements ──
     const filteredSupplements = supplementRecords
         .filter(s => {
@@ -1520,6 +1537,61 @@ const Vaccinations = () => {
             const va = a[sortField] ?? ''; const vb = b[sortField] ?? '';
             return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
         });
+
+    // Group supplement records by patient
+    const displayListSupplements = [];
+    const suppPatientMap = {};
+
+    filteredSupplements.forEach(s => {
+        const key = s.patientId || s.patientName;
+        if (!key) return;
+
+        if (!suppPatientMap[key]) {
+            suppPatientMap[key] = {
+                id: key,
+                patientId: s.patientId,
+                patientName: s.patientName || 'Unknown',
+                station: s.station || 'Unknown',
+                type: s.type || 'Mother',
+                administeredCount: 0,
+                pendingCount: 0,
+                lastAdministered: null,
+                nextScheduled: null,
+                lastStaff: null,
+                records: []
+            };
+        }
+        suppPatientMap[key].records.push(s);
+        if (s.status === 'Completed') {
+            suppPatientMap[key].administeredCount++;
+            const date = new Date(s.date);
+            if (!suppPatientMap[key].lastAdministered || date > new Date(suppPatientMap[key].lastAdministered)) {
+                suppPatientMap[key].lastAdministered = s.date;
+                suppPatientMap[key].lastStaff = s.staff;
+            }
+        } else if (s.status === 'Ongoing' || s.status === 'Pending') {
+            suppPatientMap[key].pendingCount++;
+            if (s.nextDue) {
+                const scheduledDate = new Date(s.nextDue);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                if (scheduledDate >= today) {
+                    if (!suppPatientMap[key].nextScheduled || scheduledDate < new Date(suppPatientMap[key].nextScheduled)) {
+                        suppPatientMap[key].nextScheduled = s.nextDue;
+                    }
+                }
+            }
+        }
+    });
+
+    Object.values(suppPatientMap).forEach(p => displayListSupplements.push(p));
+
+    // Pagination logic for Supplements
+    const totalSuppPages = Math.ceil(displayListSupplements.length / itemsPerPage);
+    const paginatedSupplements = displayListSupplements.slice(
+        (currentPage - 1) * itemsPerPage,
+        currentPage * itemsPerPage
+    );
 
     const SortBtn = ({ field }) => (
         <button className="sort-btn" onClick={() => handleSort(field)}>
@@ -1639,7 +1711,7 @@ const Vaccinations = () => {
 
                     <div className="vacc-card">
                         <div className="vacc-card-head">
-                            <h2>{activeTab === 'vaccines' ? <><Syringe size={16} /> Vaccination Records</> : <><Pill size={16} /> Supplement Records</>}</h2>
+                            <h2>{activeTab === 'vaccines' ? <><Syringe size={16} /> Distribution Records</> : <><Pill size={16} /> Distribution Records</>}</h2>
                             <div className="vacc-legend">
                                 {activeTab === 'vaccines' ? (
                                     <>
@@ -1663,42 +1735,46 @@ const Vaccinations = () => {
                                 <table className="vacc-table">
                                     <thead>
                                         <tr>
-                                            <th><span onClick={() => handleSort('patientName')} className="sortable-head">Patient <SortBtn field="patientName" /></span></th>
-                                            <th>Type</th>
-                                            <th>Administered</th>
-                                            <th>Pending</th>
-                                            <th>Last Given</th>
-                                            <th>Next Scheduled</th>
-                                            <th>Status</th>
-                                            <th>Last Staff</th>
-                                            <th>Actions</th>
+                                            <th className="col-num">#</th>
+                                            <th className="col-patient"><span onClick={() => handleSort('patientName')} className="sortable-head">Patient <SortBtn field="patientName" /></span></th>
+                                            <th className="col-type">Type</th>
+                                            <th className="col-admin">Administered</th>
+                                            <th className="col-pending">Pending</th>
+                                            <th className="col-date">Last Given</th>
+                                            <th className="col-date">Next Scheduled</th>
+                                            <th className="col-status">Status</th>
+                                            <th className="col-staff">Last Staff</th>
+                                            <th className="col-actions">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {displayList.map(item => (
+                                        {paginatedVaccines.map((item, index) => (
                                             <React.Fragment key={`patient-${item.id}`}>
                                                 <tr className={`vacc-row vacc-row--grouped`}>
-                                                    <td>
-                                                        <button className="expand-btn" onClick={() => toggleRow(item.id)}>
-                                                            {expandedRows[item.id] ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                                                        </button>
-                                                        <div className="vacc-patient">
-                                                            <div className="vacc-avatar">{item.patientName ? item.patientName.split(' ').map(n=>n[0]).slice(0,2).join('') : '—'}</div>
-                                                            <div>
-                                                                <span className="vacc-name">{item.patientName}</span>
-                                                                {item.isNewborn && <span className="vacc-pid">Mother: {item.motherName} · {item.station}</span>}
-                                                                {!item.isNewborn && <span className="vacc-pid">{item.station}</span>}
+                                                    <td className="col-num">{(currentPage - 1) * itemsPerPage + index + 1}</td>
+                                                    <td className="col-patient">
+                                                        <div className="patient-col-wrapper">
+                                                            <button className="expand-btn" onClick={() => toggleRow(item.id)}>
+                                                                {expandedRows[item.id] ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                                                            </button>
+                                                            <div className="vacc-patient">
+                                                                <div className="vacc-avatar">{item.patientName ? item.patientName.split(' ').map(n=>n[0]).slice(0,2).join('') : '—'}</div>
+                                                                <div>
+                                                                    <span className="vacc-name">{item.patientName}</span>
+                                                                    {item.isNewborn && <span className="vacc-pid">Mother: {item.motherName} · {item.station}</span>}
+                                                                    {!item.isNewborn && <span className="vacc-pid">{item.station}</span>}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td><span className={`type-badge type-${item.type.toLowerCase()}`}>{item.type}</span></td>
-                                                    <td>{item.administeredCount} administered</td>
-                                                    <td>{item.pendingCount} pending</td>
-                                                    <td className="vacc-date">{item.lastAdministered || <span className="not-yet">None</span>}</td>
-                                                    <td className="vacc-date">{item.nextScheduled || <span className="not-yet">None scheduled</span>}</td>
-                                                    <td><span className={`vacc-status ${item.pendingCount > 0 ? 'status-pending' : 'status-completed'}`}>{item.pendingCount > 0 ? 'Pending' : 'Completed'}</span></td>
-                                                    <td className="vacc-staff">{item.lastStaff || <span className="not-yet">—</span>}</td>
-                                                    <td>
+                                                    <td className="col-type"><span className={`type-badge type-${item.type.toLowerCase()}`}>{item.type}</span></td>
+                                                    <td className="col-admin">{item.administeredCount} administered</td>
+                                                    <td className="col-pending">{item.pendingCount} pending</td>
+                                                    <td className="col-date">{item.lastAdministered || <span className="not-yet">None</span>}</td>
+                                                    <td className="col-date">{item.nextScheduled || <span className="not-yet">None scheduled</span>}</td>
+                                                    <td className="col-status"><span className={`vacc-status ${item.pendingCount > 0 ? 'status-pending' : 'status-completed'}`}>{item.pendingCount > 0 ? 'Pending' : 'Completed'}</span></td>
+                                                    <td className="col-staff">{item.lastStaff || <span className="not-yet">—</span>}</td>
+                                                    <td className="col-actions">
                                                         <div className="row-actions">
                                                             <button className="action-btn view-btn" title="View Vaccination Schedule" onClick={() => toggleRow(item.id)}><Eye size={13} /></button>
                                                             <button className="action-btn record-btn" title="Record Vaccine" onClick={() => setRecordModal({ mode: 'vaccine', initialPatientType: item.type, initialPatientName: item.patientName })}><Plus size={13} /></button>
@@ -1707,29 +1783,29 @@ const Vaccinations = () => {
                                                 </tr>
                                                 {expandedRows[item.id] && (
                                                     <tr className="vacc-expanded-row">
-                                                        <td colSpan="9">
+                                                        <td colSpan="10">
                                                             <div className="expand-detail">
                                                                 <h4>Vaccination Schedule for {item.patientName}</h4>
                                                                 <table className="mini-table">
                                                                     <thead>
                                                                         <tr>
-                                                                            <th>Vaccine</th>
-                                                                            <th>Dose</th>
-                                                                            <th>Date Given</th>
-                                                                            <th>Scheduled</th>
-                                                                            <th>Status</th>
-                                                                            <th>Actions</th>
+                                                                            <th className="mini-col-item">Vaccine</th>
+                                                                            <th className="mini-col-dose">Dose</th>
+                                                                            <th className="mini-col-date">Date Given</th>
+                                                                            <th className="mini-col-date">Scheduled</th>
+                                                                            <th className="mini-col-status">Status</th>
+                                                                            <th className="mini-col-actions">Actions</th>
                                                                         </tr>
                                                                     </thead>
                                                                     <tbody>
                                                                         {item.records.map((record, idx) => (
                                                                             <tr key={idx}>
-                                                                                <td>{record.vaccine}</td>
-                                                                                <td>{record.dose}</td>
-                                                                                <td>{record.date || <span className="not-yet">Not given</span>}</td>
-                                                                                <td>{record.nextDue || <span className="not-yet">—</span>}</td>
-                                                                                <td><span className={`vacc-status ${vaccineStatusClass(record.status)}`}>{record.status}</span></td>
-                                                                                <td>
+                                                                                <td className="mini-col-item"><strong>{record.vaccine}</strong></td>
+                                                                                <td className="mini-col-dose">{record.dose}</td>
+                                                                                <td className="mini-col-date">{record.date || <span className="not-yet">Not given</span>}</td>
+                                                                                <td className="mini-col-date">{record.nextDue || <span className="not-yet">—</span>}</td>
+                                                                                <td className="mini-col-status"><span className={`vacc-status ${vaccineStatusClass(record.status)}`}>{record.status}</span></td>
+                                                                                <td className="mini-col-actions">
                                                                                     {record.status === 'Pending' && (
                                                                                         <button 
                                                                                             className="action-btn record-btn" 
@@ -1751,10 +1827,33 @@ const Vaccinations = () => {
                                             </React.Fragment>
                                         ))}
                                         {displayList.length === 0 && (
-                                            <tr><td colSpan="9" className="vacc-empty"><Syringe size={24} /><p>No vaccination records match your filters.</p></td></tr>
+                                            <tr><td colSpan="10" className="vacc-empty"><Syringe size={24} /><p>No vaccination records match your filters.</p></td></tr>
                                         )}
                                     </tbody>
                                 </table>
+                                {totalVaccinePages > 1 && (
+                                    <div className="pagination-wrap">
+                                        <span>
+                                            Showing {(currentPage - 1) * itemsPerPage + 1}–
+                                            {Math.min(currentPage * itemsPerPage, displayList.length)} of {displayList.length}
+                                        </span>
+                                        <div className="pagination-controls">
+                                            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="page-btn">
+                                                <ChevronLeft size={16} />
+                                            </button>
+                                            <div className="page-numbers">
+                                                {Array.from({ length: totalVaccinePages }, (_, i) => i + 1).map(num => (
+                                                    <button key={num} className={`page-num ${currentPage === num ? 'active' : ''}`} onClick={() => setCurrentPage(num)}>
+                                                        {num}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <button disabled={currentPage === totalVaccinePages} onClick={() => setCurrentPage(p => p + 1)} className="page-btn">
+                                                <ChevronRight size={16} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -1764,59 +1863,127 @@ const Vaccinations = () => {
                                 <table className="vacc-table">
                                     <thead>
                                         <tr>
-                                            <th>Patient</th>
-                                            <th>Type</th>
-                                            <th>Supplement</th>
-                                            <th>Dose</th>
-                                            <th>Start Date</th>
-                                            <th>Expiration</th>
-                                            <th>End Date</th>
-                                            <th>Status</th>
-                                            <th>Staff</th>
-                                            <th>Actions</th>
+                                            <th className="col-num">#</th>
+                                            <th className="col-patient"><span onClick={() => handleSort('patientName')} className="sortable-head">Patient <SortBtn field="patientName" /></span></th>
+                                            <th className="col-type">Type</th>
+                                            <th className="col-admin">Administered</th>
+                                            <th className="col-pending">Pending</th>
+                                            <th className="col-date">Last Given</th>
+                                            <th className="col-date">Next Scheduled</th>
+                                            <th className="col-status">Status</th>
+                                            <th className="col-staff">Last Staff</th>
+                                            <th className="col-actions">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {filteredSupplements.map(s => (
-                                            <tr key={s.id} className={`vacc-row supp-row--${s.status.toLowerCase()}`}>
-                                                <td>
-                                                    <div className="vacc-patient">
-                                                        <div className="vacc-avatar">{s.patientName.split(' ').map(n=>n[0]).slice(0,2).join('')}</div>
-                                                        <div>
-                                                            <span className="vacc-name">{s.patientName}</span>
-                                                            <span className="vacc-pid">{s.patientId} · {s.station}</span>
+                                        {paginatedSupplements.map((item, index) => (
+                                            <React.Fragment key={`supp-patient-${item.id}`}>
+                                                <tr className={`vacc-row vacc-row--grouped`}>
+                                                    <td className="col-num">{(currentPage - 1) * itemsPerPage + index + 1}</td>
+                                                    <td className="col-patient">
+                                                        <div className="patient-col-wrapper">
+                                                            <button className="expand-btn" onClick={() => toggleRow(item.id)}>
+                                                                {expandedRows[item.id] ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                                                            </button>
+                                                            <div className="vacc-patient">
+                                                                <div className="vacc-avatar">{item.patientName ? item.patientName.split(' ').map(n=>n[0]).slice(0,2).join('') : '—'}</div>
+                                                                <div>
+                                                                    <span className="vacc-name">{item.patientName}</span>
+                                                                    <span className="vacc-pid">{item.station}</span>
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                </td>
-                                                <td><span className={`type-badge type-${s.type.toLowerCase()}`}>{s.type}</span></td>
-                                                <td className="vacc-item-name">{s.supplement}</td>
-                                                <td className="vacc-dose">{s.dose}</td>
-                                                <td className="vacc-date">{s.date}</td>
-                                                <td className="vacc-date">
-                                                    {s.expirationDate ? (
-                                                        <>
-                                                            <span className={`exp-status ${s.expirationClass}`}>{s.expirationStatus}</span>
-                                                            <span className="exp-date">{s.expirationDate}</span>
-                                                        </>
-                                                    ) : <span className="not-yet">—</span>}
-                                                </td>
-                                                <td className="vacc-date">{s.nextDue}</td>
-                                                <td><span className={`vacc-status ${supplementStatusClass(s.status)}`}>{s.status}</span></td>
-                                                <td className="vacc-staff">{s.staff}</td>
-                                                <td>
-                                                    <div className="row-actions">
-                                                        <button className="action-btn view-btn" title="View Details" onClick={() => setExpirationSummaryModal({ patientId: s.patientId, patientName: s.patientName, type: 'supplement' })}><Eye size={13} /></button>
-                                                        <button className="action-btn record-btn" title="Record Intake" onClick={() => setRecordModal({ mode: 'supplement' })}><Plus size={13} /></button>
-                                                        <button className="action-btn edit-btn" title="Edit"><Edit2 size={13} /></button>
-                                                    </div>
-                                                </td>
-                                            </tr>
+                                                    </td>
+                                                    <td className="col-type"><span className={`type-badge type-${item.type.toLowerCase()}`}>{item.type}</span></td>
+                                                    <td className="col-admin">{item.administeredCount} administered</td>
+                                                    <td className="col-pending">{item.pendingCount} pending</td>
+                                                    <td className="col-date">{item.lastAdministered || <span className="not-yet">None</span>}</td>
+                                                    <td className="col-date">{item.nextScheduled || <span className="not-yet">None scheduled</span>}</td>
+                                                    <td className="col-status"><span className={`vacc-status ${item.pendingCount > 0 ? 'status-pending' : 'status-completed'}`}>{item.pendingCount > 0 ? 'Pending' : 'Completed'}</span></td>
+                                                    <td className="col-staff">{item.lastStaff || <span className="not-yet">—</span>}</td>
+                                                    <td className="col-actions">
+                                                        <div className="row-actions">
+                                                            <button className="action-btn view-btn" title="View Supplement Schedule" onClick={() => toggleRow(item.id)}><Eye size={13} /></button>
+                                                            <button className="action-btn record-btn" title="Record Supplement" onClick={() => setRecordModal({ mode: 'supplement' })}><Plus size={13} /></button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                {expandedRows[item.id] && (
+                                                    <tr className="vacc-expanded-row">
+                                                        <td colSpan="10">
+                                                            <div className="expand-detail">
+                                                                <h4>Supplement Distribution History for {item.patientName}</h4>
+                                                                <table className="mini-table">
+                                                                    <thead>
+                                                                        <tr>
+                                                                            <th className="mini-col-item">Supplement</th>
+                                                                            <th className="mini-col-dose">Dose</th>
+                                                                            <th className="mini-col-date">Start Date</th>
+                                                                            <th className="mini-col-exp">Expiration</th>
+                                                                            <th className="mini-col-date">End Date</th>
+                                                                            <th className="mini-col-status">Status</th>
+                                                                            <th className="mini-col-actions">Actions</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        {item.records.map((record, idx) => (
+                                                                            <tr key={idx}>
+                                                                                <td className="mini-col-item"><strong>{record.supplement}</strong></td>
+                                                                                <td className="mini-col-dose">{record.dose}</td>
+                                                                                <td className="mini-col-date">{record.date || <span className="not-yet">Not given</span>}</td>
+                                                                                <td className="mini-col-exp">
+                                                                                    {record.expirationDate ? (
+                                                                                        <>
+                                                                                            <span className={`exp-status ${record.expirationClass}`}>{record.expirationStatus}</span>
+                                                                                            <span className="exp-date">{record.expirationDate}</span>
+                                                                                        </>
+                                                                                    ) : <span className="not-yet">—</span>}
+                                                                                </td>
+                                                                                <td className="mini-col-date">{record.nextDue || <span className="not-yet">—</span>}</td>
+                                                                                <td className="mini-col-status"><span className={`vacc-status ${supplementStatusClass(record.status)}`}>{record.status}</span></td>
+                                                                                <td className="mini-col-actions">
+                                                                                    <div className="row-actions">
+                                                                                        <button className="action-btn edit-btn" title="Edit"><Edit2 size={13} /></button>
+                                                                                    </div>
+                                                                                </td>
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </React.Fragment>
                                         ))}
-                                        {filteredSupplements.length === 0 && (
-                                            <tr><td colSpan="9" className="vacc-empty"><Pill size={24} /><p>No supplement records match your filters.</p></td></tr>
+                                        {displayListSupplements.length === 0 && (
+                                            <tr><td colSpan="10" className="vacc-empty"><Pill size={24} /><p>No supplement records match your filters.</p></td></tr>
                                         )}
                                     </tbody>
                                 </table>
+                                {totalSuppPages > 1 && (
+                                    <div className="pagination-wrap">
+                                        <span>
+                                            Showing {(currentPage - 1) * itemsPerPage + 1}–
+                                            {Math.min(currentPage * itemsPerPage, filteredSupplements.length)} of {filteredSupplements.length}
+                                        </span>
+                                        <div className="pagination-controls">
+                                            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="page-btn">
+                                                <ChevronLeft size={16} />
+                                            </button>
+                                            <div className="page-numbers">
+                                                {Array.from({ length: totalSuppPages }, (_, i) => i + 1).map(num => (
+                                                    <button key={num} className={`page-num ${currentPage === num ? 'active' : ''}`} onClick={() => setCurrentPage(num)}>
+                                                        {num}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <button disabled={currentPage === totalSuppPages} onClick={() => setCurrentPage(p => p + 1)} className="page-btn">
+                                                <ChevronRight size={16} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

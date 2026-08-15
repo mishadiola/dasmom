@@ -13,7 +13,9 @@ import {
   ArrowUpRight,
   AlertCircle,
   Activity,
+  FileText
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import PatientService from '../../services/patientservice';
 import '../../styles/pages/HighRiskCases.css';
 
@@ -268,6 +270,24 @@ const HighRiskCases = () => {
 
   const stationDistribution = getStationDistribution();
 
+  const handleExport = () => {
+    const exportData = filteredPatients.map(p => ({
+        'Patient ID': p.id || '',
+        'Name': p.name || '',
+        'Station': p.station || 'Unassigned',
+        'Age': p.age || 'N/A',
+        'Gestation': p.weeks ? `${p.weeks} weeks` : 'N/A',
+        'Risk Level': p.riskLevel || 'High Risk',
+        'Conditions': p.condition || '',
+        'Next Appointment': p.nextVisit || 'Initial'
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'High Risk Cases');
+    XLSX.writeFile(workbook, 'high_risk_cases.xlsx');
+  };
+
   const getRowClass = (p) => {
     if (p.riskLevel === 'High Risk') return 'row-high-risk';
     if (p.riskLevel === 'Medium Risk') return 'row-moderate-risk';
@@ -289,31 +309,32 @@ const HighRiskCases = () => {
       {/* ── Page Header ── */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">
-            <AlertTriangle
-              size={22}
-              style={{
-                verticalAlign: 'middle',
-                marginRight: '8px',
-                color: 'var(--color-rose)',
-              }}
-            />
-            High Risk Cases
-          </h1>
+          <div className="page-title-row">
+            <h1 className="page-title">
+              <AlertTriangle
+                size={22}
+                style={{
+                  verticalAlign: 'middle',
+                  marginRight: '8px',
+                  color: 'var(--color-rose)',
+                }}
+              />
+              High Risk Cases
+            </h1>
+            <span className="title-statistic-badge">
+              Total High-Risk Cases: <strong>{stats.totalHighRisk}</strong>
+            </span>
+          </div>
           <p className="page-subtitle">
             Dynamic monitoring of critical pregnancies and priority follow‑ups
           </p>
         </div>
 
-        {/* ── Header KPI ── */}
-        <div className="header-kpi-card">
-          <div className="kpi-icon-wrap">
-            <AlertTriangle size={20} />
-          </div>
-          <div>
-            <span className="kpi-label">Total High‑Risk Cases</span>
-            <div className="kpi-value">{stats.totalHighRisk}</div>
-          </div>
+        <div className="header-actions">
+          <button className="btn btn-outline" onClick={handleExport}>
+            <FileText size={16} />
+            Export List
+          </button>
         </div>
       </div>
 
@@ -551,49 +572,6 @@ const HighRiskCases = () => {
 
         {/* ── Right Column: Panels ── */}
         <div className="hr-side-col">
-          {/* Alerts Panel */}
-          <div className="hr-card">
-            <div className="hr-card-head">
-              <h2>
-                <AlertTriangle size={16} /> Critical Alerts
-              </h2>
-            </div>
-            <div className="alerts-list">
-              {filteredPatients
-                .filter((p) => (p.riskLevel || '').toLowerCase().includes('high'))
-                .slice(0, 8)
-                .map((p) => (
-                  <div
-                    key={p.id}
-                    className="alert-item alert-critical"
-                    onClick={() => navigate(`/dashboard/patients/${p.id}?from=high-risk`)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <div className="alert-dot"></div>
-                    <div className="alert-body">
-                      <p>
-                        <strong>{p.name}</strong>
-                      </p>
-                      <p className="alert-reason">
-                        {p.isMultipleBirth ? `${p.pregnancyType} pregnancy` : p.condition}
-                      </p>
-                      {p.isMultipleBirth && <p style={{fontSize: '12px', color: 'var(--color-rose)', fontWeight: 'bold', marginTop: '4px'}}>Multiple births - High Risk</p>}
-                      {p.isBPHighRisk && p.bpStatus && <p style={{fontSize: '12px', color: 'var(--color-rose)', fontWeight: 'bold', marginTop: '4px'}}>BP: {p.bpStatus}</p>}
-                      <div className="alert-footer">
-                        <span>Station: {p.station}</span>
-                        <ArrowUpRight size={12} />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              {filteredPatients.filter((p) =>
-                (p.riskLevel || '').toLowerCase().includes('high')
-              ).length === 0 && (
-                <p className="empty-alerts">No urgent alerts at this time.</p>
-              )}
-            </div>
-          </div>
-
           {/* Station Distribution */}
           <div className="hr-card">
             <div className="hr-card-head">

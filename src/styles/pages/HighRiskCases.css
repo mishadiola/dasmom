@@ -22,51 +22,61 @@
     gap: 20px;
 }
 
-.header-kpi-card {
+/* ── Header Title Statistic ── */
+.page-title-row {
     display: flex;
     align-items: center;
-    gap: 16px;
-    background: white;
-    padding: 12px 24px;
-    border-radius: 16px;
-    border: 1px solid rgba(224, 92, 115, 0.2);
-    box-shadow: 0 4px 15px rgba(224, 92, 115, 0.08);
-    position: relative;
-    overflow: hidden;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    gap: 12px;
 }
 
-.header-kpi-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(224, 92, 115, 0.12);
-}
-
-.kpi-icon-wrap {
-    width: 44px;
-    height: 44px;
-    border-radius: 12px;
+.title-statistic-badge {
+    display: inline-flex;
+    align-items: center;
     background: rgba(224, 92, 115, 0.1);
     color: var(--color-rose);
+    padding: 4px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.title-statistic-badge strong {
+    font-weight: 700;
+    margin-left: 4px;
+}
+
+.header-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+/* ── Buttons ── */
+.btn {
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 7px;
+    padding: 9px 16px;
+    border-radius: 10px;
+    font-family: var(--font);
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+    white-space: nowrap;
 }
 
-.kpi-label {
-    display: block;
-    font-size: 11px;
-    font-weight: 700;
+.btn-outline {
+    background: #fff;
     color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 2px;
+    border: 1.5px solid #eef0f4;
 }
 
-.kpi-value {
-    font-size: 28px;
-    font-weight: 800;
+.btn-outline:hover {
+    border-color: var(--color-rose);
     color: var(--color-rose);
-    line-height: 1;
+    background: rgba(185, 129, 138, 0.04);
 }
 
 /* ════════════════════════════

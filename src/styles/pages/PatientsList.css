@@ -20,6 +20,48 @@
 .header-actions {
     display: flex;
     gap: 12px;
+    align-items: center;
+}
+
+/* ── Header Title Statistic ── */
+.page-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.title-statistic-badge {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(224, 92, 115, 0.1);
+    color: var(--color-rose);
+    padding: 4px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.title-statistic-badge strong {
+    font-weight: 700;
+    margin-left: 4px;
+}
+
+@media (max-width: 768px) {
+    .header-actions {
+        width: 100%;
+        justify-content: flex-start;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .header-actions {
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+    }
 }
 
 /* ══════════════════════════════════════════

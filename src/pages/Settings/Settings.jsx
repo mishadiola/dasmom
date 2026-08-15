@@ -49,7 +49,15 @@ const formatStationName = (station) => {
     // Capitalize first letter of each word
     return station
         .split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+};
+
+// Apply title-case formatting while typing (capitalize first letter of each word, preserve rest)
+const toTitleCaseWhileTyping = (value) => {
+    return value
+        .split(' ')
+        .map(word => word.length > 0 ? word.charAt(0).toUpperCase() + word.slice(1) : word)
         .join(' ');
 };
 
@@ -61,8 +69,6 @@ const normalizeRoleValue = (role) => {
     if (!value) return 'staff';
     if (value === 'super admin' || value === 'admin') return 'admin';
     if (value === 'cho personnel' || value === 'cho personnel') return 'cho personnel';
-    if (value === 'midwife') return 'midwife';
-    if (value === 'doctor') return 'doctor';
     if (value === 'staff') return 'staff';
     return value;
 };
@@ -71,9 +77,7 @@ const formatRoleLabel = (role) => {
     const value = normalizeRoleValue(role);
     if (value === 'cho personnel') return 'CHO Personnel';
     if (value === 'admin') return 'Admin';
-    if (value === 'staff') return 'Staff';
-    if (value === 'midwife') return 'Midwife';
-    if (value === 'doctor') return 'Doctor';
+    if (value === 'staff') return 'Station Staff';
     return value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
 };
 
@@ -191,8 +195,8 @@ const AddUserModal = ({ onClose, onSuccess }) => {
                                     <option key={role.id} value={role.value}>{formatRoleLabel(role.value)}</option>
                                 )) : (
                                     <>
-                                        <option value="staff">Staff</option>
                                         <option value="admin">Admin</option>
+                                        <option value="staff">Station Staff</option>
                                         <option value="cho personnel">CHO Personnel</option>
                                     </>
                                 )}
@@ -206,7 +210,8 @@ const AddUserModal = ({ onClose, onSuccess }) => {
                                     placeholder="Select or type barangay..."
                                     value={form.station}
                                     onChange={e => {
-                                        update('station', e.target.value);
+                                        const formatted = toTitleCaseWhileTyping(e.target.value);
+                                        update('station', formatted);
                                         setShowStationDropdown(true);
                                     }}
                                     onFocus={() => setShowStationDropdown(true)}
@@ -277,12 +282,12 @@ const AddUserModal = ({ onClose, onSuccess }) => {
                         <div className="form-group form-group--full">
                             <label>Password <span className="req">*</span></label>
                             <div className="pwd-wrap">
-                                <input type={showPwd ? 'text' : 'password'} placeholder="Min. 8 characters" value={form.password} onChange={e => update('password', e.target.value)} />
-                                <button type="button" className="pwd-toggle" onClick={() => setShowPwd(v => !v)}>
-                                    {showPwd ? <EyeOff size={14} /> : <Eye size={14} />}
-                                </button>
+                                <input type={showPwd ? 'text' : 'password'} placeholder="Min. 8 characters" value={form.password} onChange={e => update('password', e.target.value)} style={{ paddingRight: '12px' }} />
                                 <button type="button" className="btn btn-outline pwd-gen-btn" onClick={genPassword}><Key size={13} /> Auto-generate</button>
                             </div>
+                            <button type="button" onClick={() => setShowPwd(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', color: 'var(--color-text-muted)', fontSize: '12px', cursor: 'pointer', padding: '4px 0' }}>
+                                {showPwd ? <EyeOff size={14} /> : <Eye size={14} />} {showPwd ? 'Hide Password' : 'Show Password'}
+                            </button>
                             <span className="form-hint">Use 8+ characters with mixed case, numbers, and symbols.</span>
                         </div>
                     </div>
@@ -393,8 +398,8 @@ const EditUserModal = ({ staff, onClose, onSuccess }) => {
                                     <option key={role.id} value={role.value}>{formatRoleLabel(role.value)}</option>
                                 )) : (
                                     <>
-                                        <option value="staff">Staff</option>
                                         <option value="admin">Admin</option>
+                                        <option value="staff">Station Staff</option>
                                         <option value="cho personnel">CHO Personnel</option>
                                     </>
                                 )}
@@ -407,7 +412,11 @@ const EditUserModal = ({ staff, onClose, onSuccess }) => {
                                     type="text"
                                     placeholder="Select or type barangay..."
                                     value={form.station}
-                                    onChange={e => update('station', e.target.value)}
+                                    onChange={e => {
+                                        const formatted = toTitleCaseWhileTyping(e.target.value);
+                                        update('station', formatted);
+                                        setShowStationDropdown(true);
+                                    }}
                                     onFocus={() => setShowStationDropdown(true)}
                                     style={{ paddingRight: '32px' }}
                                 />
@@ -485,9 +494,8 @@ const EditUserModal = ({ staff, onClose, onSuccess }) => {
 const UserAccountsTab = () => {
     const staffService = new StaffService();
     const [search, setSearch] = useState('');
-    const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
     const [roleFilter, setRoleFilter] = useState('All');
-    const [statusFilter, setStatusFilter] = useState('All');
+    const [statusFilter, setStatusFilter] = useState('All'); // 'All' | 'Active' | 'Archived'
     const [showModal, setShowModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [selectedStaff, setSelectedStaff] = useState(null);
@@ -525,9 +533,16 @@ const UserAccountsTab = () => {
         const s = search.toLowerCase();
         const matchS = u.name.toLowerCase().includes(s) || u.email.toLowerCase().includes(s);
         const matchR = roleFilter === 'All' || normalizeRoleValue(u.role) === normalizeRoleValue(roleFilter);
-        const matchSt = statusFilter === 'All' || u.status === statusFilter;
-        const matchArchive = archiveFilter === 'all' || (u.archiveStatus || 'active') === archiveFilter;
-        return matchS && matchR && matchSt && matchArchive;
+        
+        const isArchived = u.archiveStatus === 'archived';
+        let matchSt = true;
+        if (statusFilter === 'Active') {
+            matchSt = !isArchived;
+        } else if (statusFilter === 'Archived') {
+            matchSt = isArchived;
+        }
+
+        return matchS && matchR && matchSt;
     });
 
     const handleModalSuccess = () => {
@@ -575,14 +590,9 @@ const UserAccountsTab = () => {
                     ))}
                 </select>
                 <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="set-select">
-                    <option value="All">All Statuses</option>
-                    <option>Active</option>
-                    <option>Inactive</option>
-                </select>
-                <select value={archiveFilter} onChange={e => setArchiveFilter(e.target.value)} className="set-select">
-                    <option value="active">Active</option>
-                    <option value="archived">Archived</option>
-                    <option value="all">All</option>
+                    <option value="All">Status</option>
+                    <option value="Active">Active</option>
+                    <option value="Archived">Archived</option>
                 </select>
                 <button className="btn btn-primary" onClick={() => setShowModal(true)}><Plus size={15} /> Add Staff</button>
             </div>
@@ -659,9 +669,8 @@ const UserAccountsTab = () => {
    TAB 3: SYSTEM SETTINGS
 ════════════════════════════ */
 const SystemSettingsTab = () => {
-    const [notifs, setNotifs] = useState({ highRiskEmail: true, appointmentReminder: true, lowStock: true, missedFollowUp: false });
+    const [notifs, setNotifs] = useState({ highRiskEmail: true, appointmentReminder: true, lowStock: true });
     const [reports, setReports] = useState({ format: 'PDF', includeStation: true, includePatientSummary: true });
-    const [dash, setDash] = useState({ landingPage: 'Dashboard', showHighRisk: true, showAlerts: true, showStats: true });
 
     const toggle = (group, setter, key) => setter(prev => ({ ...prev, [key]: !prev[key] }));
 
@@ -702,11 +711,6 @@ const SystemSettingsTab = () => {
                         desc="Alert when vaccine or supplement stock falls below threshold"
                         onChange={() => toggle(notifs, setNotifs, 'lowStock')}
                     />
-                    <ToggleSwitch
-                        value={notifs.missedFollowUp} label="Missed Follow-up Alerts"
-                        desc="Notify staff when patients miss a scheduled visit"
-                        onChange={() => toggle(notifs, setNotifs, 'missedFollowUp')}
-                    />
                 </div>
 
                 {/* Reports */}
@@ -732,37 +736,6 @@ const SystemSettingsTab = () => {
                         value={reports.includePatientSummary} label="Include Patient Summary"
                         desc="Add individual patient summaries in reports"
                         onChange={() => toggle(reports, setReports, 'includePatientSummary')}
-                    />
-                </div>
-
-                {/* Dashboard */}
-                <div className="settings-section">
-                    <div className="section-header"><Monitor size={16} /><h3>Dashboard Settings</h3></div>
-                    <div className="setting-row">
-                        <div className="setting-info">
-                            <span className="setting-label">Default Landing Page</span>
-                            <span className="setting-desc">Page shown after login</span>
-                        </div>
-                        <select className="set-select" value={dash.landingPage} onChange={e => setDash(p => ({ ...p, landingPage: e.target.value }))}>
-                            <option>Dashboard</option>
-                            <option>Patient Profiles</option>
-                            <option>High-Risk Cases</option>
-                        </select>
-                    </div>
-                    <ToggleSwitch
-                        value={dash.showHighRisk} label="Show High-Risk Widget"
-                        desc="Display high-risk patient count on dashboard"
-                        onChange={() => toggle(dash, setDash, 'showHighRisk')}
-                    />
-                    <ToggleSwitch
-                        value={dash.showAlerts} label="Show Alerts Panel"
-                        desc="Display system alerts on dashboard"
-                        onChange={() => toggle(dash, setDash, 'showAlerts')}
-                    />
-                    <ToggleSwitch
-                        value={dash.showStats} label="Show Summary Stats"
-                        desc="Display stat cards at top of dashboard"
-                        onChange={() => toggle(dash, setDash, 'showStats')}
                     />
                 </div>
             </div>

@@ -432,57 +432,58 @@ const PostpartumRecords = () => {
                 {/* ── RIGHT: Alerts + Station ── */}
                 <div className="pp-side-col">
 
-                    {/* Alerts Panel */}
+                    {/* Station Distribution */}
                     <div className="pp-card">
                         <div className="pp-card-head">
-                            <h2><AlertTriangle size={17} /> System Alerts</h2>
+                            <h2>
+                                <MapPin size={16} /> Station Distribution
+                            </h2>
                         </div>
-                        <div className="alerts-list">
-                            {filtered.filter(m => m.recoveryStatus === 'Complication').map(m => (
-                                <div key={m.id} className="alert-item alert-critical">
-                                    <div className="alert-dot"></div>
-                                    <div className="alert-body">
-                                        <p>{m.name} has complications: {m.complications}</p>
-                                        <span>Patient ID: {m.patientId}</span>
-                                    </div>
-                                </div>
-                            ))}
-                            {filtered.filter(m => m.followUpStatus === 'Missed').map(m => (
-                                <div key={m.id} className="alert-item alert-warning">
-                                    <div className="alert-dot"></div>
-                                    <div className="alert-body">
-                                        <p>{m.name} missed follow-up on {m.nextFollowUp}</p>
-                                        <span>Station: {m.station}</span>
-                                    </div>
-                                </div>
-                            ))}
-                            {filtered.filter(m => m.recoveryStatus === 'Complication' || m.followUpStatus === 'Missed').length === 0 && (
-                                <p className="pp-empty-side">No urgent alerts found.</p>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Station Recovery Distribution */}
-                    <div className="pp-card">
-                        <div className="pp-card-head">
-                            <h2><MapPin size={17} /> Station Recovery</h2>
-                        </div>
-                        <div className="station-list">
-                            {stationStats.map(b => {
-                                const pct = Math.round((b.recovered / b.total) * 100) || 0;
+                        <div className="station-dist-list">
+                            {(() => {
+                                const counts = {};
+                                filtered.forEach((p) => {
+                                    const st = p.station || 'Unassigned';
+                                    counts[st] = (counts[st] || 0) + 1;
+                                });
+                                const dist = Object.entries(counts)
+                                    .map(([name, count]) => ({ name, count }))
+                                    .sort((a, b) => b.count - a.count);
+                                
                                 return (
-                                    <div key={b.name} className="station-row">
-                                        <div className="station-name-row">
-                                            <span className="station-name">{b.name}</span>
-                                            <span className="station-count">{b.recovered}/{b.total} recovered</span>
-                                        </div>
-                                        <div className="station-bar-bg">
-                                            <div className="station-bar-fill" style={{ width: `${pct}%`, background: pct >= 70 ? '#6db8a0' : pct >= 50 ? '#e8b84b' : '#e05c73' }}></div>
-                                        </div>
-                                    </div>
+                                    <>
+                                        {dist.map((b) => (
+                                            <div key={b.name} className="station-dist-item">
+                                                <span>{b.name}</span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <div className="station-bar-wrap">
+                                                        <div
+                                                            className="station-bar-fill"
+                                                            style={{
+                                                                width: `${(b.count / Math.max(filtered.length, 1)) * 100}%`,
+                                                            }}
+                                                        ></div>
+                                                    </div>
+                                                    <span
+                                                        style={{
+                                                            fontSize: '12px',
+                                                            fontWeight: 700,
+                                                            color: 'var(--color-rose)',
+                                                            minWidth: '20px',
+                                                            textAlign: 'right',
+                                                        }}
+                                                    >
+                                                        {b.count}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {dist.length === 0 && (
+                                            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', textAlign: 'center', margin: '20px 0' }}>No records found.</p>
+                                        )}
+                                    </>
                                 );
-                            })}
-                            {stationStats.length === 0 && <p className="pp-empty-side">No station data available.</p>}
+                            })()}
                         </div>
                     </div>
 

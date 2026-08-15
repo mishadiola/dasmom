@@ -49,7 +49,10 @@ export default class StaffService {
         id: role.id,
         value: role.user_type?.trim() || '',
         label: this.formatRoleLabel(role.user_type),
-      })).filter(role => role.value);
+      })).filter(role => {
+        const val = role.value.toLowerCase();
+        return ['admin', 'staff', 'cho personnel'].includes(val);
+      });
     } catch (error) {
       console.error('❌ getAllUserRoles:', error);
       return [];
@@ -62,10 +65,7 @@ export default class StaffService {
     const normalized = value.toLowerCase();
     if (normalized === 'cho personnel') return 'CHO Personnel';
     if (normalized === 'admin') return 'Admin';
-    if (normalized === 'staff') return 'Staff';
-    if (normalized === 'midwife') return 'Midwife';
-    if (normalized === 'doctor') return 'Doctor';
-    if (normalized === 'patient') return 'Patient';
+    if (normalized === 'staff') return 'Station Staff';
     return value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
   }
 
