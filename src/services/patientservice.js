@@ -1060,7 +1060,9 @@ export default class PatientService {
       }
     });
 
-    const patientId = authUser.id;
+    // Extract first 4 numeric digits from the UID
+    const numericOnly = authUser.id.replace(/[^0-9]/g, '');
+    const patientId = numericOnly.substring(0, 4);
 
     const { error: patientInsertError } = await this.supabase.from('patient_basic_info').insert({
       id: patientId,

@@ -571,7 +571,7 @@ const AddPatient = () => {
             }
         }
 
-        const requiredPersonal = ['firstName', 'middleName', 'lastName', 'dob', 'civilStatus', 'email', 'contactNumber', 'address', 'station', 'municipality', 'province'];
+        const requiredPersonal = ['firstName', 'lastName', 'dob', 'civilStatus', 'email', 'contactNumber', 'address', 'station', 'municipality', 'province'];
         const requiredEmergency = sameAsPatientAddress
             ? ['emName', 'emRel', 'emPhone']
             : ['emName', 'emRel', 'emPhone', 'emAddress'];

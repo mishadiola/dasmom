@@ -11,6 +11,13 @@ import '../../styles/pages/PatientsList.css';
 import PatientService from '../../services/patientservice';
 import EditPatientModal from '../../components/Patient/EditPatientModal';
 
+// Helper function to extract first 4 numeric digits from patient ID
+const getShortPatientId = (id) => {
+    if (!id) return '';
+    const numericOnly = String(id).replace(/[^0-9]/g, '');
+    return numericOnly.substring(0, 4) || String(id).substring(0, 4);
+};
+
 const EMPTY_VITALS = {
     bpSystolic: '',
     bpDiastolic: '',
@@ -75,7 +82,7 @@ const RecordVitalsModal = ({ patient, onSave, onClose, supplements }) => {
                 <div className="pv-modal-header">
                     <div>
                         <h2 className="pv-modal-title">Record Vital Signs</h2>
-                        <p className="pv-modal-sub">{patient.name} &middot; {patient.id}</p>
+                        <p className="pv-modal-sub">{patient.name} &middot; {getShortPatientId(patient.id)}</p>
                     </div>
                     <button className="pv-modal-close" onClick={onClose}><X size={18} /></button>
                 </div>
@@ -662,7 +669,7 @@ const PatientsList = () => {
                                 paginatedPatients.map((p, index) => (
                                     <tr key={p.id} className="table-row">
                                         <td className="cell-number">{(currentPage - 1) * itemsPerPage + index + 1}</td>
-                                        <td className="cell-id">{p.id}</td>
+                                        <td className="cell-id">{getShortPatientId(p.id)}</td>
 
                                         <td>
                                             <div className="cell-name-wrap" onClick = {() => navigate(`/dashboard/patients/${p.id}?from=patients`)}>

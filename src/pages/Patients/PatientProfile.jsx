@@ -25,6 +25,13 @@ const formatReadableDate = (dateString) => {
     return date.toLocaleDateString('en-US', options);
 };
 
+// Helper function to extract first 4 numeric digits from patient ID
+const getShortPatientId = (id) => {
+    if (!id) return '';
+    const numericOnly = String(id).replace(/[^0-9]/g, '');
+    return numericOnly.substring(0, 4) || String(id).substring(0, 4);
+};
+
 // Helper function for proper ordinal formatting
 const getOrdinalSuffix = (num) => {
     if (!num) return '';
@@ -183,7 +190,7 @@ const PatientProfile = () => {
             <body>
                 <div class="header">
                     <h1 class="patient-name">${p.name}</h1>
-                    <p class="patient-info">Patient ID: ${p.id} | Age: ${p.age} years | Station: ${p.station}</p>
+                    <p class="patient-info">Patient ID: ${getShortPatientId(p.id)} | Age: ${p.age} years | Station: ${p.station}</p>
                     <p class="patient-info">Risk Level: <span class="risk-badge">${p.risk || 'Normal'}</span></p>
                     <p class="patient-info">Generated on: ${new Date().toLocaleDateString()}</p>
                 </div>
@@ -415,7 +422,7 @@ const PatientProfile = () => {
             <body>
                 <div class="header">
                     <h1 class="patient-name">${p.name}</h1>
-                    <p class="patient-info">Patient ID: ${p.id} | Age: ${p.age} years | Station: ${p.station} | Risk: ${p.risk}</p>
+                    <p class="patient-info">Patient ID: ${getShortPatientId(p.id)} | Age: ${p.age} years | Station: ${p.station} | Risk: ${p.risk}</p>
                     <p class="patient-info">Prenatal Visits Schedule</p>
                     <p class="patient-info">Generated on: ${new Date().toLocaleDateString()}</p>
                 </div>
@@ -506,7 +513,7 @@ const PatientProfile = () => {
                             </span>
                         </div>
                         <p className="profile-meta">
-                            ID: {p.id.slice(0, 8)}... · {p.age} years old · <MapPin size={12} /> {p.station}
+                            ID: {getShortPatientId(p.id)} · {p.age} years old · <MapPin size={12} /> {p.station}
                         </p>
                     </div>
                 </div>
@@ -573,7 +580,7 @@ const PatientProfile = () => {
                                 <div className="mc-body grid-2-col">
                                     <div className="mc-field">
                                         <label>Patient ID</label>
-                                        <span>{p.id.split('-')[0].toUpperCase()}</span>
+                                        <span>{getShortPatientId(p.id)}</span>
                                     </div>
                                     <div className="mc-field">
                                         <label>Date of Birth</label>
