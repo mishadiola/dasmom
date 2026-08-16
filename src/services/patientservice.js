@@ -34,8 +34,25 @@ export default class PatientService {
 
   async getCurrentUserAccess() {
     const currentUser = await authService.getAuthUser();
-    const role = (currentUser?.role || '').toLowerCase();
+    let role = (currentUser?.role || '').toLowerCase();
     let stationId = null;
+
+    if (!role && currentUser?.id) {
+      const { data: userRow } = await this.supabase
+        .from('users')
+        .select('usertype')
+        .eq('id', currentUser.id)
+        .maybeSingle();
+
+      if (userRow?.usertype) {
+        const { data: userTypeRow } = await this.supabase
+          .from('user_type')
+          .select('user_type')
+          .eq('id', userRow.usertype)
+          .maybeSingle();
+        role = (userTypeRow?.user_type || '').toLowerCase();
+      }
+    }
 
     if (role === 'cho personnel' || role === 'staff') {
       const { data } = await this.supabase
@@ -1417,18 +1434,27 @@ async getSlotCount(dateStr, timeSlot) {
   async getHighRiskStats({ includeArchived = false } = {}) {
     try {
       const archivedPatientIds = includeArchived ? new Set() : await this.getArchivedPatientIds();
+      const { role, stationId } = await this.getCurrentUserAccess();
+      const stationPatientIds = new Set();
 
-      // Get all deliveries to identify postpartum patients
+      if (['cho personnel', 'staff'].includes(role)) {
+        if (!stationId) return { highRiskCount: 0 };
+        const { data: patientRows } = await this.supabase
+          .from('patient_basic_info')
+          .select('id')
+          .eq('station_ass', stationId);
+        (patientRows || []).forEach((row) => stationPatientIds.add(row.id));
+      }
+
       const { data: deliveries } = await this.supabase
         .from('deliveries')
         .select('mother_id');
-      
+
       const deliveredPatients = new Set();
       (deliveries || []).forEach(d => {
         if (d.mother_id) deliveredPatients.add(d.mother_id);
       });
 
-      // Get latest attended visits with risk
       const { data: visits, error } = await this.supabase
         .from('prenatal_visits')
         .select('patient_id, calculated_risk, created_at')
@@ -1437,7 +1463,6 @@ async getSlotCount(dateStr, timeSlot) {
 
       if (error) throw error;
 
-      // Get latest pregnancy status
       const { data: pregnancies, error: pregError } = await this.supabase
         .from('pregnancy_info')
         .select('patient_id, pregn_postp, created_at')
@@ -1448,6 +1473,7 @@ async getSlotCount(dateStr, timeSlot) {
       const latestPregMap = new Map();
       (pregnancies || []).forEach(p => {
         if (!p.patient_id) return;
+        if (stationPatientIds.size > 0 && !stationPatientIds.has(p.patient_id)) return;
         const existing = latestPregMap.get(p.patient_id);
         const currentTime = new Date(p.created_at).getTime() || 0;
         const existingTime = existing ? new Date(existing.created_at).getTime() || 0 : 0;
@@ -1456,16 +1482,15 @@ async getSlotCount(dateStr, timeSlot) {
         }
       });
 
-      // Get latest attended visit per patient
       const latestVisitMap = new Map();
       (visits || []).forEach(v => {
         if (!v.patient_id) return;
+        if (stationPatientIds.size > 0 && !stationPatientIds.has(v.patient_id)) return;
         if (!includeArchived && archivedPatientIds.has(v.patient_id)) return;
-        // Skip postpartum patients
         if (deliveredPatients.has(v.patient_id)) return;
         const preg = latestPregMap.get(v.patient_id);
         if (!preg || preg.pregn_postp?.toLowerCase() !== 'pregnant') return;
-        
+
         const existing = latestVisitMap.get(v.patient_id);
         if (!existing || new Date(v.created_at) > new Date(existing.created_at)) {
           latestVisitMap.set(v.patient_id, v);
@@ -1477,9 +1502,7 @@ async getSlotCount(dateStr, timeSlot) {
                visit.calculated_risk.toLowerCase().includes('high');
       }).length;
 
-      return {
-        highRiskCount
-      };
+      return { highRiskCount };
     } catch (err) {
       console.error('Error fetching high risk stats:', err);
       return { highRiskCount: 0 };
@@ -1489,27 +1512,37 @@ async getSlotCount(dateStr, timeSlot) {
 async getHighRiskPatients({ includeArchived = false } = {}) {
   try {
     const archivedPatientIds = includeArchived ? new Set() : await this.getArchivedPatientIds();
+    const { role, stationId } = await this.getCurrentUserAccess();
+    const stationPatientIds = new Set();
 
-    // First get all deliveries to identify postpartum patients
+    if (['cho personnel', 'staff'].includes(role)) {
+      if (!stationId) return [];
+      const { data: patientRows } = await this.supabase
+        .from('patient_basic_info')
+        .select('id')
+        .eq('station_ass', stationId);
+      (patientRows || []).forEach((row) => stationPatientIds.add(row.id));
+    }
+
     const { data: deliveries } = await this.supabase
       .from('deliveries')
       .select('mother_id')
       .order('delivery_date', { ascending: false });
-    
+
     const deliveredPatients = new Set();
     (deliveries || []).forEach(d => {
       if (d.mother_id) deliveredPatients.add(d.mother_id);
     });
 
-    // Get latest pregnancy status for each patient
     const { data: pregnancies } = await this.supabase
       .from('pregnancy_info')
       .select('patient_id, pregn_postp, created_at')
       .order('created_at', { ascending: false });
-    
+
     const latestPregMap = new Map();
     (pregnancies || []).forEach(p => {
       if (!p.patient_id) return;
+      if (stationPatientIds.size > 0 && !stationPatientIds.has(p.patient_id)) return;
       const existing = latestPregMap.get(p.patient_id);
       const currentTime = new Date(p.created_at).getTime() || 0;
       const existingTime = existing ? new Date(existing.created_at).getTime() || 0 : 0;
@@ -1548,13 +1581,12 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     const latestAttendedByPatient = new Map();
     (data || []).forEach((visit) => {
       if (!visit.patient_id || visit.status !== 'Attended') return;
+      if (stationPatientIds.size > 0 && !stationPatientIds.has(visit.patient_id)) return;
       if (!includeArchived && archivedPatientIds.has(visit.patient_id)) return;
-      // Only consider patients who haven't delivered
       if (deliveredPatients.has(visit.patient_id)) return;
-      // Only consider patients who are still pregnant
       const preg = latestPregMap.get(visit.patient_id);
       if (!preg || preg.pregn_postp?.toLowerCase() !== 'pregnant') return;
-      
+
       if (!latestAttendedByPatient.has(visit.patient_id)) {
         latestAttendedByPatient.set(visit.patient_id, visit);
       }

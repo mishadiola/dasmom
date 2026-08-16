@@ -62,6 +62,77 @@ const toTitleCaseWhileTyping = (value) => {
 };
 
 /* ════════════════════════════
+   ADD STATION MODAL
+════════════════════════════ */
+const AddStationModal = ({ onClose, onSuccess }) => {
+    const staffService = new StaffService();
+    const [stationName, setStationName] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+
+        if (!stationName.trim()) {
+            setError('Please enter a station name');
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            await staffService.addStation(stationName.trim());
+            setError('');
+            setStationName('');
+            onSuccess?.();
+            onClose();
+        } catch (err) {
+            console.error('Failed to create station:', err);
+            setError(err.message || 'Failed to create station. Please try again.');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="modal-backdrop" onClick={onClose}>
+            <div className="set-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+                <div className="modal-header">
+                    <div><h2><Plus size={20} /> Add New Station</h2><p>Create a new station / barangay.</p></div>
+                    <button className="modal-close" onClick={onClose}><X size={20} /></button>
+                </div>
+                <div className="modal-body">
+                    {error && (
+                        <div className="form-error" style={{ padding: '12px', backgroundColor: '#fee', borderLeft: '4px solid #f66', marginBottom: '16px', borderRadius: '4px', color: '#c33' }}>
+                            <AlertCircle size={14} style={{ display: 'inline', marginRight: '6px' }} />
+                            {error}
+                        </div>
+                    )}
+                    <div className="form-group">
+                        <label>Station / Barangay Name <span className="req">*</span></label>
+                        <input
+                            type="text"
+                            placeholder="e.g. Poblacion, Salawag"
+                            value={stationName}
+                            onChange={e => setStationName(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && handleSubmit(e)}
+                            disabled={submitting}
+                            autoFocus
+                        />
+                    </div>
+                </div>
+                <div className="modal-footer">
+                    <button className="btn btn-outline" onClick={onClose} disabled={submitting}>Cancel</button>
+                    <button className="btn btn-primary" onClick={handleSubmit} disabled={submitting}>
+                        <CheckCircle2 size={15} /> {submitting ? 'Creating...' : 'Create Station'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+/* ════════════════════════════
    ADD USER MODAL
 ════════════════════════════ */
 const normalizeRoleValue = (role) => {
@@ -88,6 +159,7 @@ const AddUserModal = ({ onClose, onSuccess }) => {
     const [stations, setStations] = useState([]);
     const [roles, setRoles] = useState([]);
     const [showStationDropdown, setShowStationDropdown] = useState(false);
+    const [showAddStationModal, setShowAddStationModal] = useState(false);
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
@@ -204,80 +276,41 @@ const AddUserModal = ({ onClose, onSuccess }) => {
                         </div>
                         <div className="form-group">
                             <label>Assign Station / Barangay</label>
-                            <div style={{ position: 'relative' }}>
-                                <input
-                                    type="text"
-                                    placeholder="Select or type barangay..."
-                                    value={form.station}
-                                    onChange={e => {
-                                        const formatted = toTitleCaseWhileTyping(e.target.value);
-                                        update('station', formatted);
-                                        setShowStationDropdown(true);
-                                    }}
-                                    onFocus={() => setShowStationDropdown(true)}
-                                    style={{ paddingRight: '32px' }}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowStationDropdown(!showStationDropdown)}
-                                    style={{
-                                        position: 'absolute',
-                                        right: '8px',
-                                        top: '50%',
-                                        transform: 'translateY(-50%)',
-                                        background: 'none',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        padding: '4px',
-                                    }}
-                                >
-                                    <ChevronDown size={16} />
-                                </button>
-                                {showStationDropdown && (
-                                    <div
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <div style={{ position: 'relative', flex: 1 }}>
+                                    <select
+                                        value={form.station}
+                                        onChange={e => update('station', e.target.value)}
+                                        onFocus={() => setShowStationDropdown(true)}
+                                        style={{ width: '100%', paddingRight: '32px' }}
+                                    >
+                                        <option value="">Select station...</option>
+                                        {stations.map(s => (
+                                            <option key={s} value={s}>{formatStationName(s)}</option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowStationDropdown(v => !v)}
                                         style={{
                                             position: 'absolute',
-                                            top: '100%',
-                                            left: 0,
-                                            right: 0,
-                                            backgroundColor: 'white',
-                                            border: '1px solid #ddd',
-                                            borderRadius: '6px',
-                                            marginTop: '4px',
-                                            zIndex: 100,
-                                            maxHeight: '200px',
-                                            overflowY: 'auto',
-                                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                            right: '8px',
+                                            top: '50%',
+                                            transform: 'translateY(-50%)',
+                                            background: 'none',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            padding: '4px',
                                         }}
                                     >
-                                        {stations.length > 0 ? (
-                                            stations.map(s => (
-                                                <div
-                                                    key={s}
-                                                    onClick={() => {
-                                                        update('station', s);
-                                                        setShowStationDropdown(false);
-                                                    }}
-                                                    style={{
-                                                        padding: '10px 12px',
-                                                        cursor: 'pointer',
-                                                        borderBottom: '1px solid #f0f0f0',
-                                                        backgroundColor: form.station === s ? '#f0f0f0' : 'white',
-                                                        ':hover': { backgroundColor: '#f5f5f5' },
-                                                    }}
-                                                >
-                                                    {formatStationName(s)}
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <div style={{ padding: '10px 12px', color: '#999' }}>
-                                                No stations available. Type to create new.
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+                                        <ChevronDown size={16} />
+                                    </button>
+                                </div>
+                                <button type="button" className="btn btn-outline" onClick={() => setShowAddStationModal(true)}>
+                                    <Plus size={14} /> Add Station
+                                </button>
                             </div>
-                            <span className="form-hint">Select existing station or type to create a new one</span>
+                            <span className="form-hint">Choose an existing station or add a new one.</span>
                         </div>
                         <div className="form-group form-group--full">
                             <label>Password <span className="req">*</span></label>
@@ -299,9 +332,68 @@ const AddUserModal = ({ onClose, onSuccess }) => {
                     </button>
                 </div>
             </div>
+            {showAddStationModal && (
+                <AddStationInlineModal
+                    onClose={() => setShowAddStationModal(false)}
+                    onSuccess={async () => {
+                        setShowAddStationModal(false);
+                        const stationList = await staffService.getAllStations();
+                        setStations(stationList);
+                    }}
+                />
+            )}
         </div>
     );
 };
+
+const AddStationInlineModal = ({ onClose, onSuccess }) => {
+    const staffService = new StaffService();
+    const [stationName, setStationName] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleSubmit = async () => {
+        const name = stationName.trim();
+        if (!name) {
+            setError('Please enter a station name');
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            await staffService.addStation(name);
+            onSuccess?.();
+            onClose();
+        } catch (err) {
+            setError(err.message || 'Failed to add station');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="modal-backdrop" onClick={onClose}>
+            <div className="set-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+                <div className="modal-header">
+                    <div><h2><Plus size={20} /> Add Station</h2><p>Create a new barangay / station.</p></div>
+                    <button className="modal-close" onClick={onClose}><X size={20} /></button>
+                </div>
+                <div className="modal-body">
+                    {error && <div className="form-error" style={{ marginBottom: '12px' }}>{error}</div>}
+                    <div className="form-group">
+                        <label>Station Name <span className="req">*</span></label>
+                        <input value={stationName} onChange={e => setStationName(e.target.value)} placeholder="e.g. Salawag" />
+                    </div>
+                </div>
+                <div className="modal-footer">
+                    <button className="btn btn-outline" onClick={onClose}>Cancel</button>
+                    <button className="btn btn-primary" onClick={handleSubmit} disabled={submitting}> {submitting ? 'Saving...' : 'Save Station'} </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 /* ════════════════════════════
    EDIT USER MODAL
 ════════════════════════════ */
@@ -311,6 +403,7 @@ const EditUserModal = ({ staff, onClose, onSuccess }) => {
     const [stations, setStations] = useState([]);
     const [roles, setRoles] = useState([]);
     const [showStationDropdown, setShowStationDropdown] = useState(false);
+    const [showAddStationModal, setShowAddStationModal] = useState(false);
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
@@ -407,77 +500,41 @@ const EditUserModal = ({ staff, onClose, onSuccess }) => {
                         </div>
                         <div className="form-group">
                             <label>Assign Station / Barangay</label>
-                            <div style={{ position: 'relative' }}>
-                                <input
-                                    type="text"
-                                    placeholder="Select or type barangay..."
-                                    value={form.station}
-                                    onChange={e => {
-                                        const formatted = toTitleCaseWhileTyping(e.target.value);
-                                        update('station', formatted);
-                                        setShowStationDropdown(true);
-                                    }}
-                                    onFocus={() => setShowStationDropdown(true)}
-                                    style={{ paddingRight: '32px' }}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowStationDropdown(!showStationDropdown)}
-                                    style={{
-                                        position: 'absolute',
-                                        right: '8px',
-                                        top: '50%',
-                                        transform: 'translateY(-50%)',
-                                        background: 'none',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        padding: '4px',
-                                    }}
-                                >
-                                    <ChevronDown size={16} />
-                                </button>
-                                {showStationDropdown && (
-                                    <div
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <div style={{ position: 'relative', flex: 1 }}>
+                                    <select
+                                        value={form.station}
+                                        onChange={e => update('station', e.target.value)}
+                                        onFocus={() => setShowStationDropdown(true)}
+                                        style={{ width: '100%', paddingRight: '32px' }}
+                                    >
+                                        <option value="">Select station...</option>
+                                        {stations.map(s => (
+                                            <option key={s} value={s}>{formatStationName(s)}</option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowStationDropdown(v => !v)}
                                         style={{
                                             position: 'absolute',
-                                            top: '100%',
-                                            left: 0,
-                                            right: 0,
-                                            backgroundColor: 'white',
-                                            border: '1px solid #ddd',
-                                            borderRadius: '6px',
-                                            marginTop: '4px',
-                                            zIndex: 100,
-                                            maxHeight: '200px',
-                                            overflowY: 'auto',
-                                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                            right: '8px',
+                                            top: '50%',
+                                            transform: 'translateY(-50%)',
+                                            background: 'none',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            padding: '4px',
                                         }}
                                     >
-                                        {stations.length > 0 ? (
-                                            stations.map(s => (
-                                                <div
-                                                    key={s}
-                                                    onClick={() => { update('station', s); setShowStationDropdown(false); }}
-                                                    style={{
-                                                        padding: '10px 12px',
-                                                        cursor: 'pointer',
-                                                        borderBottom: '1px solid #f0f0f0',
-                                                        backgroundColor: form.station === s ? '#f0f0f0' : 'white',
-                                                        ':hover': { backgroundColor: '#f5f5f5' },
-                                                    }}
-                                                >
-                                                    {formatStationName(s)}
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <div style={{ padding: '10px 12px', color: '#999' }}>
-                                                No stations available. Type to create new.
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+                                        <ChevronDown size={16} />
+                                    </button>
+                                </div>
+                                <button type="button" className="btn btn-outline" onClick={() => setShowAddStationModal(true)}>
+                                    <Plus size={14} /> Add Station
+                                </button>
                             </div>
-                            <span className="form-hint">Select existing station or type to create a new one</span>
+                            <span className="form-hint">Choose an existing station or add a new station.</span>
                         </div>
                     </div>
                 </div>
@@ -488,6 +545,16 @@ const EditUserModal = ({ staff, onClose, onSuccess }) => {
                     </button>
                 </div>
             </div>
+            {showAddStationModal && (
+                <AddStationInlineModal
+                    onClose={() => setShowAddStationModal(false)}
+                    onSuccess={async () => {
+                        setShowAddStationModal(false);
+                        const stationList = await staffService.getAllStations();
+                        setStations(stationList);
+                    }}
+                />
+            )}
         </div>
     );
 };

@@ -75,7 +75,7 @@ const UserAccount = () => {
                     bloodType: patient.bloodtype || 'N/A',
                     civilStatus: patient.civil_status || 'N/A',
                     phone: patient.contact_no || 'N/A',
-                    email: patient.email_address || authUser.email || 'N/A',
+                    email: authUser?.email || 'N/A',
                     address: patient.house_no ? `${patient.house_no}, ${patient.municipality || ''}, ${patient.province || ''}`.trim() : 'N/A',
                     philHealthNumber: patient.philhealthnumber || 'N/A',
                     station: patient.station || 'N/A'

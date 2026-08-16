@@ -23,8 +23,22 @@ import '../../styles/pages/Inventory.css';
 const inventoryService = new InventoryService();
 const patientService = new PatientService();
 
+const normalizeRole = (role) => String(role || '').trim().toLowerCase();
+const isAdminRole = (role) => {
+  const normalized = normalizeRole(role);
+  return normalized === 'admin' || normalized === 'super admin' || normalized === 'super-admin' || normalized.includes('admin');
+};
+
 const Inventory = () => {
   const { user } = useContext(AuthContext);
+  const [userScope, setUserScope] = useState({ role: 'user', stationId: null, stationName: null, userId: user?.id || null });
+  const [availableStations, setAvailableStations] = useState([]);
+  const isAdmin = isAdminRole(userScope.role);
+  const visibleStations = useMemo(() => {
+    if (!userScope.stationName) return availableStations;
+    if (isAdmin) return availableStations;
+    return [userScope.stationName];
+  }, [availableStations, isAdmin, userScope.stationName]);
   const [activeTab, setActiveTab] = useState('vaccines');
   const [loading, setLoading] = useState(true);
   const [vaccines, setVaccines] = useState([]);
@@ -39,8 +53,8 @@ const Inventory = () => {
   // Station Distribution states
   const [showDistributionModal, setShowDistributionModal] = useState(false);
   const [selectedDistRecord, setSelectedDistRecord] = useState(null);
-  const [availableStations, setAvailableStations] = useState([]);
   const [distributionHistory, setDistributionHistory] = useState([]);
+  const [stationCurrentInventory, setStationCurrentInventory] = useState([]);
   const [distForm, setDistForm] = useState({
     item_type: 'vaccine',
     item_id: '',
@@ -58,34 +72,50 @@ const Inventory = () => {
   const [historyTypeFilter, setHistoryTypeFilter] = useState('All');
   const [historyDateFilter, setHistoryDateFilter] = useState('');
 
+  // Expandable rows for station inventory
+  const [expandedStationRows, setExpandedStationRows] = useState({});
+
+  // Station inventory now directly uses fetched current stock data, not distribution history
+  // Group by station + item_name + item_type, with batch/brand variants as children
   const stationInventory = useMemo(() => {
-    if (!distributionHistory || distributionHistory.length === 0) return [];
+    if (!stationCurrentInventory || stationCurrentInventory.length === 0) return [];
+
     const grouped = {};
 
-    distributionHistory.forEach(rec => {
-      const key = `${rec.destination_station || 'Unknown'}||${rec.item_type || 'Unknown'}||${rec.item_name || 'Unknown'}`;
-      if (!grouped[key]) {
-        grouped[key] = {
-          station: rec.destination_station || 'Unknown',
-          item_name: rec.item_name || 'Unknown',
-          item_type: rec.item_type || 'Unknown',
-          unit: rec.unit || (rec.item_type === 'Vaccine' ? 'vials' : 'tablets'),
-          quantity: 0,
-          last_distribution_date: rec.distribution_date || ''
+    stationCurrentInventory.forEach(row => {
+      const groupKey = `${row.station || 'Unknown'}||${row.item_type || 'Unknown'}||${row.item_name || 'Unknown'}`;
+
+      if (!grouped[groupKey]) {
+        grouped[groupKey] = {
+          groupKey,
+          station: row.station || 'Unknown',
+          item_name: row.item_name || 'Unknown',
+          item_type: row.item_type || 'Unknown',
+          unit: row.unit || (row.item_type === 'Vaccine' ? 'vials' : 'pcs'),
+          brand: row.brand || '',
+          expiration_date: row.expiration_date || null,
+          totalQuantity: 0,
+          variants: []
         };
       }
-      grouped[key].quantity += Number(rec.quantity) || 0;
-      if (rec.distribution_date && rec.distribution_date > grouped[key].last_distribution_date) {
-        grouped[key].last_distribution_date = rec.distribution_date;
-      }
+
+      grouped[groupKey].totalQuantity += Number(row.quantity) || 0;
+      grouped[groupKey].variants.push({
+        id: row.id,
+        quantity: Number(row.quantity) || 0,
+        batch: row.batch || 'N/A',
+        last_updated: row.last_updated || null
+      });
     });
 
     return Object.values(grouped).sort((a, b) => {
-      if (a.station !== b.station) return a.station.localeCompare(b.station);
-      if (a.item_type !== b.item_type) return a.item_type.localeCompare(b.item_type);
-      return a.item_name.localeCompare(b.item_name);
+      const stationCmp = (a.station || '').localeCompare(b.station || '');
+      if (stationCmp !== 0) return stationCmp;
+      const typeCmp = (a.item_type || '').localeCompare(b.item_type || '');
+      if (typeCmp !== 0) return typeCmp;
+      return (a.item_name || '').localeCompare(b.item_name || '');
     });
-  }, [distributionHistory]);
+  }, [stationCurrentInventory]);
 
   // Handle auto-populating user info when context resolves
   useEffect(() => {
@@ -259,38 +289,73 @@ const Inventory = () => {
   };
 
   useEffect(() => {
+    let isCurrent = true;
+
+    const loadScope = async () => {
+      try {
+        const scope = await inventoryService.getCurrentUserScope();
+        if (isCurrent) setUserScope(scope);
+      } catch (error) {
+        console.warn('Inventory user scope lookup failed:', error);
+      }
+    };
+
+    loadScope();
     fetchData();
 
     const vaxSub = inventoryService.subscribeToInventory('vaccine_inventory', () => fetchData());
     const suppSub = inventoryService.subscribeToInventory('supplement_inventory', () => fetchData());
 
-    // Load distribution history from DB, fallback to localStorage if the DB call fails
-    (async () => {
-      try {
-        const history = await inventoryService.getStationDistributionHistory();
-        setDistributionHistory(history || []);
-        try { localStorage.setItem('dasmom_station_distributions', JSON.stringify(history || [])); } catch (e) {}
-      } catch (err) {
-        console.warn('Failed to fetch distribution history from DB, falling back to localStorage:', err);
-        const stored = localStorage.getItem('dasmom_station_distributions');
-        if (stored) {
-          try {
-            const parsed = JSON.parse(stored) || [];
-            const filtered = parsed.filter(record => !record.id?.toString().startsWith('dist-mock-'));
-            setDistributionHistory(filtered);
-          } catch (e) {
-            console.error('Failed to load distribution history from localStorage:', e);
-            setDistributionHistory([]);
-          }
-        }
-      }
-    })();
-
     return () => {
+      isCurrent = false;
       vaxSub.unsubscribe();
       suppSub.unsubscribe();
     };
-  }, []);
+  }, [user?.id]);
+
+  // Separate effect for station inventory to prevent clearing on central inventory updates
+  useEffect(() => {
+    let isCurrent = true;
+
+    const fetchStationData = async () => {
+      try {
+        const stationInventoryData = await inventoryService.getStationInventorySnapshot();
+        if (isCurrent) setStationCurrentInventory(stationInventoryData || []);
+
+        const history = await inventoryService.getStationDistributionHistory();
+        if (isCurrent) setDistributionHistory(history || []);
+      } catch (err) {
+        console.warn('Failed to fetch station inventory/distribution data:', err);
+        if (isCurrent) {
+          setStationCurrentInventory([]);
+          setDistributionHistory([]);
+        }
+      }
+    };
+
+    fetchStationData();
+
+    // Subscribe to station inventory tables for real-time updates
+    const stationVaccineSub = inventoryService.supabase
+      .channel('realtime:station_vaccine_inventory')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'station_vaccine_inventory' }, () => {
+        if (isCurrent) fetchStationData();
+      })
+      .subscribe();
+
+    const stationSupplementSub = inventoryService.supabase
+      .channel('realtime:station_supplement_inventory')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'station_supplement_inventory' }, () => {
+        if (isCurrent) fetchStationData();
+      })
+      .subscribe();
+
+    return () => {
+      isCurrent = false;
+      inventoryService.supabase.removeChannel(stationVaccineSub);
+      inventoryService.supabase.removeChannel(stationSupplementSub);
+    };
+  }, [user?.id]);
 
   const getStatus = (qty, maxStock) => {
     if (qty <= 0) return { label: 'Out of Stock', class: 'status-out' };
@@ -660,9 +725,7 @@ const Inventory = () => {
         remarks: distData?.remarks || distForm.remarks || ''
       };
 
-      const updatedHistory = [newRecord, ...distributionHistory];
-      localStorage.setItem('dasmom_station_distributions', JSON.stringify(updatedHistory));
-      setDistributionHistory(updatedHistory);
+      setDistributionHistory(prev => [newRecord, ...prev]);
 
       // Reset form & close
       setShowDistributionModal(false);
@@ -832,6 +895,12 @@ const Inventory = () => {
       <div className="inv-main-layout">
         <div className="inv-table-col">
 
+      {!isAdmin && userScope.stationName && (
+        <div className="station-scope-banner" style={{ marginBottom: '12px', padding: '10px 14px', background: '#eef6ff', border: '1px solid #d6e9ff', borderRadius: '10px', color: '#235f9c', fontSize: '13px', fontWeight: '600' }}>
+          Viewing inventory for: {userScope.stationName}
+        </div>
+      )}
+
       <div className="inv-controls">
         <div className="search-wrap">
           <Search size={16} className="search-icon" />
@@ -891,6 +960,7 @@ const Inventory = () => {
         </button>
       </div>
 
+      {isAdmin && (
       <div className="inv-card">
         <div className="table-wrapper">
           <table className="inv-table">
@@ -1242,6 +1312,53 @@ const Inventory = () => {
           </div>
         )}
       </div>
+      )}
+
+      <div className="inv-side-col">
+        <div className="inv-card">
+          <div className="inv-card-head" style={{ padding: '16px 20px', borderBottom: '1px solid #f0f2f5' }}>
+            <h2 style={{ fontSize: '15px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertTriangle size={16} /> Notifications & Alerts
+            </h2>
+          </div>
+          <div className="alerts-list" style={{ padding: '8px 16px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {pendingStockAlerts.count > 0 && (
+              <div className="alert-item alert-warning" style={{ background: 'rgba(232,184,75,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px' }}>
+                <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', marginTop: '4px', flexShrink: 0, background: '#e8b84b' }}></div>
+                <div className="alert-body">
+                  <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Pending Vaccines Need Stock</p>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                    {pendingStockAlerts.count} pending vaccination(s) need stock{pendingStockAlerts.stations.length > 0 ? ` for ${pendingStockAlerts.stations.join(', ')}` : ''}.
+                  </span>
+                </div>
+              </div>
+            )}
+            {lowStockCount > 0 && (
+              <div className="alert-item alert-warning" style={{ background: 'rgba(232,184,75,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px' }}>
+                <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', marginTop: '4px', flexShrink: 0, background: '#e8b84b' }}></div>
+                <div className="alert-body">
+                  <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Low Stock Warning</p>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{lowStockCount} items are running low on stock.</span>
+                </div>
+              </div>
+            )}
+            {outOfStockCount > 0 && (
+              <div className="alert-item alert-critical" style={{ background: 'rgba(224,92,115,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px' }}>
+                <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', marginTop: '4px', flexShrink: 0, background: '#e05c73' }}></div>
+                <div className="alert-body">
+                  <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Out of Stock</p>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{outOfStockCount} items are currently out of stock!</span>
+                </div>
+              </div>
+            )}
+            {pendingStockAlerts.count === 0 && lowStockCount === 0 && outOfStockCount === 0 && (
+              <div style={{ textAlign: 'center', padding: '20px', fontSize: '12px', fontStyle: 'italic', color: 'var(--color-text-muted)' }}>
+                No urgent alerts.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
 
     {/* ── STATION INVENTORY ── */}
@@ -1256,27 +1373,80 @@ const Inventory = () => {
         <table className="inv-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
+              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Expand</th>
               <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Station</th>
               <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Item</th>
               <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Type</th>
-              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Qty</th>
+              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Total Qty</th>
               <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Unit</th>
-              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Last Distributed</th>
+              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Brand</th>
+              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Expiration Date</th>
             </tr>
           </thead>
           <tbody>
-            {stationInventory.length > 0 ? stationInventory.map((record, index) => (
-              <tr key={`${record.station}-${record.item_name}-${index}`} style={{ borderBottom: '1px solid #f0f2f5' }}>
-                <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{record.station}</td>
-                <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{record.item_name}</td>
-                <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{record.item_type}</td>
-                <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '600', textAlign: 'center' }}>{record.quantity}</td>
-                <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{record.unit}</td>
-                <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{record.last_distribution_date || 'N/A'}</td>
-              </tr>
-            )) : (
+            {stationInventory.length > 0 ? stationInventory.map((group, groupIndex) => {
+              const isExpanded = expandedStationRows[group.groupKey];
+              return (
+                <React.Fragment key={group.groupKey}>
+                  {/* Parent Row */}
+                  <tr style={{ borderBottom: '1px solid #f0f2f5', backgroundColor: '#fafbfc' }}>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', textAlign: 'center' }}>
+                      <button
+                        onClick={() => setExpandedStationRows(prev => ({
+                          ...prev,
+                          [group.groupKey]: !prev[group.groupKey]
+                        }))}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: '0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <ChevronDown
+                          size={16}
+                          style={{
+                            transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+                            transition: 'transform 0.2s',
+                            color: '#666'
+                          }}
+                        />
+                      </button>
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', fontWeight: '600' }}>{group.station}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', fontWeight: '600' }}>{group.item_name}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{group.item_type}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '600', textAlign: 'center', color: '#2c5282' }}>{group.totalQuantity}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{group.unit}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>{group.brand || 'N/A'}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>{group.expiration_date ? new Date(group.expiration_date).toLocaleDateString() : 'N/A'}</td>
+                  </tr>
+
+                  {/* Child Rows (Batch Variants) */}
+                  {isExpanded && group.variants.map((variant, variantIndex) => (
+                    <tr key={`${group.groupKey}-variant-${variantIndex}`} style={{ borderBottom: '1px solid #f0f2f5', backgroundColor: '#fff9f9' }}>
+                      <td style={{ padding: '8px 16px' }}></td>
+                      <td style={{ padding: '8px 16px', fontSize: '12px', color: '#666', fontStyle: 'italic' }}></td>
+                      <td style={{ padding: '8px 16px', fontSize: '12px', color: '#666' }}>
+                        Batch: <strong>{variant.batch}</strong>
+                      </td>
+                      <td style={{ padding: '8px 16px', fontSize: '12px', color: '#666' }}></td>
+                      <td style={{ padding: '8px 16px', fontSize: '12px', textAlign: 'center', color: '#555' }}>{variant.quantity}</td>
+                      <td style={{ padding: '8px 16px', fontSize: '11px', color: '#999' }}></td>
+                      <td style={{ padding: '8px 16px', fontSize: '11px', color: '#999' }}></td>
+                      <td style={{ padding: '8px 16px', fontSize: '11px', color: '#999' }}>
+                        Updated: {variant.last_updated ? new Date(variant.last_updated).toLocaleDateString() : 'N/A'}
+                      </td>
+                    </tr>
+                  ))}
+                </React.Fragment>
+              );
+            }) : (
               <tr>
-                <td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: '#888', fontSize: '13px' }}>
+                <td colSpan="8" style={{ padding: '20px', textAlign: 'center', color: '#888', fontSize: '13px' }}>
                   No station inventory records yet.
                 </td>
               </tr>
@@ -1284,54 +1454,6 @@ const Inventory = () => {
           </tbody>
         </table>
       </div>
-    </div>
-
-    {/* ── ALERTS PANEL ── */}
-    <div className="inv-side-col">
-        <div className="inv-card">
-            <div className="inv-card-head" style={{ padding: '16px 20px', borderBottom: '1px solid #f0f2f5' }}>
-                <h2 style={{ fontSize: '15px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <AlertTriangle size={16} /> Notifications & Alerts
-                </h2>
-            </div>
-            <div className="alerts-list" style={{ padding: '8px 16px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {pendingStockAlerts.count > 0 && (
-                    <div className="alert-item alert-warning" style={{ background: 'rgba(232,184,75,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px' }}>
-                        <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', marginTop: '4px', flexShrink: 0, background: '#e8b84b' }}></div>
-                        <div className="alert-body">
-                            <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Pending Vaccines Need Stock</p>
-                            <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
-                                {pendingStockAlerts.count} pending vaccination(s) need stock{pendingStockAlerts.stations.length > 0 ? ` for ${pendingStockAlerts.stations.join(', ')}` : ''}.
-                            </span>
-                        </div>
-                    </div>
-                )}
-                {lowStockCount > 0 && (
-                    <div className="alert-item alert-warning" style={{ background: 'rgba(232,184,75,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px' }}>
-                        <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', marginTop: '4px', flexShrink: 0, background: '#e8b84b' }}></div>
-                        <div className="alert-body">
-                            <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Low Stock Warning</p>
-                            <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{lowStockCount} items are running low on stock.</span>
-                        </div>
-                    </div>
-                )}
-                {outOfStockCount > 0 && (
-                    <div className="alert-item alert-critical" style={{ background: 'rgba(224,92,115,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px' }}>
-                        <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', marginTop: '4px', flexShrink: 0, background: '#e05c73' }}></div>
-                        <div className="alert-body">
-                            <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Out of Stock</p>
-                            <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{outOfStockCount} items are currently out of stock!</span>
-                        </div>
-                    </div>
-                )}
-                {pendingStockAlerts.count === 0 && lowStockCount === 0 && outOfStockCount === 0 && (
-                    <div style={{ textAlign: 'center', padding: '20px', fontSize: '12px', fontStyle: 'italic', color: 'var(--color-text-muted)' }}>
-                        No urgent alerts.
-                    </div>
-                )}
-            </div>
-        </div>
-    </div>
     </div>
 
       {/* ── STATION DISTRIBUTION HISTORY ── */}
@@ -1352,12 +1474,13 @@ const Inventory = () => {
               />
             </div>
             <select
-              value={historyStationFilter}
+              value={isAdmin ? historyStationFilter : (visibleStations.includes(historyStationFilter) ? historyStationFilter : (visibleStations[0] || 'All'))}
               onChange={e => setHistoryStationFilter(e.target.value)}
-              style={{ padding: '7px 10px', border: '1px solid #e9ecef', borderRadius: '8px', fontSize: '13px', background: '#fff', cursor: 'pointer' }}
+              disabled={!isAdmin && visibleStations.length <= 1}
+              style={{ padding: '7px 10px', border: '1px solid #e9ecef', borderRadius: '8px', fontSize: '13px', background: '#fff', cursor: !isAdmin && visibleStations.length <= 1 ? 'not-allowed' : 'pointer' }}
             >
-              <option value="All">All Stations</option>
-              {availableStations.map(s => <option key={s} value={s}>{s}</option>)}
+              {isAdmin ? <option value="All">All Stations</option> : null}
+              {(isAdmin ? availableStations : visibleStations).map(s => <option key={s} value={s}>{s}</option>)}
             </select>
             <select
               value={historyTypeFilter}
@@ -1964,6 +2087,7 @@ const Inventory = () => {
       )}
 
     </div>
+  </div>
   );
 };
 

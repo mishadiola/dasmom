@@ -28,21 +28,27 @@
 
 .inv-main-layout {
     display: grid;
-    grid-template-columns: 1fr 300px;
+    grid-template-columns: minmax(0, 1fr) 320px;
     gap: 20px;
     align-items: start;
 }
 
-.inv-table-col {
+.inv-table-col,
+.inv-side-col {
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 24px;
 }
 
 .inv-side-col {
-    display: flex;
-    flex-direction: column;
     gap: 20px;
+}
+
+.table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 

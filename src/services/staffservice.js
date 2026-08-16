@@ -74,44 +74,61 @@ export default class StaffService {
    */
   async getAllStaff() {
     try {
-      const { data, error } = await this.supabase
-        .from('staff_profiles')
-        .select(`
-          id,
-          full_name,
-          employee_id,
-          station_ass,
-          stations:station_ass (
-            station_name
-          ),
-          created_at,
-          users (
-            email_address,
-            user_type (
-              user_type
-            )
-          )
-        `)
-        .order('created_at', { ascending: false });
+      const [{ data: staffRows, error: staffError }, { data: userRows }, { data: userTypeRows }] = await Promise.all([
+        this.supabase
+          .from('staff_profiles')
+          .select(`
+            id,
+            full_name,
+            employee_id,
+            station_ass,
+            stations:station_ass (
+              station_name
+            ),
+            created_at
+          `)
+          .order('created_at', { ascending: false }),
+        this.supabase
+          .from('users')
+          .select('id, email_address, usertype'),
+        this.supabase
+          .from('user_type')
+          .select('id, user_type')
+      ]);
 
-      if (error) throw error;
+      if (staffError) throw staffError;
 
-      return (data || []).map(staff => ({
-        id: staff.id,
-        name: staff.full_name,
-        email: staff.users?.email_address || 'N/A',
-        role: this.formatRoleLabel(staff.users?.user_type?.user_type || 'Staff'),
-        station: staff.stations?.station_name || 'No Assignment',
-        employeeId: staff.employee_id,
-        status: 'Active',
-        lastLogin: 'N/A',
-        avatar: staff.full_name
-          ?.split(' ')
-          .map(n => n[0])
-          .slice(0, 2)
-          .join('')
-          .toUpperCase() || 'ST',
-      }));
+      const userMap = new Map((userRows || []).map(user => [user.id, user]));
+      const userTypeMap = new Map((userTypeRows || []).map(type => [type.id, type.user_type]));
+
+      const mapped = (staffRows || []).map(staff => {
+        const user = userMap.get(staff.id);
+        const roleName = userTypeMap.get(user?.usertype) || 'Staff';
+        const email = user?.email_address || 'N/A';
+
+        if (!user?.email_address) {
+          console.warn('Staff profile missing public users email', { staffId: staff.id, profile: staff.full_name, userRow: user || null });
+        }
+
+        return {
+          id: staff.id,
+          name: staff.full_name,
+          email,
+          role: this.formatRoleLabel(roleName),
+          station: staff.stations?.station_name || 'No Assignment',
+          employeeId: staff.employee_id,
+          status: 'Active',
+          lastLogin: 'N/A',
+          avatar: staff.full_name
+            ?.split(' ')
+            .map(n => n[0])
+            .slice(0, 2)
+            .join('')
+            .toUpperCase() || 'ST',
+        };
+      });
+
+      return mapped;
     } catch (error) {
       console.error('❌ getAllStaff:', error);
       return [];
@@ -140,6 +157,44 @@ export default class StaffService {
     } catch (error) {
       console.error('❌ getAllStations:', error);
       return [];
+    }
+  }
+
+  /**
+   * Add a new station
+   */
+  async addStation(stationName) {
+    try {
+      if (!stationName || !stationName.trim()) {
+        throw new Error('Station name is required');
+      }
+
+      // Check if station already exists
+      const { data: existing } = await this.supabase
+        .from('stations')
+        .select('id, station_name')
+        .ilike('station_name', stationName.trim())
+        .maybeSingle();
+
+      if (existing) {
+        throw new Error(`Station "${existing.station_name}" already exists`);
+      }
+
+      // Insert new station
+      const { data, error } = await this.supabase
+        .from('stations')
+        .insert({
+          station_name: stationName.trim(),
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return data;
+    } catch (error) {
+      console.error('❌ addStation:', error);
+      throw error;
     }
   }
 
@@ -351,8 +406,8 @@ export default class StaffService {
     return {
       id: data.id,
       name: data.full_name,
-      email: data.users?.email_address || 'N/A',
-      role: this.formatRoleLabel(data.users?.user_type?.user_type || 'Staff'),
+      email: data.users?.email_address || data.email_address || 'N/A',
+      role: this.formatRoleLabel(data.users?.user_type?.user_type || data.user_type || 'Staff'),
       station: data.stations?.station_name || data.barangay_assignment || 'No Assignment',
       employeeId: data.employee_id,
       status: 'Active',

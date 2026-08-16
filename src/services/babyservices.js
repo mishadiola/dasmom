@@ -9,6 +9,40 @@ class BabyService {
     this.patientService = new PatientService();
   }
 
+  async getCurrentUserAccess() {
+    const currentUser = await this.authService.getAuthUser();
+    let role = String(currentUser?.role || '').toLowerCase();
+    let stationId = null;
+
+    if (!role && currentUser?.id) {
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('usertype')
+        .eq('id', currentUser.id)
+        .maybeSingle();
+
+      if (userRow?.usertype) {
+        const { data: typeRow } = await supabase
+          .from('user_type')
+          .select('user_type')
+          .eq('id', userRow.usertype)
+          .maybeSingle();
+        role = String(typeRow?.user_type || '').toLowerCase();
+      }
+    }
+
+    if (['cho personnel', 'staff'].includes(role) && currentUser?.id) {
+      const { data: profile } = await supabase
+        .from('staff_profiles')
+        .select('station_ass')
+        .eq('id', currentUser.id)
+        .maybeSingle();
+      stationId = profile?.station_ass || null;
+    }
+
+    return { role, stationId, currentUser };
+  }
+
   async getCurrentUserId() {
     const user = await this.authService.getAuthUser();
     return user?.id || null;
@@ -176,6 +210,7 @@ class BabyService {
 
   async getAllDeliveries() {
     try {
+      const { role, stationId } = await this.getCurrentUserAccess();
       const { data, error } = await supabase
         .from('deliveries')
         .select(`
@@ -195,7 +230,8 @@ class BabyService {
             id,
             first_name,
             last_name,
-            station_ass
+            station_ass,
+            stations:station_ass (station_name)
           ),
           newborns (
             id,
@@ -217,14 +253,23 @@ class BabyService {
 
       if (error) throw error;
 
-        return (data || []).map(d => {
+      const filtered = (data || []).filter(d => {
+        if (role === 'admin') return true;
+        if (['cho personnel', 'staff'].includes(role)) {
+          const motherStation = d.patient_basic_info?.station_ass || d.patient_basic_info?.stations?.station_name;
+          return motherStation && stationId && motherStation === stationId;
+        }
+        return false;
+      });
+
+        return filtered.map(d => {
         const newborn = Array.isArray(d.newborns) ? d.newborns[0] : d.newborns;
         const staff = Array.isArray(d.staff_profiles) ? d.staff_profiles[0] : d.staff_profiles;
         return {
           id: d.id,
           patientId: d.patient_basic_info?.id || '',
           patientName: `${d.patient_basic_info?.first_name || ''} ${d.patient_basic_info?.last_name || ''}`.trim(),
-          station: d.patient_basic_info?.stations?.station_name || 'N/A',
+          station: d.patient_basic_info?.stations?.station_name || d.patient_basic_info?.station_ass || 'Unassigned',
           deliveryDate: d.delivery_date,
           deliveryTime: d.delivery_time,
           deliveryType: d.delivery_type,
@@ -498,17 +543,18 @@ class BabyService {
   async getStations() {
     try {
         const { data, error } = await supabase
-            .from('staff_profiles')
-            .select('station_ass')
-            .not('station_ass', 'is', null)
-            .order('station_ass');
-        
+            .from('stations')
+            .select('id, station_name')
+            .not('station_name', 'is', null)
+            .order('station_name', { ascending: true });
+
         if (error) throw error;
-        
-        return ['All Stations', ...new Set(data?.map(s => s.station_ass).filter(Boolean))];
+
+        const names = (data || []).map(s => s.station_name).filter(Boolean);
+        return ['All Stations', ...new Set(names)];
     } catch (error) {
         console.error('Error loading stations:', error);
-        return ['Main Clinic'];
+        return ['All Stations', 'Main Clinic'];
     }
   }
 
@@ -545,6 +591,7 @@ class BabyService {
    */
   async getPostpartumRecords() {
     try {
+        const { role, stationId } = await this.getCurrentUserAccess();
         const { data: deliveries, error } = await supabase
             .from('deliveries')
             .select(`
@@ -556,7 +603,8 @@ class BabyService {
                 postpartum_visit_date,
                 notes,
                 patient_basic_info!deliveries_mother_id_fkey (
-                    id, first_name, last_name, station_ass
+                    id, first_name, last_name, station_ass,
+                    stations:station_ass (station_name)
                 ),
                 newborns (
                     id, condition_at_birth, risk_level
@@ -566,8 +614,15 @@ class BabyService {
 
         if (error) throw error;
 
-        // Also check high-risk status from pregnancy_info
-        const motherIds = [...new Set(deliveries.map(d => d.mother_id))];
+        const filtered = (deliveries || []).filter(d => {
+            if (role === 'admin') return true;
+            if (['cho personnel', 'staff'].includes(role)) {
+                return d.patient_basic_info?.station_ass && stationId && d.patient_basic_info.station_ass === stationId;
+            }
+            return false;
+        });
+
+        const motherIds = [...new Set(filtered.map(d => d.mother_id))];
         const { data: pregInfo } = await supabase
             .from('pregnancy_info')
             .select('patient_id, pregn_postp, calculated_risk')
@@ -576,7 +631,7 @@ class BabyService {
         const pregMap = new Map(pregInfo?.map(p => [p.patient_id, p]) || []);
         const today = new Date();
 
-        return (deliveries || []).map(d => {
+        return filtered.map(d => {
             const mother = d.patient_basic_info;
             const newborns = Array.isArray(d.newborns) ? d.newborns : [d.newborns].filter(Boolean);
             const preg = pregMap.get(d.mother_id) || {};
@@ -604,7 +659,7 @@ class BabyService {
                 id: d.id,
                 patientId: mother?.id || '',
                 name: `${mother?.first_name || ''} ${mother?.last_name || ''}`.trim(),
-                station: mother?.barangay || 'N/A',
+                station: mother?.stations?.station_name || mother?.station_ass || 'Unassigned',
                 deliveryDate: d.delivery_date,
                 deliveryType: d.delivery_type || 'NSD',
                 daysPostpartum: daysPP,
@@ -640,7 +695,7 @@ class BabyService {
         // Calculate station distribution
         const stationMap = {};
         records.forEach(r => {
-            const stationName = r.station || 'Unknown';
+            const stationName = r.station && r.station !== 'N/A' && r.station !== 'Unassigned' ? r.station : 'Unassigned';
             if (!stationMap[stationName]) stationMap[stationName] = { name: stationName, total: 0, recovered: 0 };
             stationMap[stationName].total++;
             if (r.daysPostpartum > 42 && r.recoveryStatus === 'Normal') stationMap[stationName].recovered++;

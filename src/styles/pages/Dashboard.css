@@ -1194,6 +1194,77 @@
 }
 
 /* ══════════════════════════════════════════
+   PATIENT OVERVIEW
+══════════════════════════════════════════ */
+.patient-overview-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.po-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px;
+    border-radius: 12px;
+    background: #fafafa;
+    border: 1px solid #eef0f4;
+    transition: all 0.15s ease;
+}
+
+.po-row:hover {
+    background: #f4f6f9;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.po-row--total {
+    background: linear-gradient(135deg, rgba(185, 129, 138, 0.08), rgba(185, 129, 138, 0.04));
+    border-color: rgba(185, 129, 138, 0.2);
+}
+
+.po-row--tri1 {
+    background: rgba(253, 213, 229, 0.25);
+    border-color: rgba(253, 213, 229, 0.4);
+}
+
+.po-row--tri2 {
+    background: rgba(255, 227, 164, 0.25);
+    border-color: rgba(255, 227, 164, 0.4);
+}
+
+.po-row--tri3 {
+    background: rgba(195, 207, 183, 0.2);
+    border-color: rgba(195, 207, 183, 0.35);
+}
+
+.po-count {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--color-text);
+    line-height: 1;
+    min-width: 40px;
+    text-align: center;
+}
+
+.po-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+    margin: 0;
+    flex: 1;
+    text-align: left;
+}
+
+.po-divider {
+    height: 1px;
+    background: #eef0f4;
+    margin: 4px 0;
+}
+
+/* ══════════════════════════════════════════
    RESPONSIVE
 ══════════════════════════════════════════ */
 @media (max-width: 1100px) {

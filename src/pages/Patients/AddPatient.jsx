@@ -571,31 +571,32 @@ const AddPatient = () => {
             }
         }
 
-        const requiredPersonal = ['firstName', 'lastName', 'dob', 'email', 'contactNumber', 'address', 'station'];
-        // emAddress is not required if sameAsPatientAddress is checked (it will be auto-filled from patient address)
-        const requiredEmergency = sameAsPatientAddress 
-            ? ['emName', 'emRel', 'emPhone'] 
+        const requiredPersonal = ['firstName', 'middleName', 'lastName', 'dob', 'civilStatus', 'email', 'contactNumber', 'address', 'station', 'municipality', 'province'];
+        const requiredEmergency = sameAsPatientAddress
+            ? ['emName', 'emRel', 'emPhone']
             : ['emName', 'emRel', 'emPhone', 'emAddress'];
-        
-        // Different required fields based on pregnancy status
+
         let requiredPregnancy = [];
         if (formData.pregnancyStatus === 'Pregnant') {
-            requiredPregnancy = ['gravida', 'para', 'lmp'];
+            requiredPregnancy = ['gravida', 'para', 'lmp', 'pregnancyType'];
         } else if (formData.pregnancyStatus === 'Postpartum') {
             requiredPregnancy = ['gravida', 'para', 'babyName', 'birthDate', 'deliveryType', 'babyGender', 'babyWeight'];
         }
-        
-        // BP is required for pregnant patients
-        const requiredVitals = formData.pregnancyStatus === 'Pregnant' ? ['bp', 'weight', 'height'] : ['weight', 'height'];
+
+        const requiredVitals = ['weight', 'height'];
+        if (formData.pregnancyStatus === 'Pregnant') {
+            requiredVitals.push('bp');
+        }
 
         const missing = [];
         const checkFields = (fields) => fields.forEach(f => {
-            if (!formData[f]) {
+            const value = formData[f];
+            if (!value || (typeof value === 'string' && value.trim() === '')) {
                 missing.push(f);
-            } 
-            else if ((f === 'contactNumber' || f === 'emPhone')) {
-                // Validate Philippine mobile number format: must start with "09" and be exactly 11 digits
-                if (formData[f].length !== 11 || !formData[f].startsWith('09')) {
+                return;
+            }
+            if ((f === 'contactNumber' || f === 'emPhone')) {
+                if (value.length !== 11 || !value.startsWith('09')) {
                     missing.push(f + '-invalid');
                 }
             }
@@ -604,6 +605,13 @@ const AddPatient = () => {
         checkFields(requiredEmergency);
         checkFields(requiredPregnancy);
         checkFields(requiredVitals);
+
+        if (missing.length > 0) {
+            setMissingFields(missing);
+            setToast({ type: 'error', message: 'Please complete all required fields before saving. PhilHealth and other ID numbers are optional.' });
+            setIsSaving(false);
+            return;
+        }
 
         setIsSaving(true);
 
