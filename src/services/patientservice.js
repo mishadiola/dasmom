@@ -1060,9 +1060,9 @@ export default class PatientService {
       }
     });
 
-    // Extract first 4 numeric digits from the UID
-    const numericOnly = authUser.id.replace(/[^0-9]/g, '');
-    const patientId = numericOnly.substring(0, 4);
+    // Use the real UUID from the auth/public user record as the database ID.
+    // The UI may still shorten this value to 4 digits for display only.
+    const patientId = authUser.id;
 
     const { error: patientInsertError } = await this.supabase.from('patient_basic_info').insert({
       id: patientId,
