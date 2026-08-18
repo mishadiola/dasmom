@@ -522,10 +522,17 @@ class InventoryService {
         const quantity = Number(row?.quantity ?? 0);
         const maxStock = Number(row?.max_quantity ?? inventoryRow?.max_quantity ?? 0);
         const percentage = maxStock ? Math.round((quantity / maxStock) * 100) : 0;
+        
         let status = 'ok';
-        if (quantity <= 0) status = 'critical';
-        else if (percentage <= 20) status = 'low';
-        else if (percentage <= 50) status = 'medium';
+        // Preserve archived status from database
+        const dbStatus = row?.status ?? inventoryRow?.status;
+        if (dbStatus === 'archived') {
+            status = 'archived';
+        } else {
+            if (quantity <= 0) status = 'critical';
+            else if (percentage <= 20) status = 'low';
+            else if (percentage <= 50) status = 'medium';
+        }
 
         if (!isAdmin) {
           return {
@@ -613,10 +620,17 @@ class InventoryService {
         const quantity = Number(row?.quantity ?? 0);
         const maxStock = Number(row?.max_quant ?? inventoryRow?.max_quant ?? 0);
         const percentage = maxStock ? Math.round((quantity / maxStock) * 100) : 0;
+        
         let status = 'ok';
-        if (quantity <= 0) status = 'critical';
-        else if (percentage <= 20) status = 'low';
-        else if (percentage <= 50) status = 'medium';
+        // Preserve archived status from database
+        const dbStatus = row?.status ?? inventoryRow?.status;
+        if (dbStatus === 'archived') {
+            status = 'archived';
+        } else {
+            if (quantity <= 0) status = 'critical';
+            else if (percentage <= 20) status = 'low';
+            else if (percentage <= 50) status = 'medium';
+        }
 
         if (!isAdmin) {
           return {

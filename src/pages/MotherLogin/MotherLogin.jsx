@@ -69,7 +69,7 @@ const MotherLogin = () => {
                             <div className="ml-logo-wrapper">
                                 <img src={logo} alt="DasMom+ Logo" className="ml-logo" />
                             </div>
-                            <h1 className="ml-title">Mother Login</h1>
+                            <h1 className="ml-title">Log in</h1>
                             <p className="ml-subtitle">Access your maternal health dashboard</p>
                         </div>
 

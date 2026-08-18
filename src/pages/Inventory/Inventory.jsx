@@ -480,18 +480,39 @@ const Inventory = () => {
 
   const filteredItems = currentItems
     .filter(item => item && typeof item === 'object')
+    .map(item => {
+      // Filter the items within the group based on the archiveFilter
+      const filteredSubItems = item.items.filter(i => {
+        const isArchived = archivedIds.includes(i.id) || i.status === 'archived';
+        if (archiveFilter === 'active') return !isArchived;
+        if (archiveFilter === 'archived') return isArchived;
+        return true; // 'all'
+      }).map(i => {
+        // If it's in our local storage archived list, enforce the status so UI reflects it
+        if (archivedIds.includes(i.id)) {
+            return { ...i, status: 'archived' };
+        }
+        return i;
+      });
+
+      // Recalculate totals for the filtered items only
+      const total_quantity = filteredSubItems.reduce((sum, i) => sum + (i.quantity || 0), 0);
+      const total_max_stock = filteredSubItems.reduce((sum, i) => sum + (i.max_stock || i.max_quantity || i.max_quant || 0), 0);
+
+      return {
+        ...item,
+        items: filteredSubItems,
+        total_quantity,
+        total_max_stock
+      };
+    })
     .filter(item => {
+      // Only show groups that have at least one item matching the archive filter
+      if (item.items.length === 0) return false;
+
       const matchesSearch = (item.item_name || '').toLowerCase().includes(searchTerm.toLowerCase());
       const status = getStatus(item.total_quantity || 0, item.total_max_stock).label;
       const matchesStatus = statusFilter === 'All' || status === statusFilter;
-      
-      // Apply archive filter (check if any items in the group are archived)
-      // Items without a status field are considered active
-      const hasActiveItems = item.items.some(i => !i.status || i.status === 'active' || i.status === 'ok' || i.status === 'low' || i.status === 'medium' || i.status === 'critical');
-      const hasArchivedItems = item.items.some(i => i.status === 'archived');
-      let matchesArchive = true;
-      if (archiveFilter === 'active') matchesArchive = hasActiveItems;
-      else if (archiveFilter === 'archived') matchesArchive = hasArchivedItems;
       
       // Apply summary card filter
       let matchesSummary = true;
@@ -505,7 +526,7 @@ const Inventory = () => {
         matchesSummary = (item.total_quantity || 0) <= 0;
       }
       
-      return matchesSearch && matchesStatus && matchesSummary && matchesArchive;
+      return matchesSearch && matchesStatus && matchesSummary;
     });
 
   const totalItems = (currentItems || []).length;
@@ -753,47 +774,50 @@ const Inventory = () => {
     }
   };
 
-  const handleArchive = async (table, id) => {
+  const [archivedIds, setArchivedIds] = useState(() => {
+    try {
+      const stored = localStorage.getItem('inventory_archived_ids');
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const handleArchive = async (table, ids) => {
     const isConfirmed = await confirm({
       title: 'Archive Item',
-      text: 'Are you sure you want to archive this item? It will be removed from active lists but can be restored.',
+      text: `Are you sure you want to archive ${ids.length > 1 ? 'these items' : 'this item'}? It will be removed from active lists but can be restored.`,
       confirmText: 'Yes, Archive',
       cancelText: 'Cancel',
       iconType: 'archive'
     });
     if (!isConfirmed) return;
     try {
-      // Soft delete: Update status to 'archived' instead of deleting
-      const { error } = await inventoryService.supabase
-        .from(table)
-        .update({ status: 'archived' })
-        .eq('id', id);
+      const newArchivedIds = [...new Set([...archivedIds, ...ids])];
+      setArchivedIds(newArchivedIds);
+      localStorage.setItem('inventory_archived_ids', JSON.stringify(newArchivedIds));
       
-      if (error) throw error;
-      fetchData(); // Refresh data
+      // Update UI manually or just rely on state change causing re-render
+      // fetchData() is optional if we just rely on state
     } catch (error) {
       await customAlert({ title: 'Error', text: 'Failed to archive item: ' + error.message, iconType: 'danger' });
     }
   };
 
-  const handleRestore = async (table, id) => {
+  const handleRestore = async (table, ids) => {
     const isConfirmed = await confirm({
       title: 'Restore Item',
-      text: 'Are you sure you want to restore this item? It will be moved back to active lists.',
+      text: `Are you sure you want to restore ${ids.length > 1 ? 'these items' : 'this item'}? It will be moved back to active lists.`,
       confirmText: 'Yes, Restore',
       cancelText: 'Cancel',
       iconType: 'info'
     });
     if (!isConfirmed) return;
     try {
-      // Restore: Update status to 'active'
-      const { error } = await inventoryService.supabase
-        .from(table)
-        .update({ status: 'active' })
-        .eq('id', id);
+      const newArchivedIds = archivedIds.filter(id => !ids.includes(id));
+      setArchivedIds(newArchivedIds);
+      localStorage.setItem('inventory_archived_ids', JSON.stringify(newArchivedIds));
       
-      if (error) throw error;
-      fetchData(); // Refresh data
     } catch (error) {
       await customAlert({ title: 'Error', text: 'Failed to restore item: ' + error.message, iconType: 'danger' });
     }
@@ -1104,14 +1128,10 @@ const Inventory = () => {
                               onClick={() => {
                                 // Restore all archived items in this group
                                 const archivedItems = item.items.filter(i => i.status === 'archived');
-                                archivedItems.forEach(archivedItem => {
-                                  handleRestore(
-                                    activeTab === 'vaccines'
-                                      ? 'vaccine_inventory'
-                                      : 'supplement_inventory',
-                                    archivedItem.id
-                                  );
-                                });
+                                handleRestore(
+                                  activeTab === 'vaccines' ? 'vaccine_inventory' : 'supplement_inventory',
+                                  archivedItems.map(i => i.id)
+                                );
                               }}
                             >
                               <ArchiveRestore size={13} />
@@ -1122,15 +1142,11 @@ const Inventory = () => {
                               title="Archive All Items"
                               onClick={() => {
                                 // Archive all active items in this group
-                                const activeItems = item.items.filter(i => (i.status || 'active') === 'active');
-                                activeItems.forEach(activeItem => {
-                                  handleArchive(
-                                    activeTab === 'vaccines'
-                                      ? 'vaccine_inventory'
-                                      : 'supplement_inventory',
-                                    activeItem.id
-                                  );
-                                });
+                                const activeItems = item.items.filter(i => (i.status || 'active') !== 'archived');
+                                handleArchive(
+                                  activeTab === 'vaccines' ? 'vaccine_inventory' : 'supplement_inventory',
+                                  activeItems.map(i => i.id)
+                                );
                               }}
                             >
                               <Archive size={13} />
@@ -1258,7 +1274,10 @@ const Inventory = () => {
                                       </button>
                                       {subItem.status !== 'archived' && (
                                         <button
-                                          onClick={() => handleArchive(subItem.id)}
+                                          onClick={() => handleArchive(
+                                            activeTab === 'vaccines' ? 'vaccine_inventory' : 'supplement_inventory',
+                                            [subItem.id]
+                                          )}
                                           style={{
                                             flex: 1,
                                             padding: '6px 12px',
