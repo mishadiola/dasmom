@@ -139,6 +139,7 @@ const PrenatalVisits = () => {
     const [selectedVisit, setSelectedVisit] = useState(null);
     const [appointments, setAppointments] = useState([]);
     const [vaccinationsTable, setVaccinationsTable] = useState([]);
+    const [postpartumTable, setPostpartumTable] = useState([]);
     const [visitsTable, setVisitsTable] = useState([]);
     const [archivedPatientIds, setArchivedPatientIds] = useState(new Set());
     const [selectedPatient, setSelectedPatient] = useState(null);
@@ -210,11 +211,10 @@ const PrenatalVisits = () => {
         try {
             const vDays = getVisibleDays(currentDate, calendarView);
             if (vDays.length === 0) return;
-            
+
             const archivedIds = await patientService.getArchivedPatientIds();
             setArchivedPatientIds(archivedIds);
 
-            // Fetch perfectly aligned with the visual grid columns
             const startDate = vDays[0].date;
             const endDate = vDays[vDays.length - 1].date;
 
@@ -233,10 +233,10 @@ const PrenatalVisits = () => {
                         notes,
                         created_at,
                         vaccine_inventory (vaccine_name),
-                        patient_basic_info!vaccinations_patient_id_fkey (id, first_name, last_name, lmp, edd)
+                        patient_basic_info!vaccinations_patient_id_fkey (id, first_name, last_name)
                     `)
                     .not('patient_id', 'is', null)
-                    .order('created_at', { ascending: false })
+                    .order('scheduled_vaccination', { ascending: true, nullsFirst: false })
             ]);
 
             const processedVisits = (visitsData || []).map(v => ({
@@ -246,21 +246,25 @@ const PrenatalVisits = () => {
 
             const processedVaccs = ((vaccData && vaccData.data) || []).map(v => {
                 const dateStr = v.scheduled_vaccination || v.vaccinated_date || (v.created_at ? v.created_at.split('T')[0] : '');
-                const patientName = v.patient_basic_info 
-                    ? `${v.patient_basic_info.first_name || ''} ${v.patient_basic_info.last_name || ''}`.trim() 
-                    : v.patient_id;
-                const vName = v.vaccine_inventory?.vaccine_name || (v.notes ? v.notes.split(' ')[0] : 'Maternal Vaccine');
-                const doseTxt = v.dose_number ? `Dose ${v.dose_number}` : '';
+                const patientName = v.patient_basic_info
+                    ? `${v.patient_basic_info.first_name || ''} ${v.patient_basic_info.last_name || ''}`.trim()
+                    : 'Unknown patient';
+
+                const vaccineName =
+                    v.vaccine_inventory?.vaccine_name ||
+                    String(v.notes || '').trim() ||
+                    'Vaccine';
+
                 return {
                     id: v.id,
                     patientId: v.patient_id,
                     patientName: patientName || v.patient_id,
-                    vaccineName: vName,
-                    doseText: doseTxt,
+                    vaccineName,
+                    doseText: v.dose_number ? `Dose ${v.dose_number}` : '',
                     visitDate: dateStr,
                     visitDateOnly: dateStr,
                     visitTime: '09:00 AM',
-                    status: v.status || 'Scheduled',
+                    status: v.status || 'Pending',
                     vaccinatedDate: v.vaccinated_date,
                     scheduledVaccination: v.scheduled_vaccination,
                     notes: v.notes,
@@ -271,9 +275,10 @@ const PrenatalVisits = () => {
             setVisitsTable(processedVisits);
             setAppointments(apptsData || []);
             setVaccinationsTable(processedVaccs);
+            setPostpartumTable([]);
 
         } catch (error) {
-            console.error(error);
+            console.error('Prenatal fetch error:', error);
         }
     }, [currentDate, calendarView, archiveFilter, patientService]);
 
@@ -335,26 +340,67 @@ const PrenatalVisits = () => {
         }
     }, [patientService]);
 
-    // Fetch vaccinations when selected vaccine patient ID changes
     useEffect(() => {
-        if (!selectedVaccinePatientId) {
-            setPatientVaccinations([]);
+        if (visitTypeTab !== 'postpartum') {
+            setPostpartumTable([]);
             return;
         }
-        const fetchVaccinations = async () => {
+
+        const loadPostpartumFollowUps = async () => {
             try {
                 const { data, error } = await patientService.supabase
-                    .from('vaccinations')
-                    .select('*, vaccine_inventory(vaccine_name)')
-                    .eq('patient_id', selectedVaccinePatientId);
+                    .from('deliveries')
+                    .select(`
+                        id,
+                        mother_id,
+                        delivery_date,
+                        postpartum_visit_date,
+                        patient_basic_info!deliveries_mother_id_fkey (id, first_name, last_name)
+                    `)
+                    .not('postpartum_visit_date', 'is', null)
+                    .order('postpartum_visit_date', { ascending: false });
+
                 if (error) throw error;
-                setPatientVaccinations(data || []);
+
+                const rows = (data || []).map(d => {
+                    const dateStr = d.postpartum_visit_date || d.delivery_date || '';
+                    const patientName = d.patient_basic_info
+                        ? `${d.patient_basic_info.first_name || ''} ${d.patient_basic_info.last_name || ''}`.trim()
+                        : d.mother_id;
+
+                    return {
+                        id: d.id,
+                        patientId: d.mother_id,
+                        patientName: patientName || d.mother_id,
+                        vaccineName: 'Postpartum Follow-up',
+                        doseText: '',
+                        visitDate: dateStr,
+                        visitDateOnly: dateStr,
+                        visitTime: '09:00 AM',
+                        status: dateStr && dateStr < new Date().toISOString().split('T')[0] ? 'Missed' : 'Scheduled',
+                        vaccinatedDate: null,
+                        scheduledVaccination: dateStr,
+                        notes: 'Postpartum follow-up',
+                        raw: d
+                    };
+                });
+
+                setPostpartumTable(rows);
             } catch (err) {
-                console.error('Error fetching patient vaccinations:', err);
+                console.error('Error loading postpartum follow-ups:', err);
+                setPostpartumTable([]);
             }
         };
-        fetchVaccinations();
-    }, [selectedVaccinePatientId, patientService.supabase]);
+
+        loadPostpartumFollowUps();
+    }, [visitTypeTab, patientService.supabase]);
+
+    useEffect(() => {
+        if (visitTypeTab !== 'vaccination') return;
+        if (vaccinationsTable.length === 0) {
+            fetchData();
+        }
+    }, [visitTypeTab, fetchData, vaccinationsTable.length]);
 
     // Generate vaccination schedule timeline based on patient's LMP and db records
     const calculatedVaccineSchedule = useMemo(() => {
@@ -624,67 +670,50 @@ const PrenatalVisits = () => {
 
     const categorizeVisits = () => {
         const today = new Date().toISOString().split('T')[0];
-        
+
+        let activeRows = [];
         if (visitTypeTab === 'vaccination') {
-            const allVaccs = filteredVaccinations.map(v => ({
-                id: v.id,
-                patientId: v.patientId,
-                patientName: v.patientName,
-                vaccineName: v.vaccineName,
-                doseText: v.doseText,
-                visitDate: v.visitDateOnly,
-                visitTime: v.visitTime,
-                status: v.status,
-                vaccinatedDate: v.vaccinatedDate,
-                visitDateTime: new Date(`${v.visitDateOnly || today}T00:00:00`)
-            }));
-
-            const upcoming = allVaccs.filter(v => 
-                (v.status === 'Scheduled' || v.status === 'Pending') && 
-                v.visitDate >= today
-            ).sort((a, b) => a.visitDate.localeCompare(b.visitDate));
-
-            const missed = allVaccs.filter(v => 
-                v.status === 'Missed' || 
-                ((v.status === 'Scheduled' || v.status === 'Pending') && v.visitDate < today)
-            ).sort((a, b) => b.visitDate.localeCompare(a.visitDate));
-
-            const completed = allVaccs.filter(v => 
-                v.status === 'Attended' || v.status === 'Completed' || v.status === 'Given' || v.vaccinatedDate
-            ).sort((a, b) => {
-                const dateA = a.vaccinatedDate ? new Date(a.vaccinatedDate) : new Date(a.visitDate);
-                const dateB = b.vaccinatedDate ? new Date(b.vaccinatedDate) : new Date(b.visitDate);
-                return dateB - dateA;
+            activeRows = filteredVaccinations;
+        } else if (visitTypeTab === 'postpartum') {
+            activeRows = postpartumTable.filter(v => {
+                const matchesSearch = (v.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    v.patientId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    v.vaccineName?.toLowerCase().includes(searchTerm.toLowerCase()));
+                const matchesArchive =
+                    archiveFilter === 'all' ||
+                    (archiveFilter === 'archived' ? archivedPatientIds.has(v.patientId) : !archivedPatientIds.has(v.patientId));
+                return matchesSearch && matchesArchive;
             });
-
-            return { upcoming, missed, completed };
+        } else {
+            activeRows = filteredVisits;
         }
 
-        // Flatten all visits into individual visit records with status
-        const allVisits = filteredVisits.map(v => ({
+        const allEntries = activeRows.map(v => ({
             id: v.id,
             patientId: v.patientId,
             patientName: v.patientName,
             risk: v.risk || v.calculated_risk || 'Normal',
-            visitDate: v.visitDateOnly,
-            visitTime: v.visitTime,
+            vaccineName: v.vaccineName,
+            doseText: v.doseText,
+            visitDate: v.visitDateOnly || v.visitDate,
+            visitTime: v.visitTime || '09:00 AM',
             status: v.status,
-            attendedDate: v.attendedDate,
-            visitDateTime: new Date(`${v.visitDateOnly}T${v.visitTime || '00:00'}`)
+            attendedDate: v.attendedDate || v.vaccinatedDate,
+            visitDateTime: new Date(`${v.visitDateOnly || v.visitDate || today}T${v.visitTime ? convertTo24Hour(v.visitTime) : '09:00'}`)
         }));
 
-        const upcoming = allVisits.filter(v => 
+        const upcoming = allEntries.filter(v => 
             (v.status === 'Scheduled' || v.status === 'Pending') && 
             v.visitDate >= today
         ).sort((a, b) => a.visitDate.localeCompare(b.visitDate));
 
-        const missed = allVisits.filter(v => 
+        const missed = allEntries.filter(v => 
             v.status === 'Missed' || 
-            (v.status === 'Scheduled' && v.visitDate < today)
+            ((v.status === 'Scheduled' || v.status === 'Pending') && v.visitDate < today)
         ).sort((a, b) => b.visitDate.localeCompare(a.visitDate));
 
-        const completed = allVisits.filter(v => 
-            v.status === 'Attended' || v.status === 'Completed'
+        const completed = allEntries.filter(v => 
+            v.status === 'Attended' || v.status === 'Completed' || v.status === 'Given' || v.status === 'Done' || v.attendedDate
         ).sort((a, b) => {
             const dateA = a.attendedDate ? new Date(a.attendedDate) : new Date(a.visitDate);
             const dateB = b.attendedDate ? new Date(b.attendedDate) : new Date(b.visitDate);
@@ -813,191 +842,185 @@ const PrenatalVisits = () => {
                     </div>
                 </div>
 
-                {visitTypeTab === 'postpartum' ? (
-                    <div className="pv-calendar-section vaccination-empty" style={{ padding: '40px', textAlign: 'center' }}>
-                        <div className="empty-state">
-                            <CalendarIcon size={48} />
-                            <h3>No postpartum schedules yet.</h3>
-                            <p>Postpartum scheduling will be available soon.</p>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="pv-grid-container">
-                        {calendarView === 'day' ? (
-                            <div className="day-view-container">
-                                {visibleDays.map(day => {
-                                    const dayItems = visitTypeTab === 'vaccination'
-                                        ? vaccinationsTable.filter(v => v.visitDateOnly === day.date)
+                <div className="pv-grid-container">
+                    {calendarView === 'day' ? (
+                        <div className="day-view-container">
+                            {visibleDays.map(day => {
+                                const dayItems = visitTypeTab === 'vaccination'
+                                    ? vaccinationsTable.filter(v => v.visitDateOnly === day.date)
+                                    : visitTypeTab === 'postpartum'
+                                        ? postpartumTable.filter(v => v.visitDateOnly === day.date)
                                         : visitsTable.filter(v => v.visitDateOnly === day.date);
-                                    const dayAppts = visitTypeTab === 'prenatal' ? appointments.filter(a => a.date === day.date) : [];
-                                    const dayManual = visitTypeTab === 'prenatal' ? manualVisits.filter(v => v.visit_date === day.date) : [];
-                                    
-                                    return (
-                                        <div key={day.date} className={`day-schedule-card ${day.date === TODAY ? 'day-today' : ''}`}>
-                                            <div className="day-schedule-header">
-                                                <h3 className="day-schedule-title">
-                                                    {day.label}
-                                                    {day.date === TODAY && <span className="today-badge">TODAY</span>}
-                                                </h3>
-                                                <span className="day-schedule-count">
-                                                    {dayItems.length + dayAppts.length + dayManual.length} schedule{dayItems.length + dayAppts.length + dayManual.length !== 1 ? 's' : ''}
-                                                </span>
-                                            </div>
-                                            <div className="day-schedule-list">
-                                                {dayItems.length > 0 ? (
-                                                    dayItems.map(item => (
-                                                        <div 
-                                                            key={item.id} 
-                                                            className={`schedule-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
-                                                            onClick={(e) => { e.stopPropagation(); setSelectedVisit(item); }}
-                                                        >
-                                                            <div className="schedule-time">
-                                                                <Clock size={14} />
-                                                                <span>{item.visitTime || 'TBD'}</span>
-                                                            </div>
-                                                            <div className="schedule-details">
-                                                                <span className="schedule-patient">{item.patientName}</span>
-                                                                <span className="schedule-id">{visitTypeTab === 'vaccination' ? item.vaccineName : item.patientId}</span>
-                                                            </div>
-                                                            <span className={`schedule-status status-${(item.status || 'scheduled').toLowerCase()}`}>
-                                                                {item.status || 'Scheduled'}
-                                                            </span>
-                                                        </div>
-                                                    ))
-                                                ) : dayAppts.length > 0 ? (
-                                                    dayAppts.map((a, idx) => (
-                                                        <div key={`appt-${idx}`} className={`schedule-item status-${a.status?.toLowerCase() || 'scheduled'}`}>
-                                                            <div className="schedule-time">
-                                                                <Clock size={14} />
-                                                                <span>{a.time || 'TBD'}</span>
-                                                            </div>
-                                                            <div className="schedule-details">
-                                                                <span className="schedule-patient">{a.patientName || 'Appointment'}</span>
-                                                                <span className="schedule-id">{a.patientId || ''}</span>
-                                                            </div>
-                                                            <span className={`schedule-status status-${a.status?.toLowerCase() || 'scheduled'}`}>
-                                                                {a.status || 'Scheduled'}
-                                                            </span>
-                                                        </div>
-                                                    ))
-                                                ) : (
-                                                    <div className="no-schedules">No schedules for this day</div>
-                                                )}
-                                                {/* Manual visits (Emergency / Follow-up) */}
-                                                {dayManual.map(mv => (
-                                                    <div key={mv.id} className={`schedule-item manual-visit-item manual-${mv.visit_type}`}>
+                                const dayAppts = visitTypeTab === 'prenatal' ? appointments.filter(a => a.date === day.date) : [];
+                                const dayManual = visitTypeTab === 'prenatal' ? manualVisits.filter(v => v.visit_date === day.date) : [];
+
+                                return (
+                                    <div key={day.date} className={`day-schedule-card ${day.date === TODAY ? 'day-today' : ''}`}>
+                                        <div className="day-schedule-header">
+                                            <h3 className="day-schedule-title">
+                                                {day.label}
+                                                {day.date === TODAY && <span className="today-badge">TODAY</span>}
+                                            </h3>
+                                            <span className="day-schedule-count">
+                                                {dayItems.length + dayAppts.length + dayManual.length} schedule{dayItems.length + dayAppts.length + dayManual.length !== 1 ? 's' : ''}
+                                            </span>
+                                        </div>
+                                        <div className="day-schedule-list">
+                                            {dayItems.length > 0 ? (
+                                                dayItems.map(item => (
+                                                    <div 
+                                                        key={item.id} 
+                                                        className={`schedule-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
+                                                        onClick={(e) => { e.stopPropagation(); setSelectedVisit(item); }}
+                                                    >
                                                         <div className="schedule-time">
                                                             <Clock size={14} />
-                                                            <span>{mv.visit_time || 'TBD'}</span>
+                                                            <span>{item.visitTime || 'TBD'}</span>
                                                         </div>
                                                         <div className="schedule-details">
-                                                            <span className="schedule-patient">{mv.patient_name}</span>
-                                                            <span className="visit-type-badge badge-manual-type badge-{mv.visit_type}">{mv.visit_type === 'emergency' ? 'Emergency' : 'Follow-up'}</span>
+                                                            <span className="schedule-patient">{item.patientName}</span>
+                                                            <span className="schedule-id">{visitTypeTab === 'vaccination' ? item.vaccineName : visitTypeTab === 'postpartum' ? 'Postpartum Follow-up' : item.patientId}</span>
                                                         </div>
-                                                        <span className="visit-type-badge" style={{ background: mv.visit_type === 'emergency' ? 'rgba(224,92,115,0.15)' : 'rgba(147,111,199,0.15)', color: mv.visit_type === 'emergency' ? '#c94070' : '#7a4fa8', fontWeight: 600, fontSize: '11px', padding: '2px 8px', borderRadius: '10px' }}>
-                                                            {mv.visit_type === 'emergency' ? 'Emergency' : 'Follow-up'}
+                                                        <span className={`schedule-status status-${(item.status || 'scheduled').toLowerCase()}`}>
+                                                            {item.status || 'Scheduled'}
                                                         </span>
                                                     </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        ) : (
-                            <div className={`day-grid ${calendarView}-grid`}>
-                                {calendarView === 'week' ? (
-                                    <div className="week-row">
-                                        {visibleDays.map(day => {
-                                            const dayItems = visitTypeTab === 'vaccination'
-                                                ? vaccinationsTable.filter(v => v.visitDateOnly === day.date)
-                                                : visitsTable.filter(v => v.visitDateOnly === day.date);
-                                            const dayManual = visitTypeTab === 'prenatal' ? manualVisits.filter(mv => mv.visit_date === day.date) : [];
-
-                                            return (
-                                                <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`} onClick={() => { setCalendarView('day'); setCurrentDate(new Date(day.date)); }}>
-                                                    <h4 className="day-header">
-                                                        {formatCalendarDate(day.date)}
-                                                        {day.date === TODAY && <span className="today-badge">TODAY</span>}
-                                                    </h4>
-                                                    <div className="day-visits">
-                                                        {dayItems.map(item => (
-                                                            <div 
-                                                                key={item.id} 
-                                                                className={`visit-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
-                                                                onClick={(e) => { e.stopPropagation(); setSelectedVisit(item); }}
-                                                            >
-                                                                <span className="visit-patient">{item.patientName}</span>
-                                                                <span className="visit-status">{visitTypeTab === 'vaccination' ? item.vaccineName : (item.status || 'Scheduled')}</span>
-                                                            </div>
-                                                        ))}
-                                                        {dayManual.map(mv => (
-                                                            <div key={mv.id} className={`visit-item manual-${mv.visit_type}`}>
-                                                                <span className="visit-patient">{mv.patient_name}</span>
-                                                                <span className="visit-type-badge" style={{ background: mv.visit_type === 'emergency' ? 'rgba(224,92,115,0.15)' : 'rgba(147,111,199,0.15)', color: mv.visit_type === 'emergency' ? '#c94070' : '#7a4fa8', fontWeight: 600, fontSize: '10px', padding: '1px 6px', borderRadius: '8px' }}>{mv.visit_type === 'emergency' ? 'Emergency' : 'Follow-up'}</span>
-                                                            </div>
-                                                        ))}
-                                                        {dayItems.length === 0 && dayManual.length === 0 && (
-                                                            <div className="no-visits">No schedules</div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                ) : (
-                                    // Month view: group days into weeks
-                                    (() => {
-                                        const weeks = [];
-                                        for (let i = 0; i < visibleDays.length; i += 7) {
-                                            weeks.push(visibleDays.slice(i, i + 7));
-                                        }
-                                        return weeks.map((week, weekIndex) => (
-                                            <div key={weekIndex} className="week-row">
-                                                {week.map(day => {
-                                                    const dayItems = visitTypeTab === 'vaccination'
-                                                        ? vaccinationsTable.filter(v => v.visitDateOnly === day.date)
-                                                        : visitsTable.filter(v => v.visitDateOnly === day.date);
-                                                    const dayManual = visitTypeTab === 'prenatal' ? manualVisits.filter(mv => mv.visit_date === day.date) : [];
-
-                                                    return (
-                                                        <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`} onClick={() => { setCalendarView('day'); setCurrentDate(new Date(day.date)); }}>
-                                                            <h4 className="day-header">
-                                                                {formatCalendarDate(day.date)}
-                                                                {day.date === TODAY && <span className="today-badge">TODAY</span>}
-                                                            </h4>
-                                                            <div className="day-visits">
-                                                                {dayItems.map(item => (
-                                                                    <div 
-                                                                        key={item.id} 
-                                                                        className={`visit-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
-                                                                        onClick={(e) => { e.stopPropagation(); setSelectedVisit(item); }}
-                                                                    >
-                                                                        <span className="visit-patient">{item.patientName}</span>
-                                                                        <span className="visit-status">{visitTypeTab === 'vaccination' ? item.vaccineName : (item.status || 'Scheduled')}</span>
-                                                                    </div>
-                                                                ))}
-                                                                {dayManual.map(mv => (
-                                                                    <div key={mv.id} className={`visit-item manual-${mv.visit_type}`}>
-                                                                        <span className="visit-patient">{mv.patient_name}</span>
-                                                                        <span className="visit-type-badge" style={{ background: mv.visit_type === 'emergency' ? 'rgba(224,92,115,0.15)' : 'rgba(147,111,199,0.15)', color: mv.visit_type === 'emergency' ? '#c94070' : '#7a4fa8', fontWeight: 600, fontSize: '11px', padding: '1px 6px', borderRadius: '8px' }}>{mv.visit_type === 'emergency' ? 'Emergency' : 'Follow-up'}</span>
-                                                                    </div>
-                                                                ))}
-                                                                {dayItems.length === 0 && dayManual.length === 0 && (
-                                                                    <div className="no-visits">No schedules</div>
-                                                                )}
-                                                            </div>
+                                                ))
+                                            ) : dayAppts.length > 0 ? (
+                                                dayAppts.map((a, idx) => (
+                                                    <div key={`appt-${idx}`} className={`schedule-item status-${a.status?.toLowerCase() || 'scheduled'}`}>
+                                                        <div className="schedule-time">
+                                                            <Clock size={14} />
+                                                            <span>{a.time || 'TBD'}</span>
                                                         </div>
-                                                    );
-                                                })}
+                                                        <div className="schedule-details">
+                                                            <span className="schedule-patient">{a.patientName || 'Appointment'}</span>
+                                                            <span className="schedule-id">{a.patientId || ''}</span>
+                                                        </div>
+                                                        <span className={`schedule-status status-${a.status?.toLowerCase() || 'scheduled'}`}>
+                                                            {a.status || 'Scheduled'}
+                                                        </span>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div className="no-schedules">No schedules for this day</div>
+                                            )}
+                                            {dayManual.map(mv => (
+                                                <div key={mv.id} className={`schedule-item manual-visit-item manual-${mv.visit_type}`}>
+                                                    <div className="schedule-time">
+                                                        <Clock size={14} />
+                                                        <span>{mv.visit_time || 'TBD'}</span>
+                                                    </div>
+                                                    <div className="schedule-details">
+                                                        <span className="schedule-patient">{mv.patient_name}</span>
+                                                        <span className="visit-type-badge badge-manual-type badge-{mv.visit_type}">{mv.visit_type === 'emergency' ? 'Emergency' : 'Follow-up'}</span>
+                                                    </div>
+                                                    <span className="visit-type-badge" style={{ background: mv.visit_type === 'emergency' ? 'rgba(224,92,115,0.15)' : 'rgba(147,111,199,0.15)', color: mv.visit_type === 'emergency' ? '#c94070' : '#7a4fa8', fontWeight: 600, fontSize: '11px', padding: '2px 8px', borderRadius: '10px' }}>
+                                                        {mv.visit_type === 'emergency' ? 'Emergency' : 'Follow-up'}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <div className={`day-grid ${calendarView}-grid`}>
+                            {calendarView === 'week' ? (
+                                <div className="week-row">
+                                    {visibleDays.map(day => {
+                                        const dayItems = visitTypeTab === 'vaccination'
+                                            ? vaccinationsTable.filter(v => v.visitDateOnly === day.date)
+                                            : visitTypeTab === 'postpartum'
+                                                ? postpartumTable.filter(v => v.visitDateOnly === day.date)
+                                                : visitsTable.filter(v => v.visitDateOnly === day.date);
+                                        const dayManual = visitTypeTab === 'prenatal' ? manualVisits.filter(mv => mv.visit_date === day.date) : [];
+
+                                        return (
+                                            <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`} onClick={() => { setCalendarView('day'); setCurrentDate(new Date(day.date)); }}>
+                                                <h4 className="day-header">
+                                                    {formatCalendarDate(day.date)}
+                                                    {day.date === TODAY && <span className="today-badge">TODAY</span>}
+                                                </h4>
+                                                <div className="day-visits">
+                                                    {dayItems.map(item => (
+                                                        <div 
+                                                            key={item.id} 
+                                                            className={`visit-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
+                                                            onClick={(e) => { e.stopPropagation(); setSelectedVisit(item); }}
+                                                        >
+                                                            <span className="visit-patient">{item.patientName}</span>
+                                                            <span className="visit-status">{visitTypeTab === 'vaccination' ? item.vaccineName : visitTypeTab === 'postpartum' ? 'Postpartum' : (item.status || 'Scheduled')}</span>
+                                                        </div>
+                                                    ))}
+                                                    {dayManual.map(mv => (
+                                                        <div key={mv.id} className={`visit-item manual-${mv.visit_type}`}>
+                                                            <span className="visit-patient">{mv.patient_name}</span>
+                                                            <span className="visit-type-badge" style={{ background: mv.visit_type === 'emergency' ? 'rgba(224,92,115,0.15)' : 'rgba(147,111,199,0.15)', color: mv.visit_type === 'emergency' ? '#c94070' : '#7a4fa8', fontWeight: 600, fontSize: '10px', padding: '1px 6px', borderRadius: '8px' }}>{mv.visit_type === 'emergency' ? 'Emergency' : 'Follow-up'}</span>
+                                                        </div>
+                                                    ))}
+                                                    {dayItems.length === 0 && dayManual.length === 0 && (
+                                                        <div className="no-visits">No schedules</div>
+                                                    )}
+                                                </div>
                                             </div>
-                                        ));
-                                    })()
-                                )}
-                            </div>
-                        )}
-                    </div>
-                )}
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                (() => {
+                                    const weeks = [];
+                                    for (let i = 0; i < visibleDays.length; i += 7) {
+                                        weeks.push(visibleDays.slice(i, i + 7));
+                                    }
+                                    return weeks.map((week, weekIndex) => (
+                                        <div key={weekIndex} className="week-row">
+                                            {week.map(day => {
+                                                const dayItems = visitTypeTab === 'vaccination'
+                                                    ? vaccinationsTable.filter(v => v.visitDateOnly === day.date)
+                                                    : visitTypeTab === 'postpartum'
+                                                        ? postpartumTable.filter(v => v.visitDateOnly === day.date)
+                                                        : visitsTable.filter(v => v.visitDateOnly === day.date);
+                                                const dayManual = visitTypeTab === 'prenatal' ? manualVisits.filter(mv => mv.visit_date === day.date) : [];
+
+                                                return (
+                                                    <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`} onClick={() => { setCalendarView('day'); setCurrentDate(new Date(day.date)); }}>
+                                                        <h4 className="day-header">
+                                                            {formatCalendarDate(day.date)}
+                                                            {day.date === TODAY && <span className="today-badge">TODAY</span>}
+                                                        </h4>
+                                                        <div className="day-visits">
+                                                            {dayItems.map(item => (
+                                                                <div 
+                                                                    key={item.id} 
+                                                                    className={`visit-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
+                                                                    onClick={(e) => { e.stopPropagation(); setSelectedVisit(item); }}
+                                                                >
+                                                                    <span className="visit-patient">{item.patientName}</span>
+                                                                    <span className="visit-status">{visitTypeTab === 'vaccination' ? item.vaccineName : visitTypeTab === 'postpartum' ? 'Postpartum' : (item.status || 'Scheduled')}</span>
+                                                                </div>
+                                                            ))}
+                                                            {dayManual.map(mv => (
+                                                                <div key={mv.id} className={`visit-item manual-${mv.visit_type}`}>
+                                                                    <span className="visit-patient">{mv.patient_name}</span>
+                                                                    <span className="visit-type-badge" style={{ background: mv.visit_type === 'emergency' ? 'rgba(224,92,115,0.15)' : 'rgba(147,111,199,0.15)', color: mv.visit_type === 'emergency' ? '#c94070' : '#7a4fa8', fontWeight: 600, fontSize: '11px', padding: '1px 6px', borderRadius: '8px' }}>{mv.visit_type === 'emergency' ? 'Emergency' : 'Follow-up'}</span>
+                                                                </div>
+                                                            ))}
+                                                            {dayItems.length === 0 && dayManual.length === 0 && (
+                                                                <div className="no-visits">No schedules</div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    ));
+                                })()
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
 
 
@@ -1209,13 +1232,87 @@ const PrenatalVisits = () => {
                         </table>
                     </div>
                 ) : (
-                    /* Postpartum Tab - Table Empty State */
-                    <div className="pv-table-section vaccination-empty" style={{ padding: '40px', textAlign: 'center' }}>
-                        <div className="empty-state">
-                            <Users size={48} />
-                            <h3>No {visitTypeTab} schedules found.</h3>
-                            <p>{visitTypeTab.charAt(0).toUpperCase() + visitTypeTab.slice(1)} patient records will appear here.</p>
-                        </div>
+                    <div className="table-responsive">
+                        <table className="pv-table">
+                            <thead>
+                                <tr>
+                                    <th style={{ textAlign: 'center', width: '50px' }}>#</th>
+                                    <th>Patient Name</th>
+                                    <th>Follow-up</th>
+                                    <th>Date &amp; Time</th>
+                                    <th>Status</th>
+                                    <th className="text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {paginatedTabVisits.length > 0 ? (
+                                    paginatedTabVisits.map((visit, idx) => (
+                                        <tr key={visit.id}>
+                                            <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: '12.5px', width: '50px' }}>{tabStartIndex + idx + 1}</td>
+                                            <td>
+                                                <div className="p-info">
+                                                    <span className="p-name">{visit.patientName}</span>
+                                                    <span className="p-id">{visit.patientId}</span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div className="p-info">
+                                                    <span className="p-name" style={{ fontWeight: 600 }}>Postpartum Follow-up</span>
+                                                    <span className="p-id">{visit.doseText || 'Routine check'}</span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div className="visit-datetime">
+                                                    <span className="visit-date">{formatReadableDate(visit.visitDate)}</span>
+                                                    <span className="visit-time">{visit.visitTime || '09:00 AM'}</span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span className={`status-badge status-${visit.status?.toLowerCase() || 'scheduled'}`}>
+                                                    {visit.status}
+                                                </span>
+                                            </td>
+                                            <td className="text-right">
+                                                <div className="row-actions">
+                                                    <button className="action-btn-text action-btn-primary" onClick={() => navigate('/dashboard/postpartum')} title="Open Postpartum Records">
+                                                        <Users size={14} /> Record
+                                                    </button>
+                                                    <button className="action-btn-text action-btn-secondary" onClick={() => setSelectedVisit({ ...visit, type: 'Postpartum' })} title="View Follow-up Details">
+                                                        <Eye size={14} /> View
+                                                    </button>
+                                                    <button className="action-btn-text action-btn-accent" onClick={() => navigate(`/dashboard/patients/${visit.patientId}`)} title="View Patient Profile">
+                                                        <Users size={14} /> Profile
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan="6" className="empty-tab-state">
+                                            {visitCategoryTab === 'upcoming' && (
+                                                <div className="empty-state-content">
+                                                    <CalendarCheck size={32} />
+                                                    <p>No upcoming postpartum follow-ups.</p>
+                                                </div>
+                                            )}
+                                            {visitCategoryTab === 'missed' && (
+                                                <div className="empty-state-content">
+                                                    <AlertTriangle size={32} />
+                                                    <p>No missed postpartum follow-ups.</p>
+                                                </div>
+                                            )}
+                                            {visitCategoryTab === 'completed' && (
+                                                <div className="empty-state-content">
+                                                    <CheckCircle2 size={32} />
+                                                    <p>No completed postpartum follow-ups.</p>
+                                                </div>
+                                            )}
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
                     </div>
                 )}
 
