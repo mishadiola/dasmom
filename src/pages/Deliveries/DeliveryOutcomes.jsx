@@ -202,8 +202,8 @@ const DeliveryOutcomes = () => {
     const handleNewPregnancy = async (patientId) => {
         const isConfirmed = await confirm({
             title: 'Create New Pregnancy',
-            text: 'Are you sure you want to create a new pregnancy record for this patient? This will mark them as active/pregnant again.',
-            confirmText: 'Yes, Create',
+            text: 'This will open the existing patient form and prefill her details so you can complete the new pregnancy and vital checks.',
+            confirmText: 'Continue',
             cancelText: 'Cancel',
             iconType: 'info'
         });
@@ -211,47 +211,9 @@ const DeliveryOutcomes = () => {
             return;
         }
 
-        try {
-            const patientService = new PatientService();
-            
-            // Create new pregnancy record
-            const newPregnancyData = {
-                patient_id: patientId,
-                lmd: new Date().toISOString().split('T')[0], // Set LMP to current date
-                edd: null, // Will be calculated based on LMP
-                gravida: null, // Will be updated from patient history
-                para: null, // Will be updated from patient history
-                risk_factors: '',
-                calculated_risk: 'Normal',
-                pregnancy_type: 'Singleton',
-                status: 'Active'
-            };
-
-            // Insert new pregnancy record
-            const { data: pregnancyData, error: pregnancyError } = await supabase
-                .from('pregnancy_info')
-                .insert([newPregnancyData])
-                .select()
-                .single();
-
-            if (pregnancyError) throw pregnancyError;
-
-            // Update patient basic info to mark as pregnant
-            const { error: updateError } = await supabase
-                .from('patient_basic_info')
-                .update({ is_pregnant: true })
-                .eq('id', patientId);
-
-            if (updateError) throw updateError;
-
-            await customAlert({ title: 'Success', text: 'New pregnancy record created successfully!', iconType: 'success' });
-            
-            // Navigate to patient profile
-            navigate(`/dashboard/patients/${patientId}?from=deliveries`);
-        } catch (err) {
-            console.error('Error creating new pregnancy:', err);
-            await customAlert({ title: 'Error', text: `Failed to create new pregnancy: ${err.message}`, iconType: 'danger' });
-        }
+        navigate('/dashboard/patients/add', {
+            state: { existingPatientId: patientId }
+        });
     };
 
     return (

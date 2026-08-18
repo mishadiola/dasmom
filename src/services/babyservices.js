@@ -445,10 +445,8 @@ class BabyService {
             edd: currentPregnancy.edd,
             pregnancy_type: currentPregnancy.pregnancy_type,
             place_of_delivery: deliveryData.facility || currentPregnancy.place_of_delivery,
-            calculated_risk: currentPregnancy.calculated_risk,
             gravida: newGravida,
-            para: newPara,
-            risk_factors: currentPregnancy.risk_factors
+            para: newPara
           });
 
         // Schedule postpartum visit
@@ -625,16 +623,40 @@ class BabyService {
         const motherIds = [...new Set(filtered.map(d => d.mother_id))];
         const { data: pregInfo } = await supabase
             .from('pregnancy_info')
-            .select('patient_id, pregn_postp, calculated_risk')
-            .in('patient_id', motherIds);
+            .select('patient_id, pregn_postp, created_at')
+            .in('patient_id', motherIds)
+            .order('created_at', { ascending: false });
 
-        const pregMap = new Map(pregInfo?.map(p => [p.patient_id, p]) || []);
+        const latestPregMap = new Map();
+        (pregInfo || []).forEach(row => {
+            if (!row.patient_id || latestPregMap.has(row.patient_id)) return;
+            latestPregMap.set(row.patient_id, row);
+        });
+
+        const { data: riskRows } = await supabase
+            .from('prenatal_visits')
+            .select('patient_id, calculated_risk, visit_date')
+            .in('patient_id', motherIds)
+            .order('visit_date', { ascending: false });
+
+        const latestRiskMap = new Map();
+        (riskRows || []).forEach(row => {
+            if (!row.patient_id || latestRiskMap.has(row.patient_id)) return;
+            latestRiskMap.set(row.patient_id, row.calculated_risk || 'Normal');
+        });
+
         const today = new Date();
 
-        return filtered.map(d => {
+        return filtered
+            .filter(d => {
+                const latestPreg = latestPregMap.get(d.mother_id) || {};
+                return (latestPreg.pregn_postp || '').toLowerCase() === 'postpartum';
+            })
+            .map(d => {
             const mother = d.patient_basic_info;
             const newborns = Array.isArray(d.newborns) ? d.newborns : [d.newborns].filter(Boolean);
-            const preg = pregMap.get(d.mother_id) || {};
+            const preg = latestPregMap.get(d.mother_id) || {};
+            const riskLevel = latestRiskMap.get(d.mother_id) || 'Normal';
             
             const deliveryDate = new Date(d.delivery_date);
             const diffTime = Math.abs(today - deliveryDate);
@@ -646,7 +668,7 @@ class BabyService {
             
             let recoveryStatus = 'Normal';
             if (hasComplications) recoveryStatus = 'Complication';
-            else if (preg.calculated_risk === 'High Risk' || preg.calculated_risk === 'High') recoveryStatus = 'Monitoring';
+            else if (riskLevel === 'High Risk' || riskLevel === 'High') recoveryStatus = 'Monitoring';
 
             // Determine follow-up status
             let followUpStatus = 'Upcoming';

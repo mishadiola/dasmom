@@ -1951,6 +1951,120 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     }
   }
 
+  async addExistingPregnancy(patientId, patientData, createdBy = null) {
+    try {
+      const resolvedCreatedBy = createdBy || (await this.getCurrentUserId());
+      const { data: latestPregnancy, error: latestErr } = await this.supabase
+        .from('pregnancy_info')
+        .select('*')
+        .eq('patient_id', patientId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (latestErr) throw latestErr;
+
+      const parsedGravida = parseInt(patientData.gravida, 10);
+      const parsedPara = parseInt(patientData.para, 10);
+
+      const nextGravida = Number.isFinite(parsedGravida)
+        ? parsedGravida
+        : (latestPregnancy?.gravida ? Number(latestPregnancy.gravida) + 1 : 1);
+
+      const nextPara = Number.isFinite(parsedPara)
+        ? parsedPara
+        : (latestPregnancy?.para ? Number(latestPregnancy.para) : 0);
+
+      const { data: pregnancyRow, error: pregnancyError } = await this.supabase
+        .from('pregnancy_info')
+        .insert({
+          patient_id: patientId,
+          created_by: resolvedCreatedBy,
+          pregn_postp: 'Pregnant',
+          lmd: patientData.lmp || null,
+          edd: patientData.edd || null,
+          pregnancy_type: patientData.pregnancyType || 'Singleton',
+          place_of_delivery: patientData.plannedDeliveryPlace || null,
+          gravida: nextGravida,
+          para: nextPara
+        })
+        .select()
+        .single();
+
+      if (pregnancyError) throw pregnancyError;
+
+      const today = new Date().toISOString().split('T')[0];
+      const schedulePreview = Array.isArray(patientData.schedulePreview)
+        ? patientData.schedulePreview
+            .filter(v => v && v.date && !Number.isNaN(new Date(v.date).getTime()))
+            .map(v => ({ ...v, date: new Date(v.date).toISOString().split('T')[0] }))
+        : [];
+
+      const retainedStaff = patientData.station ? await this.getRetainedStaff(patientData.station) : [];
+      const actualVisitDate = today;
+      const bpMatch = patientData.bp ? patientData.bp.match(/^(\d+)[/\s](\d+)$/) : null;
+      const weeksAtVisit = patientData.lmp ? this.calculateWeeks(patientData.lmp) : 0;
+      const gaString = weeksAtVisit > 0 ? `${weeksAtVisit} weeks` : '1st visit';
+
+      const firstVisitRecord = {
+        patient_id: patientId,
+        visit_date: actualVisitDate,
+        visit_number: 1,
+        trimester: patientData.lmp ? this.calculateTrimester(patientData.lmp) : 1,
+        gestational_age: gaString,
+        bp_systolic: bpMatch ? parseInt(bpMatch[1], 10) : null,
+        bp_diastolic: bpMatch ? parseInt(bpMatch[2], 10) : null,
+        weight_kg: patientData.weight ? parseFloat(patientData.weight) : null,
+        height_cm: patientData.height ? parseFloat(patientData.height) : null,
+        temp_c: patientData.temp ? parseFloat(patientData.temp) : null,
+        pulse_bpm: patientData.pulse ? parseInt(patientData.pulse, 10) : null,
+        resp_rate_cpm: patientData.respRate ? parseInt(patientData.respRate, 10) : null,
+        fundal_height_cm: patientData.fundalHeight ? parseFloat(patientData.fundalHeight) : null,
+        fhr_bpm: patientData.fhr ? parseInt(patientData.fhr, 10) : null,
+        fetal_movement: patientData.fetalMovement || null,
+        presentation: patientData.presentation || null,
+        tests_done: patientData.testsDone ? patientData.testsDone.split(',').map(s => s.trim()).filter(Boolean) : null,
+        clinical_notes: patientData.visitNotes || 'Initial re-pregnancy assessment visit',
+        next_appt_date: schedulePreview[0]?.date || null,
+        next_appt_type: 'Follow-up Checkup',
+        status: 'Attended',
+        attended_date: new Date().toISOString(),
+        assigned_staff: retainedStaff?.[0]?.id || null,
+        calculated_risk: patientData.riskLevel || 'Normal',
+        risk_factors: patientData.riskFactors || null,
+        created_by: resolvedCreatedBy
+      };
+
+      const { error: firstVisitError } = await this.supabase.from('prenatal_visits').insert(firstVisitRecord);
+      if (firstVisitError) throw firstVisitError;
+
+      const futureSchedule = this.filterScheduleAfterToday(schedulePreview);
+      if (futureSchedule.length > 0) {
+        await this.insertPrenatalSchedule(
+          patientId,
+          futureSchedule,
+          resolvedCreatedBy,
+          { retained_staff: retainedStaff?.[0]?.id || null },
+          35
+        );
+      } else {
+        await this.smartSemesterScheduling({
+          patientId,
+          lmp: patientData.lmp,
+          createdBy: resolvedCreatedBy,
+          maxPerDay: 35,
+          retained_staff: retainedStaff?.[0]?.id || null
+        });
+      }
+
+      await this.schedulePrenatalVaccinations(patientId, patientData.lmp, resolvedCreatedBy);
+      return await this.getPatientById(patientId);
+    } catch (error) {
+      console.error('Error creating new pregnancy for existing patient:', error);
+      throw error;
+    }
+  }
+
   async updatePregnancyStatus(patientId, status) {
     try {
       const { error } = await this.supabase

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import {
     ArrowLeft, Save, X, FileText, User, Activity,
@@ -73,6 +73,7 @@ const formatStationName = (station) => {
 
 const AddPatient = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { user } = useContext(AuthContext);  
     const [activeTab, setActiveTab] = useState('personal');
     const [toast, setToast] = useState(null);
@@ -92,15 +93,62 @@ const AddPatient = () => {
     const [searchResults, setSearchResults] = useState([]);
     const [selectedExistingPatient, setSelectedExistingPatient] = useState(null);
 
-    const handleSearch = (e) => {
+    const hydrateExistingPatient = async (patient) => {
+        if (!patient) return;
+
+        setSelectedExistingPatient({
+            id: patient.id,
+            name: patient.name || `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
+            dob: patient.dob || patient.date_of_birth || '',
+            station: patient.station || patient.stations?.station_name || patient.municipality || 'N/A'
+        });
+
+        // Load only patient_basic_info fields (personal information)
+        // When adding a NEW pregnancy, populate gravida and para from the latest pregnancy_info record
+        // This allows tracking cumulative pregnancy and delivery counts
+        setFormData(prev => ({
+            ...prev,
+            // Personal info only
+            firstName: patient.first_name || patient.firstName || prev.firstName,
+            middleName: patient.middle_name || patient.middleName || prev.middleName,
+            lastName: patient.last_name || patient.lastName || prev.lastName,
+            suffix: patient.suffix || prev.suffix,
+            dob: patient.date_of_birth || patient.dob || prev.dob,
+            age: patient.age || prev.age,
+            civilStatus: patient.civilStatus || patient.civil_status || prev.civilStatus,
+            contactNumber: patient.phone || patient.contact_no || prev.contactNumber,
+            address: patient.address || patient.house_no || prev.address,
+            station: patient.station || patient.stations?.station_name || prev.station,
+            municipality: patient.municipality || prev.municipality,
+            province: patient.province || prev.province,
+            emName: patient.emergencyContact?.name || patient.emergency_contact?.name || prev.emName,
+            emRel: patient.emergencyContact?.relationship || patient.emergency_contact?.relationship || prev.emRel,
+            emPhone: patient.emergencyContact?.phone || patient.emergency_contact?.phone || prev.emPhone,
+            emAddress: patient.emergencyContact?.address || patient.emergency_contact?.address || prev.emAddress,
+            // Populate gravida and para from the patient's latest pregnancy record
+            // These are cumulative counts from obstetric history
+            gravida: patient.gravida || prev.gravida || '',
+            para: patient.para || prev.para || '',
+            pregnancyStatus: 'Pregnant', // Always 'Pregnant' when adding new pregnancy to existing patient
+            lmp: prev.lmp, // User will enter LMP for this new pregnancy
+            edd: prev.edd,
+        }));
+    };
+
+    const handleSearch = async (e) => {
         const query = e.target.value;
         setSearchQuery(query);
-        if (query.length > 2) {
-            setSearchResults([
-                { id: '1', name: 'Maria Santos', dob: '1990-05-15', station: 'Salawag' },
-                { id: '2', name: 'Maria Cruz', dob: '1992-08-20', station: 'Salawag' }
-            ].filter(p => p.name.toLowerCase().includes(query.toLowerCase())));
-        } else {
+
+        if (query.trim().length < 2) {
+            setSearchResults([]);
+            return;
+        }
+
+        try {
+            const results = await patientService.searchPatients(query.trim());
+            setSearchResults(results.slice(0, 10));
+        } catch (error) {
+            console.error('Error searching patients:', error);
             setSearchResults([]);
         }
     };
@@ -153,6 +201,25 @@ const AddPatient = () => {
         };
         loadStations();
     }, []);
+
+    useEffect(() => {
+        const patientId = location.state?.existingPatientId;
+        if (!patientId) return;
+
+        const fillPrefilledPatient = async () => {
+            try {
+                const patient = await patientService.getPatientById(patientId);
+                if (!patient) return;
+
+                setRegistrationMode('existing');
+                await hydrateExistingPatient(patient);
+            } catch (error) {
+                console.error('Error loading prefilled patient:', error);
+            }
+        };
+
+        fillPrefilledPatient();
+    }, [location.state?.existingPatientId]);
 
     useEffect(() => {
         if (user) {
@@ -575,6 +642,14 @@ const AddPatient = () => {
             return;
         }
 
+        const isExistingPatientMode = registrationMode === 'existing' || !!selectedExistingPatient;
+        const patientIdForPregnancy = selectedExistingPatient?.id || location.state?.existingPatientId || null;
+
+        if (isExistingPatientMode && !patientIdForPregnancy) {
+            setToast({ type: 'error', message: 'Please select an existing patient before saving the new pregnancy.' });
+            return;
+        }
+
         // Validate EDD is not in the past for pregnant patients
         if (formData.pregnancyStatus === 'Pregnant' && formData.edd) {
             const today = new Date();
@@ -590,10 +665,20 @@ const AddPatient = () => {
             }
         }
 
-        const requiredPersonal = ['firstName', 'lastName', 'dob', 'civilStatus', 'email', 'contactNumber', 'address', 'station', 'municipality', 'province'];
-        const requiredEmergency = sameAsPatientAddress
-            ? ['emName', 'emRel', 'emPhone']
-            : ['emName', 'emRel', 'emPhone', 'emAddress'];
+        const requiredPersonal = [
+            'contactNumber',
+            'address',
+            'station',
+            'municipality',
+            'province',
+            ...(isExistingPatientMode ? [] : ['firstName', 'lastName', 'dob', 'civilStatus', 'email'])
+        ];
+
+        const requiredEmergency = isExistingPatientMode
+            ? []
+            : (sameAsPatientAddress
+                ? ['emName', 'emRel', 'emPhone']
+                : ['emName', 'emRel', 'emPhone', 'emAddress']);
 
         let requiredPregnancy = [];
         if (formData.pregnancyStatus === 'Pregnant') {
@@ -607,14 +692,16 @@ const AddPatient = () => {
             requiredVitals.push('bp');
         }
 
+        const isEmptyValue = (value) => value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
+
         const missing = [];
         const checkFields = (fields) => fields.forEach(f => {
             const value = formData[f];
-            if (!value || (typeof value === 'string' && value.trim() === '')) {
+            if (isEmptyValue(value)) {
                 missing.push(f);
                 return;
             }
-            if ((f === 'contactNumber' || f === 'emPhone')) {
+            if ((f === 'contactNumber' || f === 'emPhone') && typeof value === 'string') {
                 if (value.length !== 11 || !value.startsWith('09')) {
                     missing.push(f + '-invalid');
                 }
@@ -683,32 +770,40 @@ const AddPatient = () => {
         };
 
         try {
+            if (isExistingPatientMode && patientIdForPregnancy) {
+                const updatedPatient = await patientService.addExistingPregnancy(patientIdForPregnancy, patientData, user.id);
+                setToast({
+                    type: 'success',
+                    message: `✅ New pregnancy saved for ${updatedPatient?.name || `${formData.firstName} ${formData.lastName}`}. Prenatal schedule was generated.`
+                });
+                navigate(`/dashboard/patients/${patientIdForPregnancy}`, { replace: true });
+                return;
+            }
+
             console.log('📤 Passing to PatientService.addPatient:', patientData);
             const newPatient = await patientService.addPatient(patientData);
     
-    console.log('🎉 Patient created:', newPatient.id, `${newPatient.first_name || formData.firstName} ${newPatient.last_name || formData.lastName}`);
+            console.log('🎉 Patient created:', newPatient.id, `${newPatient.first_name || formData.firstName} ${newPatient.last_name || formData.lastName}`);
     
-    const profileId = newPatient?.id || newPatient?.patient_id || newPatient?.user?.id;
+            const profileId = newPatient?.id || newPatient?.patient_id || newPatient?.user?.id;
 
-    setToast({ 
-        type: 'success', 
-        message: `✅ Patient saved successfully!
-        👤 ${newPatient.first_name || formData.firstName} ${newPatient.last_name || formData.lastName}
-        📅 Semester visits auto-scheduled
-        🏘️ ${newPatient.barangay || formData.station}` 
-    });
+            setToast({ 
+                type: 'success', 
+                message: `✅ Patient saved successfully!
+                👤 ${newPatient.first_name || formData.firstName} ${newPatient.last_name || formData.lastName}
+                📅 Semester visits auto-scheduled
+                🏘️ ${newPatient.barangay || formData.station}` 
+            });
     
-    if (profileId) {
-        navigate(`/dashboard/patients/${profileId}`, { replace: true });
-    } else {
-        navigate('/dashboard/patients', { replace: true });
-    }
-} 
-        catch (err) {
+            if (profileId) {
+                navigate(`/dashboard/patients/${profileId}`, { replace: true });
+            } else {
+                navigate('/dashboard/patients', { replace: true });
+            }
+        } catch (err) {
             console.error('💥 Save failed:', err);
             setToast({ type: 'error', message: `Save failed: ${err.message}` });
-        }
-        finally {
+        } finally {
             setIsSaving(false);
         }
     };
@@ -828,10 +923,19 @@ const AddPatient = () => {
                                     {searchQuery.length > 2 && (
                                         <div style={{ marginTop: '8px', border: '1.5px solid #eef0f4', borderRadius: '12px', overflow: 'hidden', background: '#fff' }}>
                                             {searchResults.length > 0 ? searchResults.map(p => (
-                                                <div key={p.id} style={{ padding: '12px 16px', borderBottom: '1px solid #eef0f4', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'background 0.15s ease' }} onClick={() => setSelectedExistingPatient(p)} onMouseEnter={e => e.currentTarget.style.background = '#f8f9fb'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+                                                <div key={p.id} style={{ padding: '12px 16px', borderBottom: '1px solid #eef0f4', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'background 0.15s ease' }} onClick={async () => {
+                                                    const fullPatient = await patientService.getPatientById(p.id);
+                                                    if (fullPatient) {
+                                                        await hydrateExistingPatient(fullPatient);
+                                                    } else {
+                                                        setSelectedExistingPatient(p);
+                                                    }
+                                                    setSearchQuery('');
+                                                    setSearchResults([]);
+                                                }} onMouseEnter={e => e.currentTarget.style.background = '#f8f9fb'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
                                                     <div>
                                                         <div style={{ fontWeight: 600, color: 'var(--color-text)', fontSize: '14px' }}>{p.name}</div>
-                                                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>DOB: {p.dob} • Station: {p.station}</div>
+                                                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>DOB: {p.dob || 'N/A'} • Station: {p.station || 'N/A'}</div>
                                                     </div>
                                                     <button type="button" className="btn btn-outline" style={{ padding: '4px 12px', fontSize: '12px' }}>Select</button>
                                                 </div>
