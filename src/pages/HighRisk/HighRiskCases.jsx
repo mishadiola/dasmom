@@ -326,7 +326,7 @@ const HighRiskCases = () => {
             </span>
           </div>
           <p className="page-subtitle">
-            Dynamic monitoring of critical pregnancies and priority follow‑ups
+            Monitor pregnant patients with high-risk conditions and complications.
           </p>
         </div>
 
@@ -410,8 +410,8 @@ const HighRiskCases = () => {
         <div className="hr-table-col">
           <div className="hr-card">
             <div className="hr-card-head">
-              <h2>
-                <HeartPulse size={17} /> Real‑Time High‑Risk Monitoring
+              <h2 style={{ color: '#dc2626' }}>
+                <AlertTriangle size={17} /> Real‑Time High‑Risk Monitoring
               </h2>
               <span className="hr-count">{filteredPatients.length} patients</span>
             </div>
@@ -451,14 +451,7 @@ const HighRiskCases = () => {
                                 .join('') || 'ID'}
                             </div>
                             <div>
-                              <p className="patient-name patient-name-link">{p.name}</p>
-                              <span
-                                className={`risk-pill risk-pill-${
-                                  (p.riskLevel || '').toLowerCase().split(' ')[0]
-                                }`}
-                              >
-                                {p.riskLevel}
-                              </span>
+                              <p className="patient-name patient-name-link" style={{ margin: 0 }}>{p.name}</p>
                             </div>
                           </div>
                         </td>

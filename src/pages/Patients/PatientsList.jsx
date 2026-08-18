@@ -10,6 +10,7 @@ import {
 import '../../styles/pages/PatientsList.css';
 import PatientService from '../../services/patientservice';
 import EditPatientModal from '../../components/Patient/EditPatientModal';
+import { useModal } from '../../context/ModalContext';
 
 // Helper function to extract first 4 numeric digits from patient ID
 const getShortPatientId = (id) => {
@@ -178,6 +179,7 @@ const RecordVitalsModal = ({ patient, onSave, onClose, supplements }) => {
 
 const PatientsList = () => {
     const navigate = useNavigate();
+    const { alert: customAlert, confirm } = useModal();
 
     const [patients, setPatients] = useState([]);
 
@@ -246,7 +248,7 @@ const PatientsList = () => {
             setEditModalPatient(detailedPatient);
         } catch (err) {
             console.error('Error loading patient details for edit:', err);
-            alert('Unable to load patient details. Please try again.');
+            await customAlert({ title: 'Error', text: 'Unable to load patient details. Please try again.', iconType: 'danger' });
         } finally {
             setModalLoading(prev => ({ ...prev, edit: false }));
         }
@@ -261,7 +263,7 @@ const PatientsList = () => {
             setVitalModalPatient(detailedPatient);
         } catch (err) {
             console.error('Error loading patient details for vitals:', err);
-            alert('Unable to load patient details. Please try again.');
+            await customAlert({ title: 'Error', text: 'Unable to load patient details. Please try again.', iconType: 'danger' });
         } finally {
             setModalLoading(prev => ({ ...prev, vitals: false }));
         }
@@ -401,7 +403,7 @@ const PatientsList = () => {
             setTimeout(() => setVitalToast(false), 3500);
         } catch (err) {
             console.error('Error saving vitals:', err);
-            alert('Error saving vitals: ' + err.message);
+            await customAlert({ title: 'Error', text: 'Error saving vitals: ' + err.message, iconType: 'danger' });
         }
     };
 
@@ -427,7 +429,15 @@ const PatientsList = () => {
     };
 
     const handleArchive = async (patientId) => {
-        if (window.confirm('Are you sure you want to archive this patient? It will be removed from active lists but can be restored.')) {
+        const isConfirmed = await confirm({
+            title: 'Archive Patient',
+            text: 'Are you sure you want to archive this patient? It will be removed from active lists but can be restored.',
+            confirmText: 'Yes, Archive',
+            cancelText: 'Cancel',
+            iconType: 'archive'
+        });
+
+        if (isConfirmed) {
             try {
                 const patientService = new PatientService();
                 await patientService.archivePatient(patientId);
@@ -436,13 +446,21 @@ const PatientsList = () => {
                 );
             } catch (err) {
                 console.error('Error archiving patient:', err);
-                alert('Unable to archive patient right now.');
+                await customAlert({ title: 'Error', text: 'Unable to archive patient right now.', iconType: 'danger' });
             }
         }
     };
 
     const handleRestore = async (patientId) => {
-        if (window.confirm('Are you sure you want to restore this patient? It will be moved back to active lists.')) {
+        const isConfirmed = await confirm({
+            title: 'Restore Patient',
+            text: 'Are you sure you want to restore this patient? It will be moved back to active lists.',
+            confirmText: 'Yes, Restore',
+            cancelText: 'Cancel',
+            iconType: 'info'
+        });
+
+        if (isConfirmed) {
             try {
                 const patientService = new PatientService();
                 await patientService.restorePatient(patientId);
@@ -451,7 +469,7 @@ const PatientsList = () => {
                 );
             } catch (err) {
                 console.error('Error restoring patient:', err);
-                alert('Unable to restore patient right now.');
+                await customAlert({ title: 'Error', text: 'Unable to restore patient right now.', iconType: 'danger' });
             }
         }
     };
@@ -468,7 +486,7 @@ const PatientsList = () => {
                             Total Patients: <strong>{patients.length}</strong>
                         </span>
                     </div>
-                    <p className="page-subtitle">Manage and monitor all registered pregnant patients</p>
+                    <p className="page-subtitle">Manage and monitor all registered pregnant patients, including archived records.</p>
                 </div>
                 <div className="header-actions">
                     <button className="btn btn-outline" onClick={handleExport}>
@@ -477,7 +495,7 @@ const PatientsList = () => {
                     </button>
                     <button className="btn btn-primary" onClick={() => navigate('/dashboard/patients/add')}>
                         <Plus size={16} />
-                        Add New Patient
+                        Add Pregnancy
                     </button>
                 </div>
             </div>

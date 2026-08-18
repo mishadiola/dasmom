@@ -132,7 +132,7 @@ const PrenatalVisits = () => {
     const [filterStatus, setFilterStatus] = useState('All');
     const [archiveFilter, setArchiveFilter] = useState('active');
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 20;
+    const itemsPerPage = 10;
     const [currentDate, setCurrentDate] = useState(new Date());
     const [toast, setToast] = useState(null);
     const [calendarView, setCalendarView] = useState('day'); // day, week, month
@@ -735,7 +735,7 @@ const PrenatalVisits = () => {
             <div className="page-header">
                 <div>
                     <h1 className="page-title">Visits &amp; Scheduling</h1>
-                    <p className="page-subtitle">30 slots/day max (25 regular + 5 rescheduling)</p>
+                    <p className="page-subtitle">Manage patient visits and schedules with up to 30 appointments per day — 25 for regular visits and 5 for rescheduled visits.</p>
                 </div>
                 <div className="header-actions">
                     <button
@@ -1048,6 +1048,7 @@ const PrenatalVisits = () => {
                         <table className="pv-table">
                             <thead>
                                 <tr>
+                                    <th style={{ textAlign: 'center', width: '50px' }}>#</th>
                                     <th>Patient Name</th>
                                     <th>Risk Level</th>
                                     <th>Date & Time</th>
@@ -1057,8 +1058,9 @@ const PrenatalVisits = () => {
                             </thead>
                             <tbody>
                                 {paginatedTabVisits.length > 0 ? (
-                                    paginatedTabVisits.map(visit => (
+                                    paginatedTabVisits.map((visit, idx) => (
                                         <tr key={visit.id}>
+                                            <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: '12.5px', width: '50px' }}>{tabStartIndex + idx + 1}</td>
                                             <td>
                                                 <div className="p-info">
                                                     <span className="p-name">{visit.patientName}</span>
@@ -1098,7 +1100,7 @@ const PrenatalVisits = () => {
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan="5" className="empty-tab-state">
+                                        <td colSpan="6" className="empty-tab-state">
                                             {visitCategoryTab === 'upcoming' && (
                                                 <div className="empty-state-content">
                                                     <CalendarCheck size={32} />
@@ -1128,6 +1130,7 @@ const PrenatalVisits = () => {
                         <table className="pv-table">
                             <thead>
                                 <tr>
+                                    <th style={{ textAlign: 'center', width: '50px' }}>#</th>
                                     <th>Patient Name</th>
                                     <th>Vaccine</th>
                                     <th>Scheduled Date &amp; Time</th>
@@ -1137,8 +1140,9 @@ const PrenatalVisits = () => {
                             </thead>
                             <tbody>
                                 {paginatedTabVisits.length > 0 ? (
-                                    paginatedTabVisits.map(vacc => (
+                                    paginatedTabVisits.map((vacc, idx) => (
                                         <tr key={vacc.id}>
+                                            <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: '12.5px', width: '50px' }}>{tabStartIndex + idx + 1}</td>
                                             <td>
                                                 <div className="p-info">
                                                     <span className="p-name">{vacc.patientName}</span>
@@ -1179,7 +1183,7 @@ const PrenatalVisits = () => {
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan="5" className="empty-tab-state">
+                                        <td colSpan="6" className="empty-tab-state">
                                             {visitCategoryTab === 'upcoming' && (
                                                 <div className="empty-state-content">
                                                     <CalendarCheck size={32} />
@@ -1218,7 +1222,7 @@ const PrenatalVisits = () => {
                 {tabTotalPages > 1 && (
                     <div className="pagination-wrap">
                         <span>
-                            Showing {tabStartIndex + 1}-{Math.min(tabStartIndex + itemsPerPage, tabVisits.length)} of {tabVisits.length}
+                            Showing {tabStartIndex + 1}–{Math.min(tabStartIndex + itemsPerPage, deduplicatedVisits.length)} of {deduplicatedVisits.length}
                         </span>
 
                         <div className="pagination-controls">

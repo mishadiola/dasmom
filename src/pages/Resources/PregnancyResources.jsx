@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useModal } from '../../context/ModalContext';
 import {
     Plus, Search, LayoutGrid, List, MoreVertical,
     Edit2, Archive, ArchiveRestore, Eye, X, Filter, ChevronRight,
@@ -14,6 +15,7 @@ const CATEGORIES = [
 ];
 
 const PregnancyResources = () => {
+    const { confirm } = useModal();
     const [viewMode, setViewMode] = useState('table'); // 'table' | 'grid'
     const [searchTerm, setSearchTerm] = useState('');
     const [activeCategory, setActiveCategory] = useState('All');
@@ -64,15 +66,29 @@ const PregnancyResources = () => {
         });
     };
 
-    const handleArchive = (id) => {
-        if (window.confirm('Are you sure you want to archive this resource? It will be removed from active lists but can be restored.')) {
-            setResources(resources.map(r => r.id === id ? { ...r, archiveStatus: 'archived' } : r));
+    const handleArchive = async (id) => {
+        const isConfirmed = await confirm({
+            title: 'Archive Resource',
+            text: 'Are you sure you want to archive this resource? It will be removed from active lists but can be restored.',
+            confirmText: 'Yes, Archive',
+            cancelText: 'Cancel',
+            iconType: 'archive'
+        });
+        if (isConfirmed) {
+            setResources(prev => prev.map(r => r.id === id ? { ...r, archiveStatus: 'archived' } : r));
         }
     };
 
-    const handleRestore = (id) => {
-        if (window.confirm('Are you sure you want to restore this resource? It will be moved back to active lists.')) {
-            setResources(resources.map(r => r.id === id ? { ...r, archiveStatus: 'active' } : r));
+    const handleRestore = async (id) => {
+        const isConfirmed = await confirm({
+            title: 'Restore Resource',
+            text: 'Are you sure you want to restore this resource? It will be moved back to active lists.',
+            confirmText: 'Yes, Restore',
+            cancelText: 'Cancel',
+            iconType: 'info'
+        });
+        if (isConfirmed) {
+            setResources(prev => prev.map(r => r.id === id ? { ...r, archiveStatus: 'active' } : r));
         }
     };
 

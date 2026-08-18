@@ -4,10 +4,12 @@ import {
     Shield, ChevronRight, Clock, Mail, Phone, ExternalLink, ArrowLeft
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useModal } from '../../context/ModalContext';
 import '../../styles/pages/UserSettings.css';
 
 const UserSettings = () => {
     const navigate = useNavigate();
+    const { alert: customAlert } = useModal();
 
     // Notification states
     const [notifs, setNotifs] = useState({
@@ -35,9 +37,10 @@ const UserSettings = () => {
         navigate('/');
     };
 
-    const handlePasswordChange = (e) => {
+    const handlePasswordChange = async (e) => {
         e.preventDefault();
-        alert('Password change initiated. In a real app, this would verify the current password.');
+        await customAlert({ title: 'Password Change', text: 'Password change initiated. In a real app, this would verify the current password.', iconType: 'info' });
+        setPasswords({ current: '', new: '', confirm: '' });
     };
 
     return (

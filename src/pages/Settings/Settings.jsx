@@ -8,9 +8,10 @@ import {
     Plus, Search, Edit2, Archive, ArchiveRestore, RotateCcw, X, Eye, EyeOff,
     CheckCircle2, XCircle, AlertCircle, Bell,
     Monitor, ChevronDown, ToggleLeft, ToggleRight,
-    Key, Save, Mail, MapPin, Clock, LogOut, Lock, FileText
+    Key, Save, Mail, MapPin, Clock, LogOut, Lock, FileText, Trash2
 } from 'lucide-react';
 import '../../styles/pages/Settings.css';
+import { useModal } from '../../context/ModalContext';
 
 /* ════════════════════════════
    MOCK DATA
@@ -307,7 +308,7 @@ const AddUserModal = ({ onClose, onSuccess }) => {
                                     </button>
                                 </div>
                                 <button type="button" className="btn btn-outline" onClick={() => setShowAddStationModal(true)}>
-                                    <Plus size={14} /> Add Station
+                                    <SettingsIcon size={14} /> Manage Stations
                                 </button>
                             </div>
                             <span className="form-hint">Choose an existing station or add a new one.</span>
@@ -333,12 +334,15 @@ const AddUserModal = ({ onClose, onSuccess }) => {
                 </div>
             </div>
             {showAddStationModal && (
-                <AddStationInlineModal
+                <ManageStationsModal
+                    initialStations={stations}
                     onClose={() => setShowAddStationModal(false)}
-                    onSuccess={async () => {
-                        setShowAddStationModal(false);
-                        const stationList = await staffService.getAllStations();
-                        setStations(stationList);
+                    onSuccess={(updatedStations) => {
+                        if (updatedStations) setStations(updatedStations);
+                        else {
+                            // fallback if updatedStations not provided
+                            staffService.getAllStations().then(setStations);
+                        }
                     }}
                 />
             )}
@@ -346,24 +350,39 @@ const AddUserModal = ({ onClose, onSuccess }) => {
     );
 };
 
-const AddStationInlineModal = ({ onClose, onSuccess }) => {
+const ManageStationsModal = ({ onClose, onSuccess, initialStations }) => {
     const staffService = new StaffService();
-    const [stationName, setStationName] = useState('');
+    const [stations, setStations] = useState(initialStations || []);
+    const [newStation, setNewStation] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
+    const [editingStation, setEditingStation] = useState(null); // original name
+    const [editName, setEditName] = useState('');
+    const [deletingStation, setDeletingStation] = useState(null);
 
-    const handleSubmit = async () => {
-        const name = stationName.trim();
-        if (!name) {
-            setError('Please enter a station name');
-            return;
-        }
+    useEffect(() => {
+        const fetchStations = async () => {
+            try {
+                const list = await staffService.getAllStations();
+                setStations(list);
+            } catch (err) {
+                console.error(err);
+            }
+        };
+        if (!initialStations) fetchStations();
+    }, [initialStations]);
 
+    const handleAdd = async () => {
+        const name = newStation.trim();
+        if (!name) return;
         setSubmitting(true);
+        setError('');
         try {
             await staffService.addStation(name);
-            onSuccess?.();
-            onClose();
+            setNewStation('');
+            const updated = await staffService.getAllStations();
+            setStations(updated);
+            onSuccess?.(updated);
         } catch (err) {
             setError(err.message || 'Failed to add station');
         } finally {
@@ -371,23 +390,112 @@ const AddStationInlineModal = ({ onClose, onSuccess }) => {
         }
     };
 
+    const handleEditSave = async (oldName) => {
+        const name = editName.trim();
+        if (!name) return;
+        if (name.toLowerCase() === oldName.toLowerCase()) {
+            setEditingStation(null);
+            return;
+        }
+        setSubmitting(true);
+        setError('');
+        try {
+            await staffService.editStation(oldName, name);
+            setEditingStation(null);
+            const updated = await staffService.getAllStations();
+            setStations(updated);
+            onSuccess?.(updated);
+        } catch (err) {
+            setError(err.message || 'Failed to edit station');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleDelete = async (name) => {
+        setSubmitting(true);
+        setError('');
+        try {
+            await staffService.deleteStation(name);
+            setDeletingStation(null);
+            const updated = await staffService.getAllStations();
+            setStations(updated);
+            onSuccess?.(updated);
+        } catch (err) {
+            setError(err.message || 'Failed to delete station');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     return (
         <div className="modal-backdrop" onClick={onClose}>
-            <div className="set-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px' }}>
-                <div className="modal-header">
-                    <div><h2><Plus size={20} /> Add Station</h2><p>Create a new barangay / station.</p></div>
+            <div className="set-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+                <div className="modal-header" style={{ flexShrink: 0 }}>
+                    <div><h2><SettingsIcon size={20} /> Manage Stations</h2><p>Add, edit, or remove barangays / stations.</p></div>
                     <button className="modal-close" onClick={onClose}><X size={20} /></button>
                 </div>
-                <div className="modal-body">
-                    {error && <div className="form-error" style={{ marginBottom: '12px' }}>{error}</div>}
+                <div className="modal-body" style={{ overflowY: 'auto', flex: 1 }}>
+                    {error && (
+                        <div className="form-error" style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#fee', borderLeft: '4px solid #f66', borderRadius: '4px', color: '#c33' }}>
+                            <AlertCircle size={14} style={{ display: 'inline', marginRight: '6px' }} />
+                            {error}
+                        </div>
+                    )}
+                    
+                    <div className="form-group" style={{ marginBottom: '24px' }}>
+                        <label>Add New Station</label>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <input value={newStation} onChange={e => setNewStation(e.target.value)} placeholder="e.g. Salawag" style={{ flex: 1 }} onKeyDown={e => e.key === 'Enter' && handleAdd()} disabled={submitting} />
+                            <button className="btn btn-primary" onClick={handleAdd} disabled={submitting || !newStation.trim()}>
+                                <Plus size={16} /> Add
+                            </button>
+                        </div>
+                    </div>
+
                     <div className="form-group">
-                        <label>Station Name <span className="req">*</span></label>
-                        <input value={stationName} onChange={e => setStationName(e.target.value)} placeholder="e.g. Salawag" />
+                        <label>Existing Stations</label>
+                        {stations.length === 0 ? (
+                            <div style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-muted)', border: '1px dashed var(--color-border)', borderRadius: '8px' }}>No stations found.</div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '8px' }}>
+                                {stations.sort((a,b) => a.localeCompare(b)).map(station => (
+                                    <div key={station} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px', backgroundColor: 'var(--color-bg)', borderRadius: '6px', border: '1px solid var(--color-border-light)' }}>
+                                        {editingStation === station ? (
+                                            <div style={{ display: 'flex', gap: '8px', flex: 1 }}>
+                                                <input value={editName} onChange={e => setEditName(e.target.value)} style={{ flex: 1, padding: '6px 10px' }} autoFocus onKeyDown={e => e.key === 'Enter' && handleEditSave(station)} disabled={submitting} />
+                                                <button className="btn btn-primary" style={{ padding: '6px 12px' }} onClick={() => handleEditSave(station)} disabled={submitting || !editName.trim()}><Save size={14} /></button>
+                                                <button className="btn btn-outline" style={{ padding: '6px 12px' }} onClick={() => setEditingStation(null)} disabled={submitting}><X size={14} /></button>
+                                            </div>
+                                        ) : deletingStation === station ? (
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, color: '#c33' }}>
+                                                <span style={{ fontSize: '13px', fontWeight: '500' }}>Delete {station}?</span>
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    <button className="btn btn-primary" style={{ padding: '6px 12px', backgroundColor: '#dc2626', borderColor: '#dc2626' }} onClick={() => handleDelete(station)} disabled={submitting}>Yes</button>
+                                                    <button className="btn btn-outline" style={{ padding: '6px 12px' }} onClick={() => setDeletingStation(null)} disabled={submitting}>No</button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <span style={{ fontWeight: '500', fontSize: '14px' }}>{formatStationName(station)}</span>
+                                                <div style={{ display: 'flex', gap: '6px' }}>
+                                                    <button type="button" onClick={() => { setEditingStation(station); setEditName(station); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'var(--color-text-muted)' }} title="Edit Station" disabled={submitting}>
+                                                        <Edit2 size={16} />
+                                                    </button>
+                                                    <button type="button" onClick={() => setDeletingStation(station)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#f66' }} title="Delete Station" disabled={submitting}>
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
-                <div className="modal-footer">
-                    <button className="btn btn-outline" onClick={onClose}>Cancel</button>
-                    <button className="btn btn-primary" onClick={handleSubmit} disabled={submitting}> {submitting ? 'Saving...' : 'Save Station'} </button>
+                <div className="modal-footer" style={{ flexShrink: 0 }}>
+                    <button className="btn btn-outline" onClick={onClose} disabled={submitting}>Close</button>
                 </div>
             </div>
         </div>
@@ -559,10 +667,11 @@ const EditUserModal = ({ staff, onClose, onSuccess }) => {
     );
 };
 const UserAccountsTab = () => {
+    const { confirm, alert: customAlert } = useModal();
     const staffService = new StaffService();
     const [search, setSearch] = useState('');
     const [roleFilter, setRoleFilter] = useState('All');
-    const [statusFilter, setStatusFilter] = useState('All'); // 'All' | 'Active' | 'Archived'
+    const [statusFilter, setStatusFilter] = useState('Active'); // 'All' | 'Active' | 'Archived'
     const [showModal, setShowModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [selectedStaff, setSelectedStaff] = useState(null);
@@ -616,16 +725,61 @@ const UserAccountsTab = () => {
         fetchStaff();
     };
 
-    const handleArchive = (staffId) => {
-        if (window.confirm('Are you sure you want to archive this staff account? It will be removed from active lists but can be restored.')) {
-            setStaff(prevStaff =>
-                prevStaff.map(u => u.id === staffId ? { ...u, archiveStatus: 'archived' } : u)
-            );
+    const handleArchive = async (staffId) => {
+        try {
+            const check = await staffService.checkStaffAssignments(staffId);
+
+            if (check.hasAssignments) {
+                let msg = `This staff member cannot be archived right now.\n\n`;
+                if (check.patientCount > 0) {
+                    msg += `They are assigned to station "${check.stationName}" which has ${check.patientCount} active patient(s).\n`;
+                } else if (check.stationName) {
+                    msg += `They are assigned to station "${check.stationName}".\n`;
+                }
+                msg += `\nPlease reassign or remove these responsibilities before archiving.`;
+                await customAlert({
+                    title: 'Cannot Archive Staff',
+                    text: msg,
+                    iconType: 'warning'
+                });
+                return;
+            }
+
+            const isConfirmed = await confirm({
+                title: 'Archive Staff',
+                text: 'Are you sure you want to archive this staff account? It will be removed from active lists but can be restored.',
+                confirmText: 'Yes, Archive',
+                cancelText: 'Cancel',
+                iconType: 'archive'
+            });
+
+            if (isConfirmed) {
+                staffService.archiveStaff(staffId);
+                setStaff(prevStaff =>
+                    prevStaff.map(u => u.id === staffId ? { ...u, archiveStatus: 'archived' } : u)
+                );
+            }
+        } catch (err) {
+            console.error('Failed to archive staff:', err);
+            await customAlert({
+                title: 'Error',
+                text: 'An error occurred while trying to archive staff. Please try again.',
+                iconType: 'danger'
+            });
         }
     };
 
-    const handleRestore = (staffId) => {
-        if (window.confirm('Are you sure you want to restore this staff account? It will be moved back to active lists.')) {
+    const handleRestore = async (staffId) => {
+        const isConfirmed = await confirm({
+            title: 'Restore Staff',
+            text: 'Are you sure you want to restore this staff account? It will be moved back to active lists.',
+            confirmText: 'Yes, Restore',
+            cancelText: 'Cancel',
+            iconType: 'info'
+        });
+
+        if (isConfirmed) {
+            staffService.restoreStaff(staffId);
             setStaff(prevStaff =>
                 prevStaff.map(u => u.id === staffId ? { ...u, archiveStatus: 'active' } : u)
             );
@@ -657,7 +811,7 @@ const UserAccountsTab = () => {
                     ))}
                 </select>
                 <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="set-select">
-                    <option value="All">Status</option>
+                    <option value="All">All Status</option>
                     <option value="Active">Active</option>
                     <option value="Archived">Archived</option>
                 </select>
@@ -1068,7 +1222,7 @@ const Settings = () => {
             <div className="page-header">
                 <div>
                     <h1 className="page-title"><SettingsIcon size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Settings</h1>
-                    <p className="page-subtitle">Manage users, system preferences, and security settings</p>
+                    <p className="page-subtitle">Manage user accounts, system settings, and your profile.</p>
                 </div>
             </div>
 

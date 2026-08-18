@@ -11,6 +11,7 @@ import logo from '../assets/images/dasmom_logo.png';
 import { AuthContext } from '../context/AuthContext';
 import PatientService from '../services/patientservice';
 import supabase from '../config/supabaseclient';
+import { useModal } from '../context/ModalContext';
 import MotherAIChatAssistant from '../components/MotherDashboard/MotherAIChatAssistant';
 
 const NAV_ITEMS = [
@@ -63,11 +64,11 @@ const DashboardLayout = () => {
     const [notifications, setNotifications] = useState([]);
     const [notifCount, setNotifCount] = useState(0);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
-    const [showLogoutModal, setShowLogoutModal] = useState(false);
     const userMenuRef = useRef(null);
     const navigate = useNavigate();
     const location = useLocation();
     const { user, logout: authLogout } = useContext(AuthContext);
+    const { confirm } = useModal();
     const patientService = new PatientService();
 
     // Determine if we are in User View based on path
@@ -222,15 +223,20 @@ const DashboardLayout = () => {
         fetchNotifications();
     }, [user, isUserView]);
 
-    const handleLogout = () => {
-        setShowLogoutModal(true);
+    const handleLogout = async () => {
         setUserMenuOpen(false);
-    };
-
-    const confirmLogout = async () => {
-        setShowLogoutModal(false);
-        await authLogout();
-        navigate(isUserView ? '/mother-login' : '/');
+        const confirmed = await confirm({
+            title: 'Confirm Logout',
+            text: 'Are you sure you want to log out of DasMom+? You will need to login again to access the system.',
+            confirmText: 'Yes, Logout',
+            cancelText: 'Stay Logged In',
+            iconType: 'logout'
+        });
+        
+        if (confirmed) {
+            await authLogout();
+            navigate(isUserView ? '/mother-login' : '/');
+        }
     };
 
     // Filter nav items based on view
@@ -493,35 +499,7 @@ const DashboardLayout = () => {
                 </main>
             </div>
 
-            {/* ── Logout Confirmation Modal ── */}
-            {showLogoutModal && (
-                <div className="logout-modal-overlay" onClick={() => setShowLogoutModal(false)}>
-                    <div className="logout-modal-card" onClick={e => e.stopPropagation()}>
-                        <div className="logout-modal-icon">
-                            <LogOut size={28} />
-                        </div>
-                        <h2 className="logout-modal-title">Confirm Logout</h2>
-                        <p className="logout-modal-text">
-                            Are you sure you want to log out of <strong>DasMom+</strong>? 
-                            You will need to login again to access the system.
-                        </p>
-                        <div className="logout-modal-actions">
-                            <button 
-                                className="logout-btn-cancel" 
-                                onClick={() => setShowLogoutModal(false)}
-                            >
-                                Stay Logged In
-                            </button>
-                            <button 
-                                className="logout-btn-confirm" 
-                                onClick={confirmLogout}
-                            >
-                                Yes, Logout
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+
 
             {/* ── Mother Portal AI Chat Assistant ── */}
             {isUserView && <MotherAIChatAssistant />}

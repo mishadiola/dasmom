@@ -18,6 +18,7 @@ import {
 import { AuthContext } from '../../context/AuthContext';
 import InventoryService from '../../services/inventoryservice';
 import PatientService from '../../services/patientservice';
+import { useModal } from '../../context/ModalContext';
 import '../../styles/pages/Inventory.css';
 
 const inventoryService = new InventoryService();
@@ -30,6 +31,7 @@ const isAdminRole = (role) => {
 };
 
 const Inventory = () => {
+  const { alert: customAlert, confirm } = useModal();
   const { user } = useContext(AuthContext);
   const [userScope, setUserScope] = useState({ role: 'user', stationId: null, stationName: null, userId: user?.id || null });
   const [availableStations, setAvailableStations] = useState([]);
@@ -590,7 +592,7 @@ const Inventory = () => {
       setForm({ item_name: '', quantity: '', max_stock: '', unit: activeTab === 'vaccines' ? 'vials' : 'tablets', brand: '', expiration_date: '', batch_number: '', manufactured_date: '' });
     } catch (error) {
       console.error('handleAddSubmit error:', error);
-      alert('Failed to add item: ' + error.message);
+      await customAlert({ title: 'Error', text: 'Failed to add item: ' + error.message, iconType: 'danger' });
     } finally {
       setIsSubmitting(false);
     }
@@ -652,7 +654,7 @@ const Inventory = () => {
       setShowUpdateModal(null);
       setForm({ item_name: '', quantity: '', max_stock: '', unit: '', brand: '', expiration_date: '' });
     } catch (error) {
-      alert('Failed to update quantity: ' + error.message);
+      await customAlert({ title: 'Error', text: 'Failed to update quantity: ' + error.message, iconType: 'danger' });
     } finally {
       setIsSubmitting(false);
     }
@@ -667,20 +669,20 @@ const Inventory = () => {
       const selectedItem = availableList.find(item => item.id === distForm.item_id);
 
       if (!selectedItem) {
-        alert('Please select a valid item.');
+        await customAlert({ title: 'Invalid Selection', text: 'Please select a valid item.', iconType: 'warning' });
         setIsSubmitting(false);
         return;
       }
 
       const qtyToDistribute = Number(distForm.quantity);
       if (isNaN(qtyToDistribute) || qtyToDistribute <= 0) {
-        alert('Please enter a valid quantity.');
+        await customAlert({ title: 'Invalid Quantity', text: 'Please enter a valid quantity.', iconType: 'warning' });
         setIsSubmitting(false);
         return;
       }
 
       if (qtyToDistribute > selectedItem.quantity) {
-        alert(`Cannot distribute more than available stock (${selectedItem.quantity} ${selectedItem.unit}).`);
+        await customAlert({ title: 'Insufficient Stock', text: `Cannot distribute more than available stock (${selectedItem.quantity} ${selectedItem.unit}).`, iconType: 'warning' });
         setIsSubmitting(false);
         return;
       }
@@ -742,17 +744,24 @@ const Inventory = () => {
 
       // Refresh stats and inventory immediately
       await fetchData();
-      alert('Distribution successful! Stock levels updated.');
+      await customAlert({ title: 'Success', text: 'Distribution successful! Stock levels updated.', iconType: 'success' });
     } catch (error) {
       console.error('Error distributing inventory:', error);
-      alert('Failed to distribute items: ' + error.message);
+      await customAlert({ title: 'Error', text: 'Failed to distribute items: ' + error.message, iconType: 'danger' });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleArchive = async (table, id) => {
-    if (!window.confirm('Are you sure you want to archive this item? It will be removed from active lists but can be restored.')) return;
+    const isConfirmed = await confirm({
+      title: 'Archive Item',
+      text: 'Are you sure you want to archive this item? It will be removed from active lists but can be restored.',
+      confirmText: 'Yes, Archive',
+      cancelText: 'Cancel',
+      iconType: 'archive'
+    });
+    if (!isConfirmed) return;
     try {
       // Soft delete: Update status to 'archived' instead of deleting
       const { error } = await inventoryService.supabase
@@ -763,12 +772,19 @@ const Inventory = () => {
       if (error) throw error;
       fetchData(); // Refresh data
     } catch (error) {
-      alert('Failed to archive item: ' + error.message);
+      await customAlert({ title: 'Error', text: 'Failed to archive item: ' + error.message, iconType: 'danger' });
     }
   };
 
   const handleRestore = async (table, id) => {
-    if (!window.confirm('Are you sure you want to restore this item? It will be moved back to active lists.')) return;
+    const isConfirmed = await confirm({
+      title: 'Restore Item',
+      text: 'Are you sure you want to restore this item? It will be moved back to active lists.',
+      confirmText: 'Yes, Restore',
+      cancelText: 'Cancel',
+      iconType: 'info'
+    });
+    if (!isConfirmed) return;
     try {
       // Restore: Update status to 'active'
       const { error } = await inventoryService.supabase
@@ -779,7 +795,7 @@ const Inventory = () => {
       if (error) throw error;
       fetchData(); // Refresh data
     } catch (error) {
-      alert('Failed to restore item: ' + error.message);
+      await customAlert({ title: 'Error', text: 'Failed to restore item: ' + error.message, iconType: 'danger' });
     }
   };
 
@@ -801,7 +817,7 @@ const Inventory = () => {
           <h1 className="page-title">
             <Package size={22} className="header-icon" /> Inventory Management
           </h1>
-          <p className="page-subtitle">Track and manage facility supplies for vaccines and supplements.</p>
+          <p className="page-subtitle">Track and manage vaccine and supplement supplies across CHO stations to help maintain adequate stock levels.</p>
         </div>
         <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
           <button

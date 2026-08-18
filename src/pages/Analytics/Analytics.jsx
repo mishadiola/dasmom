@@ -888,8 +888,8 @@ const Analytics = () => {
             {/* ── Page Header ── */}
             <header className="analytics-header">
                 <div>
-                    <h1 className="page-title">Executive Analytics</h1>
-                    <p className="page-subtitle">DASMOM+ Integrated Maternal Health Intelligence</p>
+                    <h1 className="page-title">Analytics</h1>
+                    <p className="page-subtitle">View overall maternal health trends and performance across CHO III.</p>
                 </div>
             </header>
 

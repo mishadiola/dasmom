@@ -19,7 +19,7 @@ const authService = new AuthService();
    MOCK DATA
 ════════════════════════════ */
 const STAT_META = [
-    { id: 1, label: 'Total Pregnant Patients', key: 'totalPatients', trend: 'up', sub: 'registered in system', icon: HeartPulse, color: 'rose', path: '/dashboard/patients' },
+    { id: 1, label: 'Active Pregnant Patients', key: 'totalPatients', trend: 'up', sub: 'currently registered in system', icon: HeartPulse, color: 'rose', path: '/dashboard/patients' },
     { id: 2, label: 'High-Risk Pregnancies',   key: 'highRisk',      trend: 'up', sub: 'marked high risk',    icon: AlertTriangle, color: 'orange', path: '/dashboard/high-risk' },
     { id: 3, label: 'Delivery Outcomes',        key: 'newborns',      trend: 'up', sub: 'birth records',        icon: Baby, color: 'pink', path: '/dashboard/newborns' },
     { id: 4, label: 'Appointments Today',       key: 'apptToday',     trend: 'neutral', sub: 'scheduled today', icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal' },
@@ -375,7 +375,7 @@ const Dashboard = () => {
                     <p className="welcome-actions-title">Quick Actions</p>
                     <div className="welcome-actions">
                         {[
-                            { label: 'Add Patient', icon: Users, color: 'rose', path: '/dashboard/patients/add' },
+                            { label: 'Add Pregnancy', icon: Plus, color: 'rose', path: '/dashboard/patients/add' },
                             { label: 'View Schedules', icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal', state: { openBooking: true } },
                             { label: 'High Risk Patients', icon: AlertTriangle, color: 'blue', path: '/dashboard/high-risk' },
                             { label: 'Log Delivery', icon: Baby, color: 'pink', path: '/dashboard/deliveries' },

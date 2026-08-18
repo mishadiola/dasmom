@@ -4,6 +4,7 @@ import BabyService from '../../services/babyservices';
 import VaccinationService from '../../services/vaccinationservice';
 import supabase from '../../config/supabaseclient';
 import { useNavigate } from 'react-router-dom';
+import { useModal } from '../../context/ModalContext';
 import {
     Search, Filter, Plus, X, Syringe, Pill, Package,
     AlertTriangle, CheckCircle2, Clock, XCircle,
@@ -27,6 +28,7 @@ const SUPPLEMENT_TYPES = [
 const STAFF_LIST = ['Nurse Ana', 'Nurse Bea', 'Midwife Elena', 'Midwife Ana', 'Dr. Reyes (OB)'];
 
 const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAutoSelectId, onClose, onSave }) => {
+    const { alert: customAlert } = useModal();
     const babyService = new BabyService();
     const [form, setForm] = useState({
         patientType: initialPatientType || 'Mother', patientName: initialPatientName || '', vaccine: '',
@@ -481,7 +483,7 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAuto
             (mode === 'vaccine' && !hasPendingSelection && !hasCheckboxSelection && (!form.vaccine || !form.dose)) ||
             (mode === 'supplement' && (!form.supplement || !form.dose)) ||
             !form.date) {
-            alert('Please fill in all required fields.');
+            await customAlert({ title: 'Missing Information', text: 'Please fill in all required fields.', iconType: 'warning' });
             return;
         }
 
@@ -628,7 +630,7 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAuto
                     for (const vaccineName of selectedVaccineNames) {
                         const dose = vaccineDoses[vaccineName];
                         if (!dose) {
-                            alert(`Please select a dose for ${vaccineName}`);
+                            await customAlert({ title: 'Missing Dose', text: `Please select a dose for ${vaccineName}`, iconType: 'warning' });
                             setIsSaving(false);
                             return;
                         }
@@ -637,7 +639,7 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAuto
                         const vaccInv = await resolveInventoryBatch('vaccine', vaccineName, selectedBrand, patientStationId);
 
                         if (!vaccInv) {
-                            alert(`No stock available for ${vaccineName}`);
+                            await customAlert({ title: 'Out of Stock', text: `No stock available for ${vaccineName}`, iconType: 'warning' });
                             setIsSaving(false);
                             return;
                         }
@@ -734,6 +736,7 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAuto
                 if (selectedVaccineNames.length === 0 && selectedScheduledIds.length === 0) {
                     // Manual entry: try to find in inventory first, otherwise create without inventory
                     const vaccInv = await resolveInventoryBatch('vaccine', form.vaccine, form.brand || null, patientStationId);
+                    const doseNumber = parseInt(form.dose.match(/\d+/)?.[0]) || 1;
                     const vaccinationRecord = {
                         patient_id: patientId,
                         dose_number: doseNumber,
@@ -841,8 +844,7 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAuto
             }
         } catch (error) {
             console.error('Error saving record:', error);
-            console.error('Error stack:', error.stack);
-            alert('Failed to save record: ' + (error.message || 'Unknown error - check console for details'));
+            await customAlert({ title: 'Error', text: 'Failed to save record: ' + (error.message || 'Unknown error - check console for details'), iconType: 'danger' });
         } finally {
             setIsSaving(false);
         }
@@ -1042,6 +1044,7 @@ const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAuto
 ════════════════════════════════════ */
 const Vaccinations = () => {
     const navigate = useNavigate();
+    const { alert: customAlert } = useModal();
     const patientService = new PatientService();
     const babyService = new BabyService();
 
@@ -1751,7 +1754,9 @@ const Vaccinations = () => {
                                         {paginatedVaccines.map((item, index) => (
                                             <React.Fragment key={`patient-${item.id}`}>
                                                 <tr className={`vacc-row vacc-row--grouped`}>
-                                                    <td className="col-num">{(currentPage - 1) * itemsPerPage + index + 1}</td>
+                                                    <td className="col-num" rowSpan={expandedRows[item.id] ? 2 : 1}>
+                                                        {(currentPage - 1) * itemsPerPage + index + 1}
+                                                    </td>
                                                     <td className="col-patient">
                                                         <div className="patient-col-wrapper">
                                                             <button className="expand-btn" onClick={() => toggleRow(item.id)}>
@@ -1783,7 +1788,7 @@ const Vaccinations = () => {
                                                 </tr>
                                                 {expandedRows[item.id] && (
                                                     <tr className="vacc-expanded-row">
-                                                        <td colSpan="10">
+                                                        <td colSpan="9">
                                                             <div className="expand-detail">
                                                                 <h4>Vaccination Schedule for {item.patientName}</h4>
                                                                 <table className="mini-table">
@@ -1879,7 +1884,9 @@ const Vaccinations = () => {
                                         {paginatedSupplements.map((item, index) => (
                                             <React.Fragment key={`supp-patient-${item.id}`}>
                                                 <tr className={`vacc-row vacc-row--grouped`}>
-                                                    <td className="col-num">{(currentPage - 1) * itemsPerPage + index + 1}</td>
+                                                    <td className="col-num" rowSpan={expandedRows[item.id] ? 2 : 1}>
+                                                        {(currentPage - 1) * itemsPerPage + index + 1}
+                                                    </td>
                                                     <td className="col-patient">
                                                         <div className="patient-col-wrapper">
                                                             <button className="expand-btn" onClick={() => toggleRow(item.id)}>
@@ -1910,7 +1917,7 @@ const Vaccinations = () => {
                                                 </tr>
                                                 {expandedRows[item.id] && (
                                                     <tr className="vacc-expanded-row">
-                                                        <td colSpan="10">
+                                                        <td colSpan="9">
                                                             <div className="expand-detail">
                                                                 <h4>Supplement Distribution History for {item.patientName}</h4>
                                                                 <table className="mini-table">

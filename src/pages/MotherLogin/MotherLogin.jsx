@@ -8,9 +8,11 @@ import '../../styles/pages/MotherLogin.css';
 import logo from '../../assets/images/dasmom_logo.png';
 import AuthService from '../../services/authservice';
 import { AuthContext } from '../../context/AuthContext';
+import { useModal } from '../../context/ModalContext';
 
 const MotherLogin = () => {
     const navigate = useNavigate();
+    const { alert: customAlert } = useModal();
     const { setUser } = useContext(AuthContext);
     const authService = new AuthService();
 
@@ -27,7 +29,7 @@ const MotherLogin = () => {
         const user = await authService.login(email, password);
 
         if (!authService.accessCheck(user, 'mother')) {
-            alert('You do not have access as a mother.');
+            await customAlert({ title: 'Access Denied', text: 'You do not have access as a mother.', iconType: 'danger' });
             return;
         }
 
@@ -36,7 +38,7 @@ const MotherLogin = () => {
         navigate(route);
 
     } catch (err) {
-        alert(err.message);
+        await customAlert({ title: 'Login Error', text: err.message, iconType: 'danger' });
     } finally {
         setIsLoading(false);
     }

@@ -69,10 +69,7 @@ export default class StaffService {
     return value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
   }
 
-  /**
-   * Fetch all staff members with their details
-   */
-  async getAllStaff() {
+    async getAllStaff() {
     try {
       const [{ data: staffRows, error: staffError }, { data: userRows }, { data: userTypeRows }] = await Promise.all([
         this.supabase
@@ -118,6 +115,7 @@ export default class StaffService {
           station: staff.stations?.station_name || 'No Assignment',
           employeeId: staff.employee_id,
           status: 'Active',
+          archiveStatus: StaffService.getArchivedStaffIds().has(staff.id) ? 'archived' : 'active',
           lastLogin: 'N/A',
           avatar: staff.full_name
             ?.split(' ')
@@ -133,6 +131,74 @@ export default class StaffService {
       console.error('❌ getAllStaff:', error);
       return [];
     }
+  }
+
+  // ── localStorage-based archive persistence ──────────────────────────────
+  // Stores a Set of archived staff IDs in localStorage so archive status
+  // survives page refreshes without needing a DB schema change.
+  static ARCHIVE_KEY = 'dasmom_archived_staff';
+
+  static getArchivedStaffIds() {
+    try {
+      const raw = localStorage.getItem(StaffService.ARCHIVE_KEY);
+      return new Set(raw ? JSON.parse(raw) : []);
+    } catch {
+      return new Set();
+    }
+  }
+
+  static setArchivedStaffIds(idSet) {
+    try {
+      localStorage.setItem(StaffService.ARCHIVE_KEY, JSON.stringify([...idSet]));
+    } catch (err) {
+      console.error('Failed to persist archived staff ids:', err);
+    }
+  }
+
+  async checkStaffAssignments(staffId) {
+    try {
+      const { data: staff, error } = await this.supabase
+        .from('staff_profiles')
+        .select('station_ass, stations:station_ass(station_name)')
+        .eq('id', staffId)
+        .single();
+
+      if (error) throw error;
+
+      if (!staff.station_ass) {
+        return { hasAssignments: false };
+      }
+
+      const stationName = staff.stations?.station_name || 'Assigned Station';
+
+      const { count, error: countErr } = await this.supabase
+        .from('patient_basic_info')
+        .select('id', { count: 'exact', head: true })
+        .eq('station_ass', staff.station_ass);
+
+      if (countErr) throw countErr;
+
+      if (count && count > 0) {
+        return { hasAssignments: true, stationName, patientCount: count };
+      }
+
+      return { hasAssignments: false };
+    } catch (err) {
+      console.error('Error checking staff assignments:', err);
+      return { hasAssignments: false };
+    }
+  }
+
+  archiveStaff(staffId) {
+    const ids = StaffService.getArchivedStaffIds();
+    ids.add(staffId);
+    StaffService.setArchivedStaffIds(ids);
+  }
+
+  restoreStaff(staffId) {
+    const ids = StaffService.getArchivedStaffIds();
+    ids.delete(staffId);
+    StaffService.setArchivedStaffIds(ids);
   }
 
   /**
@@ -194,6 +260,106 @@ export default class StaffService {
       return data;
     } catch (error) {
       console.error('❌ addStation:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Edit an existing station
+   */
+  async editStation(oldName, newName) {
+    try {
+      if (!oldName || !oldName.trim() || !newName || !newName.trim()) {
+        throw new Error('Both old and new station names are required');
+      }
+
+      // Check if the old station exists
+      const { data: oldStation } = await this.supabase
+        .from('stations')
+        .select('id')
+        .ilike('station_name', oldName.trim())
+        .maybeSingle();
+
+      if (!oldStation) {
+        throw new Error(`Station "${oldName}" not found`);
+      }
+
+      // Check if new name already exists (and is a different station)
+      const { data: existing } = await this.supabase
+        .from('stations')
+        .select('id')
+        .ilike('station_name', newName.trim())
+        .neq('id', oldStation.id)
+        .maybeSingle();
+
+      if (existing) {
+        throw new Error(`Station "${newName}" already exists`);
+      }
+
+      // Update the station name
+      const { error } = await this.supabase
+        .from('stations')
+        .update({ station_name: newName.trim() })
+        .eq('id', oldStation.id);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('❌ editStation:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete an existing station if it has no assignments
+   */
+  async deleteStation(stationName) {
+    try {
+      if (!stationName || !stationName.trim()) {
+        throw new Error('Station name is required');
+      }
+
+      // Find station id
+      const { data: station } = await this.supabase
+        .from('stations')
+        .select('id')
+        .ilike('station_name', stationName.trim())
+        .maybeSingle();
+
+      if (!station) {
+        throw new Error(`Station "${stationName}" not found`);
+      }
+
+      // Check for assignments in staff_profiles
+      const { count: staffCount, error: staffError } = await this.supabase
+        .from('staff_profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('station_ass', station.id);
+
+      if (staffError) throw staffError;
+
+      // Check for assignments in patient_basic_info
+      const { count: patientCount, error: patientError } = await this.supabase
+        .from('patient_basic_info')
+        .select('id', { count: 'exact', head: true })
+        .eq('station_ass', station.id);
+
+      if (patientError) throw patientError;
+
+      if (staffCount > 0 || patientCount > 0) {
+        throw new Error(`Cannot delete station: currently assigned to ${staffCount} staff member(s) and ${patientCount} patient(s). Reassign them before deleting.`);
+      }
+
+      // Safe to delete
+      const { error } = await this.supabase
+        .from('stations')
+        .delete()
+        .eq('id', station.id);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('❌ deleteStation:', error);
       throw error;
     }
   }

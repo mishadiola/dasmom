@@ -178,6 +178,8 @@ const NewbornTracking = () => {
     const [filters, setFilters] = useState({ status: 'All', progress: 'All', station: 'All' });
     const [selectedBaby, setSelectedBaby] = useState(null);
     const [expandedRow, setExpandedRow] = useState(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
 
     // ── Baby Vaccination Calendar State ──
     const [vaccCalendarDate, setVaccCalendarDate] = useState(new Date());
@@ -511,7 +513,7 @@ const NewbornTracking = () => {
             <div className="page-header vacc-header">
                 <div>
                     <h1 className="page-title"><Baby size={24} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Newborn Records</h1>
-                    <p className="page-subtitle">View all newborn records, vaccination status, and patient information</p>
+                    <p className="page-subtitle">View and manage newborn records, including vaccination status and newborn information.</p>
                 </div>
                 <div className="header-actions">
                     <button className="btn btn-outline" onClick={handleExport}>
@@ -547,18 +549,21 @@ const NewbornTracking = () => {
                         className="nb-search-input"
                         placeholder="Search by baby name, mother name, ID, or station..."
                         value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
+                        onChange={e => {
+                            setSearchTerm(e.target.value);
+                            setCurrentPage(1);
+                        }}
                     />
                 </div>
                 <div className="nb-filters-row vacc-filters">
                     <span className="filters-label"><Filter size={13} /> Filters:</span>
-                    <select value={filters.status} onChange={e => handleFilter('status', e.target.value)}>
+                    <select value={filters.status} onChange={e => { handleFilter('status', e.target.value); setCurrentPage(1); }}>
                         <option value="All">All Status</option>
                         <option value="Completed">Fully Vaccinated</option>
                         <option value="In Progress">In Progress</option>
                         <option value="Overdue">Overdue</option>
                     </select>
-                    <select value={filters.progress} onChange={e => handleFilter('progress', e.target.value)}>
+                    <select value={filters.progress} onChange={e => { handleFilter('progress', e.target.value); setCurrentPage(1); }}>
                         <option value="All">All Progress</option>
                         <option value="0-25%">0-25% Complete</option>
                         <option value="26-50%">26-50% Complete</option>
@@ -566,7 +571,7 @@ const NewbornTracking = () => {
                         <option value="76-99%">76-99% Complete</option>
                         <option value="100%">100% Complete</option>
                     </select>
-                    <select value={filters.station} onChange={e => handleFilter('station', e.target.value)}>
+                    <select value={filters.station} onChange={e => { handleFilter('station', e.target.value); setCurrentPage(1); }}>
                         <option value="All">All Stations</option>
                         {[1,2,3,4,5,6,7].map(n => <option key={n} value={`Station ${n}`}>Station {n}</option>)}
                     </select>
@@ -737,6 +742,7 @@ const NewbornTracking = () => {
                     <table className="nb-table vacc-table">
                         <thead>
                             <tr>
+                                <th className="row-number-header" style={{ width: '50px' }}># / No.</th>
                                 <th>Baby Name</th>
                                 <th>Mother Name</th>
                                 <th>Birth Date</th>
@@ -748,12 +754,15 @@ const NewbornTracking = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filtered.map(b => {
+                            {filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((b, index) => {
                                 const nextVaccine = getNextVaccine(b);
                                 const lastVaccine = getLastVaccine(b);
                                 const vaccStatus = getVaccinationStatus(b);
                                 return (
                                     <tr key={b.id} className={`nb-row ${getRowClass(b)}`}>
+                                        <td className="row-number-cell" style={{ width: '50px' }}>
+                                            {(currentPage - 1) * itemsPerPage + index + 1}
+                                        </td>
                                         <td>
                                             <div className="nb-baby-cell">
                                                 <div className={`nb-avatar nb-avatar--${b.gender?.toLowerCase() || 'unknown'}`}>
@@ -813,7 +822,7 @@ const NewbornTracking = () => {
 
                             {filtered.length === 0 && (
                                 <tr>
-                                    <td colSpan="8" className="nb-empty registry-empty">
+                                    <td colSpan="9" className="nb-empty registry-empty">
                                         <Baby size={48} />
                                         <p>No newborn records found.</p>
                                         <small>Newborn records will appear here when added to the system.</small>
@@ -822,6 +831,30 @@ const NewbornTracking = () => {
                             )}
                         </tbody>
                     </table>
+                    {/* Pagination Controls */}
+                    {filtered.length > 0 && (
+                        <div className="table-pagination">
+                            <div className="pagination-info">
+                                Showing {((currentPage - 1) * itemsPerPage) + 1}–{Math.min(currentPage * itemsPerPage, filtered.length)} of {filtered.length}
+                            </div>
+                            <div className="pagination-controls">
+                                <button 
+                                    className="page-btn" 
+                                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                    disabled={currentPage === 1}
+                                >
+                                    <ChevronLeft size={16} />
+                                </button>
+                                <button 
+                                    className="page-btn" 
+                                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(filtered.length / itemsPerPage)))}
+                                    disabled={currentPage === Math.ceil(filtered.length / itemsPerPage)}
+                                >
+                                    <ChevronRight size={16} />
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 

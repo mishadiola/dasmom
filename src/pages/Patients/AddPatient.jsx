@@ -4,7 +4,7 @@ import { AuthContext } from '../../context/AuthContext';
 import {
     ArrowLeft, Save, X, FileText, User, Activity,
     Calendar, HeartPulse, UploadCloud, AlertTriangle,
-    CheckCircle2, XCircle, Loader2
+    CheckCircle2, XCircle, Loader2, Search
 } from 'lucide-react';
 import '../../styles/pages/AddPatient.css';
 import PatientService from "../../services/patientservice";
@@ -85,6 +85,25 @@ const AddPatient = () => {
     const [doctorList, setDoctorList] = useState([]);
     const [schedulePreview, setSchedulePreview] = useState([]);
     const [loadingSchedule, setLoadingSchedule] = useState(false);
+
+    // New states for Registration Mode (UI only)
+    const [registrationMode, setRegistrationMode] = useState('new'); // 'new' | 'existing'
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState([]);
+    const [selectedExistingPatient, setSelectedExistingPatient] = useState(null);
+
+    const handleSearch = (e) => {
+        const query = e.target.value;
+        setSearchQuery(query);
+        if (query.length > 2) {
+            setSearchResults([
+                { id: '1', name: 'Maria Santos', dob: '1990-05-15', station: 'Salawag' },
+                { id: '2', name: 'Maria Cruz', dob: '1992-08-20', station: 'Salawag' }
+            ].filter(p => p.name.toLowerCase().includes(query.toLowerCase())));
+        } else {
+            setSearchResults([]);
+        }
+    };
     const [otherConditionRisk, setOtherConditionRisk] = useState('Low');
     const [retainedStaffList, setRetainedStaffList] = useState([]);
     const [emailSuggestions, setEmailSuggestions] = useState([]);
@@ -703,27 +722,43 @@ const AddPatient = () => {
                 </div>
             )}
 
-            <div className="ap-header">
-                <div>
-                    <button className="back-link" onClick={() => navigate(-1)}>
-                        <ArrowLeft size={16} /> Back to Patient List
-                    </button>
-                    <h1 className="ap-title">
-                        {formData.pregnancyStatus === 'Postpartum' 
-                            ? 'Add Postpartum Patient' 
-                            : 'Add New Pregnant Patient'}
-                    </h1>
-                    <p>BHW: {currentStaff.full_name} | Available Stations: {availableStations.length}</p>
-                </div>
-            </div>
+            <div style={{ backgroundColor: 'var(--color-primary, #b9818a)', color: 'white', padding: '16px 24px', borderRadius: '12px', marginBottom: '16px' }}>
+                <button 
+                    onClick={() => navigate(-1)} 
+                    style={{ 
+                        marginBottom: '12px', 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        gap: '6px', 
+                        background: 'none',
+                        border: 'none',
+                        color: 'rgba(255, 255, 255, 0.9)',
+                        cursor: 'pointer',
+                        padding: 0,
+                        fontSize: '0.85rem'
+                    }}
+                >
+                    <ArrowLeft size={16} /> Back to Patient List
+                </button>
 
-            <div className="ap-smart-badges">
-                <div className={`smart-badge risk-badge risk-${formData.riskLevel.toLowerCase().split(' ')[0]}`}>
-                    {formData.riskLevel === 'High Risk' && <AlertTriangle size={14} />}
-                    Auto Risk: {formData.riskLevel}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h1 style={{ fontSize: '1.65rem', margin: 0, fontWeight: 600 }}>
+                        {formData.pregnancyStatus === 'Postpartum' 
+                            ? 'Register Postpartum Patient' 
+                            : 'Register New Pregnancy'}
+                    </h1>
+                    
+                    <div style={{ 
+                        backgroundColor: 'rgba(255, 255, 255, 0.2)', 
+                        padding: '4px 12px', 
+                        borderRadius: '20px', 
+                        fontSize: '0.8rem',
+                        fontWeight: 500,
+                        whiteSpace: 'nowrap'
+                    }}>
+                        BHW: {currentStaff.full_name}
+                    </div>
                 </div>
-                {formData.gestationalAge && <div className="smart-badge">GA: {formData.gestationalAge}</div>}
-                <div className="smart-badge">35 slots/day per Station</div>
             </div>
 
             <div className="ap-container">
@@ -749,10 +784,78 @@ const AddPatient = () => {
 
                 <form onSubmit={handleSave} className="ap-form">
                     <div className="ap-content">
-                        {/* PERSONAL TAB - OLD FIELDS + NEW DROPDOWN */}
+                        {/* PERSONAL TAB */}
                         {activeTab === 'personal' && (
                             <div className="ap-section animate-fade">
                             <h2 className="section-title">Personal Information</h2>
+                            
+                            <div className="registration-mode-toggle" style={{ display: 'flex', gap: '16px', marginBottom: '24px', padding: '4px', backgroundColor: 'var(--color-bg)', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+                                <button type="button" className={`btn ${registrationMode === 'new' ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 1, border: registrationMode === 'new' ? 'none' : 'transparent', boxShadow: registrationMode === 'new' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none' }} onClick={() => { setRegistrationMode('new'); setSelectedExistingPatient(null); }}>
+                                    <User size={16} style={{ marginRight: '8px' }} /> New Patient
+                                </button>
+                                <button type="button" className={`btn ${registrationMode === 'existing' ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 1, border: registrationMode === 'existing' ? 'none' : 'transparent', boxShadow: registrationMode === 'existing' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none' }} onClick={() => setRegistrationMode('existing')}>
+                                    <Search size={16} style={{ marginRight: '8px' }} /> Existing Patient
+                                </button>
+                            </div>
+
+                            {registrationMode === 'existing' && !selectedExistingPatient && (
+                                <div style={{ marginBottom: '24px' }}>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500, fontSize: '13.5px', color: 'var(--color-text)' }}>Search Existing Patient</label>
+                                    <div style={{ position: 'relative', width: '100%' }}>
+                                        <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-light)', pointerEvents: 'none' }} />
+                                        <input 
+                                            type="text" 
+                                            placeholder="Search by name or Patient ID..." 
+                                            value={searchQuery}
+                                            onChange={handleSearch}
+                                            style={{ 
+                                                width: '100%', 
+                                                padding: '10px 16px 10px 42px', 
+                                                border: '1.5px solid #eef0f4', 
+                                                borderRadius: '12px', 
+                                                fontFamily: 'var(--font)', 
+                                                fontSize: '13.5px', 
+                                                color: 'var(--color-text)', 
+                                                background: '#f8f9fb', 
+                                                transition: 'all 0.2s ease',
+                                                outline: 'none',
+                                                boxSizing: 'border-box'
+                                            }}
+                                            onFocus={e => { e.target.style.borderColor = 'var(--color-rose)'; e.target.style.background = '#fff'; e.target.style.boxShadow = '0 0 0 3px rgba(185, 129, 138, 0.1)'; }}
+                                            onBlur={e => { e.target.style.borderColor = '#eef0f4'; e.target.style.background = '#f8f9fb'; e.target.style.boxShadow = 'none'; }}
+                                        />
+                                    </div>
+                                    {searchQuery.length > 2 && (
+                                        <div style={{ marginTop: '8px', border: '1.5px solid #eef0f4', borderRadius: '12px', overflow: 'hidden', background: '#fff' }}>
+                                            {searchResults.length > 0 ? searchResults.map(p => (
+                                                <div key={p.id} style={{ padding: '12px 16px', borderBottom: '1px solid #eef0f4', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'background 0.15s ease' }} onClick={() => setSelectedExistingPatient(p)} onMouseEnter={e => e.currentTarget.style.background = '#f8f9fb'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+                                                    <div>
+                                                        <div style={{ fontWeight: 600, color: 'var(--color-text)', fontSize: '14px' }}>{p.name}</div>
+                                                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>DOB: {p.dob} • Station: {p.station}</div>
+                                                    </div>
+                                                    <button type="button" className="btn btn-outline" style={{ padding: '4px 12px', fontSize: '12px' }}>Select</button>
+                                                </div>
+                                            )) : (
+                                                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13.5px' }}>No patients found matching "{searchQuery}"</div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {registrationMode === 'existing' && selectedExistingPatient && (
+                                <div className="selected-patient-card" style={{ marginBottom: '24px', padding: '16px', backgroundColor: 'var(--color-bg)', border: '1px solid var(--color-primary-light)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                        <div style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 600, marginBottom: '4px' }}>SELECTED PATIENT</div>
+                                        <div style={{ fontWeight: 600, fontSize: '16px' }}>{selectedExistingPatient.name}</div>
+                                        <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>DOB: {selectedExistingPatient.dob} • Station: {selectedExistingPatient.station}</div>
+                                    </div>
+                                    <button type="button" className="btn btn-outline" onClick={() => { setSelectedExistingPatient(null); setSearchQuery(''); }}>Change Patient</button>
+                                </div>
+                            )}
+
+                            {registrationMode === 'new' && (
+                                <>
                             <div className="form-grid-3">
                                 <div className="form-group">
                                     <label>First Name <span className="req">*</span></label>
@@ -958,6 +1061,8 @@ const AddPatient = () => {
                                     <input name="validId" value={formData.validId} onChange={handleChange} />
                                 </div>
                             </div>
+                            </>
+                            )}
                         </div>
                     )}
 

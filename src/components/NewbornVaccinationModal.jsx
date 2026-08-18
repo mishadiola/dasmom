@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import supabase from '../config/supabaseclient';
 import PatientService from '../services/patientservice';
 import { X, Syringe, CheckCircle2, RefreshCw } from 'lucide-react';
+import { useModal } from '../context/ModalContext';
 
 const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
+    const { alert: customAlert } = useModal();
     const [pendingVaccines, setPendingVaccines] = useState([]);
     const [selectedVaccines, setSelectedVaccines] = useState({});
     const [staff, setStaff] = useState('');
@@ -82,7 +84,7 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
             .map(([id]) => id);
 
         if (selectedIds.length === 0) {
-            alert('Please select at least one vaccine to mark as administered.');
+            await customAlert({ title: 'No Selection', text: 'Please select at least one vaccine to mark as administered.', iconType: 'warning' });
             return;
         }
 
@@ -188,7 +190,7 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
             onClose();
         } catch (error) {
             console.error('Error saving vaccinations:', error);
-            alert('Failed to save vaccinations: ' + error.message);
+            await customAlert({ title: 'Error', text: 'Failed to save vaccinations: ' + error.message, iconType: 'danger' });
         } finally {
             setIsSaving(false);
         }

@@ -14,12 +14,14 @@ import PatientService from '../../services/patientservice';
 import supabase from '../../config/supabaseclient';
 import * as XLSX from 'xlsx';
 import { formatTime12Hour } from '../../utils/pregnancyUtils';
+import { useModal } from '../../context/ModalContext';
 
 const COMPLICATION_OPTIONS = ['None', 'Hemorrhage', 'Infection', 'Preeclampsia', 'Placenta Previa', 'Preterm'];
 const DELIVERY_TYPES = ['NSD', 'CS', 'Breech'];
 
 const DeliveryOutcomes = () => {
     const navigate = useNavigate();
+    const { confirm, alert: customAlert } = useModal();
     const babyService = new BabyService();
     const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState({
@@ -198,7 +200,14 @@ const DeliveryOutcomes = () => {
     );
 
     const handleNewPregnancy = async (patientId) => {
-        if (!confirm('Are you sure you want to create a new pregnancy record for this patient? This will mark them as active/pregnant again.')) {
+        const isConfirmed = await confirm({
+            title: 'Create New Pregnancy',
+            text: 'Are you sure you want to create a new pregnancy record for this patient? This will mark them as active/pregnant again.',
+            confirmText: 'Yes, Create',
+            cancelText: 'Cancel',
+            iconType: 'info'
+        });
+        if (!isConfirmed) {
             return;
         }
 
@@ -235,13 +244,13 @@ const DeliveryOutcomes = () => {
 
             if (updateError) throw updateError;
 
-            alert(' New pregnancy record created successfully!');
+            await customAlert({ title: 'Success', text: 'New pregnancy record created successfully!', iconType: 'success' });
             
             // Navigate to patient profile
             navigate(`/dashboard/patients/${patientId}?from=deliveries`);
         } catch (err) {
             console.error('Error creating new pregnancy:', err);
-            alert(` Failed to create new pregnancy: ${err.message}`);
+            await customAlert({ title: 'Error', text: `Failed to create new pregnancy: ${err.message}`, iconType: 'danger' });
         }
     };
 
@@ -253,7 +262,7 @@ const DeliveryOutcomes = () => {
                         <Stethoscope size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> 
                         Delivery Outcomes
                     </h1>
-                    <p className="page-subtitle">Record and monitor birth events — type, outcome, complications, and baby status</p>
+                    <p className="page-subtitle">Record and monitor birth outcomes, including delivery type, complications, and baby status.</p>
                 </div>
                 <div className="header-actions">
                     <button className="btn btn-outline" onClick={handleExport}><Download size={16} /> Export Report</button>
@@ -306,14 +315,6 @@ const DeliveryOutcomes = () => {
                     />
                 </div>
                 <div className="do-filters-row">
-                    <div className="view-toggle-wrap">
-                        <button 
-                            className={`view-toggle ${filters.view === 'outcomes' ? 'active' : ''}`} 
-                            onClick={() => handleFilter('view', 'outcomes')}
-                        >
-                            Completed Deliveries
-                        </button>
-                    </div>
                     <span className="filters-label"><Filter size={13} /> Filters:</span>
                     <select value={filters.type} onChange={e => handleFilter('type', e.target.value)}>
                         <option value="All">All Types</option>
@@ -348,11 +349,12 @@ const DeliveryOutcomes = () => {
                             <table className="do-table">
                                 <thead>
                                     <tr>
+                                        <th className="row-number-header" style={{ width: '50px' }}>#</th>
                                         <th><span className="sortable-head" onClick={() => handleSort('patientName')}>
                                             Patient <SortBtn field="patientName" />
                                         </span></th>
                                         <th><span className="sortable-head" onClick={() => handleSort('deliveryDate')}>
-                                            Birth Date <SortBtn field="deliveryDate" />
+                                            Delivery Date <SortBtn field="deliveryDate" />
                                         </span></th>
                                         <th>Type</th>
                                         <th>Risk</th>
@@ -364,9 +366,12 @@ const DeliveryOutcomes = () => {
                                 </thead>
                                 <tbody>
                                     {loading ? (
-                                        <tr><td colSpan="8" className="do-loading">Loading...</td></tr>
-                                    ) : filtered.map(d => (
+                                        <tr><td colSpan="9" className="do-loading">Loading...</td></tr>
+                                    ) : filtered.map((d, index) => (
                                         <tr key={d.id} className={`do-row ${getRowClass(d)}`}>
+                                            <td className="row-number-cell" style={{ width: '50px' }}>
+                                                {index + 1}
+                                            </td>
                                             <td>
                                                 <div 
                                                     className="do-patient" 
@@ -410,7 +415,7 @@ const DeliveryOutcomes = () => {
                                     ))}
                                     {!loading && !filtered.length && (
                                         <tr>
-                                            <td colSpan="8" className="do-empty">
+                                            <td colSpan="9" className="do-empty">
                                                 <Baby size={28} />
                                                 <p>No matching records found</p>
                                             </td>

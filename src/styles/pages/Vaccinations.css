@@ -379,6 +379,12 @@
     border-collapse: collapse;
 }
 
+.vacc-table th.col-num,
+.vacc-table td.col-num {
+    text-align: center;
+    vertical-align: middle;
+}
+
 .vacc-table th {
     text-align: left;
     padding: 10px 12px;

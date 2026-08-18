@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Search, Filter, Baby, Heart, AlertTriangle, Clock,
-    CheckCircle2, XCircle, ChevronRight, Eye,
+    CheckCircle2, XCircle, ChevronRight, ChevronLeft, Eye,
     AlertCircle, FileText, MapPin, Activity, Thermometer,
     Brain, Milk, Calendar, TrendingUp, Download, X
 } from 'lucide-react';
@@ -162,6 +162,8 @@ const PostpartumRecords = () => {
         deliveryType: 'All', recovery: 'All', station: 'All', followUp: 'All'
     });
     const [selectedMother, setSelectedMother] = useState(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
 
     useEffect(() => {
         const fetchData = async () => {
@@ -191,7 +193,10 @@ const PostpartumRecords = () => {
         CheckCircle2
     };
 
-    const handleFilter = (key, val) => setFilters(prev => ({ ...prev, [key]: val }));
+    const handleFilter = (key, val) => {
+        setFilters(prev => ({ ...prev, [key]: val }));
+        setCurrentPage(1);
+    };
 
     const handleExportReport = () => {
         const exportData = filtered.map(m => ({
@@ -282,7 +287,7 @@ const PostpartumRecords = () => {
             <div className="page-header">
                 <div>
                     <h1 className="page-title"><Heart size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Postpartum Records</h1>
-                    <p className="page-subtitle">Monitor mothers post-delivery — recovery, complications & follow-ups</p>
+                    <p className="page-subtitle">Monitor mothers after delivery, including recovery, complications, and follow-up visits.</p>
                 </div>
                 <div className="header-actions">
                     <button className="btn btn-outline" onClick={handleExportReport}><Download size={16} /> Export Report</button>
@@ -317,7 +322,10 @@ const PostpartumRecords = () => {
                         className="pp-search-input"
                         placeholder="Search by name, patient ID, or station..."
                         value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
+                        onChange={e => {
+                            setSearchTerm(e.target.value);
+                            setCurrentPage(1);
+                        }}
                     />
                 </div>
                 <div className="pp-filters-row">
@@ -360,6 +368,7 @@ const PostpartumRecords = () => {
                             <table className="pp-table">
                                 <thead>
                                     <tr>
+                                        <th className="row-number-header" style={{ width: '50px' }}>#</th>
                                         <th>Patient</th>
                                         <th>Delivery</th>
                                         <th>Days PP</th>
@@ -372,8 +381,11 @@ const PostpartumRecords = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filtered.map(m => (
+                                    {filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((m, index) => (
                                         <tr key={m.id} className={getRecoveryClass(m.recoveryStatus)}>
+                                            <td className="row-number-cell" style={{ width: '50px' }}>
+                                                {(currentPage - 1) * itemsPerPage + index + 1}
+                                            </td>
                                             <td>
                                                 <div className="pp-patient-cell" onClick={() => navigate(`/dashboard/patients/${m.patientId}`)} style={{ cursor: 'pointer' }}>
                                                     <div className="pp-avatar">{m.name.split(' ').map(n => n[0]).slice(0, 2).join('')}</div>
@@ -417,7 +429,7 @@ const PostpartumRecords = () => {
                                     ))}
                                     {filtered.length === 0 && (
                                         <tr>
-                                            <td colSpan="8" className="pp-empty">
+                                            <td colSpan="10" className="pp-empty">
                                                 <Baby size={28} />
                                                 <p>No postpartum records matching your filters.</p>
                                             </td>
@@ -425,6 +437,30 @@ const PostpartumRecords = () => {
                                     )}
                                 </tbody>
                             </table>
+                            {/* Pagination Controls */}
+                            {filtered.length > 0 && (
+                                <div className="table-pagination">
+                                    <div className="pagination-info">
+                                        Showing {((currentPage - 1) * itemsPerPage) + 1}–{Math.min(currentPage * itemsPerPage, filtered.length)} of {filtered.length}
+                                    </div>
+                                    <div className="pagination-controls">
+                                        <button 
+                                            className="page-btn" 
+                                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                            disabled={currentPage === 1}
+                                        >
+                                            <ChevronLeft size={16} />
+                                        </button>
+                                        <button 
+                                            className="page-btn" 
+                                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(filtered.length / itemsPerPage)))}
+                                            disabled={currentPage === Math.ceil(filtered.length / itemsPerPage)}
+                                        >
+                                            <ChevronRight size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

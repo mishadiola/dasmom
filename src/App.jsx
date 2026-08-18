@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import { AuthProvider } from './context/AuthContext';
+import { ModalProvider } from './context/ModalContext';
 import ProtectedRoute from './routes/ProtectedRoute';
 
 import Landing from './pages/Landing/Landing';
@@ -41,8 +42,9 @@ import './App.css';
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
+      <ModalProvider>
+        <BrowserRouter>
+          <Routes>
 
           {/* PUBLIC ROUTES */}
           <Route path="/" element={<Login />} />
@@ -95,7 +97,8 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
 
         </Routes>
-      </BrowserRouter>
+        </BrowserRouter>
+      </ModalProvider>
     </AuthProvider>
   );
 }

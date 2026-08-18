@@ -98,7 +98,7 @@ const StationReports = () => {
             <div className="page-header">
                 <div>
                     <h1 className="page-title"><MapPin size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Station Reports</h1>
-                    <p className="page-subtitle">Community-level health monitoring — patient coverage, risk distribution, and vaccination rates</p>
+                    <p className="page-subtitle">View health data and performance for each station under CHO III, including patient coverage, risk distribution, and vaccination rates.</p>
                 </div>
                 <div className="header-actions">
                     <button className="btn btn-outline" onClick={() => setShowCharts(v => !v)}>
