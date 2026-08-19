@@ -1,0 +1,92 @@
+/* src/components/Legend/Legend.css */
+.shared-legend-container {
+    position: relative;
+    margin-left: auto;
+    display: inline-block;
+}
+
+/* Match reference exactly: White background, Thin soft rose/mauve border, Rounded corners */
+.shared-legend-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: white;
+    border: 1px solid rgba(185, 129, 138, 0.4); /* Thin soft rose/mauve border */
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text);
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.2s ease;
+}
+
+.shared-legend-btn:hover, .shared-legend-btn.active {
+    background: rgba(185, 129, 138, 0.05);
+    border-color: var(--color-rose);
+}
+
+.shared-legend-icon {
+    color: var(--color-rose);
+}
+
+/* Dropdown styling */
+.shared-legend-popover {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 8px;
+    background: white;
+    border: 1px solid #eef0f4;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08); /* same subtle shadow */
+    z-index: 50;
+    min-width: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px; /* spacing between categories */
+    text-align: left;
+}
+
+.shared-legend-category {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Category headings in the same uppercase style */
+.shared-legend-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Colored pills container */
+.shared-legend-items {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Colored pills with same dimensions, radius, typography, and alignment */
+.shared-legend-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 6px;
+    white-space: nowrap;
+    display: inline-block;
+    text-align: center;
+    width: fit-content;
+}
+
+.shared-legend-item-icon {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 4px;
+    vertical-align: middle;
+}

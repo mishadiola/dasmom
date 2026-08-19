@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import '../../styles/pages/StationReports.css';
 import PatientService from '../../services/patientservice';
+import Legend from '../../components/Legend/Legend';
 
 /* ════════════════════════════
    MAIN COMPONENT
@@ -190,11 +191,18 @@ const StationReports = () => {
             <div className="st-card">
                 <div className="st-card-head">
                     <h2><MapPin size={17} /> Station Overview</h2>
-                    <div className="st-legend">
-                        <span className="legend-chip chip-normal"><CheckCircle2 size={11} /> Normal</span>
-                        <span className="legend-chip chip-monitor"><AlertTriangle size={11} /> Monitor</span>
-                        <span className="legend-chip chip-critical"><AlertCircle size={11} /> Critical</span>
-                    </div>
+                    <Legend 
+                        categories={[
+                            {
+                                title: "Status",
+                                items: [
+                                    { label: "Normal", className: "chip-normal", icon: <CheckCircle2 size={11} /> },
+                                    { label: "Monitor", className: "chip-monitor", icon: <AlertTriangle size={11} /> },
+                                    { label: "Critical", className: "chip-critical", icon: <AlertCircle size={11} /> }
+                                ]
+                            }
+                        ]}
+                    />
                     <span className="st-count">{filtered.length} stations</span>
                 </div>
 

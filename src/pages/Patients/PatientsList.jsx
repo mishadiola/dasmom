@@ -11,6 +11,7 @@ import '../../styles/pages/PatientsList.css';
 import PatientService from '../../services/patientservice';
 import EditPatientModal from '../../components/Patient/EditPatientModal';
 import { useModal } from '../../context/ModalContext';
+import Legend from '../../components/Legend/Legend';
 
 // Helper function to extract first 4 numeric digits from patient ID
 const getShortPatientId = (id) => {
@@ -661,34 +662,26 @@ const PatientsList = () => {
                         <button className="clear-filters-btn" onClick={clearFilters}>Clear All</button>
                     )}
                     </div> {/* Closes filter-group */}
-                    
-                    {/* Legend Popover */}
-                    <div className="filter-dropdown-container" style={{ marginLeft: 'auto' }}>
-                        <button 
-                            className={`filter-btn ${activePopover === 'legend' ? 'active-filter' : ''}`}
-                            onClick={() => setActivePopover(activePopover === 'legend' ? null : 'legend')}
-                        >
-                            <Info size={14} className="filter-btn-icon" />
-                            Legend
-                        </button>
-                        
-                        {activePopover === 'legend' && (
-                            <div className="filter-popover" style={{ right: 0, left: 'auto', minWidth: '200px', padding: '16px' }}>
-                                <div className="popover-title" style={{ color: 'var(--color-text)', marginBottom: '12px' }}>Gestation</div>
-                                <div className="popover-options" style={{ padding: '0', gap: '8px', marginBottom: '16px' }}>
-                                    <span className="tri-badge tri-1" style={{ display: 'inline-block', textAlign: 'center' }}>1st Trim</span>
-                                    <span className="tri-badge tri-2" style={{ display: 'inline-block', textAlign: 'center' }}>2nd Trim</span>
-                                    <span className="tri-badge tri-3" style={{ display: 'inline-block', textAlign: 'center' }}>3rd Trim</span>
-                                </div>
-                                <div className="popover-title" style={{ color: 'var(--color-text)', marginBottom: '12px' }}>Risk Level</div>
-                                <div className="popover-options" style={{ padding: '0', gap: '8px' }}>
-                                    <span className="risk-badge risk-low" style={{ display: 'inline-block', textAlign: 'center' }}>Low Risk</span>
-                                    <span className="risk-badge risk-medium" style={{ display: 'inline-block', textAlign: 'center' }}>Medium Risk</span>
-                                    <span className="risk-badge risk-high" style={{ display: 'inline-block', textAlign: 'center' }}>High Risk</span>
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                    <Legend 
+                        categories={[
+                            {
+                                title: "Gestation",
+                                items: [
+                                    { label: "1st Trim", className: "tri-badge tri-1" },
+                                    { label: "2nd Trim", className: "tri-badge tri-2" },
+                                    { label: "3rd Trim", className: "tri-badge tri-3" }
+                                ]
+                            },
+                            {
+                                title: "Risk Level",
+                                items: [
+                                    { label: "Low Risk", className: "risk-badge risk-low" },
+                                    { label: "Medium Risk", className: "risk-badge risk-medium" },
+                                    { label: "High Risk", className: "risk-badge risk-high" }
+                                ]
+                            }
+                        ]}
+                    />
                 </div> {/* Closes filters-row */}
             </div> {/* Closes controls-card */}
 

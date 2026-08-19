@@ -17,6 +17,8 @@ import {
   Info
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import PatientRecordModal from '../PatientRecords/PatientRecordModal';
+import Legend from '../../components/Legend/Legend';
 import PatientService from '../../services/patientservice';
 import '../../styles/pages/HighRiskCases.css';
 
@@ -403,50 +405,18 @@ const HighRiskCases = () => {
           </select>
           
           {/* Legend Popover */}
-          <div style={{ marginLeft: 'auto', position: 'relative' }}>
-            <button 
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  background: 'white',
-                  border: '1.5px solid #eef0f4',
-                  padding: '8px 12px',
-                  borderRadius: '10px',
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  color: 'var(--color-text)',
-                  cursor: 'pointer'
-                }}
-                onClick={() => setActivePopover(activePopover === 'legend' ? null : 'legend')}
-            >
-                <Info size={14} style={{ color: 'var(--color-rose)' }} />
-                Legend
-            </button>
-            
-            {activePopover === 'legend' && (
-                <div style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  marginTop: '8px',
-                  background: 'white',
-                  border: '1px solid #eef0f4',
-                  borderRadius: '12px',
-                  padding: '16px',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-                  zIndex: 50,
-                  minWidth: '200px'
-                }}>
-                    <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--color-text)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gestation</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <span className="trim-badge trim-1" style={{ display: 'inline-block', textAlign: 'center', width: 'fit-content' }}>1st Trim</span>
-                        <span className="trim-badge trim-2" style={{ display: 'inline-block', textAlign: 'center', width: 'fit-content' }}>2nd Trim</span>
-                        <span className="trim-badge trim-3" style={{ display: 'inline-block', textAlign: 'center', width: 'fit-content' }}>3rd Trim</span>
-                    </div>
-                </div>
-            )}
-          </div>
+          <Legend 
+              categories={[
+                  {
+                      title: "Gestation",
+                      items: [
+                          { label: "1st Trim", className: "trim-1" },
+                          { label: "2nd Trim", className: "trim-2" },
+                          { label: "3rd Trim", className: "trim-3" }
+                      ]
+                  }
+              ]}
+          />
         </div>
 
       </div>

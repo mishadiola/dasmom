@@ -15,6 +15,7 @@ import supabase from '../../config/supabaseclient';
 import * as XLSX from 'xlsx';
 import { formatTime12Hour } from '../../utils/pregnancyUtils';
 import { useModal } from '../../context/ModalContext';
+import Legend from '../../components/Legend/Legend';
 
 const COMPLICATION_OPTIONS = ['None', 'Hemorrhage', 'Infection', 'Preeclampsia', 'Placenta Previa', 'Preterm'];
 const DELIVERY_TYPES = ['NSD', 'CS', 'Breech'];
@@ -337,34 +338,37 @@ const DeliveryOutcomes = () => {
                     <select value={filters.station} onChange={e => handleFilter('station', e.target.value)}>
                         {stations.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
-                    <div style={{ marginLeft: 'auto', position: 'relative' }}>
-                        <button className="btn btn-outline" onClick={() => setShowLegend(!showLegend)}>Legend</button>
-                        {showLegend && (
-                            <div className="do-legend-popover">
-                                <div className="do-legend-section">
-                                    <h4>OUTCOME</h4>
-                                    <div className="do-legend-item"><span className="outcome-badge outcome-live">Live Birth</span></div>
-                                    <div className="do-legend-item"><span className="outcome-badge outcome-stillbirth">Stillbirth</span></div>
-                                    <div className="do-legend-item"><span className="outcome-badge outcome-miscarriage">Miscarriage</span></div>
-                                </div>
-                                <div className="do-legend-section">
-                                    <h4>TYPE</h4>
-                                    <div className="do-legend-item"><span className="dt-badge dt-nsd">NSD (Normal)</span></div>
-                                    <div className="do-legend-item"><span className="dt-badge dt-cs">CS (Cesarean)</span></div>
-                                    <div className="do-legend-item"><span className="dt-badge dt-breech">Breech</span></div>
-                                    <div className="do-legend-item"><span className="dt-badge dt-na">N/A – Not Applicable</span></div>
-                                </div>
-                                <div className="do-legend-section">
-                                    <h4>BABY STATUS</h4>
-                                    <div className="do-legend-item"><span className="baby-badge baby-healthy">Healthy</span></div>
-                                    <div className="do-legend-item"><span className="baby-badge baby-nicu">NICU</span></div>
-                                    <div className="do-legend-item"><span className="baby-badge baby-special">Special Care</span></div>
-                                    <div className="do-legend-item"><span className="baby-badge baby-stillbirth">Stillbirth</span></div>
-                                    <div className="do-legend-item"><span className="baby-badge baby-na">N/A – No Baby</span></div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                    <Legend 
+                        categories={[
+                            {
+                                title: "OUTCOME",
+                                items: [
+                                    { label: "Live Birth", className: "outcome-live" },
+                                    { label: "Stillbirth", className: "outcome-stillbirth" },
+                                    { label: "Miscarriage", className: "outcome-miscarriage" }
+                                ]
+                            },
+                            {
+                                title: "TYPE",
+                                items: [
+                                    { label: "NSD (Normal)", className: "dt-nsd" },
+                                    { label: "CS (Cesarean)", className: "dt-cs" },
+                                    { label: "Breech", className: "dt-breech" },
+                                    { label: "N/A – Not Applicable", className: "dt-na" }
+                                ]
+                            },
+                            {
+                                title: "BABY STATUS",
+                                items: [
+                                    { label: "Healthy", className: "baby-healthy" },
+                                    { label: "NICU", className: "baby-nicu" },
+                                    { label: "Special Care", className: "baby-special" },
+                                    { label: "Stillbirth", className: "baby-stillbirth" },
+                                    { label: "N/A – No Baby", className: "baby-na" }
+                                ]
+                            }
+                        ]}
+                    />
                 </div>
             </div>
 

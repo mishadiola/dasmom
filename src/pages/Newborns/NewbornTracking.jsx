@@ -9,6 +9,7 @@ import {
 import NewbornService from '../../services/newbornservice';
 import * as XLSX from 'xlsx';
 import '../../styles/pages/NewbornTracking.css';
+import Legend from '../../components/Legend/Legend';
 
 /* ════════════════════════════
    CALENDAR HELPERS
@@ -608,12 +609,19 @@ const NewbornTracking = () => {
                                 </button>
                             ))}
                         </div>
-                        <div className="legend-pills">
-                            <span><i className="dot vacc-dot-scheduled"></i>Scheduled</span>
-                            <span><i className="dot vacc-dot-completed"></i>Completed</span>
-                            <span><i className="dot vacc-dot-missed"></i>Missed</span>
-                            <span><i className="dot vacc-dot-overdue"></i>Overdue</span>
-                        </div>
+                        <Legend 
+                            categories={[
+                                {
+                                    title: "Schedule Status",
+                                    items: [
+                                        { label: "Scheduled", icon: <i className="dot vacc-dot-scheduled"></i> },
+                                        { label: "Completed", icon: <i className="dot vacc-dot-completed"></i> },
+                                        { label: "Missed", icon: <i className="dot vacc-dot-missed"></i> },
+                                        { label: "Overdue", icon: <i className="dot vacc-dot-overdue"></i> }
+                                    ]
+                                }
+                            ]}
+                        />
                     </div>
                 </div>
 
@@ -730,11 +738,18 @@ const NewbornTracking = () => {
             <div className="nb-card vacc-table-card">
                 <div className="nb-card-head registry-table-head">
                     <h2><Baby size={17} /> Newborn Registry</h2>
-                    <div className="nb-legend registry-legend">
-                        <span className="legend-chip chip-completed"><CheckCircle2 size={11} /> Fully Vaccinated</span>
-                        <span className="legend-chip chip-progress"><TrendingUp size={11} /> In Progress</span>
-                        <span className="legend-chip chip-overdue"><AlertTriangle size={11} /> Needs Attention</span>
-                    </div>
+                    <Legend 
+                        categories={[
+                            {
+                                title: "Status",
+                                items: [
+                                    { label: "Fully Vaccinated", className: "chip-completed", icon: <CheckCircle2 size={11} /> },
+                                    { label: "In Progress", className: "chip-progress", icon: <TrendingUp size={11} /> },
+                                    { label: "Needs Attention", className: "chip-overdue", icon: <AlertTriangle size={11} /> }
+                                ]
+                            }
+                        ]}
+                    />
                     <span className="nb-count">{filtered.length} newborns</span>
                 </div>
 

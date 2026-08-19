@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import NewbornVaccinationModal from '../../components/NewbornVaccinationModal';
 import '../../styles/pages/Vaccinations.css';
+import Legend from '../../components/Legend/Legend';
 
 // Constants for vaccine and supplement types
 const VACCINE_TYPES = [
@@ -1715,21 +1716,22 @@ const Vaccinations = () => {
                     <div className="vacc-card">
                         <div className="vacc-card-head">
                             <h2>{activeTab === 'vaccines' ? <><Syringe size={16} /> Distribution Records</> : <><Pill size={16} /> Distribution Records</>}</h2>
-                            <div className="vacc-legend">
-                                {activeTab === 'vaccines' ? (
-                                    <>
-                                        <span className="legend-chip chip-completed"><CheckCircle2 size={11} /> Completed</span>
-                                        <span className="legend-chip chip-pending"><Clock size={11} /> Pending</span>
-                                        <span className="legend-chip chip-overdue"><AlertTriangle size={11} /> Overdue</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <span className="legend-chip chip-completed"><CheckCircle2 size={11} /> Completed</span>
-                                        <span className="legend-chip chip-pending"><Pill size={11} /> Ongoing</span>
-                                        <span className="legend-chip chip-missed"><XCircle size={11} /> Missed</span>
-                                    </>
-                                )}
-                            </div>
+                            <Legend 
+                                categories={[
+                                    {
+                                        title: "Status",
+                                        items: activeTab === 'vaccines' ? [
+                                            { label: "Completed", className: "chip-completed", icon: <CheckCircle2 size={11} /> },
+                                            { label: "Pending", className: "chip-pending", icon: <Clock size={11} /> },
+                                            { label: "Overdue", className: "chip-overdue", icon: <AlertTriangle size={11} /> }
+                                        ] : [
+                                            { label: "Completed", className: "chip-completed", icon: <CheckCircle2 size={11} /> },
+                                            { label: "Ongoing", className: "chip-pending", icon: <Pill size={11} /> },
+                                            { label: "Missed", className: "chip-missed", icon: <XCircle size={11} /> }
+                                        ]
+                                    }
+                                ]}
+                            />
                         </div>
 
                         {/* VACCINES TABLE */}
