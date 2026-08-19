@@ -90,7 +90,7 @@
     display: flex;
     flex-direction: column;
     gap: 24px;
-    max-width: 1400px;
+    width: 100%;
     margin: 0 auto;
     padding-bottom: 40px;
 }
@@ -100,7 +100,7 @@
 ════════════════════════════ */
 .do-stats-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 16px;
 }
 
@@ -479,6 +479,13 @@
 .dt-nsd     { background: rgba(109,184,160,0.15); color: #3d8870; }
 .dt-cs      { background: rgba(139,92,246,0.12);  color: #6d28d9; }
 .dt-breech  { background: rgba(220,140,60,0.12);  color: #b85e12; }
+.dt-na      { background: rgba(200,200,200,0.15); color: #777777; }
+
+/* Outcome badge */
+.outcome-badge { font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 6px; }
+.outcome-live        { background: rgba(109,184,160,0.15); color: #3d8870; }
+.outcome-stillbirth  { background: rgba(232,184,75,0.15);  color: #a87c12; }
+.outcome-miscarriage { background: rgba(224,92,115,0.15);  color: #b73a52; }
 
 /* Risk badge */
 .risk-badge { font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 6px; }
@@ -500,9 +507,11 @@
 .baby-info { display: flex; flex-direction: column; gap: 2px; }
 
 .baby-badge { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 5px; }
-.baby-alive     { background: rgba(109,184,160,0.15); color: #3d8870; }
-.baby-nicu      { background: rgba(232,184,75,0.15);  color: #a87c12; }
-.baby-stillbirth { background: rgba(224,92,115,0.15); color: #b73a52; }
+.baby-healthy     { background: rgba(109,184,160,0.15); color: #3d8870; }
+.baby-nicu        { background: rgba(139,92,246,0.12);  color: #6d28d9; }
+.baby-special     { background: rgba(220,140,60,0.12);  color: #b85e12; }
+.baby-stillbirth  { background: rgba(224,92,115,0.15);  color: #b73a52; }
+.baby-na          { background: rgba(200,200,200,0.15); color: #777777; }
 
 .baby-gender { font-size: 11px; color: var(--color-text-muted); }
 
@@ -1083,4 +1092,37 @@
     border-radius: 4px;
     background: linear-gradient(90deg, var(--color-rose), var(--color-rose-dark));
     transition: width 0.5s ease;
+}
+
+/* ════════════════════════════
+   LEGEND POPOVER
+════════════════════════════ */
+.do-legend-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    background: white;
+    border: 1px solid #eef0f4;
+    border-radius: 12px;
+    padding: 16px;
+    width: 220px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.do-legend-section h4 {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--color-text-muted);
+    margin: 0 0 8px;
+    letter-spacing: 0.5px;
+}
+
+.do-legend-item {
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
 }

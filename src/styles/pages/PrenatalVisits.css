@@ -4,7 +4,7 @@
     display: flex;
     flex-direction: column;
     gap: 24px;
-    max-width: 1400px;
+    width: 100%;
     margin: 0 auto;
     padding-bottom: 40px;
 }
@@ -103,7 +103,7 @@
     display: inline-block;
 }
 
-.d-avail { background: #6db8a0; }
+.d-avail { background: #7aa2db; }
 .d-booked { background: #5baed0; }
 .d-full { background: #d1d6e0; }
 
@@ -629,25 +629,28 @@
 }
 
 .week-grid .week-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
     gap: 8px;
 }
 
 .month-grid .week-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
     gap: 8px;
 }
 
 .day-cell {
-    flex: 1;
     background: #ffffff;
     border: 1px solid #eef0f4;
     border-radius: 8px;
     padding: 12px;
-    min-height: 120px;
+    height: 140px;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 8px;
+    overflow: hidden;
 }
 
 .day-today {
@@ -662,6 +665,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
+    flex-shrink: 0;
 }
 
 .day-header .today-badge {
@@ -679,6 +683,7 @@
     flex-direction: column;
     gap: 4px;
     overflow-y: auto;
+    padding-right: 4px;
 }
 
 .visit-item {
@@ -1471,15 +1476,15 @@ padding-right: 16px;
 }
 
 .schedule-item.status-scheduled {
-    background: rgba(255, 193, 7, 0.08);
-    border-color: rgba(255, 193, 7, 0.2);
-    border-left: 4px solid #ffc107;
+    background: rgba(230, 184, 110, 0.08);
+    border-color: rgba(230, 184, 110, 0.2);
+    border-left: 4px solid #e6b86e;
 }
 
 .schedule-item.status-missed {
-    background: rgba(220, 53, 69, 0.08);
-    border-color: rgba(220, 53, 69, 0.2);
-    border-left: 4px solid #dc3545;
+    background: rgba(224, 122, 138, 0.08);
+    border-color: rgba(224, 122, 138, 0.2);
+    border-left: 4px solid #e07a8a;
 }
 
 .schedule-item.status-cancelled {
@@ -1531,13 +1536,13 @@ padding-right: 16px;
 }
 
 .schedule-status.status-scheduled {
-    background: rgba(255, 193, 7, 0.15);
-    color: #b77f26;
+    background: rgba(230, 184, 110, 0.15);
+    color: #b77f26; /* Kept similar to amber text */
 }
 
 .schedule-status.status-missed {
-    background: rgba(220, 53, 69, 0.15);
-    color: #dc3545;
+    background: rgba(224, 122, 138, 0.15);
+    color: #c95c6e;
 }
 
 .schedule-status.status-cancelled {
@@ -1554,9 +1559,9 @@ padding-right: 16px;
 }
 
 /* ── Status Legend Updates ── */
-.d-scheduled { background: #ffc107; }
+.d-scheduled { background: #e6b86e; }
 .d-attended { background: #6db8a0; }
-.d-missed { background: #dc3545; }
+.d-missed { background: #e07a8a; }
 .d-cancelled { background: #6c757d; }
 
 /* ── MODAL STYLES ── */

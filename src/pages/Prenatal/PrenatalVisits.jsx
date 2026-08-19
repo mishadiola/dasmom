@@ -136,6 +136,8 @@ const PrenatalVisits = () => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [toast, setToast] = useState(null);
     const [calendarView, setCalendarView] = useState('day'); // day, week, month
+    const [showLegend, setShowLegend] = useState(false);
+    const legendRef = useRef(null);
     const [selectedVisit, setSelectedVisit] = useState(null);
     const [appointments, setAppointments] = useState([]);
     const [vaccinationsTable, setVaccinationsTable] = useState([]);
@@ -281,6 +283,16 @@ const PrenatalVisits = () => {
             console.error('Prenatal fetch error:', error);
         }
     }, [currentDate, calendarView, archiveFilter, patientService]);
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (legendRef.current && !legendRef.current.contains(e.target)) {
+                setShowLegend(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const handleUpdateVisitStatus = async (visitId, updates) => {
         try {
@@ -833,11 +845,22 @@ const PrenatalVisits = () => {
                                 </button>
                             ))}
                         </div>
-                        <div className="legend-pills">
-                            <span><i className="dot d-avail"></i> Available</span>
-                            <span><i className="dot d-scheduled"></i> Scheduled</span>
-                            <span><i className="dot d-attended"></i> Attended / Completed</span>
-                            <span><i className="dot d-missed"></i> Missed</span>
+                        <div className="legend-container" ref={legendRef} style={{ position: 'relative', marginLeft: '12px' }}>
+                            <button 
+                                className="view-toggle-btn" 
+                                onClick={() => setShowLegend(!showLegend)} 
+                                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', background: showLegend ? '#f1f5f9' : 'transparent', border: '1px solid #e2e8f0' }}
+                            >
+                                <Filter size={14} /> Legend
+                            </button>
+                            {showLegend && (
+                                <div className="legend-popover" style={{ position: 'absolute', top: '100%', right: 0, marginTop: '8px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 50, minWidth: '200px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#475569', fontWeight: '500' }}><i className="dot d-avail"></i> Available</span>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#475569', fontWeight: '500' }}><i className="dot d-scheduled"></i> Scheduled</span>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#475569', fontWeight: '500' }}><i className="dot d-attended"></i> Attended / Completed</span>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#475569', fontWeight: '500' }}><i className="dot d-missed"></i> Missed</span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

@@ -26,13 +26,14 @@ const DeliveryOutcomes = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState({
         type: 'All',
-        risk: 'All',
+        outcome: 'All',
         complication: 'All',
         station: 'All',
         view: 'outcomes'
     });
     const [showModal, setShowModal] = useState(false);
     const [showViewModal, setShowViewModal] = useState(false);
+    const [showLegend, setShowLegend] = useState(false);
     const [selectedDelivery, setSelectedDelivery] = useState(null);
     const [sortField, setSortField] = useState('deliveryDate');
     const [sortAsc, setSortAsc] = useState(false);
@@ -154,12 +155,12 @@ const DeliveryOutcomes = () => {
                     d.station?.toLowerCase().includes(s);
 
                 const matchType = filters.type === 'All' || d.deliveryType === filters.type;
-                const matchRisk = filters.risk === 'All' || d.riskLevel === filters.risk;
+                const matchOutcome = filters.outcome === 'All' || d.pregnancyOutcome === filters.outcome;
                 const matchComp = filters.complication === 'All' || 
                     (filters.complication === 'None' ? d.complications === 'None' : d.complications !== 'None');
                 const matchStation = filters.station === 'All' || d.station === filters.station;
 
-                return matchSearch && matchType && matchRisk && matchComp && matchStation;
+                return matchSearch && matchType && matchOutcome && matchComp && matchStation;
             })
             .sort((a, b) => {
                 const field = sortField;
@@ -184,10 +185,50 @@ const DeliveryOutcomes = () => {
         return 'risk-normal';
     };
 
+    const getOutcomeBadge = (o) => {
+        if (o === 'Miscarriage') return 'outcome-miscarriage';
+        if (o === 'Stillbirth') return 'outcome-stillbirth';
+        return 'outcome-live';
+    };
+
     const getBabyBadge = (b) => {
-        if (b === 'NICU' || b === 'Special Care') return 'baby-nicu';
+        if (b === 'NICU') return 'baby-nicu';
+        if (b === 'Special Care') return 'baby-special';
         if (b === 'Stillbirth') return 'baby-stillbirth';
-        return 'baby-alive';
+        if (!b || b.includes('N/A')) return 'baby-na';
+        return 'baby-healthy';
+    };
+
+    const getDeliveryTypeBadge = (type) => {
+        if (!type) return 'dt-na';
+        if (type.includes('NSD')) return 'dt-nsd';
+        if (type.includes('CS')) return 'dt-cs';
+        if (type.includes('Breech')) return 'dt-breech';
+        return 'dt-na';
+    };
+
+    const getDisplayData = (d) => {
+        const outcome = d.pregnancyOutcome;
+        let typeStr = d.deliveryType || '';
+        let type = 'N/A - Not Applicable';
+        let babyStatus = d.babyOutcome || 'N/A - No Baby';
+
+        // Parse actual stored type
+        const tUp = typeStr.toUpperCase();
+        if (tUp.includes('NSD') || tUp === 'NORMAL') type = 'NSD (Normal)';
+        else if (tUp.includes('CS') || tUp.includes('CESAREAN')) type = 'CS (Cesarean)';
+        else if (tUp.includes('BREECH')) type = 'Breech';
+        else if (typeStr) type = typeStr;
+
+        // Apply rules
+        if (outcome === 'Miscarriage') {
+            type = 'N/A - Not Applicable';
+            babyStatus = 'N/A - No Baby';
+        } else if (outcome === 'Stillbirth') {
+            babyStatus = 'Stillbirth';
+        }
+
+        return { type, babyStatus };
     };
 
     const SortBtn = ({ field }) => (
@@ -282,11 +323,11 @@ const DeliveryOutcomes = () => {
                         <option value="All">All Types</option>
                         {DELIVERY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
-                    <select value={filters.risk} onChange={e => handleFilter('risk', e.target.value)}>
-                        <option value="All">All Risk</option>
-                        <option value="Normal">Normal</option>
-                        <option value="Monitor">Monitor</option>
-                        <option value="High Risk">High Risk</option>
+                    <select value={filters.outcome} onChange={e => handleFilter('outcome', e.target.value)}>
+                        <option value="All">All Outcomes</option>
+                        <option value="Live Birth">Live Birth</option>
+                        <option value="Stillbirth">Stillbirth</option>
+                        <option value="Miscarriage">Miscarriage</option>
                     </select>
                     <select value={filters.complication} onChange={e => handleFilter('complication', e.target.value)}>
                         <option value="All">All Complications</option>
@@ -296,6 +337,34 @@ const DeliveryOutcomes = () => {
                     <select value={filters.station} onChange={e => handleFilter('station', e.target.value)}>
                         {stations.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
+                    <div style={{ marginLeft: 'auto', position: 'relative' }}>
+                        <button className="btn btn-outline" onClick={() => setShowLegend(!showLegend)}>Legend</button>
+                        {showLegend && (
+                            <div className="do-legend-popover">
+                                <div className="do-legend-section">
+                                    <h4>OUTCOME</h4>
+                                    <div className="do-legend-item"><span className="outcome-badge outcome-live">Live Birth</span></div>
+                                    <div className="do-legend-item"><span className="outcome-badge outcome-stillbirth">Stillbirth</span></div>
+                                    <div className="do-legend-item"><span className="outcome-badge outcome-miscarriage">Miscarriage</span></div>
+                                </div>
+                                <div className="do-legend-section">
+                                    <h4>TYPE</h4>
+                                    <div className="do-legend-item"><span className="dt-badge dt-nsd">NSD (Normal)</span></div>
+                                    <div className="do-legend-item"><span className="dt-badge dt-cs">CS (Cesarean)</span></div>
+                                    <div className="do-legend-item"><span className="dt-badge dt-breech">Breech</span></div>
+                                    <div className="do-legend-item"><span className="dt-badge dt-na">N/A – Not Applicable</span></div>
+                                </div>
+                                <div className="do-legend-section">
+                                    <h4>BABY STATUS</h4>
+                                    <div className="do-legend-item"><span className="baby-badge baby-healthy">Healthy</span></div>
+                                    <div className="do-legend-item"><span className="baby-badge baby-nicu">NICU</span></div>
+                                    <div className="do-legend-item"><span className="baby-badge baby-special">Special Care</span></div>
+                                    <div className="do-legend-item"><span className="baby-badge baby-stillbirth">Stillbirth</span></div>
+                                    <div className="do-legend-item"><span className="baby-badge baby-na">N/A – No Baby</span></div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -315,11 +384,9 @@ const DeliveryOutcomes = () => {
                                         <th><span className="sortable-head" onClick={() => handleSort('patientName')}>
                                             Patient <SortBtn field="patientName" />
                                         </span></th>
-                                        <th><span className="sortable-head" onClick={() => handleSort('deliveryDate')}>
-                                            Delivery Date <SortBtn field="deliveryDate" />
-                                        </span></th>
+                                        <th>Delivery Date</th>
+                                        <th>Outcome</th>
                                         <th>Type</th>
-                                        <th>Risk</th>
                                         <th>Complications</th>
                                         <th>Baby Status</th>
                                         <th>Staff</th>
@@ -350,11 +417,15 @@ const DeliveryOutcomes = () => {
                                                 </div>
                                             </td>
                                             <td>
-                                                <span className="do-date">{d.deliveryDate}</span>
+                                                <span className="do-date">
+                                                    {d.deliveryDate 
+                                                        ? new Date(d.deliveryDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) 
+                                                        : ''}
+                                                </span>
                                                 {d.deliveryTime && <span className="do-time">{formatTime12Hour(d.deliveryTime)}</span>}
                                             </td>
-                                            <td><span className={`dt-badge dt-${d.deliveryType?.toLowerCase()}`}>{d.deliveryType}</span></td>
-                                            <td><span className={`risk-badge ${getRiskBadge(d.riskLevel)}`}>{d.riskLevel}</span></td>
+                                            <td><span className={`outcome-badge ${getOutcomeBadge(d.pregnancyOutcome)}`}>{d.pregnancyOutcome}</span></td>
+                                            <td><span className={`dt-badge ${getDeliveryTypeBadge(getDisplayData(d).type)}`}>{getDisplayData(d).type}</span></td>
                                             <td>
                                                 <span className={`comp-text ${d.complications !== 'None' ? 'has-comp' : ''}`}>
                                                     {d.complications !== 'None' && <AlertCircle size={12} />}
@@ -363,7 +434,7 @@ const DeliveryOutcomes = () => {
                                             </td>
                                             <td>
                                                 {d.babyName && <div className="baby-name-summary">{d.babyName}</div>}
-                                                <span className={`baby-badge ${getBabyBadge(d.babyOutcome)}`}>{d.babyOutcome}</span>
+                                                <span className={`baby-badge ${getBabyBadge(getDisplayData(d).babyStatus)}`}>{getDisplayData(d).babyStatus}</span>
                                             </td>
                                             <td>{d.staff}</td>
                                             <td>
@@ -470,6 +541,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
         deliveryDate: '',
         deliveryTime: '',
         deliveryType: '',
+        pregnancyOutcome: '',
         attendingStaffId: '',
         attendingStaffName: '',
         facility: '',
@@ -498,6 +570,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
         if (sectionId === 'delivery') {
             if (!formData.deliveryDate) errors.push('Delivery Date');
             if (!formData.deliveryType) errors.push('Delivery Type');
+            if (!formData.pregnancyOutcome) errors.push('Pregnancy Outcome');
         }
         if (sectionId === 'baby') {
             formData.newborns.forEach((nb, i) => {
@@ -621,7 +694,42 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
     }, [form.station, localStaff, staffList]);
 
     const updateForm = (key, value) => {
-        setForm(prev => ({ ...prev, [key]: value }));
+        setForm(prev => {
+            const next = { ...prev, [key]: value };
+            
+            // Logic for Pregnancy Outcome
+            if (key === 'pregnancyOutcome') {
+                if (value === 'Miscarriage') {
+                    next.deliveryType = 'N/A - Not Applicable';
+                    next.newborns = [{
+                        babyName: 'N/A - No Baby',
+                        babyGender: 'Female',
+                        babyWeight: '',
+                        babyLength: '',
+                        headCircumference: '',
+                        apgar1: '',
+                        apgar5: '',
+                        babyCondition: 'N/A - No Baby'
+                    }];
+                } else if (value === 'Stillbirth') {
+                    if (next.newborns[0].babyName === 'N/A - No Baby') {
+                        next.newborns[0].babyName = '';
+                    }
+                    next.newborns = next.newborns.map(nb => ({ ...nb, babyCondition: 'Stillbirth' }));
+                    if (next.deliveryType === 'N/A - Not Applicable') next.deliveryType = '';
+                } else if (value === 'Live Birth') {
+                    if (next.deliveryType === 'N/A - Not Applicable') next.deliveryType = '';
+                    if (next.newborns[0].babyName === 'N/A - No Baby') {
+                        next.newborns[0].babyName = '';
+                    }
+                    if (next.newborns[0].babyCondition === 'N/A - No Baby' || next.newborns[0].babyCondition === 'Stillbirth') {
+                        next.newborns = next.newborns.map(nb => ({ ...nb, babyCondition: 'Healthy' }));
+                    }
+                }
+            }
+            return next;
+        });
+
         // Clear validation errors when user fills in a field
         if (value && validationErrors.length > 0) {
             setValidationErrors(prev => prev.filter(e => !e.toLowerCase().includes(key.toLowerCase())));
@@ -998,12 +1106,22 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                                 <input type="time" value={form.deliveryTime} onChange={e => updateForm('deliveryTime', e.target.value)} />
                             </div>
                             <div className="form-group">
+                                <label>Pregnancy Outcome <span className="req">*</span></label>
+                                <select value={form.pregnancyOutcome} onChange={e => updateForm('pregnancyOutcome', e.target.value)} className={isFieldInvalid('Pregnancy Outcome', form.pregnancyOutcome) ? 'field-error' : ''}>
+                                    <option value="">Select outcome...</option>
+                                    <option value="Live Birth">Live Birth</option>
+                                    <option value="Stillbirth">Stillbirth</option>
+                                    <option value="Miscarriage">Miscarriage</option>
+                                </select>
+                            </div>
+                            <div className="form-group">
                                 <label>Type <span className="req">*</span></label>
-                                <select value={form.deliveryType} onChange={e => updateForm('deliveryType', e.target.value)} className={isFieldInvalid('Delivery Type', form.deliveryType) ? 'field-error' : ''}>
+                                <select value={form.deliveryType} onChange={e => updateForm('deliveryType', e.target.value)} disabled={form.pregnancyOutcome === 'Miscarriage'} className={isFieldInvalid('Delivery Type', form.deliveryType) ? 'field-error' : ''}>
                                     <option value="">Select type...</option>
                                     <option value="NSD">NSD (Normal)</option>
                                     <option value="CS">CS (Cesarean)</option>
                                     <option value="Breech">Breech</option>
+                                    <option value="N/A - Not Applicable" style={{ display: 'none' }}>N/A - Not Applicable</option>
                                 </select>
                             </div>
                             <div className="form-group">
@@ -1062,50 +1180,52 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                                     <div className="form-grid-2">
                                         <div className="form-group">
                                             <label>Baby Name <span className="req">*</span></label>
-                                            <input type="text" value={newborn.babyName} onChange={e => updateNewborn(index, 'babyName', e.target.value)} placeholder="Enter baby name" className={isFieldInvalid(form.newborns.length > 1 ? `Baby Name (Newborn ${index + 1})` : 'Baby Name', newborn.babyName?.trim()) ? 'field-error' : ''} />
+                                            <input type="text" value={newborn.babyName} onChange={e => updateNewborn(index, 'babyName', e.target.value)} placeholder="Enter baby name" disabled={form.pregnancyOutcome === 'Miscarriage'} className={isFieldInvalid(form.newborns.length > 1 ? `Baby Name (Newborn ${index + 1})` : 'Baby Name', newborn.babyName?.trim()) ? 'field-error' : ''} />
                                         </div>
                                         <div className="form-group">
                                             <label>Birth Weight (kg)</label>
-                                            <input type="number" step="0.01" value={newborn.babyWeight} onChange={e => updateNewborn(index, 'babyWeight', e.target.value)} />
+                                            <input type="number" step="0.01" value={newborn.babyWeight} onChange={e => updateNewborn(index, 'babyWeight', e.target.value)} disabled={form.pregnancyOutcome === 'Miscarriage'} />
                                         </div>
                                         <div className="form-group">
                                             <label>Birth Length (cm)</label>
-                                            <input type="number" step="0.1" value={newborn.babyLength} onChange={e => updateNewborn(index, 'babyLength', e.target.value)} />
+                                            <input type="number" step="0.1" value={newborn.babyLength} onChange={e => updateNewborn(index, 'babyLength', e.target.value)} disabled={form.pregnancyOutcome === 'Miscarriage'} />
                                         </div>
                                         <div className="form-group">
                                             <label>Head Circumference (cm)</label>
-                                            <input type="number" step="0.1" value={newborn.headCircumference} onChange={e => updateNewborn(index, 'headCircumference', e.target.value)} />
+                                            <input type="number" step="0.1" value={newborn.headCircumference} onChange={e => updateNewborn(index, 'headCircumference', e.target.value)} disabled={form.pregnancyOutcome === 'Miscarriage'} />
                                         </div>
                                         <div className="form-group">
                                             <label>Gender</label>
-                                            <select value={newborn.babyGender} onChange={e => updateNewborn(index, 'babyGender', e.target.value)}>
+                                            <select value={newborn.babyGender} onChange={e => updateNewborn(index, 'babyGender', e.target.value)} disabled={form.pregnancyOutcome === 'Miscarriage'}>
                                                 <option>Male</option>
                                                 <option>Female</option>
                                             </select>
                                         </div>
                                         <div className="form-group">
                                             <label>APGAR 1min</label>
-                                            <input type="number" min="0" max="10" value={newborn.apgar1} onChange={e => updateNewborn(index, 'apgar1', e.target.value)} />
+                                            <input type="number" min="0" max="10" value={newborn.apgar1} onChange={e => updateNewborn(index, 'apgar1', e.target.value)} disabled={form.pregnancyOutcome === 'Miscarriage'} />
                                         </div>
                                         <div className="form-group">
                                             <label>APGAR 5min</label>
-                                            <input type="number" min="0" max="10" value={newborn.apgar5} onChange={e => updateNewborn(index, 'apgar5', e.target.value)} />
+                                            <input type="number" min="0" max="10" value={newborn.apgar5} onChange={e => updateNewborn(index, 'apgar5', e.target.value)} disabled={form.pregnancyOutcome === 'Miscarriage'} />
                                         </div>
                                         <div className="form-group">
                                             <label>Baby Condition <span className="req">*</span></label>
-                                            <select value={newborn.babyCondition} onChange={e => updateNewborn(index, 'babyCondition', e.target.value)} className={isFieldInvalid(form.newborns.length > 1 ? `Baby Condition (Newborn ${index + 1})` : 'Baby Condition', newborn.babyCondition) ? 'field-error' : ''}>
+                                            <select value={newborn.babyCondition} onChange={e => updateNewborn(index, 'babyCondition', e.target.value)} disabled={form.pregnancyOutcome === 'Miscarriage' || form.pregnancyOutcome === 'Stillbirth'} className={isFieldInvalid(form.newborns.length > 1 ? `Baby Condition (Newborn ${index + 1})` : 'Baby Condition', newborn.babyCondition) ? 'field-error' : ''}>
                                                 <option value="">Select condition...</option>
                                                 <option value="Healthy">Healthy</option>
                                                 <option value="NICU">NICU</option>
                                                 <option value="Special Care">Special Care</option>
+                                                <option value="Neonatal Death">Neonatal Death</option>
                                                 <option value="Stillbirth">Stillbirth</option>
+                                                <option value="N/A - No Baby" style={{ display: 'none' }}>N/A - No Baby</option>
                                             </select>
                                         </div>
                                     </div>
                                 </div>
                             ))}
                             <div style={{ textAlign: 'center', marginTop: '10px' }}>
-                                <button type="button" className="btn btn-outline" onClick={addNewborn} disabled={form.newborns.length >= 5}>
+                                <button type="button" className="btn btn-outline" onClick={addNewborn} disabled={form.newborns.length >= 5 || form.pregnancyOutcome === 'Miscarriage'}>
                                     + Add Another Newborn
                                 </button>
                             </div>

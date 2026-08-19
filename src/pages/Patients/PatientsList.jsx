@@ -5,7 +5,7 @@ import {
     Search, Filter, Plus, ChevronLeft, ChevronRight, ChevronDown, Check,
     Eye, Edit, Archive, ArchiveRestore, Activity, CalendarPlus,
     FileText, User, Users, MapPin, Clock, AlertTriangle,
-    X, CheckCircle2
+    X, CheckCircle2, Info
 } from 'lucide-react';
 import '../../styles/pages/PatientsList.css';
 import PatientService from '../../services/patientservice';
@@ -660,9 +660,37 @@ const PatientsList = () => {
                     {hasActiveFilters && (
                         <button className="clear-filters-btn" onClick={clearFilters}>Clear All</button>
                     )}
-                </div>
-                </div>
-            </div>
+                    </div> {/* Closes filter-group */}
+                    
+                    {/* Legend Popover */}
+                    <div className="filter-dropdown-container" style={{ marginLeft: 'auto' }}>
+                        <button 
+                            className={`filter-btn ${activePopover === 'legend' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'legend' ? null : 'legend')}
+                        >
+                            <Info size={14} className="filter-btn-icon" />
+                            Legend
+                        </button>
+                        
+                        {activePopover === 'legend' && (
+                            <div className="filter-popover" style={{ right: 0, left: 'auto', minWidth: '200px', padding: '16px' }}>
+                                <div className="popover-title" style={{ color: 'var(--color-text)', marginBottom: '12px' }}>Gestation</div>
+                                <div className="popover-options" style={{ padding: '0', gap: '8px', marginBottom: '16px' }}>
+                                    <span className="tri-badge tri-1" style={{ display: 'inline-block', textAlign: 'center' }}>1st Trim</span>
+                                    <span className="tri-badge tri-2" style={{ display: 'inline-block', textAlign: 'center' }}>2nd Trim</span>
+                                    <span className="tri-badge tri-3" style={{ display: 'inline-block', textAlign: 'center' }}>3rd Trim</span>
+                                </div>
+                                <div className="popover-title" style={{ color: 'var(--color-text)', marginBottom: '12px' }}>Risk Level</div>
+                                <div className="popover-options" style={{ padding: '0', gap: '8px' }}>
+                                    <span className="risk-badge risk-low" style={{ display: 'inline-block', textAlign: 'center' }}>Low Risk</span>
+                                    <span className="risk-badge risk-medium" style={{ display: 'inline-block', textAlign: 'center' }}>Medium Risk</span>
+                                    <span className="risk-badge risk-high" style={{ display: 'inline-block', textAlign: 'center' }}>High Risk</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div> {/* Closes filters-row */}
+            </div> {/* Closes controls-card */}
 
             <div className="table-card">
                 <div className="table-responsive">

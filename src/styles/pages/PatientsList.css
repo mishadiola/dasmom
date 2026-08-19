@@ -7,7 +7,7 @@
     display: flex;
     flex-direction: column;
     gap: 20px;
-    max-width: 1400px;
+    width: 100%;
     margin: 0 auto;
 }
 
@@ -443,10 +443,10 @@
 
 /* Trimester Badge */
 .tri-badge {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
-    padding: 4px 10px;
-    border-radius: 8px;
+    padding: 3px 9px;
+    border-radius: 6px;
     white-space: nowrap;
 }
 
@@ -461,8 +461,38 @@
 }
 
 .tri-3 {
-    background: linear-gradient(135deg, #e8c4c4 0%, #d4a5a5 100%);
-    color: #f5e6e8;
+    background: rgba(195, 207, 183, 0.4);
+    color: #4a7a50;
+}
+
+/* Legend */
+.patients-legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 16px;
+    background: rgba(248, 249, 251, 0.5);
+    border-top: 1px solid #eef0f4;
+}
+
+.legend-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.legend-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--color-text-light);
+    letter-spacing: 0.5px;
+}
+
+.legend-items {
+    display: flex;
+    gap: 6px;
 }
 
 /* Risk Badge */
@@ -487,13 +517,13 @@
 }
 
 .risk-monitor {
-    background: rgba(249, 162, 108, 0.15);
-    color: #9a5a20;
+    background: rgba(232, 184, 75, 0.15);
+    color: #a87c12;
 }
 
 .risk-medium {
-    background: rgba(249, 162, 108, 0.15);
-    color: #9a5a20;
+    background: rgba(232, 184, 75, 0.15);
+    color: #a87c12;
 }
 
 .risk-high {

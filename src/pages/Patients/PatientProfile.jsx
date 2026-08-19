@@ -518,18 +518,22 @@ const PatientProfile = () => {
                     </div>
                 </div>
                 <div className="profile-header-right">
-                    <div className="header-stats">
-                        <div className="h-stat">
-                            <span className="h-stat-label">Trimester</span>
-                            <span className="h-stat-val trimester-val">{p.trimester || 'N/A'}</span>
+                    <div className="header-stats" style={{ display: 'flex', gap: '24px', alignItems: 'center', backgroundColor: '#f8f9fa', padding: '12px 24px', borderRadius: '12px', border: '1px solid #edf2f7', marginRight: '16px' }}>
+                        <div className="h-stat" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <span className="h-stat-label" style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Trimester</span>
+                            <span className="h-stat-val trimester-val" style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', margin: 0 }}>
+                                {p.trimester ? `${p.trimester}${p.trimester == 1 ? 'st' : p.trimester == 2 ? 'nd' : p.trimester == 3 ? 'rd' : 'th'} Trimester` : 'N/A'}
+                            </span>
                         </div>
-                        <div className="h-stat">
-                            <span className="h-stat-label">Weeks</span>
-                            <span className="h-stat-val">{p.weeks || '0'}w</span>
+                        <div style={{ width: '1px', height: '32px', backgroundColor: '#e2e8f0' }}></div>
+                        <div className="h-stat" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <span className="h-stat-label" style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Gestational Age</span>
+                            <span className="h-stat-val" style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', margin: 0 }}>{p.weeks || '0'} weeks</span>
                         </div>
-                        <div className="h-stat">
-                            <span className="h-stat-label">EDD</span>
-                            <span className="h-stat-val">{formatReadableDate(p.edd) || 'TBD'}</span>
+                        <div style={{ width: '1px', height: '32px', backgroundColor: '#e2e8f0' }}></div>
+                        <div className="h-stat" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <span className="h-stat-label" style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Expected Due Date</span>
+                            <span className="h-stat-val" style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', margin: 0 }}>{formatReadableDate(p.edd) || 'TBD'}</span>
                         </div>
                     </div>
                     <div className="header-actions">
@@ -818,35 +822,72 @@ const PatientProfile = () => {
                                     </div>
                                 </div>
 
-                                <div className="tracking-progress-section">
-                                    <h3 className="tracking-section-title">Gestation Progress Tracking</h3>
-                                    <div className="progress-infographic">
-                                        <div className="progress-bar-bg">
-                                            <div className="progress-fill" style={{ width: `${Math.min(100, (p.weeks / 40) * 100)}%` }}>
-                                                <div className="progress-glow"></div>
+                                <div className="tracking-progress-section" style={{ backgroundColor: '#fff', padding: '32px', borderRadius: '16px', boxShadow: '0 2px 10px rgba(0,0,0,0.02)', border: '1px solid #edf2f7', marginTop: '16px' }}>
+                                    <h3 className="tracking-section-title" style={{ fontSize: '15px', color: '#1e293b', fontWeight: '700', marginBottom: '64px' }}>Gestation Progress Tracking</h3>
+                                    
+                                    <div className="progress-timeline-container" style={{ position: 'relative', width: '100%', margin: '0 auto', height: '16px' }}>
+                                        {/* Background Track */}
+                                        <div style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', width: '100%', height: '8px', backgroundColor: '#f1f5f9', borderRadius: '4px' }}></div>
+                                        
+                                        {/* Fill Track */}
+                                        <div style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', width: `${Math.min(100, (p.weeks / 40) * 100)}%`, height: '8px', backgroundColor: '#b9818a', borderRadius: '4px', transition: 'width 1s ease-in-out' }}></div>
+                                        
+                                        {/* Milestones */}
+                                        <div style={{ position: 'absolute', width: '100%', height: '100%', zIndex: 2 }}>
+                                            {/* 1st Trimester */}
+                                            <div style={{ position: 'absolute', left: '0%', transform: 'translateX(-20%)', top: '50%', marginTop: '-8px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                                <div style={{ width: '16px', height: '16px', borderRadius: '50%', backgroundColor: p.weeks >= 0 ? '#b9818a' : '#fff', border: `3px solid ${p.weeks >= 0 ? '#b9818a' : '#cbd5e1'}`, marginBottom: '12px', transition: 'all 0.3s' }}></div>
+                                                <div style={{ textAlign: 'center', whiteSpace: 'nowrap', marginTop: '4px' }}>
+                                                    <div style={{ fontSize: '13px', fontWeight: '700', color: p.weeks >= 0 ? '#1e293b' : '#64748b' }}>1st Trimester</div>
+                                                    <div style={{ fontSize: '11px', fontWeight: '500', color: '#94a3b8', marginTop: '2px' }}>Weeks 1–13</div>
+                                                </div>
+                                            </div>
+
+                                            {/* 2nd Trimester */}
+                                            <div style={{ position: 'absolute', left: '35%', transform: 'translateX(-50%)', top: '50%', marginTop: '-8px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                                <div style={{ width: '16px', height: '16px', borderRadius: '50%', backgroundColor: p.weeks >= 14 ? '#b9818a' : '#fff', border: `3px solid ${p.weeks >= 14 ? '#b9818a' : '#cbd5e1'}`, marginBottom: '12px', transition: 'all 0.3s' }}></div>
+                                                <div style={{ textAlign: 'center', whiteSpace: 'nowrap', marginTop: '4px' }}>
+                                                    <div style={{ fontSize: '13px', fontWeight: '700', color: p.weeks >= 14 ? '#1e293b' : '#64748b' }}>2nd Trimester</div>
+                                                    <div style={{ fontSize: '11px', fontWeight: '500', color: '#94a3b8', marginTop: '2px' }}>Weeks 14–27</div>
+                                                </div>
+                                            </div>
+
+                                            {/* 3rd Trimester */}
+                                            <div style={{ position: 'absolute', left: '70%', transform: 'translateX(-50%)', top: '50%', marginTop: '-8px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                                <div style={{ width: '16px', height: '16px', borderRadius: '50%', backgroundColor: p.weeks >= 28 ? '#b9818a' : '#fff', border: `3px solid ${p.weeks >= 28 ? '#b9818a' : '#cbd5e1'}`, marginBottom: '12px', transition: 'all 0.3s' }}></div>
+                                                <div style={{ textAlign: 'center', whiteSpace: 'nowrap', marginTop: '4px' }}>
+                                                    <div style={{ fontSize: '13px', fontWeight: '700', color: p.weeks >= 28 ? '#1e293b' : '#64748b' }}>3rd Trimester</div>
+                                                    <div style={{ fontSize: '11px', fontWeight: '500', color: '#94a3b8', marginTop: '2px' }}>Weeks 28–40</div>
+                                                </div>
+                                            </div>
+
+                                            {/* Term */}
+                                            <div style={{ position: 'absolute', left: '100%', transform: 'translateX(-80%)', top: '50%', marginTop: '-8px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                                <div style={{ width: '16px', height: '16px', borderRadius: '50%', backgroundColor: p.weeks >= 40 ? '#b9818a' : '#fff', border: `3px solid ${p.weeks >= 40 ? '#b9818a' : '#cbd5e1'}`, marginBottom: '12px', transition: 'all 0.3s' }}></div>
+                                                <div style={{ textAlign: 'center', whiteSpace: 'nowrap', marginTop: '4px' }}>
+                                                    <div style={{ fontSize: '13px', fontWeight: '700', color: p.weeks >= 40 ? '#1e293b' : '#64748b' }}>Term</div>
+                                                    <div style={{ fontSize: '11px', fontWeight: '500', color: '#94a3b8', marginTop: '2px' }}>Week 40</div>
+                                                </div>
                                             </div>
                                             
-                                            <div className={`progress-marker ${p.weeks >= 0 ? 'reached' : ''}`} style={{ left: '0%' }}>
-                                                <div className="marker-dot"></div>
-                                                <span className="marker-label">T1 (Start)</span>
-                                            </div>
-                                            <div className={`progress-marker ${p.weeks >= 14 ? 'reached' : ''}`} style={{ left: '35%' }}>
-                                                <div className="marker-dot"></div>
-                                                <span className="marker-label">T2 (Week 14)</span>
-                                            </div>
-                                            <div className={`progress-marker ${p.weeks >= 28 ? 'reached' : ''}`} style={{ left: '70%' }}>
-                                                <div className="marker-dot"></div>
-                                                <span className="marker-label">T3 (Week 28)</span>
-                                            </div>
-                                            <div className={`progress-marker ${p.weeks >= 40 ? 'reached' : ''}`} style={{ left: '100%' }}>
-                                                <div className="marker-dot"></div>
-                                                <span className="marker-label">Term (Week 40)</span>
-                                            </div>
+                                            {/* Current Patient Marker */}
+                                            {p.weeks > 0 && p.weeks <= 40 && (
+                                                <div style={{ position: 'absolute', left: `${Math.min(100, (p.weeks / 40) * 100)}%`, transform: 'translate(-50%, -100%)', top: '-6px', display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 10 }}>
+                                                    <div style={{ backgroundColor: '#fff', color: '#b9818a', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', boxShadow: '0 2px 10px rgba(185, 129, 138, 0.25)', border: '1.5px solid #b9818a', whiteSpace: 'nowrap' }}>
+                                                        Week {p.weeks}
+                                                    </div>
+                                                    <div style={{ width: '2px', height: '16px', backgroundColor: '#b9818a', marginTop: '4px' }}></div>
+                                                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#fff', border: '2.5px solid #b9818a', marginTop: '-4px' }}></div>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
-                                    <p className="progress-note">
-                                        Patient is currently at <strong>{p.weeks} weeks</strong>. Ensure all scheduled prenatal visits for Trimester {p.trimester} are completed on time.
-                                    </p>
+
+                                    <div style={{ backgroundColor: '#f8f9fa', padding: '12px 16px', borderRadius: '8px', borderLeft: '4px solid #b9818a', marginTop: '72px' }}>
+                                        <p style={{ margin: 0, fontSize: '13px', color: '#475569', lineHeight: '1.5' }}>
+                                            Patient is currently at <strong style={{ color: '#1e293b' }}>{p.weeks} weeks</strong>. Ensure all scheduled prenatal visits for Trimester {p.trimester} are completed on time.
+                                        </p>
+                                    </div>
                                 </div>
 
                                 <div className="tracking-details-grid">
@@ -1019,67 +1060,96 @@ const PatientProfile = () => {
 
                 {/* --- DISTRIBUTION RECORDS --- */}
                 {activeTab === 'vaccines' && (
-                    <div className="info-grid animate-fade">
-                        <div className="info-card">
-                            <h3 className="info-card-title"><Syringe size={16} /> Administered Vaccines</h3>
+                    <div className="info-grid animate-fade" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', alignItems: 'stretch' }}>
+                        {/* Administered Vaccines Card */}
+                        <div className="info-card" style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #edf2f7', padding: '28px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', height: '100%' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
+                                <div style={{ backgroundColor: '#fff0f3', padding: '12px', borderRadius: '14px', color: '#b9818a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Syringe size={22} />
+                                </div>
+                                <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#1e293b', margin: 0 }}>Administered Vaccines</h3>
+                            </div>
+                            
                             {p.vaccines.length > 0 ? (
-                                <table className="mini-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Vaccine Name</th>
-                                            <th>Dose</th>
-                                            <th>Date Given</th>
-                                            <th>Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {p.vaccines.map((v, i) => {
-                                            const status = v.status || (v.vaccinated_date ? 'Completed' : 'Pending');
-                                            const statusClass = status === 'Completed' ? 'status-completed' : 'status-pending';
-                                            return (
-                                                <tr key={i}>
-                                                    <td>{v.vaccine_name}</td>
-                                                    <td>{v.dose_number}</td>
-                                                    <td>{v.vaccinated_date || v.scheduled_vaccination}</td>
-                                                    <td><span className={`status-badge ${statusClass}`}>{status}</span></td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
+                                <div style={{ overflowX: 'auto', flex: 1 }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                                        <thead>
+                                            <tr>
+                                                <th style={{ padding: '0 16px 16px 0', fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid #f1f5f9' }}>Vaccine Name</th>
+                                                <th style={{ padding: '0 16px 16px 16px', fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid #f1f5f9' }}>Dose</th>
+                                                <th style={{ padding: '0 16px 16px 16px', fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid #f1f5f9' }}>Date Given</th>
+                                                <th style={{ padding: '0 0 16px 16px', fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid #f1f5f9', textAlign: 'right' }}>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {p.vaccines.map((v, i) => {
+                                                const status = v.status || (v.vaccinated_date ? 'Completed' : 'Pending');
+                                                const statusColor = status === 'Completed' ? '#059669' : '#d97706';
+                                                const statusBg = status === 'Completed' ? '#d1fae5' : '#fef3c7';
+                                                return (
+                                                    <tr key={i} style={{ borderBottom: '1px solid #f8fafc' }}>
+                                                        <td style={{ padding: '20px 16px 20px 0', fontSize: '14px', color: '#0f172a', fontWeight: '600', maxWidth: '180px', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.4' }}>{v.vaccine_name}</td>
+                                                        <td style={{ padding: '20px 16px', fontSize: '14px', color: '#475569', fontWeight: '500' }}>{v.dose_number}</td>
+                                                        <td style={{ padding: '20px 16px', fontSize: '14px', color: '#475569', fontWeight: '500' }}>{v.vaccinated_date || v.scheduled_vaccination}</td>
+                                                        <td style={{ padding: '20px 0 20px 16px', textAlign: 'right' }}>
+                                                            <span style={{ display: 'inline-block', padding: '6px 14px', borderRadius: '24px', fontSize: '12px', fontWeight: '700', backgroundColor: statusBg, color: statusColor, letterSpacing: '0.3px' }}>{status}</span>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
                             ) : (
-                                <p className="empty-text">No vaccines administered yet.</p>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, padding: '40px 0' }}>
+                                    <p style={{ color: '#94a3b8', fontSize: '14px', fontWeight: '500' }}>No vaccines administered yet.</p>
+                                </div>
                             )}
                         </div>
-                        <div className="info-card">
-                            <h3 className="info-card-title"><Pill size={16} /> Supplement Distribution</h3>
+
+                        {/* Supplement Distribution Card */}
+                        <div className="info-card" style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #edf2f7', padding: '28px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', height: '100%' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
+                                <div style={{ backgroundColor: '#fff0f3', padding: '12px', borderRadius: '14px', color: '#b9818a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Pill size={22} />
+                                </div>
+                                <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#1e293b', margin: 0 }}>Supplement Distribution</h3>
+                            </div>
+                            
                             {p.supplements.length > 0 ? (
-                                <table className="mini-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Supplement</th>
-                                            <th>Dosage</th>
-                                            <th>Start Date</th>
-                                            <th>Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {p.supplements.map((s, i) => {
-                                            const status = s.status || 'Ongoing';
-                                            const statusClass = status === 'Completed' ? 'status-completed' : 'status-pending';
-                                            return (
-                                                <tr key={i}>
-                                                    <td>{s.supplement_name}</td>
-                                                    <td>{s.dosage}</td>
-                                                    <td>{s.start_date}</td>
-                                                    <td><span className={`status-badge ${statusClass}`}>{status}</span></td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
+                                <div style={{ overflowX: 'auto', flex: 1 }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                                        <thead>
+                                            <tr>
+                                                <th style={{ padding: '0 16px 16px 0', fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid #f1f5f9' }}>Supplement</th>
+                                                <th style={{ padding: '0 16px 16px 16px', fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid #f1f5f9' }}>Dosage</th>
+                                                <th style={{ padding: '0 16px 16px 16px', fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid #f1f5f9' }}>Start Date</th>
+                                                <th style={{ padding: '0 0 16px 16px', fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid #f1f5f9', textAlign: 'right' }}>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {p.supplements.map((s, i) => {
+                                                const status = s.status || 'Ongoing';
+                                                const statusColor = status === 'Completed' ? '#059669' : '#0284c7';
+                                                const statusBg = status === 'Completed' ? '#d1fae5' : '#e0f2fe';
+                                                return (
+                                                    <tr key={i} style={{ borderBottom: '1px solid #f8fafc' }}>
+                                                        <td style={{ padding: '20px 16px 20px 0', fontSize: '14px', color: '#0f172a', fontWeight: '600', maxWidth: '180px', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.4' }}>{s.supplement_name}</td>
+                                                        <td style={{ padding: '20px 16px', fontSize: '14px', color: '#475569', fontWeight: '500' }}>{s.dosage}</td>
+                                                        <td style={{ padding: '20px 16px', fontSize: '14px', color: '#475569', fontWeight: '500' }}>{s.start_date}</td>
+                                                        <td style={{ padding: '20px 0 20px 16px', textAlign: 'right' }}>
+                                                            <span style={{ display: 'inline-block', padding: '6px 14px', borderRadius: '24px', fontSize: '12px', fontWeight: '700', backgroundColor: statusBg, color: statusColor, letterSpacing: '0.3px' }}>{status}</span>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
                             ) : (
-                                <p className="empty-text">No supplements distributed yet.</p>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, padding: '40px 0' }}>
+                                    <p style={{ color: '#94a3b8', fontSize: '14px', fontWeight: '500' }}>No supplements distributed yet.</p>
+                                </div>
                             )}
                         </div>
                     </div>
@@ -1087,71 +1157,76 @@ const PatientProfile = () => {
 
                 {/* --- DELIVERY & POSTPARTUM --- */}
                 {activeTab === 'delivery' && (
-                    <div className="info-grid animate-fade">
+                    <div className="animate-fade">
                         {(p.deliveries && p.deliveries.length > 0) || p.pregnancyStatus === 'Postpartum' ? (
-                            <div className="info-card full-width">
-                                {p.pregnancyStatus === 'Postpartum' && (
-                                    <div className="status-banner banner-postpartum">
-                                        <CheckCircle2 size={20} />
-                                        <span>Patient is in Postpartum Recovery</span>
+                            <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #e8e0e4', padding: '24px 28px', boxShadow: '0 1px 4px rgba(0,0,0,0.03)' }}>
+                                {/* Header row: icon + title + status badge */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                                    <div style={{ backgroundColor: '#fff0f3', padding: '10px', borderRadius: '10px', color: '#b9818a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                        <Activity size={20} />
                                     </div>
-                                )}
+                                    <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#1e293b', margin: 0 }}>Delivery Records</h3>
+                                    {p.pregnancyStatus === 'Postpartum' && (
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#ecfdf5', color: '#059669', padding: '5px 12px', borderRadius: '20px', fontWeight: '600', fontSize: '12px', marginLeft: '4px' }}>
+                                            <CheckCircle2 size={14} />
+                                            Patient is in Postpartum Recovery
+                                        </span>
+                                    )}
+                                </div>
+
+                                {/* Divider */}
+                                <div style={{ height: '1px', backgroundColor: '#f1ecee', marginBottom: '20px' }} />
+
+                                {/* Delivery data grid */}
                                 {p.deliveries && p.deliveries.length > 0 ? (
-                                    <>
-                                        <h3 style={{ marginBottom: '16px' }}>Delivery Records</h3>
-                                        {p.deliveries.map((delivery, i) => (
-                                            <div key={i} className="delivery-card" style={{ 
-                                                background: '#f8fafc', 
-                                                borderRadius: '12px', 
-                                                padding: '16px', 
-                                                marginBottom: '12px',
-                                                border: '1px solid #e2e8f0'
-                                            }}>
-                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-                                                    <div>
-                                                        <label style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Delivery Date</label>
-                                                        <p style={{ fontWeight: '600', margin: '4px 0 0' }}>{delivery.delivery_date || 'N/A'}</p>
-                                                    </div>
-                                                    <div>
-                                                        <label style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Type</label>
-                                                        <p style={{ fontWeight: '600', margin: '4px 0 0' }}>{delivery.delivery_type || 'N/A'}</p>
-                                                    </div>
-                                                    <div>
-                                                        <label style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Mode</label>
-                                                        <p style={{ fontWeight: '600', margin: '4px 0 0' }}>{delivery.delivery_mode || 'N/A'}</p>
-                                                    </div>
-                                                    <div>
-                                                        <label style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Gestational Age</label>
-                                                        <p style={{ fontWeight: '600', margin: '4px 0 0' }}>{delivery.gestational_age || 'N/A'}</p>
-                                                    </div>
-                                                    <div>
-                                                        <label style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Risk Level</label>
-                                                        <p style={{ fontWeight: '600', margin: '4px 0 0' }}>{delivery.risk_level || 'Normal'}</p>
-                                                    </div>
-                                                    <div>
-                                                        <label style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase' }}>Facility</label>
-                                                        <p style={{ fontWeight: '600', margin: '4px 0 0' }}>{delivery.facility || 'N/A'}</p>
-                                                    </div>
+                                    p.deliveries.map((delivery, i) => (
+                                        <div key={i} style={{ marginBottom: i === p.deliveries.length - 1 ? 0 : '20px' }}>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0' }}>
+                                                <div style={{ padding: '0 12px 0 0' }}>
+                                                    <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Delivery Date</label>
+                                                    <p style={{ fontWeight: '600', color: '#1e293b', margin: 0, fontSize: '14px', lineHeight: '1.3' }}>{delivery.delivery_date || 'N/A'}</p>
                                                 </div>
-                                                {delivery.complications && delivery.complications.length > 0 && (
-                                                    <div style={{ marginTop: '12px', padding: '8px 12px', background: '#fef2f2', borderRadius: '8px' }}>
-                                                        <label style={{ fontSize: '11px', color: '#dc2626', textTransform: 'uppercase' }}>Complications</label>
-                                                        <p style={{ margin: '4px 0 0', color: '#dc2626' }}>{Array.isArray(delivery.complications) ? delivery.complications.join(', ') : delivery.complications}</p>
-                                                    </div>
-                                                )}
+                                                <div style={{ padding: '0 12px' }}>
+                                                    <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Type</label>
+                                                    <p style={{ fontWeight: '600', color: '#1e293b', margin: 0, fontSize: '14px', lineHeight: '1.3' }}>{delivery.delivery_type || 'N/A'}</p>
+                                                </div>
+                                                <div style={{ padding: '0 12px' }}>
+                                                    <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Mode</label>
+                                                    <p style={{ fontWeight: '600', color: '#1e293b', margin: 0, fontSize: '14px', lineHeight: '1.3' }}>{delivery.delivery_mode || 'N/A'}</p>
+                                                </div>
+                                                <div style={{ padding: '0 12px' }}>
+                                                    <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Gestational Age</label>
+                                                    <p style={{ fontWeight: '600', color: '#1e293b', margin: 0, fontSize: '14px', lineHeight: '1.3' }}>{delivery.gestational_age || 'N/A'}</p>
+                                                </div>
+                                                <div style={{ padding: '0 12px' }}>
+                                                    <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Risk Level</label>
+                                                    <p style={{ fontWeight: '600', color: '#1e293b', margin: 0, fontSize: '14px', lineHeight: '1.3' }}>{delivery.risk_level || 'Normal'}</p>
+                                                </div>
+                                                <div style={{ padding: '0 0 0 12px' }}>
+                                                    <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Facility</label>
+                                                    <p style={{ fontWeight: '600', color: '#1e293b', margin: 0, fontSize: '14px', lineHeight: '1.3' }}>{delivery.facility || 'N/A'}</p>
+                                                </div>
                                             </div>
-                                        ))}
-                                    </>
+                                            {delivery.complications && delivery.complications.length > 0 && (
+                                                <div style={{ marginTop: '16px', padding: '10px 14px', backgroundColor: '#fef2f2', borderRadius: '8px', borderLeft: '3px solid #ef4444' }}>
+                                                    <label style={{ fontSize: '10.5px', color: '#b91c1c', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Complications</label>
+                                                    <p style={{ margin: '4px 0 0', color: '#991b1b', fontSize: '13px', fontWeight: '500' }}>{Array.isArray(delivery.complications) ? delivery.complications.join(', ') : delivery.complications}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))
                                 ) : (
-                                    <p className="mt-4">Loading delivery records...</p>
+                                    <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>Loading delivery records...</p>
                                 )}
                             </div>
                         ) : (
-                            <div className="empty-state-card">
-                                <Activity size={48} />
-                                <h3>No Delivery Records</h3>
-                                <p>Patient is currently in the prenatal stage. Delivery records will appear here after the birth event is recorded.</p>
-                                <button className="btn btn-outline mt-3" onClick={() => navigate('/dashboard/deliveries')}>
+                            <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #e8e0e4', padding: '48px 28px', boxShadow: '0 1px 4px rgba(0,0,0,0.03)', textAlign: 'center' }}>
+                                <div style={{ color: '#c4b5ba', marginBottom: '16px' }}>
+                                    <Activity size={40} />
+                                </div>
+                                <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#1e293b', marginBottom: '8px' }}>No Delivery Records</h3>
+                                <p style={{ fontSize: '14px', color: '#64748b', maxWidth: '380px', margin: '0 auto 20px', lineHeight: '1.5' }}>Patient is currently in the prenatal stage. Delivery records will appear here after the birth event is recorded.</p>
+                                <button className="btn btn-outline" onClick={() => navigate('/dashboard/deliveries')} style={{ padding: '8px 20px', fontWeight: '600', borderRadius: '8px', fontSize: '13px' }}>
                                     Go to Delivery Outcomes
                                 </button>
                             </div>
@@ -1161,31 +1236,58 @@ const PatientProfile = () => {
 
                 {/* --- NEWBORNS --- */}
                 {activeTab === 'newborn' && (
-                    <div className="info-grid animate-fade">
+                    <div className="animate-fade">
                         {p.newborns.length > 0 ? (
                             p.newborns.map((baby, i) => (
-                                <div key={i} className="info-card baby-card">
-                                    <div className="baby-header">
-                                        <div className={`baby-icon baby-${baby.gender?.toLowerCase()}`}><Baby size={20} /></div>
-                                        <div>
-                                            <h4 className="baby-name">{baby.baby_name || 'Newborn Baby'}</h4>
-                                            <span className="baby-meta">{baby.birth_date} · {baby.gender}</span>
+                                <div key={i} style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #e8e0e4', padding: '24px 28px', boxShadow: '0 1px 4px rgba(0,0,0,0.03)', marginBottom: i === p.newborns.length - 1 ? 0 : '16px' }}>
+                                    {/* Header row: icon + title ... button */}
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                            <div style={{ backgroundColor: '#fff0f3', padding: '10px', borderRadius: '10px', color: '#b9818a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                <Baby size={20} />
+                                            </div>
+                                            <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#1e293b', margin: 0 }}>Newborn Records</h3>
+                                        </div>
+                                        <button className="btn btn-outline" onClick={() => navigate('/dashboard/newborns')} style={{ padding: '7px 18px', fontWeight: '600', borderRadius: '8px', fontSize: '13px', flexShrink: 0 }}>
+                                            View Newborn Records
+                                        </button>
+                                    </div>
+
+                                    {/* Divider */}
+                                    <div style={{ height: '1px', backgroundColor: '#f1ecee', marginBottom: '20px' }} />
+
+                                    {/* Newborn data grid */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0' }}>
+                                        <div style={{ padding: '0 12px 0 0' }}>
+                                            <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Newborn Name</label>
+                                            <p style={{ fontWeight: '600', color: '#1e293b', margin: 0, fontSize: '14px', lineHeight: '1.3' }}>{baby.baby_name || 'N/A'}</p>
+                                        </div>
+                                        <div style={{ padding: '0 12px' }}>
+                                            <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Date of Birth</label>
+                                            <p style={{ fontWeight: '600', color: '#1e293b', margin: 0, fontSize: '14px', lineHeight: '1.3' }}>{baby.birth_date || 'N/A'}</p>
+                                        </div>
+                                        <div style={{ padding: '0 12px' }}>
+                                            <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Sex</label>
+                                            <p style={{ fontWeight: '600', color: '#1e293b', margin: 0, fontSize: '14px', lineHeight: '1.3' }}>{baby.gender || 'N/A'}</p>
+                                        </div>
+                                        <div style={{ padding: '0 12px' }}>
+                                            <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Weight</label>
+                                            <p style={{ fontWeight: '600', color: '#1e293b', margin: 0, fontSize: '14px', lineHeight: '1.3' }}>{baby.birth_weight ? `${baby.birth_weight} kg` : 'N/A'}</p>
+                                        </div>
+                                        <div style={{ padding: '0 0 0 12px' }}>
+                                            <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Condition</label>
+                                            <p style={{ fontWeight: '600', color: '#1e293b', margin: 0, fontSize: '14px', lineHeight: '1.3' }}>{baby.condition || 'N/A'}</p>
                                         </div>
                                     </div>
-                                    <div className="baby-stats mt-3">
-                                        <div className="b-stat"><span>Weight:</span> <strong>{baby.birth_weight}kg</strong></div>
-                                        <div className="b-stat"><span>Condition:</span> <strong>{baby.condition}</strong></div>
-                                    </div>
-                                    <button className="btn btn-sm btn-outline mt-3 w-100" onClick={() => navigate('/dashboard/newborns')}>
-                                        View Newborn Records
-                                    </button>
                                 </div>
                             ))
                         ) : (
-                            <div className="empty-state-card">
-                                <Baby size={48} />
-                                <h3>No Newborns Registered</h3>
-                                <p>There are no newborns associated with this patient's record yet.</p>
+                            <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1px solid #e8e0e4', padding: '48px 28px', boxShadow: '0 1px 4px rgba(0,0,0,0.03)', textAlign: 'center' }}>
+                                <div style={{ color: '#c4b5ba', marginBottom: '16px' }}>
+                                    <Baby size={40} />
+                                </div>
+                                <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#1e293b', marginBottom: '8px' }}>No Newborns Registered</h3>
+                                <p style={{ fontSize: '14px', color: '#64748b', maxWidth: '380px', margin: '0 auto', lineHeight: '1.5' }}>There are no newborns associated with this patient's record yet.</p>
                             </div>
                         )}
                     </div>

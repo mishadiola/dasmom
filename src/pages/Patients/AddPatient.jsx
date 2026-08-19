@@ -154,8 +154,6 @@ const AddPatient = () => {
     };
     const [otherConditionRisk, setOtherConditionRisk] = useState('Low');
     const [retainedStaffList, setRetainedStaffList] = useState([]);
-    const [emailSuggestions, setEmailSuggestions] = useState([]);
-    const [showEmailSuggestions, setShowEmailSuggestions] = useState(false);
     const [vitalWarnings, setVitalWarnings] = useState({});
     const [bpWarning, setBpWarning] = useState(null);
     const [tempWarning, setTempWarning] = useState(null);
@@ -186,6 +184,14 @@ const AddPatient = () => {
         babyGender: 'Female', babyWeight: '', babyLength: '', headCircumference: '',
         apgar1: '', apgar5: '', babyCondition: 'Healthy',
     });
+    useEffect(() => {
+        if (toast) {
+            const timer = setTimeout(() => {
+                setToast(null);
+            }, 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [toast]);
 
     useEffect(() => {
         const loadStations = async () => {
@@ -447,6 +453,11 @@ const AddPatient = () => {
 
         // Validate email field
         if (name === 'email') {
+            // Auto-complete to @gmail.com when @ is typed
+            if (finalValue.endsWith('@') && finalValue.length > (formData.email || '').length) {
+                finalValue = finalValue + 'gmail.com';
+            }
+
             // Allow only valid email characters: letters, numbers, dot, underscore, hyphen, @
             // Disallow: comma, single quote, double quote, and other special characters
             const emailPattern = /^[a-zA-Z0-9._@-]*$/;
@@ -466,28 +477,6 @@ const AddPatient = () => {
                     delete updated[name];
                     return updated;
                 });
-
-                // Generate domain suggestions if user typed @
-                if (finalValue.includes('@')) {
-                    const [username, domain] = finalValue.split('@');
-                    const commonDomains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'icloud.com'];
-                    
-                    if (domain === '' || domain.length < 3) {
-                        // Show all suggestions when user just typed @ or started typing domain
-                        const suggestions = commonDomains.map(d => `${username}@${d}`);
-                        setEmailSuggestions(suggestions);
-                        setShowEmailSuggestions(true);
-                    } else {
-                        // Filter suggestions based on what user typed
-                        const filtered = commonDomains.filter(d => d.startsWith(domain.toLowerCase()));
-                        const suggestions = filtered.map(d => `${username}@${d}`);
-                        setEmailSuggestions(suggestions);
-                        setShowEmailSuggestions(suggestions.length > 0);
-                    }
-                } else {
-                    setShowEmailSuggestions(false);
-                    setEmailSuggestions([]);
-                }
             }
         }
 
@@ -669,9 +658,7 @@ const AddPatient = () => {
             'contactNumber',
             'address',
             'station',
-            'municipality',
-            'province',
-            ...(isExistingPatientMode ? [] : ['firstName', 'lastName', 'dob', 'civilStatus', 'email'])
+            ...(isExistingPatientMode ? [] : ['firstName', 'lastName', 'dob', 'email'])
         ];
 
         const requiredEmergency = isExistingPatientMode
@@ -680,17 +667,9 @@ const AddPatient = () => {
                 ? ['emName', 'emRel', 'emPhone']
                 : ['emName', 'emRel', 'emPhone', 'emAddress']);
 
-        let requiredPregnancy = [];
-        if (formData.pregnancyStatus === 'Pregnant') {
-            requiredPregnancy = ['gravida', 'para', 'lmp', 'pregnancyType'];
-        } else if (formData.pregnancyStatus === 'Postpartum') {
-            requiredPregnancy = ['gravida', 'para', 'babyName', 'birthDate', 'deliveryType', 'babyGender', 'babyWeight'];
-        }
+        let requiredPregnancy = ['gravida', 'para', 'lmp'];
 
-        const requiredVitals = ['weight', 'height'];
-        if (formData.pregnancyStatus === 'Pregnant') {
-            requiredVitals.push('bp');
-        }
+        const requiredVitals = ['weight', 'height', 'bp'];
 
         const isEmptyValue = (value) => value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
 
@@ -707,15 +686,35 @@ const AddPatient = () => {
                 }
             }
         });
+        
         checkFields(requiredPersonal);
-        checkFields(requiredEmergency);
         checkFields(requiredPregnancy);
+        // Medical section has no explicitly required fields
         checkFields(requiredVitals);
+        checkFields(requiredEmergency);
 
         if (missing.length > 0) {
             setMissingFields(missing);
-            setToast({ type: 'error', message: 'Please complete all required fields before saving. PhilHealth and other ID numbers are optional.' });
+            setToast({ type: 'error', message: 'Please complete all required fields before saving.' });
             setIsSaving(false);
+            
+            const firstMissing = missing[0].replace('-invalid', '');
+            
+            let targetTab = 'personal';
+            if (requiredPersonal.includes(firstMissing)) targetTab = 'personal';
+            else if (requiredPregnancy.includes(firstMissing)) targetTab = 'pregnancy';
+            else if (requiredVitals.includes(firstMissing) || requiredEmergency.includes(firstMissing)) targetTab = 'prenatal';
+            
+            setActiveTab(targetTab);
+            
+            setTimeout(() => {
+                const fieldEl = document.querySelector(`[name="${firstMissing}"]`);
+                if (fieldEl) {
+                    fieldEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    fieldEl.focus({ preventScroll: true });
+                }
+            }, 100);
+            
             return;
         }
 
@@ -1056,33 +1055,9 @@ const AddPatient = () => {
                                         name="email" 
                                         value={formData.email} 
                                         onChange={handleChange} 
-                                        onBlur={() => setTimeout(() => setShowEmailSuggestions(false), 200)}
-                                        onFocus={() => formData.email.includes('@') && setShowEmailSuggestions(true)}
                                         required
                                         className={missingFields.includes('email') || nameValidationErrors.email ? 'error-field' : ''} 
                                     />
-                                    {showEmailSuggestions && emailSuggestions.length > 0 && (
-                                        <div className="email-suggestions-dropdown">
-                                            {emailSuggestions.map((suggestion, index) => {
-                                                const [username, domain] = suggestion.split('@');
-                                                return (
-                                                    <div 
-                                                        key={index}
-                                                        className="email-suggestion-item"
-                                                        onClick={() => {
-                                                            setFormData(prev => ({ ...prev, email: suggestion }));
-                                                            setShowEmailSuggestions(false);
-                                                            setEmailSuggestions([]);
-                                                        }}
-                                                        role="option"
-                                                        aria-selected="false"
-                                                    >
-                                                        {username}@<strong>{domain}</strong>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
                                     {nameValidationErrors.email && (
                                         <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
                                             {nameValidationErrors.email}
@@ -1177,10 +1152,13 @@ const AddPatient = () => {
                             <div className="form-grid-2">
                                 <div className="form-group">
                                     <label>Pregnancy Status</label>
-                                    <select name="pregnancyStatus" value={formData.pregnancyStatus} onChange={handleChange}>
-                                        <option value="Pregnant">Pregnant</option>
-                                        <option value="Postpartum">Postpartum</option>
-                                    </select>
+                                    <input 
+                                        type="text" 
+                                        value="Pregnant" 
+                                        readOnly 
+                                        className="computed-field"
+                                        style={{ backgroundColor: 'var(--color-bg, #f8f9fb)', cursor: 'not-allowed', color: 'var(--color-text-muted)' }}
+                                    />
                                 </div>
                                 <div className="form-group duo">
                                     <label>Gravida (Total) <span className="req">*</span></label>

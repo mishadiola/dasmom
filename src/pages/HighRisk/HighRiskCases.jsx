@@ -13,7 +13,8 @@ import {
   ArrowUpRight,
   AlertCircle,
   Activity,
-  FileText
+  FileText,
+  Info
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import PatientService from '../../services/patientservice';
@@ -26,8 +27,7 @@ const TrimesterBadge = ({ weeks }) => {
 
   return (
     <span className={`trim-badge trim-${trim}`}>
-      {trim}
-      {trim === 1 ? 'st' : trim === 2 ? 'nd' : 'rd'} Trim
+      T{trim} &middot; {weeks || '--'}w
     </span>
   );
 };
@@ -49,6 +49,7 @@ const HighRiskCases = () => {
   const [filterTrimester, setFilterTrimester] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
   const [filterDateRange, setFilterDateRange] = useState('All');
+  const [activePopover, setActivePopover] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
@@ -400,6 +401,52 @@ const HighRiskCases = () => {
             <option value="Archived">Archived</option>
             <option value="All">All</option>
           </select>
+          
+          {/* Legend Popover */}
+          <div style={{ marginLeft: 'auto', position: 'relative' }}>
+            <button 
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'white',
+                  border: '1.5px solid #eef0f4',
+                  padding: '8px 12px',
+                  borderRadius: '10px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  color: 'var(--color-text)',
+                  cursor: 'pointer'
+                }}
+                onClick={() => setActivePopover(activePopover === 'legend' ? null : 'legend')}
+            >
+                <Info size={14} style={{ color: 'var(--color-rose)' }} />
+                Legend
+            </button>
+            
+            {activePopover === 'legend' && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  marginTop: '8px',
+                  background: 'white',
+                  border: '1px solid #eef0f4',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+                  zIndex: 50,
+                  minWidth: '200px'
+                }}>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--color-text)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gestation</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <span className="trim-badge trim-1" style={{ display: 'inline-block', textAlign: 'center', width: 'fit-content' }}>1st Trim</span>
+                        <span className="trim-badge trim-2" style={{ display: 'inline-block', textAlign: 'center', width: 'fit-content' }}>2nd Trim</span>
+                        <span className="trim-badge trim-3" style={{ display: 'inline-block', textAlign: 'center', width: 'fit-content' }}>3rd Trim</span>
+                    </div>
+                </div>
+            )}
+          </div>
         </div>
 
       </div>
@@ -422,7 +469,7 @@ const HighRiskCases = () => {
                   <tr>
                     <th className="row-number-header">#</th>
                     <th>Patient Profile</th>
-                    <th>Stage</th>
+                    <th>Gestation</th>
                     <th>Conditions / Complications</th>
                     <th>Due Date</th>
                     <th>BP</th>
@@ -463,7 +510,6 @@ const HighRiskCases = () => {
                             <span className="condition-main">{p.condition}</span>
                             <span className="condition-meta">
                               {p.isMultipleBirth && <span style={{display: 'block', marginTop: '4px'}}>Multiple births</span>}
-                              {p.riskLevel === 'High Risk' && <span style={{display: 'block', color: 'var(--color-rose)', fontWeight: 'bold'}}>High Risk</span>}
                             </span>
                           </div>
                         </td>

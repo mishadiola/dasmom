@@ -49,6 +49,14 @@ const Inventory = () => {
   const [statusFilter, setStatusFilter] = useState('All');
   const [activeSummaryFilter, setActiveSummaryFilter] = useState(null);
   const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
+  const [archivedIds, setArchivedIds] = useState(() => {
+    try {
+      const stored = localStorage.getItem('inventory_archived_ids');
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   const [vaccStats, setVaccStats] = useState({ mothersPending: 0, newbornsPending: 0 });
   const [pendingStockAlerts, setPendingStockAlerts] = useState({ count: 0, stations: [] });
 
@@ -774,14 +782,6 @@ const Inventory = () => {
     }
   };
 
-  const [archivedIds, setArchivedIds] = useState(() => {
-    try {
-      const stored = localStorage.getItem('inventory_archived_ids');
-      return stored ? JSON.parse(stored) : [];
-    } catch (e) {
-      return [];
-    }
-  });
 
   const handleArchive = async (table, ids) => {
     const isConfirmed = await confirm({

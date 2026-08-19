@@ -288,7 +288,8 @@ class BabyService {
           staff: staff?.full_name || 'Unassigned',
           facility: d.facility || 'N/A',
           postpartumVisitDate: d.postpartum_visit_date || null,
-          notes: d.notes || ''
+          notes: d.notes || '',
+          pregnancyOutcome: (d.delivery_type === 'N/A - Not Applicable' && (newborn?.condition_at_birth === 'N/A - No Baby')) ? 'Miscarriage' : (newborn?.condition_at_birth === 'Stillbirth' ? 'Stillbirth' : 'Live Birth')
         };
       });
     } catch (error) {

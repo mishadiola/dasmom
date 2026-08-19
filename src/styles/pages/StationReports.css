@@ -7,7 +7,7 @@
     display: flex;
     flex-direction: column;
     gap: 24px;
-    max-width: 1400px;
+    width: 100%;
     margin: 0 auto;
     padding-bottom: 40px;
 }
@@ -323,9 +323,9 @@
 /* Tri bar (trimester) */
 .tri-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; gap: 1px; }
 .tri-seg { height: 100%; }
-.tri-1 { background: #deeda5; }
-.tri-2 { background: #ffe3a4; }
-.tri-3 { background: #808b77; }
+.tri-1 { background: rgba(253, 213, 229, 0.5); }
+.tri-2 { background: rgba(255, 227, 164, 0.5); }
+.tri-3 { background: rgba(195, 207, 183, 0.4); }
 
 /* Action buttons */
 .row-actions { display: flex; gap: 5px; }
@@ -449,9 +449,9 @@
     gap: 2px;
 }
 
-.tri-bar-large .tri-1 { background: #deeda5; display: flex; align-items: center; justify-content: center; }
-.tri-bar-large .tri-2 { background: #ffe3a4; display: flex; align-items: center; justify-content: center; }
-.tri-bar-large .tri-3 { background: #808b77; display: flex; align-items: center; justify-content: center; }
+.tri-bar-large .tri-1 { background: rgba(253, 213, 229, 0.5); display: flex; align-items: center; justify-content: center; }
+.tri-bar-large .tri-2 { background: rgba(255, 227, 164, 0.5); display: flex; align-items: center; justify-content: center; }
+.tri-bar-large .tri-3 { background: rgba(195, 207, 183, 0.4); display: flex; align-items: center; justify-content: center; }
 
 .tri-bar-large span { font-size: 11px; font-weight: 800; color: white; white-space: nowrap; }
 
