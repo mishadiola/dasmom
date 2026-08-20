@@ -278,7 +278,6 @@ const PrenatalVisits = () => {
             setVisitsTable(processedVisits);
             setAppointments(apptsData || []);
             setVaccinationsTable(processedVaccs);
-            setPostpartumTable([]);
 
         } catch (error) {
             console.error('Prenatal fetch error:', error);

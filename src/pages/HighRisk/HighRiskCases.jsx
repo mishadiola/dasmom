@@ -17,7 +17,6 @@ import {
   Info
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import PatientRecordModal from '../PatientRecords/PatientRecordModal';
 import Legend from '../../components/Legend/Legend';
 import PatientService from '../../services/patientservice';
 import '../../styles/pages/HighRiskCases.css';
