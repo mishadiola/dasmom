@@ -12,6 +12,7 @@ import VaccinationService from '../../services/vaccinationservice';
 import BabyService from '../../services/babyservices';
 import PatientService from '../../services/patientservice';
 import supabase from '../../config/supabaseclient';
+import '../../styles/components/SharedFilters.css';
 import * as XLSX from 'xlsx';
 import { formatTime12Hour } from '../../utils/pregnancyUtils';
 import { useModal } from '../../context/ModalContext';
@@ -38,6 +39,7 @@ const DeliveryOutcomes = () => {
     const [selectedDelivery, setSelectedDelivery] = useState(null);
     const [sortField, setSortField] = useState('deliveryDate');
     const [sortAsc, setSortAsc] = useState(false);
+    const [activePopover, setActivePopover] = useState(null);
     const [deliveries, setDeliveries] = useState([]);
     const [stats, setStats] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -306,38 +308,115 @@ const DeliveryOutcomes = () => {
                 delivery={selectedDelivery}
             />
             
-            {}
-            <div className="do-controls">
-                <div className="do-search-wrap">
-                    <Search size={16} className="do-search-icon" />
+            {/* Search & Filters */}
+            <div className="shared-controls-card">
+                <div className="shared-search-wrap">
+                    <Search size={16} className="shared-search-icon" />
                     <input
                         type="text"
-                        className="do-search-input"
+                        className="shared-search-input"
                         placeholder="Search by mother name, patient ID, or station..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <div className="do-filters-row">
+                <div className="shared-filters-row">
                     <span className="filters-label"><Filter size={13} /> Filters:</span>
-                    <select value={filters.type} onChange={e => handleFilter('type', e.target.value)}>
-                        <option value="All">All Types</option>
-                        {DELIVERY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                    <select value={filters.outcome} onChange={e => handleFilter('outcome', e.target.value)}>
-                        <option value="All">All Outcomes</option>
-                        <option value="Live Birth">Live Birth</option>
-                        <option value="Stillbirth">Stillbirth</option>
-                        <option value="Miscarriage">Miscarriage</option>
-                    </select>
-                    <select value={filters.complication} onChange={e => handleFilter('complication', e.target.value)}>
-                        <option value="All">All Complications</option>
-                        <option value="None">No Complications</option>
-                        <option value="HasComp">With Complications</option>
-                    </select>
-                    <select value={filters.station} onChange={e => handleFilter('station', e.target.value)}>
-                        {stations.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
+                    
+                    {/* Type Filter */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${filters.type !== 'All' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'type' ? null : 'type')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            <Activity size={14} className="filter-btn-icon" />
+                            <span>{filters.type === 'All' ? 'All Types' : filters.type}</span>
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        {activePopover === 'type' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Type</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${filters.type === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('type', 'All'); setActivePopover(null); }}>All Types</button>
+                                    {DELIVERY_TYPES.map(t => (
+                                        <button key={t} className={`popover-opt-btn ${filters.type === t ? 'selected' : ''}`} onClick={() => { handleFilter('type', t); setActivePopover(null); }}>{t}</button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Outcome Filter */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${filters.outcome !== 'All' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'outcome' ? null : 'outcome')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            <Heart size={14} className="filter-btn-icon" />
+                            <span>{filters.outcome === 'All' ? 'All Outcomes' : filters.outcome}</span>
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        {activePopover === 'outcome' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Outcome</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${filters.outcome === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('outcome', 'All'); setActivePopover(null); }}>All Outcomes</button>
+                                    <button className={`popover-opt-btn ${filters.outcome === 'Live Birth' ? 'selected' : ''}`} onClick={() => { handleFilter('outcome', 'Live Birth'); setActivePopover(null); }}>Live Birth</button>
+                                    <button className={`popover-opt-btn ${filters.outcome === 'Stillbirth' ? 'selected' : ''}`} onClick={() => { handleFilter('outcome', 'Stillbirth'); setActivePopover(null); }}>Stillbirth</button>
+                                    <button className={`popover-opt-btn ${filters.outcome === 'Miscarriage' ? 'selected' : ''}`} onClick={() => { handleFilter('outcome', 'Miscarriage'); setActivePopover(null); }}>Miscarriage</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Complication Filter */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${filters.complication !== 'All' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'complication' ? null : 'complication')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            <AlertTriangle size={14} className="filter-btn-icon" />
+                            <span>{filters.complication === 'All' ? 'All Complications' : filters.complication === 'None' ? 'No Complications' : 'With Complications'}</span>
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        {activePopover === 'complication' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Complication</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${filters.complication === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('complication', 'All'); setActivePopover(null); }}>All Complications</button>
+                                    <button className={`popover-opt-btn ${filters.complication === 'None' ? 'selected' : ''}`} onClick={() => { handleFilter('complication', 'None'); setActivePopover(null); }}>No Complications</button>
+                                    <button className={`popover-opt-btn ${filters.complication === 'HasComp' ? 'selected' : ''}`} onClick={() => { handleFilter('complication', 'HasComp'); setActivePopover(null); }}>With Complications</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Station Filter */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${filters.station !== 'All' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'station' ? null : 'station')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            <MapPin size={14} className="filter-btn-icon" />
+                            <span>{filters.station === 'All' ? 'All Stations' : filters.station === 'All Stations' ? 'All Stations' : filters.station}</span>
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        {activePopover === 'station' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Station</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${filters.station === 'All' || filters.station === 'All Stations' ? 'selected' : ''}`} onClick={() => { handleFilter('station', 'All'); setActivePopover(null); }}>All Stations</button>
+                                    {stations.filter(s => s !== 'All Stations').map(s => (
+                                        <button key={s} className={`popover-opt-btn ${filters.station === s ? 'selected' : ''}`} onClick={() => { handleFilter('station', s); setActivePopover(null); }}>{s}</button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                     <Legend 
                         categories={[
                             {

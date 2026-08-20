@@ -4,12 +4,19 @@ import {
     Search, Filter, Baby, Heart, AlertTriangle, Clock,
     CheckCircle2, XCircle, ChevronRight, ChevronLeft, Eye,
     AlertCircle, FileText, MapPin, Activity, Thermometer,
-    Brain, Milk, Calendar, TrendingUp, Download, X
+    Brain, Milk, Calendar, TrendingUp, Download, X, ChevronDown
 } from 'lucide-react';
 import BabyService from '../../services/babyservices';
 import * as XLSX from 'xlsx';
+import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/PostpartumRecords.css';
 
+const formatReadableDate = (dateString) => {
+    if (!dateString || dateString === 'N/A' || dateString === 'Not scheduled' || dateString === 'None') return dateString;
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString;
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+};
 /* ════════════════════════════
    POSTPARTUM DETAIL MODAL
    ════════════════════════════ */
@@ -162,6 +169,7 @@ const PostpartumRecords = () => {
         deliveryType: 'All', recovery: 'All', station: 'All', followUp: 'All'
     });
     const [selectedMother, setSelectedMother] = useState(null);
+    const [activePopover, setActivePopover] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
@@ -314,12 +322,12 @@ const PostpartumRecords = () => {
             </div>
 
             {/* ── Search & Filters ── */}
-            <div className="pp-controls-card">
-                <div className="pp-search-wrap">
-                    <Search size={16} className="pp-search-icon" />
+            <div className="shared-controls-card">
+                <div className="shared-search-wrap">
+                    <Search size={16} className="shared-search-icon" />
                     <input
                         type="text"
-                        className="pp-search-input"
+                        className="shared-search-input"
                         placeholder="Search by name, patient ID, or station..."
                         value={searchTerm}
                         onChange={e => {
@@ -328,29 +336,103 @@ const PostpartumRecords = () => {
                         }}
                     />
                 </div>
-                <div className="pp-filters-row">
+                <div className="shared-filters-row">
                     <span className="filters-label"><Filter size={13} /> Filters:</span>
-                    <select value={filters.deliveryType} onChange={e => handleFilter('deliveryType', e.target.value)}>
-                        <option value="All">All Delivery Types</option>
-                        <option value="NSD">NSD (Normal)</option>
-                        <option value="CS">CS (Cesarean)</option>
-                    </select>
-                    <select value={filters.recovery} onChange={e => handleFilter('recovery', e.target.value)}>
-                        <option value="All">All Recovery Status</option>
-                        <option value="Normal">Normal</option>
-                        <option value="Monitoring">Monitoring</option>
-                        <option value="Complication">Complication</option>
-                    </select>
-                    <select value={filters.followUp} onChange={e => handleFilter('followUp', e.target.value)}>
-                        <option value="All">All Follow-up Status</option>
-                        <option value="Completed">Completed</option>
-                        <option value="Upcoming">Upcoming</option>
-                        <option value="Missed">Missed</option>
-                    </select>
-                    <select value={filters.station} onChange={e => handleFilter('station', e.target.value)}>
-                        <option value="All">All Stations</option>
-                        {[...new Set(mothers.map(m => m.station))].map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
+                    
+                    {/* Delivery Type Filter */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${filters.deliveryType !== 'All' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'deliveryType' ? null : 'deliveryType')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            <Activity size={14} className="filter-btn-icon" />
+                            <span>{filters.deliveryType === 'All' ? 'All Delivery Types' : filters.deliveryType}</span>
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        {activePopover === 'deliveryType' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Delivery Type</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${filters.deliveryType === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('deliveryType', 'All'); setActivePopover(null); }}>All Delivery Types</button>
+                                    <button className={`popover-opt-btn ${filters.deliveryType === 'NSD' ? 'selected' : ''}`} onClick={() => { handleFilter('deliveryType', 'NSD'); setActivePopover(null); }}>NSD (Normal)</button>
+                                    <button className={`popover-opt-btn ${filters.deliveryType === 'CS' ? 'selected' : ''}`} onClick={() => { handleFilter('deliveryType', 'CS'); setActivePopover(null); }}>CS (Cesarean)</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Recovery Status Filter */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${filters.recovery !== 'All' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'recovery' ? null : 'recovery')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            <Heart size={14} className="filter-btn-icon" />
+                            <span>{filters.recovery === 'All' ? 'All Recovery Status' : filters.recovery}</span>
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        {activePopover === 'recovery' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Recovery Status</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${filters.recovery === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('recovery', 'All'); setActivePopover(null); }}>All Recovery Status</button>
+                                    <button className={`popover-opt-btn ${filters.recovery === 'Normal' ? 'selected' : ''}`} onClick={() => { handleFilter('recovery', 'Normal'); setActivePopover(null); }}>Normal</button>
+                                    <button className={`popover-opt-btn ${filters.recovery === 'Monitoring' ? 'selected' : ''}`} onClick={() => { handleFilter('recovery', 'Monitoring'); setActivePopover(null); }}>Monitoring</button>
+                                    <button className={`popover-opt-btn ${filters.recovery === 'Complication' ? 'selected' : ''}`} onClick={() => { handleFilter('recovery', 'Complication'); setActivePopover(null); }}>Complication</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Follow-up Status Filter */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${filters.followUp !== 'All' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'followUp' ? null : 'followUp')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            <Calendar size={14} className="filter-btn-icon" />
+                            <span>{filters.followUp === 'All' ? 'All Follow-up Status' : filters.followUp}</span>
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        {activePopover === 'followUp' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Follow-up Status</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${filters.followUp === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('followUp', 'All'); setActivePopover(null); }}>All Follow-up Status</button>
+                                    <button className={`popover-opt-btn ${filters.followUp === 'Completed' ? 'selected' : ''}`} onClick={() => { handleFilter('followUp', 'Completed'); setActivePopover(null); }}>Completed</button>
+                                    <button className={`popover-opt-btn ${filters.followUp === 'Upcoming' ? 'selected' : ''}`} onClick={() => { handleFilter('followUp', 'Upcoming'); setActivePopover(null); }}>Upcoming</button>
+                                    <button className={`popover-opt-btn ${filters.followUp === 'Missed' ? 'selected' : ''}`} onClick={() => { handleFilter('followUp', 'Missed'); setActivePopover(null); }}>Missed</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Station Filter */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${filters.station !== 'All' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'station' ? null : 'station')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            <MapPin size={14} className="filter-btn-icon" />
+                            <span>{filters.station === 'All' ? 'All Stations' : filters.station}</span>
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        {activePopover === 'station' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Station</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${filters.station === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('station', 'All'); setActivePopover(null); }}>All Stations</button>
+                                    {[...new Set(mothers.map(m => m.station))].map(s => (
+                                        <button key={s} className={`popover-opt-btn ${filters.station === s ? 'selected' : ''}`} onClick={() => { handleFilter('station', s); setActivePopover(null); }}>{s}</button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -397,7 +479,7 @@ const PostpartumRecords = () => {
                                             </td>
                                             <td>
                                                 <span className={`dt-badge dt-${m.deliveryType.toLowerCase()}`}>{m.deliveryType}</span>
-                                                <div className="pp-ddate">{m.deliveryDate}</div>
+                                                <div className="pp-ddate">{formatReadableDate(m.deliveryDate)}</div>
                                             </td>
                                             <td className="pp-days-pp">
                                                 <span className="days-pill">Day {m.daysPostpartum}</span>
@@ -408,9 +490,9 @@ const PostpartumRecords = () => {
                                             <td>
                                                 <span className={`recovery-badge ${getRecoveryBadge(m.recoveryStatus)}`}>{m.recoveryStatus}</span>
                                             </td>
-                                            <td className="pp-date-cell">{m.lastCheckup}</td>
+                                            <td className="pp-date-cell">{formatReadableDate(m.lastCheckup)}</td>
                                             <td>
-                                                <div className="pp-date-cell">{m.nextFollowUp}</div>
+                                                <div className="pp-date-cell">{formatReadableDate(m.nextFollowUp)}</div>
                                                 <span className={`fu-badge ${getFollowUpBadge(m.followUpStatus)}`}>{m.followUpStatus}</span>
                                             </td>
                                             <td>

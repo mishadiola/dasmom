@@ -356,38 +356,20 @@ const DashboardLayout = () => {
             ═══════════════════════════════ */}
             <div className="main-area">
 
-                {/* ── Mobile Sidebar Toggle Handle ── */}
-                {!sidebarMobile && (
-                    <div className="mobile-only" style={{
-                        position: 'fixed',
-                        top: '50%',
-                        left: '0',
-                        transform: 'translateY(-50%)',
-                        zIndex: 45,
-                    }}>
-                        <button
+                {/* Removed floating mobile handle in favor of topbar hamburger menu */}
+                {/* ── Top Header ── */}
+                <header className="topbar" style={{ justifyContent: 'space-between' }} role="banner">
+                    
+                    {/* Mobile Hamburger Menu */}
+                    <div className="topbar-left">
+                        <button 
+                            className="mobile-menu-btn mobile-only" 
                             onClick={() => setSidebarMobile(true)}
-                            aria-label="Open sidebar"
-                            style={{
-                                background: 'var(--color-rose)',
-                                color: 'white',
-                                border: 'none',
-                                padding: '16px 8px',
-                                borderRadius: '0 8px 8px 0',
-                                boxShadow: '3px 0 12px rgba(0,0,0,0.1)',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center'
-                            }}
+                            aria-label="Open mobile menu"
                         >
-                            <ChevronRight size={20} />
+                            <Menu size={24} />
                         </button>
                     </div>
-                )}
-
-                {/* ── Top Header ── */}
-                <header className="topbar" style={{ justifyContent: 'flex-end' }} role="banner">
 
                     {/* Right side */}
                     <div className="topbar-right">

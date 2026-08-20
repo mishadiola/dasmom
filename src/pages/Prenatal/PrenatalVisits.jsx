@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, useContext } from 'react';
 import PatientService from '../../services/patientservice';
+import '../../styles/components/SharedFilters.css';
+import '../../styles/pages/PrenatalVisits.css';
 import {
     Search, Plus, Eye, Edit2, Trash2, CalendarCheck,
     AlertTriangle, HeartPulse, Filter, Clock, ChevronLeft,
@@ -1045,15 +1047,15 @@ const PrenatalVisits = () => {
                     <h2 className="section-title">
                         <Clock size={18} /> {visitTypeTab === 'vaccination' ? 'Vaccination Records' : 'Visit Records'}
                     </h2>
-                    <div className="table-filters">
-                        <div className="header-search">
-                            <Search size={18} className="hs-icon" />
+                    <div className="table-filters" style={{ flexGrow: 1, display: 'flex', justifyContent: 'flex-end' }}>
+                        <div className="shared-search-wrap" style={{ maxWidth: '400px' }}>
+                            <Search size={16} className="shared-search-icon" />
                             <input 
                                 type="text" 
                                 placeholder={visitTypeTab === 'vaccination' ? "Search Patient or Vaccine" : "Search Patient Name"} 
                                 value={searchTerm}
                                 onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                                className="hs-input"
+                                className="shared-search-input"
                             />
                         </div>
                     </div>
@@ -1107,7 +1109,7 @@ const PrenatalVisits = () => {
                                             </td>
                                             <td>
                                                 <span className={`risk-tag risk-${visit.risk?.replace(' ', '-').toLowerCase() || 'normal'}`}>
-                                                    {visit.risk}
+                                                    {visit.risk?.toLowerCase()}
                                                 </span>
                                             </td>
                                             <td>

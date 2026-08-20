@@ -277,6 +277,16 @@
     align-items: start;
 }
 
+.do-table-col, .do-side-col {
+    min-width: 0;
+}
+
+.table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 .do-card {
     background: white;
     border-radius: 14px;
@@ -1036,7 +1046,7 @@
 /* ════════════════════════════
    RESPONSIVE
 ════════════════════════════ */
-@media (max-width: 1100px) {
+@media (max-width: 1200px) {
     .do-main-layout { grid-template-columns: 1fr; }
     .do-side-col { display: grid; grid-template-columns: 1fr 1fr; }
 }

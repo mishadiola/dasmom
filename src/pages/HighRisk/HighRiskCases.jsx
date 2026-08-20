@@ -13,12 +13,15 @@ import {
   ArrowUpRight,
   AlertCircle,
   Activity,
+  Archive,
+  ChevronDown,
   FileText,
   Info
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Legend from '../../components/Legend/Legend';
 import PatientService from '../../services/patientservice';
+import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/HighRiskCases.css';
 
 const TrimesterBadge = ({ weeks }) => {
@@ -91,33 +94,62 @@ const HighRiskCases = () => {
           
           const bpStatus = p.bpStatus;
 
+          // Standardize individual risk factors
+          const formatRiskFactor = (factor) => {
+            const f = factor.trim();
+            if (!f) return '';
+            
+            const lower = f.toLowerCase();
+            // Specific string mappings
+            if (lower === 'high bp') return 'High Blood Pressure';
+            if (lower === 'twins pregnancy') return 'Twins Pregnancy';
+            if (lower === 'abnormal fetal heart rate') return 'Abnormal Fetal Heart Rate';
+            if (lower === 'overweight bmi') return 'Overweight BMI';
+            if (lower === 'anemia') return 'Anemia';
+            if (lower === 'fever') return 'Fever';
+            
+            // Keep age formatting exactly as it comes from the DB (e.g. "Age 17 (Teenage)")
+            if (lower.startsWith('age ')) return f;
+            
+            // Title case fallback for standard conditions like Diabetes, Asthma
+            return f.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+          };
+
           // Build risk factors array
           let riskFactors = [];
-          if (p.condition) {
-            riskFactors = p.condition.split(',').map(f => f.trim()).filter(Boolean);
+          if (p.condition && p.condition !== 'High‑risk pregnancy') {
+            riskFactors = p.condition.split(',').map(f => formatRiskFactor(f)).filter(Boolean);
           }
 
-          // Build comprehensive condition string with high-risk indicators
-          let conditionDisplay = p.condition || 'High‑risk pregnancy';
           let isHighRisk = p.riskLevel === 'High Risk';
 
-          // Add age-based risk
           if (isAgeHighRisk) {
-            conditionDisplay = conditionDisplay === 'High‑risk pregnancy' ? 'Age <18 or >35' : `${conditionDisplay}, Age <18 or >35`;
             isHighRisk = true;
+            // Removed frontend fallback "Age <18 or >35" to rely on the database-generated age string
           }
 
           // Add multiple births to condition if applicable
           if (isMultipleBirth) {
-            conditionDisplay = `${p.pregnancyType} pregnancy`;
+            riskFactors.push(`${formatRiskFactor(p.pregnancyType || 'Twins')} Pregnancy`);
             isHighRisk = true;
           }
 
           // Add BP status if high-risk
           if (bpStatus) {
-            conditionDisplay = `${conditionDisplay} | ${bpStatus}`;
+            riskFactors.push(formatRiskFactor(bpStatus));
             isHighRisk = true;
           }
+
+          // Clean up the conditions using a Set to prevent duplicates
+          let uniqueFactors = [...new Set(riskFactors)];
+
+          // Remove 'None' if there are other genuine conditions
+          if (uniqueFactors.length > 1) {
+            uniqueFactors = uniqueFactors.filter(f => f.toLowerCase() !== 'none');
+          }
+
+          // Build comprehensive condition string with high-risk indicators
+          let conditionDisplay = uniqueFactors.length > 0 ? uniqueFactors.join(', ') : 'None';
 
           // Add BMI status if weight is available
           // Note: height would need to be fetched separately
@@ -341,12 +373,12 @@ const HighRiskCases = () => {
       </div>
 
       {/* ── Search & Filters ── */}
-      <div className="hr-controls-card">
-        <div className="hr-search-wrap">
-          <Search size={16} className="hr-search-icon" />
+      <div className="shared-controls-card">
+        <div className="shared-search-wrap">
+          <Search size={16} className="shared-search-icon" />
           <input
             type="text"
-            className="hr-search-input"
+            className="shared-search-input"
             placeholder="Search by name or patient ID..."
             value={searchTerm}
             onChange={(e) => {
@@ -355,53 +387,81 @@ const HighRiskCases = () => {
             }}
           />
         </div>
-        <div className="hr-filters-row">
+        <div className="shared-filters-row">
           <span className="filters-label">
             <Filter size={13} /> Filters:
           </span>
           
           {/* Station Filter */}
-          <select
-            value={filterStation}
-            onChange={(e) => {
-              setFilterStation(e.target.value);
-              setCurrentPage(1);
-            }}
-          >
-            <option value="All">All Stations</option>
-            {stationDistribution.map((b) => (
-              <option key={b.name} value={b.name}>
-                {b.name}
-              </option>
-            ))}
-          </select>
+          <div className="filter-dropdown-container">
+              <button 
+                  className={`filter-btn ${filterStation !== 'All' ? 'active-filter' : ''}`}
+                  onClick={() => setActivePopover(activePopover === 'station' ? null : 'station')}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                  <MapPin size={14} className="filter-btn-icon" />
+                  <span>{filterStation === 'All' ? 'All Stations' : filterStation}</span>
+                  <ChevronDown size={14} className="filter-btn-icon" />
+              </button>
+              {activePopover === 'station' && (
+                  <div className="filter-popover">
+                      <div className="popover-title">Station</div>
+                      <div className="popover-options">
+                          <button className={`popover-opt-btn ${filterStation === 'All' ? 'selected' : ''}`} onClick={() => { setFilterStation('All'); setActivePopover(null); setCurrentPage(1); }}>All Stations</button>
+                          {stationDistribution.map((b) => (
+                              <button key={b.name} className={`popover-opt-btn ${filterStation === b.name ? 'selected' : ''}`} onClick={() => { setFilterStation(b.name); setActivePopover(null); setCurrentPage(1); }}>{b.name}</button>
+                          ))}
+                      </div>
+                  </div>
+              )}
+          </div>
           
           {/* Trimester Filter */}
-          <select
-            value={filterTrimester}
-            onChange={(e) => {
-              setFilterTrimester(e.target.value);
-              setCurrentPage(1);
-            }}
-          >
-            <option value="All">All Trimesters</option>
-            <option value="1">1st Trimester</option>
-            <option value="2">2nd Trimester</option>
-            <option value="3">3rd Trimester</option>
-          </select>
+          <div className="filter-dropdown-container">
+              <button 
+                  className={`filter-btn ${filterTrimester !== 'All' ? 'active-filter' : ''}`}
+                  onClick={() => setActivePopover(activePopover === 'trimester' ? null : 'trimester')}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                  <Activity size={14} className="filter-btn-icon" />
+                  <span>{filterTrimester === 'All' ? 'All Trimesters' : filterTrimester === '1' ? '1st Trimester' : filterTrimester === '2' ? '2nd Trimester' : '3rd Trimester'}</span>
+                  <ChevronDown size={14} className="filter-btn-icon" />
+              </button>
+              {activePopover === 'trimester' && (
+                  <div className="filter-popover">
+                      <div className="popover-title">Trimester</div>
+                      <div className="popover-options">
+                          <button className={`popover-opt-btn ${filterTrimester === 'All' ? 'selected' : ''}`} onClick={() => { setFilterTrimester('All'); setActivePopover(null); setCurrentPage(1); }}>All Trimesters</button>
+                          <button className={`popover-opt-btn ${filterTrimester === '1' ? 'selected' : ''}`} onClick={() => { setFilterTrimester('1'); setActivePopover(null); setCurrentPage(1); }}>1st Trimester</button>
+                          <button className={`popover-opt-btn ${filterTrimester === '2' ? 'selected' : ''}`} onClick={() => { setFilterTrimester('2'); setActivePopover(null); setCurrentPage(1); }}>2nd Trimester</button>
+                          <button className={`popover-opt-btn ${filterTrimester === '3' ? 'selected' : ''}`} onClick={() => { setFilterTrimester('3'); setActivePopover(null); setCurrentPage(1); }}>3rd Trimester</button>
+                      </div>
+                  </div>
+              )}
+          </div>
           
           {/* Status Filter */}
-          <select
-            value={filterStatus}
-            onChange={(e) => {
-              setFilterStatus(e.target.value);
-              setCurrentPage(1);
-            }}
-          >
-            <option value="Active">Active</option>
-            <option value="Archived">Archived</option>
-            <option value="All">All</option>
-          </select>
+          <div className="filter-dropdown-container">
+              <button 
+                  className={`filter-btn ${filterStatus !== 'All' ? 'active-filter' : ''}`}
+                  onClick={() => setActivePopover(activePopover === 'status' ? null : 'status')}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                  <Archive size={14} className="filter-btn-icon" />
+                  <span>{filterStatus === 'All' ? 'All Statuses' : filterStatus}</span>
+                  <ChevronDown size={14} className="filter-btn-icon" />
+              </button>
+              {activePopover === 'status' && (
+                  <div className="filter-popover">
+                      <div className="popover-title">Status</div>
+                      <div className="popover-options">
+                          <button className={`popover-opt-btn ${filterStatus === 'Active' ? 'selected' : ''}`} onClick={() => { setFilterStatus('Active'); setActivePopover(null); setCurrentPage(1); }}>Active</button>
+                          <button className={`popover-opt-btn ${filterStatus === 'Archived' ? 'selected' : ''}`} onClick={() => { setFilterStatus('Archived'); setActivePopover(null); setCurrentPage(1); }}>Archived</button>
+                          <button className={`popover-opt-btn ${filterStatus === 'All' ? 'selected' : ''}`} onClick={() => { setFilterStatus('All'); setActivePopover(null); setCurrentPage(1); }}>All Statuses</button>
+                      </div>
+                  </div>
+              )}
+          </div>
           
           {/* Legend Popover */}
           <Legend 

@@ -1,0 +1,282 @@
+/* ════════════════════════════
+   SHARED SEARCH & FILTERS
+   A unified standard across all DasMom pages
+════════════════════════════ */
+
+.shared-controls-card {
+    background: white;
+    border-radius: 14px;
+    border: 1px solid #eef0f4;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.03);
+    margin-bottom: 20px;
+}
+
+.shared-search-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.shared-search-icon {
+    position: absolute;
+    left: 14px;
+    color: var(--color-text-muted);
+}
+
+.shared-search-input {
+    width: 100%;
+    padding: 10px 14px 10px 40px;
+    border: 1.5px solid #eef0f4;
+    border-radius: 10px;
+    font-size: 14px;
+    font-family: var(--font);
+    outline: none;
+    background: #f8f9fb;
+    color: var(--color-text);
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.shared-search-input:focus {
+    border-color: var(--color-rose);
+    background: white;
+    box-shadow: 0 0 0 3px rgba(185, 129, 138, 0.12);
+}
+
+.shared-filters-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.filters-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+}
+
+/* Custom Filter Popover Target Button */
+.filter-dropdown-container {
+    position: relative;
+}
+
+.filter-btn {
+    appearance: none;
+    padding: 8px 14px;
+    border: 1px solid #eef0f4;
+    border-radius: 8px;
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+    background: #f8f9fb;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.filter-btn:hover {
+    border-color: #d1d6e0;
+    background: #f8f9fb;
+}
+
+.filter-btn.active-filter {
+    border-color: var(--color-rose);
+    color: var(--color-rose);
+    background: rgba(185, 129, 138, 0.05);
+}
+
+.filter-btn-icon {
+    color: var(--color-text-light);
+}
+.filter-btn.active-filter .filter-btn-icon {
+    color: var(--color-rose);
+}
+
+.filter-badge {
+    background: var(--color-rose);
+    color: #fff;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    font-weight: 700;
+}
+
+.filter-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    border: 1px solid #eef0f4;
+    min-width: 220px;
+    z-index: 50;
+    padding: 12px;
+    animation: pop-in 0.15s ease;
+}
+
+@keyframes pop-in {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.popover-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-light);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.popover-search {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #eef0f4;
+    border-radius: 6px;
+    font-size: 13px;
+    margin-bottom: 12px;
+    outline: none;
+    font-family: var(--font);
+}
+
+.popover-search:focus {
+    border-color: var(--color-rose);
+}
+
+.popover-options {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.popover-opt-btn {
+    text-align: left;
+    width: 100%;
+    background: transparent;
+    border: none;
+    padding: 8px 12px;
+    font-family: var(--font);
+    font-size: 13px;
+    color: var(--color-text);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+    font-weight: 500;
+}
+
+.popover-opt-btn:hover {
+    background: #f4f6f9;
+}
+
+.popover-opt-btn.selected {
+    background: rgba(185, 129, 138, 0.1);
+    color: var(--color-rose);
+    font-weight: 600;
+}
+
+/* Checkbox specific */
+.popover-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 4px;
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: 6px;
+    color: var(--color-text);
+}
+
+.popover-checkbox-label:hover {
+    background: #f4f6f9;
+}
+
+.popover-empty {
+    font-size: 13px;
+    color: var(--color-text-light);
+    text-align: center;
+    padding: 10px 0;
+}
+
+.clear-filters-btn {
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--color-rose);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 8px 12px;
+    margin-left: auto;
+    font-family: var(--font);
+}
+
+.clear-filters-btn:hover {
+    text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+    .shared-filters-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .filter-btn {
+        width: 100%;
+        justify-content: center;
+    }
+    .clear-filters-btn {
+        margin-left: 0;
+        width: 100%;
+        text-align: center;
+        margin-top: 8px;
+    }
+}
+
+
+/* =========================================================================
+   MOBILE RESPONSIVENESS
+   ========================================================================= */
+@media (max-width: 768px) {
+    .shared-controls-card {
+        padding: 12px 14px;
+        gap: 10px;
+    }
+
+    .shared-filters-row {
+        gap: 8px;
+    }
+
+    .filter-btn {
+        padding: 8px 10px;
+        font-size: 12px;
+    }
+    
+    .filters-label {
+        width: 100%;
+        margin-bottom: 4px;
+    }
+    
+    .filter-dropdown-container {
+        flex: 1;
+        min-width: 48%;
+    }
+    
+    .filter-btn {
+        width: 100%;
+        justify-content: space-between;
+    }
+}
+

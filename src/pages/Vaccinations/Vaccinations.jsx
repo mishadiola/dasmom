@@ -8,11 +8,12 @@ import { useModal } from '../../context/ModalContext';
 import {
     Search, Filter, Plus, X, Syringe, Pill, Package,
     AlertTriangle, CheckCircle2, Clock, XCircle,
-    Eye, Edit2, Calendar, Download, RefreshCw, ChevronDown, ChevronUp, AlertCircle, Baby,
+    Eye, Edit2, Calendar, Download, RefreshCw, ChevronDown, ChevronUp, AlertCircle, Baby, User, Activity, Archive, MapPin,
     ChevronLeft, ChevronRight
 } from 'lucide-react';
 import NewbornVaccinationModal from '../../components/NewbornVaccinationModal';
 import '../../styles/pages/Vaccinations.css';
+import '../../styles/components/SharedFilters.css';
 import Legend from '../../components/Legend/Legend';
 
 // Constants for vaccine and supplement types
@@ -28,6 +29,12 @@ const SUPPLEMENT_TYPES = [
 
 const STAFF_LIST = ['Nurse Ana', 'Nurse Bea', 'Midwife Elena', 'Midwife Ana', 'Dr. Reyes (OB)'];
 
+const formatReadableDate = (dateString) => {
+    if (!dateString) return dateString;
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString;
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+};
 const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAutoSelectId, onClose, onSave }) => {
     const { alert: customAlert } = useModal();
     const babyService = new BabyService();
@@ -1062,6 +1069,7 @@ const Vaccinations = () => {
     const [supplementRecords, setSupplementRecords] = useState([]);
     const [archivedPatientIds, setArchivedPatientIds] = useState(new Set());
     const [loading, setLoading] = useState(true);
+    const [activePopover, setActivePopover] = useState(null);
 
     const [activeTab, setActiveTab] = useState('vaccines');    // 'vaccines' | 'supplements'
     const [searchTerm, setSearchTerm] = useState('');
@@ -1660,43 +1668,123 @@ const Vaccinations = () => {
             </div>
 
             {/* ── Search & Filters ── */}
-            <div className="vacc-controls">
-                <div className="vacc-search-wrap">
-                    <Search size={16} className="vacc-search-icon" />
+            <div className="shared-controls-card">
+                <div className="shared-search-wrap">
+                    <Search size={16} className="shared-search-icon" />
                     <input
                         type="text"
-                        className="vacc-search-input"
+                        className="shared-search-input"
                         placeholder="Search by patient name, ID, or station..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <div className="vacc-filters-row">
+                <div className="shared-filters-row">
                     <span className="filters-label"><Filter size={13} /> Filters:</span>
-                    <select value={filters.patientType} onChange={e => handleFilter('patientType', e.target.value)}>
-                        <option value="All">All Patient Types</option>
-                        <option value="Mother">Mother</option>
-                        <option value="Newborn">Newborn</option>
-                    </select>
-                    <select value={filters.item} onChange={e => handleFilter('item', e.target.value)}>
-                        <option value="All">{activeTab === 'vaccines' ? 'All Vaccines' : 'All Supplements'}</option>
-                        {itemOptions.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                    <select value={filters.status} onChange={e => handleFilter('status', e.target.value)}>
-                        <option value="All">All Statuses</option>
-                        {activeTab === 'vaccines'
-                            ? <><option value="Completed">Completed</option><option value="Pending">Pending</option><option value="Overdue">Overdue</option></>
-                            : <><option value="Ongoing">Ongoing</option><option value="Completed">Completed</option><option value="Missed">Missed</option></>
-                        }
-                    </select>
-                    <select value={archiveFilter} onChange={e => setArchiveFilter(e.target.value)}>
-                        <option value="active">Active</option>
-                        <option value="archived">Archived</option>
-                        <option value="all">All</option>
-                    </select>
+                    {/* Patient Type Filter */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${filters.patientType !== 'All' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'patientType' ? null : 'patientType')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            <User size={14} className="filter-btn-icon" />
+                            <span>{filters.patientType === 'All' ? 'All Patient Types' : filters.patientType}</span>
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        {activePopover === 'patientType' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Patient Type</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${filters.patientType === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('patientType', 'All'); setActivePopover(null); }}>All Patient Types</button>
+                                    <button className={`popover-opt-btn ${filters.patientType === 'Mother' ? 'selected' : ''}`} onClick={() => { handleFilter('patientType', 'Mother'); setActivePopover(null); }}>Mother</button>
+                                    <button className={`popover-opt-btn ${filters.patientType === 'Newborn' ? 'selected' : ''}`} onClick={() => { handleFilter('patientType', 'Newborn'); setActivePopover(null); }}>Newborn</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Item Filter */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${filters.item !== 'All' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'item' ? null : 'item')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            {activeTab === 'vaccines' ? <Syringe size={14} className="filter-btn-icon" /> : <Pill size={14} className="filter-btn-icon" />}
+                            <span>{filters.item === 'All' ? (activeTab === 'vaccines' ? 'All Vaccines' : 'All Supplements') : filters.item}</span>
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        {activePopover === 'item' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Item</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${filters.item === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('item', 'All'); setActivePopover(null); }}>{activeTab === 'vaccines' ? 'All Vaccines' : 'All Supplements'}</button>
+                                    {itemOptions.map(o => (
+                                        <button key={o} className={`popover-opt-btn ${filters.item === o ? 'selected' : ''}`} onClick={() => { handleFilter('item', o); setActivePopover(null); }}>{o}</button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Status Filter */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${filters.status !== 'All' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'status' ? null : 'status')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            <Activity size={14} className="filter-btn-icon" />
+                            <span>{filters.status === 'All' ? 'All Statuses' : filters.status}</span>
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        {activePopover === 'status' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Status</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${filters.status === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('status', 'All'); setActivePopover(null); }}>All Statuses</button>
+                                    {activeTab === 'vaccines' ? (
+                                        <>
+                                            <button className={`popover-opt-btn ${filters.status === 'Completed' ? 'selected' : ''}`} onClick={() => { handleFilter('status', 'Completed'); setActivePopover(null); }}>Completed</button>
+                                            <button className={`popover-opt-btn ${filters.status === 'Pending' ? 'selected' : ''}`} onClick={() => { handleFilter('status', 'Pending'); setActivePopover(null); }}>Pending</button>
+                                            <button className={`popover-opt-btn ${filters.status === 'Overdue' ? 'selected' : ''}`} onClick={() => { handleFilter('status', 'Overdue'); setActivePopover(null); }}>Overdue</button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <button className={`popover-opt-btn ${filters.status === 'Ongoing' ? 'selected' : ''}`} onClick={() => { handleFilter('status', 'Ongoing'); setActivePopover(null); }}>Ongoing</button>
+                                            <button className={`popover-opt-btn ${filters.status === 'Completed' ? 'selected' : ''}`} onClick={() => { handleFilter('status', 'Completed'); setActivePopover(null); }}>Completed</button>
+                                            <button className={`popover-opt-btn ${filters.status === 'Missed' ? 'selected' : ''}`} onClick={() => { handleFilter('status', 'Missed'); setActivePopover(null); }}>Missed</button>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Archive Filter */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${archiveFilter !== 'active' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'archive' ? null : 'archive')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            <Archive size={14} className="filter-btn-icon" />
+                            <span>{archiveFilter === 'active' ? 'Active' : 'Archived'}</span>
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        {activePopover === 'archive' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Status</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${archiveFilter === 'active' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('active'); setActivePopover(null); }}>Active</button>
+                                    <button className={`popover-opt-btn ${archiveFilter === 'archived' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('archived'); setActivePopover(null); }}>Archived</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
-
             {/* ── Main 2-col layout ── */}
             <div className="vacc-main-layout">
 
@@ -1777,8 +1865,8 @@ const Vaccinations = () => {
                                                     <td className="col-type"><span className={`type-badge type-${item.type.toLowerCase()}`}>{item.type}</span></td>
                                                     <td className="col-admin">{item.administeredCount} administered</td>
                                                     <td className="col-pending">{item.pendingCount} pending</td>
-                                                    <td className="col-date">{item.lastAdministered || <span className="not-yet">None</span>}</td>
-                                                    <td className="col-date">{item.nextScheduled || <span className="not-yet">None scheduled</span>}</td>
+                                                    <td className="col-date">{formatReadableDate(item.lastAdministered) || <span className="not-yet">None</span>}</td>
+                                                    <td className="col-date">{formatReadableDate(item.nextScheduled) || <span className="not-yet">None scheduled</span>}</td>
                                                     <td className="col-status"><span className={`vacc-status ${item.pendingCount > 0 ? 'status-pending' : 'status-completed'}`}>{item.pendingCount > 0 ? 'Pending' : 'Completed'}</span></td>
                                                     <td className="col-staff">{item.lastStaff || <span className="not-yet">—</span>}</td>
                                                     <td className="col-actions">
@@ -1809,8 +1897,8 @@ const Vaccinations = () => {
                                                                             <tr key={idx}>
                                                                                 <td className="mini-col-item"><strong>{record.vaccine}</strong></td>
                                                                                 <td className="mini-col-dose">{record.dose}</td>
-                                                                                <td className="mini-col-date">{record.date || <span className="not-yet">Not given</span>}</td>
-                                                                                <td className="mini-col-date">{record.nextDue || <span className="not-yet">—</span>}</td>
+                                                                                <td className="mini-col-date">{formatReadableDate(record.date) || <span className="not-yet">Not given</span>}</td>
+                                                                                <td className="mini-col-date">{formatReadableDate(record.nextDue) || <span className="not-yet">—</span>}</td>
                                                                                 <td className="mini-col-status"><span className={`vacc-status ${vaccineStatusClass(record.status)}`}>{record.status}</span></td>
                                                                                 <td className="mini-col-actions">
                                                                                     {record.status === 'Pending' && (
@@ -1906,8 +1994,8 @@ const Vaccinations = () => {
                                                     <td className="col-type"><span className={`type-badge type-${item.type.toLowerCase()}`}>{item.type}</span></td>
                                                     <td className="col-admin">{item.administeredCount} administered</td>
                                                     <td className="col-pending">{item.pendingCount} pending</td>
-                                                    <td className="col-date">{item.lastAdministered || <span className="not-yet">None</span>}</td>
-                                                    <td className="col-date">{item.nextScheduled || <span className="not-yet">None scheduled</span>}</td>
+                                                    <td className="col-date">{formatReadableDate(item.lastAdministered) || <span className="not-yet">None</span>}</td>
+                                                    <td className="col-date">{formatReadableDate(item.nextScheduled) || <span className="not-yet">None scheduled</span>}</td>
                                                     <td className="col-status"><span className={`vacc-status ${item.pendingCount > 0 ? 'status-pending' : 'status-completed'}`}>{item.pendingCount > 0 ? 'Pending' : 'Completed'}</span></td>
                                                     <td className="col-staff">{item.lastStaff || <span className="not-yet">—</span>}</td>
                                                     <td className="col-actions">
@@ -1939,16 +2027,16 @@ const Vaccinations = () => {
                                                                             <tr key={idx}>
                                                                                 <td className="mini-col-item"><strong>{record.supplement}</strong></td>
                                                                                 <td className="mini-col-dose">{record.dose}</td>
-                                                                                <td className="mini-col-date">{record.date || <span className="not-yet">Not given</span>}</td>
+                                                                                <td className="mini-col-date">{formatReadableDate(record.date) || <span className="not-yet">Not given</span>}</td>
                                                                                 <td className="mini-col-exp">
                                                                                     {record.expirationDate ? (
                                                                                         <>
                                                                                             <span className={`exp-status ${record.expirationClass}`}>{record.expirationStatus}</span>
-                                                                                            <span className="exp-date">{record.expirationDate}</span>
+                                                                                            <span className="exp-date">{formatReadableDate(record.expirationDate)}</span>
                                                                                         </>
                                                                                     ) : <span className="not-yet">—</span>}
                                                                                 </td>
-                                                                                <td className="mini-col-date">{record.nextDue || <span className="not-yet">—</span>}</td>
+                                                                                <td className="mini-col-date">{formatReadableDate(record.nextDue) || <span className="not-yet">—</span>}</td>
                                                                                 <td className="mini-col-status"><span className={`vacc-status ${supplementStatusClass(record.status)}`}>{record.status}</span></td>
                                                                                 <td className="mini-col-actions">
                                                                                     <div className="row-actions">
@@ -2078,8 +2166,8 @@ const Vaccinations = () => {
                                                             <tr key={r.id}>
                                                                 <td>{expirationSummaryModal.type === 'vaccine' ? r.vaccine : r.supplement}</td>
                                                                 <td>{expirationSummaryModal.type === 'vaccine' ? 'Vaccine' : 'Supplement'}</td>
-                                                                <td>{r.date}</td>
-                                                                <td>{r.expirationDate || '—'}</td>
+                                                                <td>{formatReadableDate(r.date)}</td>
+                                                                <td>{formatReadableDate(r.expirationDate) || '—'}</td>
                                                                 <td>
                                                                     <span className={`exp-status-badge ${r.expirationClass}`}>
                                                                         {r.expirationStatus}

@@ -8,8 +8,10 @@ import {
 } from 'lucide-react';
 import NewbornService from '../../services/newbornservice';
 import * as XLSX from 'xlsx';
+import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/NewbornTracking.css';
 import Legend from '../../components/Legend/Legend';
+import { MapPin, Activity } from 'lucide-react';
 
 /* ════════════════════════════
    CALENDAR HELPERS
@@ -179,6 +181,7 @@ const NewbornTracking = () => {
     const [filters, setFilters] = useState({ status: 'All', progress: 'All', station: 'All' });
     const [selectedBaby, setSelectedBaby] = useState(null);
     const [expandedRow, setExpandedRow] = useState(null);
+    const [activePopover, setActivePopover] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
@@ -542,12 +545,12 @@ const NewbornTracking = () => {
             </div>
 
             {/* ── Search & Filters ── */}
-            <div className="nb-controls vacc-controls">
-                <div className="nb-search-wrap">
-                    <Search size={16} className="nb-search-icon" />
+            <div className="shared-controls-card">
+                <div className="shared-search-wrap">
+                    <Search size={16} className="shared-search-icon" />
                     <input
                         type="text"
-                        className="nb-search-input"
+                        className="shared-search-input"
                         placeholder="Search by baby name, mother name, ID, or station..."
                         value={searchTerm}
                         onChange={e => {
@@ -556,26 +559,82 @@ const NewbornTracking = () => {
                         }}
                     />
                 </div>
-                <div className="nb-filters-row vacc-filters">
+                <div className="shared-filters-row">
                     <span className="filters-label"><Filter size={13} /> Filters:</span>
-                    <select value={filters.status} onChange={e => { handleFilter('status', e.target.value); setCurrentPage(1); }}>
-                        <option value="All">All Status</option>
-                        <option value="Completed">Fully Vaccinated</option>
-                        <option value="In Progress">In Progress</option>
-                        <option value="Overdue">Overdue</option>
-                    </select>
-                    <select value={filters.progress} onChange={e => { handleFilter('progress', e.target.value); setCurrentPage(1); }}>
-                        <option value="All">All Progress</option>
-                        <option value="0-25%">0-25% Complete</option>
-                        <option value="26-50%">26-50% Complete</option>
-                        <option value="51-75%">51-75% Complete</option>
-                        <option value="76-99%">76-99% Complete</option>
-                        <option value="100%">100% Complete</option>
-                    </select>
-                    <select value={filters.station} onChange={e => { handleFilter('station', e.target.value); setCurrentPage(1); }}>
-                        <option value="All">All Stations</option>
-                        {[1,2,3,4,5,6,7].map(n => <option key={n} value={`Station ${n}`}>Station {n}</option>)}
-                    </select>
+                    
+                    {/* Status Filter */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${filters.status !== 'All' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'status' ? null : 'status')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            <Activity size={14} className="filter-btn-icon" />
+                            <span>{filters.status === 'All' ? 'All Status' : filters.status}</span>
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        {activePopover === 'status' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Status</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${filters.status === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('status', 'All'); setCurrentPage(1); setActivePopover(null); }}>All Status</button>
+                                    <button className={`popover-opt-btn ${filters.status === 'Completed' ? 'selected' : ''}`} onClick={() => { handleFilter('status', 'Completed'); setCurrentPage(1); setActivePopover(null); }}>Fully Vaccinated</button>
+                                    <button className={`popover-opt-btn ${filters.status === 'In Progress' ? 'selected' : ''}`} onClick={() => { handleFilter('status', 'In Progress'); setCurrentPage(1); setActivePopover(null); }}>In Progress</button>
+                                    <button className={`popover-opt-btn ${filters.status === 'Overdue' ? 'selected' : ''}`} onClick={() => { handleFilter('status', 'Overdue'); setCurrentPage(1); setActivePopover(null); }}>Overdue</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Progress Filter */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${filters.progress !== 'All' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'progress' ? null : 'progress')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            <TrendingUp size={14} className="filter-btn-icon" />
+                            <span>{filters.progress === 'All' ? 'All Progress' : filters.progress}</span>
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        {activePopover === 'progress' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Progress</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${filters.progress === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('progress', 'All'); setCurrentPage(1); setActivePopover(null); }}>All Progress</button>
+                                    <button className={`popover-opt-btn ${filters.progress === '0-25%' ? 'selected' : ''}`} onClick={() => { handleFilter('progress', '0-25%'); setCurrentPage(1); setActivePopover(null); }}>0-25% Complete</button>
+                                    <button className={`popover-opt-btn ${filters.progress === '26-50%' ? 'selected' : ''}`} onClick={() => { handleFilter('progress', '26-50%'); setCurrentPage(1); setActivePopover(null); }}>26-50% Complete</button>
+                                    <button className={`popover-opt-btn ${filters.progress === '51-75%' ? 'selected' : ''}`} onClick={() => { handleFilter('progress', '51-75%'); setCurrentPage(1); setActivePopover(null); }}>51-75% Complete</button>
+                                    <button className={`popover-opt-btn ${filters.progress === '76-99%' ? 'selected' : ''}`} onClick={() => { handleFilter('progress', '76-99%'); setCurrentPage(1); setActivePopover(null); }}>76-99% Complete</button>
+                                    <button className={`popover-opt-btn ${filters.progress === '100%' ? 'selected' : ''}`} onClick={() => { handleFilter('progress', '100%'); setCurrentPage(1); setActivePopover(null); }}>100% Complete</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Station Filter */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${filters.station !== 'All' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'station' ? null : 'station')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            <MapPin size={14} className="filter-btn-icon" />
+                            <span>{filters.station === 'All' ? 'All Stations' : filters.station}</span>
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        {activePopover === 'station' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Station</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${filters.station === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('station', 'All'); setCurrentPage(1); setActivePopover(null); }}>All Stations</button>
+                                    {[1,2,3,4,5,6,7].map(n => (
+                                        <button key={n} className={`popover-opt-btn ${filters.station === `Station ${n}` ? 'selected' : ''}`} onClick={() => { handleFilter('station', `Station ${n}`); setCurrentPage(1); setActivePopover(null); }}>Station {n}</button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -815,7 +874,7 @@ const NewbornTracking = () => {
                                         <td className="nb-date">
                                             {nextVaccine ? (
                                                 <span className={`next-date ${b.vaccLog?.some(v => v.status === 'Overdue') ? 'date-overdue' : ''}`}>
-                                                    {nextVaccine.date}
+                                                    {formatDateLong(nextVaccine.date)}
                                                 </span>
                                             ) : (
                                                 <span className="no-date">—</span>

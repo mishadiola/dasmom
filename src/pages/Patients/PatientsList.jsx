@@ -7,6 +7,7 @@ import {
     FileText, User, Users, MapPin, Clock, AlertTriangle,
     X, CheckCircle2, Info
 } from 'lucide-react';
+import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/PatientsList.css';
 import PatientService from '../../services/patientservice';
 import EditPatientModal from '../../components/Patient/EditPatientModal';
@@ -18,6 +19,12 @@ const getShortPatientId = (id) => {
     if (!id) return '';
     const numericOnly = String(id).replace(/[^0-9]/g, '');
     return numericOnly.substring(0, 4) || String(id).substring(0, 4);
+};
+
+// Helper function to format station names in Title Case
+const toTitleCase = (str) => {
+    if (!str) return '';
+    return str.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
 };
 
 const EMPTY_VITALS = {
@@ -501,34 +508,32 @@ const PatientsList = () => {
                 </div>
             </div>
 
-            <div className="controls-card">
+            <div className="shared-controls-card">
                 {/* Row 1: Search */}
-                <div className="search-row">
-                    <div className="search-wrap">
-                        <Search className="search-icon" size={18} />
-                        <input
-                            type="text"
-                            placeholder="Search by name, ID, or station..."
-                            value={searchTerm}
-                            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                            className="search-input"
-                        />
-                    </div>
+                <div className="shared-search-wrap">
+                    <Search className="shared-search-icon" size={16} />
+                    <input
+                        type="text"
+                        placeholder="Search by name, ID, or station..."
+                        value={searchTerm}
+                        onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                        className="shared-search-input"
+                    />
                 </div>
 
                 {/* Row 2: Filters */}
-                <div className="filters-row">
-                    <div className="filter-group">
-                        <span className="filter-label">Pregnancy Details</span>
+                <div className="shared-filters-row">
+                    <span className="filters-label"><Filter size={13} /> Filters:</span>
                     
                     {/* Pregnancy Details Popover */}
                     <div className="filter-dropdown-container">
                         <button 
                             className={`filter-btn ${(filters.trimesters.length > 0 || filters.risks.length > 0) ? 'active-filter' : ''}`}
                             onClick={() => setActivePopover(activePopover === 'pregnancy' ? null : 'pregnancy')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                         >
-                            <AlertTriangle size={14} className="filter-btn-icon" />
-                            Pregnancy Details
+                            <Activity size={14} className="filter-btn-icon" /> 
+                            <span>Pregnancy Details</span>
                             {(filters.trimesters.length + filters.risks.length) > 0 && <span className="filter-badge">{filters.trimesters.length + filters.risks.length}</span>}
                             <ChevronDown size={14} className="filter-btn-icon" />
                         </button>
@@ -566,9 +571,10 @@ const PatientsList = () => {
                                 setActivePopover(activePopover === 'location' ? null : 'location');
                                 setStationSearch('');
                             }}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                         >
-                            <MapPin size={14} className="filter-btn-icon" />
-                            Location
+                            <MapPin size={14} className="filter-btn-icon" /> 
+                            <span>Location</span>
                             {filters.stations.length > 0 && <span className="filter-badge">{filters.stations.length}</span>}
                             <ChevronDown size={14} className="filter-btn-icon" />
                         </button>
@@ -608,9 +614,10 @@ const PatientsList = () => {
                         <button 
                             className={`filter-btn ${archiveFilter !== 'active' ? 'active-filter' : ''}`}
                             onClick={() => setActivePopover(activePopover === 'archive' ? null : 'archive')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                         >
-                            <Archive size={14} className="filter-btn-icon" />
-                            {archiveFilter === 'active' ? 'Active' : archiveFilter === 'archived' ? 'Archived' : 'All'}
+                            <Archive size={14} className="filter-btn-icon" /> 
+                            <span>{archiveFilter === 'active' ? 'Active' : archiveFilter === 'archived' ? 'Archived' : 'All'}</span>
                             <ChevronDown size={14} className="filter-btn-icon" />
                         </button>
                         
@@ -631,9 +638,10 @@ const PatientsList = () => {
                         <button 
                             className={`filter-btn ${filters.sortBy !== 'newest' ? 'active-filter' : ''}`}
                             onClick={() => setActivePopover(activePopover === 'sort' ? null : 'sort')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                         >
-                            <Clock size={14} className="filter-btn-icon" />
-                            Sort By
+                            <Clock size={14} className="filter-btn-icon" /> 
+                            <span>Sort By</span>
                             <ChevronDown size={14} className="filter-btn-icon" />
                         </button>
                         
@@ -661,7 +669,6 @@ const PatientsList = () => {
                     {hasActiveFilters && (
                         <button className="clear-filters-btn" onClick={clearFilters}>Clear All</button>
                     )}
-                    </div> {/* Closes filter-group */}
                     <Legend 
                         categories={[
                             {
@@ -682,8 +689,8 @@ const PatientsList = () => {
                             }
                         ]}
                     />
-                </div> {/* Closes filters-row */}
-            </div> {/* Closes controls-card */}
+                </div> {/* Closes shared-filters-row */}
+            </div> {/* Closes shared-controls-card */}
 
             <div className="table-card">
                 <div className="table-responsive">
@@ -722,7 +729,7 @@ const PatientsList = () => {
                                             </div>
                                         </td>
 
-                                        <td className="cell-muted">{p.station}</td>
+                                        <td className="cell-muted">{toTitleCase(p.station)}</td>
                                         <td className="cell-bold">{p.age}</td>
 
                                         <td>

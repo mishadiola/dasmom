@@ -7,7 +7,7 @@ const Legend = ({ categories, className = '' }) => {
     const popoverRef = useRef(null);
     const buttonRef = useRef(null);
 
-    // Close on click outside
+    // Close on click outside and handle positioning
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (
@@ -20,6 +20,22 @@ const Legend = ({ categories, className = '' }) => {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    useEffect(() => {
+        if (isOpen && popoverRef.current) {
+            // Reset to right-aligned default
+            popoverRef.current.style.right = '0';
+            popoverRef.current.style.left = 'auto';
+            
+            const rect = popoverRef.current.getBoundingClientRect();
+            
+            // If it overflows the left edge of the viewport
+            if (rect.left < 10) {
+                popoverRef.current.style.right = 'auto';
+                popoverRef.current.style.left = '0';
+            }
+        }
+    }, [isOpen]);
 
     return (
         <div className={`shared-legend-container ${className}`}>

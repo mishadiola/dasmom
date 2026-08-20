@@ -13,12 +13,14 @@ import {
   Pill,
   ChevronDown,
   Truck,
-  Eye
+  Eye,
+  Activity
 } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
 import InventoryService from '../../services/inventoryservice';
 import PatientService from '../../services/patientservice';
 import { useModal } from '../../context/ModalContext';
+import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/Inventory.css';
 
 const inventoryService = new InventoryService();
@@ -28,6 +30,13 @@ const normalizeRole = (role) => String(role || '').trim().toLowerCase();
 const isAdminRole = (role) => {
   const normalized = normalizeRole(role);
   return normalized === 'admin' || normalized === 'super admin' || normalized === 'super-admin' || normalized.includes('admin');
+};
+
+const formatReadableDate = (dateString) => {
+    if (!dateString) return dateString;
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return dateString;
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 };
 
 const Inventory = () => {
@@ -47,6 +56,7 @@ const Inventory = () => {
   const [supplements, setSupplements] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [activePopover, setActivePopover] = useState(null);
   const [activeSummaryFilter, setActiveSummaryFilter] = useState(null);
   const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
   const [archivedIds, setArchivedIds] = useState(() => {
@@ -941,43 +951,74 @@ const Inventory = () => {
         </div>
       )}
 
-      <div className="inv-controls">
-        <div className="search-wrap">
-          <Search size={16} className="search-icon" />
+      <div className="shared-controls-card">
+        <div className="shared-search-wrap">
+          <Search size={16} className="shared-search-icon" />
           <input
             type="text"
+            className="shared-search-input"
             placeholder="Search items..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
           />
         </div>
-        <div className="filters-row">
-          <Filter size={14} className="filter-icon" />
-          <span>Filter:</span>
-          <select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-          >
-            <option value="All">All Status</option>
-            <option value="In Stock">In Stock</option>
-            <option value="Medium Stock">Medium Stock</option>
-            <option value="Low Stock">Low Stock</option>
-            <option value="Out of Stock">Out of Stock</option>
-          </select>
-          <Archive size={14} className="filter-icon" />
-          <select
-            value={archiveFilter}
-            onChange={e => setArchiveFilter(e.target.value)}
-          >
-            <option value="active">Active</option>
-            <option value="archived">Archived</option>
-            <option value="all">All</option>
-          </select>
+        <div className="shared-filters-row">
+          <span className="filters-label"><Filter size={13} /> Filters:</span>
+          
+          {/* Status Filter */}
+          <div className="filter-dropdown-container">
+            <button 
+                className={`filter-btn ${statusFilter !== 'All' ? 'active-filter' : ''}`}
+                onClick={() => setActivePopover(activePopover === 'status' ? null : 'status')}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+                <Activity size={14} className="filter-btn-icon" />
+                <span>{statusFilter === 'All' ? 'All Statuses' : statusFilter}</span>
+                <ChevronDown size={14} className="filter-btn-icon" />
+            </button>
+            {activePopover === 'status' && (
+                <div className="filter-popover">
+                    <div className="popover-title">Status</div>
+                    <div className="popover-options">
+                        <button className={`popover-opt-btn ${statusFilter === 'All' ? 'selected' : ''}`} onClick={() => { setStatusFilter('All'); setActivePopover(null); }}>All Status</button>
+                        <button className={`popover-opt-btn ${statusFilter === 'In Stock' ? 'selected' : ''}`} onClick={() => { setStatusFilter('In Stock'); setActivePopover(null); }}>In Stock</button>
+                        <button className={`popover-opt-btn ${statusFilter === 'Medium Stock' ? 'selected' : ''}`} onClick={() => { setStatusFilter('Medium Stock'); setActivePopover(null); }}>Medium Stock</button>
+                        <button className={`popover-opt-btn ${statusFilter === 'Low Stock' ? 'selected' : ''}`} onClick={() => { setStatusFilter('Low Stock'); setActivePopover(null); }}>Low Stock</button>
+                        <button className={`popover-opt-btn ${statusFilter === 'Out of Stock' ? 'selected' : ''}`} onClick={() => { setStatusFilter('Out of Stock'); setActivePopover(null); }}>Out of Stock</button>
+                    </div>
+                </div>
+            )}
+          </div>
+
+          {/* Archive Filter */}
+          <div className="filter-dropdown-container">
+            <button 
+                className={`filter-btn ${archiveFilter !== 'active' ? 'active-filter' : ''}`}
+                onClick={() => setActivePopover(activePopover === 'archive' ? null : 'archive')}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+                <Archive size={14} className="filter-btn-icon" />
+                <span>{archiveFilter === 'active' ? 'Active' : 'Archived'}</span>
+                <ChevronDown size={14} className="filter-btn-icon" />
+            </button>
+            {activePopover === 'archive' && (
+                <div className="filter-popover">
+                    <div className="popover-title">Archive</div>
+                    <div className="popover-options">
+                        <button className={`popover-opt-btn ${archiveFilter === 'active' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('active'); setActivePopover(null); }}>Active</button>
+                        <button className={`popover-opt-btn ${archiveFilter === 'archived' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('archived'); setActivePopover(null); }}>Archived</button>
+                        <button className={`popover-opt-btn ${archiveFilter === 'all' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('all'); setActivePopover(null); }}>All</button>
+                    </div>
+                </div>
+            )}
+          </div>
+
           <button
-            className="refresh-btn"
+            className="clear-filters-btn"
             onClick={handleRefresh}
             disabled={isRefreshing}
             title="Refresh data"
+            style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '5px' }}
           >
             <RefreshCw size={14} className={isRefreshing ? 'spinning' : ''} />
             <span>Refresh</span>
@@ -1569,7 +1610,7 @@ const Inventory = () => {
                 })
                 .map(rec => (
                   <tr key={rec.id} style={{ borderBottom: '1px solid #f0f2f5', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'} onMouseLeave={e => e.currentTarget.style.background = ''}>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap' }}>{rec.distribution_date}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap' }}>{formatReadableDate(rec.distribution_date)}</td>
                     <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>
                       <div style={{ fontWeight: '600' }}>{rec.item_name}</div>
                       {rec.brand && <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>{rec.brand}{rec.batch && rec.batch !== 'N/A' ? ` · Batch ${rec.batch}` : ''}</div>}
@@ -2091,7 +2132,7 @@ const Inventory = () => {
             <div className="modal-body">
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 {[
-                  { label: 'Date', value: selectedDistRecord.distribution_date },
+                  { label: 'Date', value: formatReadableDate(selectedDistRecord.distribution_date) },
                   { label: 'Item Type', value: selectedDistRecord.item_type },
                   { label: 'Item Name', value: selectedDistRecord.item_name, fullWidth: true },
                   { label: 'Brand', value: selectedDistRecord.brand || '—' },
