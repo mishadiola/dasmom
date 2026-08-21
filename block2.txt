@@ -1,0 +1,1321 @@
+          <h1 className="page-title">
+            <Package size={22} className="header-icon" /> Inventory Management
+          </h1>
+          <p className="page-subtitle">Track and manage vaccine and supplement supplies across CHO stations to help maintain adequate stock levels.</p>
+        </div>
+        <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+          <button
+            className="btn btn-outline"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            onClick={() => {
+              setDistForm({
+                item_type: 'vaccine',
+                item_id: '',
+                quantity: '',
+                destination_station: '',
+                distribution_date: new Date().toISOString().split('T')[0],
+                released_by: user?.fullName || user?.email?.split('@')[0] || '',
+                remarks: ''
+              });
+              setShowDistributionModal(true);
+            }}
+          >
+            <Truck size={16} /> Station Distribution
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              setForm({ item_name: '', quantity: '', max_stock: activeTab === 'vaccines' ? 500 : 1000, unit: activeTab === 'vaccines' ? 'vials' : 'tablets', brand: '', expiration_date: '', batch_number: '', manufactured_date: '' });
+              setModalSearchTerm('');
+              setSearchResults([]);
+              setSelectedExistingItem(null);
+              setShowAddModal(true);
+            }}
+          >
+            <Plus size={16} /> Add Item
+          </button>
+        </div>
+      </div>
+
+      <div className="inv-stats-grid">
+        <div 
+          className={`stat-card stat-card--lilac ${activeSummaryFilter === null ? 'stat-card--active' : ''}`}
+          onClick={() => setActiveSummaryFilter(null)}
+          style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+        >
+          <div className="stat-top">
+            <div className="stat-icon stat-icon--lilac">
+              <Package size={20} />
+            </div>
+          </div>
+          <div className="stat-value">{totalItems}</div>
+          <div className="stat-label">Total Items</div>
+        </div>
+        <div 
+          className={`stat-card stat-card--orange ${activeSummaryFilter === 'lowStock' ? 'stat-card--active' : ''}`}
+          onClick={() => setActiveSummaryFilter('lowStock')}
+          style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+        >
+          <div className="stat-top">
+            <div className="stat-icon stat-icon--orange">
+              <AlertTriangle size={20} />
+            </div>
+          </div>
+          <div className="stat-value">{lowStockCount}</div>
+          <div className="stat-label">Low Stock</div>
+        </div>
+        <div 
+          className={`stat-card stat-card--yellow ${activeSummaryFilter === 'mediumStock' ? 'stat-card--active' : ''}`}
+          onClick={() => setActiveSummaryFilter('mediumStock')}
+          style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+        >
+          <div className="stat-top">
+            <div className="stat-icon stat-icon--yellow">
+              <Package size={20} />
+            </div>
+          </div>
+          <div className="stat-value">{mediumStockCount}</div>
+          <div className="stat-label">Medium Stock</div>
+        </div>
+        <div 
+          className={`stat-card stat-card--rose ${activeSummaryFilter === 'outOfStock' ? 'stat-card--active' : ''}`}
+          onClick={() => setActiveSummaryFilter('outOfStock')}
+          style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+        >
+          <div className="stat-top">
+            <div className="stat-icon stat-icon--rose">
+              <Package size={20} />
+            </div>
+          </div>
+          <div className="stat-value">{outOfStockCount}</div>
+          <div className="stat-label">Out of Stock</div>
+        </div>
+      </div>
+
+      <div className="inv-main-layout">
+        <div className="inv-table-col">
+
+      {!isAdmin && userScope.stationName && (
+        <div className="station-scope-banner" style={{ marginBottom: '12px', padding: '10px 14px', background: '#eef6ff', border: '1px solid #d6e9ff', borderRadius: '10px', color: '#235f9c', fontSize: '13px', fontWeight: '600' }}>
+          Viewing inventory for: {userScope.stationName}
+        </div>
+      )}
+
+      <div className="shared-controls-card">
+        <div className="shared-search-wrap">
+          <Search size={16} className="shared-search-icon" />
+          <input
+            type="text"
+            className="shared-search-input"
+            placeholder="Search items..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="shared-filters-row" ref={filterRowRef}>
+          <span className="filters-label"><Filter size={13} /> Filters:</span>
+          
+          {/* Status Filter */}
+          <div className="filter-dropdown-container">
+            <button 
+                className={`filter-btn ${statusFilter !== 'All' ? 'active-filter' : ''}`}
+                onClick={() => setActivePopover(activePopover === 'status' ? null : 'status')}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+                <Activity size={14} className="filter-btn-icon" />
+                <span>{statusFilter === 'All' ? 'All Statuses' : statusFilter}</span>
+                <ChevronDown size={14} className="filter-btn-icon" />
+            </button>
+            {activePopover === 'status' && (
+                <div className="filter-popover">
+                    <div className="popover-title">Status</div>
+                    <div className="popover-options">
+                        <button className={`popover-opt-btn ${statusFilter === 'All' ? 'selected' : ''}`} onClick={() => { setStatusFilter('All'); setActivePopover(null); }}>All Status</button>
+                        <button className={`popover-opt-btn ${statusFilter === 'In Stock' ? 'selected' : ''}`} onClick={() => { setStatusFilter('In Stock'); setActivePopover(null); }}>In Stock</button>
+                        <button className={`popover-opt-btn ${statusFilter === 'Medium Stock' ? 'selected' : ''}`} onClick={() => { setStatusFilter('Medium Stock'); setActivePopover(null); }}>Medium Stock</button>
+                        <button className={`popover-opt-btn ${statusFilter === 'Low Stock' ? 'selected' : ''}`} onClick={() => { setStatusFilter('Low Stock'); setActivePopover(null); }}>Low Stock</button>
+                        <button className={`popover-opt-btn ${statusFilter === 'Out of Stock' ? 'selected' : ''}`} onClick={() => { setStatusFilter('Out of Stock'); setActivePopover(null); }}>Out of Stock</button>
+                    </div>
+                </div>
+            )}
+          </div>
+
+          {/* Archive Filter */}
+          <div className="filter-dropdown-container">
+            <button 
+                className={`filter-btn ${archiveFilter !== 'active' ? 'active-filter' : ''}`}
+                onClick={() => setActivePopover(activePopover === 'archive' ? null : 'archive')}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+                <Archive size={14} className="filter-btn-icon" />
+                <span>{archiveFilter === 'active' ? 'Active' : 'Archived'}</span>
+                <ChevronDown size={14} className="filter-btn-icon" />
+            </button>
+            {activePopover === 'archive' && (
+                <div className="filter-popover">
+                    <div className="popover-title">Archive</div>
+                    <div className="popover-options">
+                        <button className={`popover-opt-btn ${archiveFilter === 'active' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('active'); setActivePopover(null); }}>Active</button>
+                        <button className={`popover-opt-btn ${archiveFilter === 'archived' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('archived'); setActivePopover(null); }}>Archived</button>
+                        <button className={`popover-opt-btn ${archiveFilter === 'all' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('all'); setActivePopover(null); }}>All</button>
+                    </div>
+                </div>
+            )}
+          </div>
+
+          {hasActiveFilters && (
+              <button className="clear-filters-btn" onClick={clearFilters}>Clear All</button>
+          )}
+
+          <button
+            className="clear-filters-btn"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            title="Refresh data"
+            style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '5px' }}
+          >
+            <RefreshCw size={14} className={isRefreshing ? 'spinning' : ''} />
+            <span>Refresh</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="inv-tabs">
+        <button
+          className={`inv-tab ${activeTab === 'vaccines' ? 'active' : ''}`}
+          onClick={() => setActiveTab('vaccines')}
+        >
+          <Syringe size={15} /> Vaccines
+        </button>
+        <button
+          className={`inv-tab ${activeTab === 'supplements' ? 'active' : ''}`}
+          onClick={() => setActiveTab('supplements')}
+        >
+          <Pill size={15} /> Supplements
+        </button>
+      </div>
+
+      {isAdmin && (
+      <div className="inv-card">
+        <div className="table-wrapper">
+          <table className="inv-table">
+            <thead>
+              <tr>
+                <th className="row-number-header">#</th>
+                <th>Item Name</th>
+                <th>Total Stock</th>
+                <th>Unit</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan="6" className="text-center py-8">
+                    Loading inventory data...
+                  </td>
+                </tr>
+              ) : paginatedItems.length > 0 ? (
+                paginatedItems.map((item, index) => {
+                  const status = getStatus(item.total_quantity, item.total_max_stock);
+                  const percentage = getStockPercentage(item.total_quantity || 0, item.total_max_stock || 500);
+                  const rowNumber = startIndex + index + 1;
+                  return (
+                    <>
+                    <tr key={`${item.item_name}-${index}`} className="inv-row">
+                      <td className="row-number-cell">
+                        {item.items.length > 0 && (
+                          <button
+                            onClick={() => setExpandedRow(expandedRow === rowNumber ? null : rowNumber)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              padding: '4px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <span style={{ fontSize: '12px', fontWeight: '500' }}>{rowNumber}</span>
+                            {expandedRow === rowNumber ? (
+                              <ChevronDown size={14} style={{ transform: 'rotate(180deg)' }} />
+                            ) : (
+                              <ChevronDown size={14} />
+                            )}
+                          </button>
+                        )}
+                        {item.items.length === 0 && <span style={{ fontSize: '12px', fontWeight: '500' }}>{rowNumber}</span>}
+                      </td>
+                      <td className="item-name-cell">
+                        <strong>{item.item_name}</strong>
+                      </td>
+                      <td className="quantity-cell">
+                        <div className="stock-level-display">
+                          <div className="stock-text">
+                            <span className={`qty-text ${status.class}`}>
+                              {item.total_quantity}
+                            </span>
+                            <span className="stock-separator">/</span>
+                            <span className="stock-max">{item.total_max_stock}</span>
+                            <span className="stock-percentage">({percentage}%)</span>
+                          </div>
+                          <div className="stock-progress-bar">
+                            <div 
+                              className="stock-progress-fill"
+                              style={{ 
+                                width: `${percentage}%`,
+                                background: percentage <= 20 ? '#e05c73' : percentage <= 50 ? '#e8b84b' : '#6db8a0'
+                              }}
+                            ></div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="unit-cell">{item.unit || 'tablets'}</td>
+                      <td className="expiration-cell">
+                        {item.items.length > 0 ? (
+                          <div className="batch-list">
+                            {item.items.map((subItem, idx) => (
+                              <div key={idx} className="batch-item">
+                                {subItem.expiration_date ? 
+                                  new Date(subItem.expiration_date).toLocaleDateString() : 
+                                  '-'
+                                }
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
+                      <td>
+                        <span className={`status-badge ${status.class}`}>
+                          {status.label}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div className="action-btns">
+                          <button
+                            className="action-btn edit-btn"
+                            title="Update Stock"
+                            onClick={() => {
+                              setForm({
+                                ...form,
+                                quantity: item.total_quantity,
+                                max_stock: item.total_max_stock,
+                              });
+                              setShowUpdateModal({
+                                table:
+                                  activeTab === 'vaccines'
+                                    ? 'vaccine_inventory'
+                                    : 'supplement_inventory',
+                                item: item.items[0], // Use first item for editing
+                              });
+                            }}
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          {item.items.some(i => i.status === 'archived') ? (
+                            <button
+                              className="action-btn restore-btn"
+                              title="Restore All Items"
+                              onClick={() => {
+                                // Restore all archived items in this group
+                                const archivedItems = item.items.filter(i => i.status === 'archived');
+                                handleRestore(
+                                  activeTab === 'vaccines' ? 'vaccine_inventory' : 'supplement_inventory',
+                                  archivedItems.map(i => i.id)
+                                );
+                              }}
+                            >
+                              <ArchiveRestore size={13} />
+                            </button>
+                          ) : (
+                            <button
+                              className="action-btn archive-btn"
+                              title="Archive All Items"
+                              onClick={() => {
+                                // Archive all active items in this group
+                                const activeItems = item.items.filter(i => (i.status || 'active') !== 'archived');
+                                handleArchive(
+                                  activeTab === 'vaccines' ? 'vaccine_inventory' : 'supplement_inventory',
+                                  activeItems.map(i => i.id)
+                                );
+                              }}
+                            >
+                              <Archive size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    {expandedRow === rowNumber && item.items.length > 0 && (
+                      <tr key={`detail-${item.item_name}-${index}`} className="inv-row-detail">
+                        <td colSpan="6" style={{ padding: '0' }}>
+                          <div style={{
+                            padding: '16px 20px',
+                            background: '#f8f9fa',
+                            borderBottom: '1px solid #e9ecef'
+                          }}>
+                            <h4 style={{
+                              margin: '0 0 12px 0',
+                              fontSize: '14px',
+                              fontWeight: '600',
+                              color: '#333'
+                            }}>
+                              Detailed Batch Information for {item.item_name}
+                            </h4>
+                            <div style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                              gap: '12px'
+                            }}>
+                              {item.items.map((subItem, idx) => {
+                                const subStatus = getStatus(subItem.quantity, subItem.max_stock);
+                                const subPercentage = getStockPercentage(subItem.quantity || 0, subItem.max_stock || 500);
+                                const daysUntilExpiry = subItem.expiration_date 
+                                  ? Math.ceil((new Date(subItem.expiration_date) - new Date()) / (1000 * 60 * 60 * 24))
+                                  : null;
+                                const expiryStatus = daysUntilExpiry !== null
+                                  ? daysUntilExpiry < 0
+                                    ? { label: 'Expired', class: 'status-out' }
+                                    : daysUntilExpiry <= 30
+                                      ? { label: 'Expiring Soon', class: 'status-low' }
+                                      : daysUntilExpiry <= 90
+                                        ? { label: 'Expiring', class: 'status-medium' }
+                                        : { label: 'Good', class: 'status-ok' }
+                                  : { label: 'No Date', class: 'status-medium' };
+                                const batchNumber = activeTab === 'vaccines' ? subItem.batch : subItem.batch_number;
+                                return (
+                                  <div key={idx} style={{
+                                    background: 'white',
+                                    padding: '12px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #e9ecef',
+                                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                                  }}>
+                                    <div style={{
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      marginBottom: '8px'
+                                    }}>
+                                      <span style={{
+                                        fontSize: '13px',
+                                        fontWeight: '600',
+                                        color: '#333'
+                                      }}>
+                                        Batch {batchNumber || 'N/A'}
+                                      </span>
+                                      <span className={`status-badge ${expiryStatus.class}`} style={{
+                                        fontSize: '11px',
+                                        padding: '2px 8px',
+                                        borderRadius: '4px'
+                                      }}>
+                                        {expiryStatus.label}
+                                      </span>
+                                    </div>
+                                    <div style={{ fontSize: '12px', color: '#666', lineHeight: '1.6', marginBottom: '12px' }}>
+                                      <div><strong>Brand:</strong> {subItem.brand || 'N/A'}</div>
+                                      <div><strong>Quantity:</strong> {subItem.quantity} / {subItem.max_stock} ({subPercentage}%)</div>
+                                      <div><strong>Stock Status:</strong> <span className={`status-badge ${subStatus.class}`} style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '3px' }}>{subStatus.label}</span></div>
+                                      <div><strong>Expiration:</strong> {subItem.expiration_date ? new Date(subItem.expiration_date).toLocaleDateString() : 'N/A'}</div>
+                                      {daysUntilExpiry !== null && (
+                                        <div><strong>Days Until Expiry:</strong> {daysUntilExpiry < 0 ? `${Math.abs(daysUntilExpiry)} days overdue` : `${daysUntilExpiry} days`}</div>
+                                      )}
+                                      <div><strong>Manufactured:</strong> {subItem.manufactured_date ? new Date(subItem.manufactured_date).toLocaleDateString() : 'N/A'}</div>
+                                    </div>
+                                    <div style={{
+                                      display: 'flex',
+                                      gap: '8px',
+                                      borderTop: '1px solid #e9ecef',
+                                      paddingTop: '8px'
+                                    }}>
+                                      <button
+                                        onClick={() => {
+                                          setForm({
+                                            item_name: item.item_name,
+                                            brand: subItem.brand || '',
+                                            quantity: subItem.quantity,
+                                            max_stock: subItem.max_stock,
+                                            unit: subItem.unit,
+                                            expiration_date: subItem.expiration_date || '',
+                                            batch_number: batchNumber || '',
+                                            manufactured_date: subItem.manufactured_date || ''
+                                          });
+                                          setShowUpdateModal({
+                                            table: activeTab === 'vaccines' ? 'vaccine_inventory' : 'supplement_inventory',
+                                            item: subItem
+                                          });
+                                          setExpandedRow(null);
+                                        }}
+                                        style={{
+                                          flex: 1,
+                                          padding: '6px 12px',
+                                          fontSize: '12px',
+                                          background: '#e3f2fd',
+                                          color: '#1976d2',
+                                          border: 'none',
+                                          borderRadius: '4px',
+                                          cursor: 'pointer',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          gap: '4px'
+                                        }}
+                                      >
+                                        <Edit2 size={12} /> Edit
+                                      </button>
+                                      {subItem.status !== 'archived' && (
+                                        <button
+                                          onClick={() => handleArchive(
+                                            activeTab === 'vaccines' ? 'vaccine_inventory' : 'supplement_inventory',
+                                            [subItem.id]
+                                          )}
+                                          style={{
+                                            flex: 1,
+                                            padding: '6px 12px',
+                                            fontSize: '12px',
+                                            background: '#ffebee',
+                                            color: '#c62828',
+                                            border: 'none',
+                                            borderRadius: '4px',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '4px'
+                                          }}
+                                        >
+                                          <Archive size={12} /> Archive
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan="6" className="text-center py-8">
+                    No items found
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        
+        {/* Pagination Controls */}
+        {filteredItems.length > itemsPerPage && (
+          <div className="pagination-container">
+            <div className="pagination-info">
+              Showing {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredItems.length)} of {filteredItems.length}
+            </div>
+            <div className="pagination-controls">
+              <button
+                className="pagination-btn"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </button>
+              <span className="pagination-page-info">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                className="pagination-btn"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+      )}
+
+      <div className="inv-side-col">
+        <div className="inv-card">
+          <div className="inv-card-head" style={{ padding: '16px 20px', borderBottom: '1px solid #f0f2f5' }}>
+            <h2 style={{ fontSize: '15px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertTriangle size={16} /> Notifications & Alerts
+            </h2>
+          </div>
+          <div className="alerts-list" style={{ padding: '8px 16px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {pendingStockAlerts.count > 0 && (
+              <div className="alert-item alert-warning" style={{ background: 'rgba(232,184,75,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px' }}>
+                <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', marginTop: '4px', flexShrink: 0, background: '#e8b84b' }}></div>
+                <div className="alert-body">
+                  <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Pending Vaccines Need Stock</p>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                    {pendingStockAlerts.count} pending vaccination(s) need stock{pendingStockAlerts.stations.length > 0 ? ` for ${pendingStockAlerts.stations.join(', ')}` : ''}.
+                  </span>
+                </div>
+              </div>
+            )}
+            {lowStockCount > 0 && (
+              <div className="alert-item alert-warning" style={{ background: 'rgba(232,184,75,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px' }}>
+                <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', marginTop: '4px', flexShrink: 0, background: '#e8b84b' }}></div>
+                <div className="alert-body">
+                  <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Low Stock Warning</p>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{lowStockCount} items are running low on stock.</span>
+                </div>
+              </div>
+            )}
+            {outOfStockCount > 0 && (
+              <div className="alert-item alert-critical" style={{ background: 'rgba(224,92,115,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px' }}>
+                <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', marginTop: '4px', flexShrink: 0, background: '#e05c73' }}></div>
+                <div className="alert-body">
+                  <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Out of Stock</p>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{outOfStockCount} items are currently out of stock!</span>
+                </div>
+              </div>
+            )}
+            {pendingStockAlerts.count === 0 && lowStockCount === 0 && outOfStockCount === 0 && (
+              <div style={{ textAlign: 'center', padding: '20px', fontSize: '12px', fontStyle: 'italic', color: 'var(--color-text-muted)' }}>
+                No urgent alerts.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* ── STATION INVENTORY ── */}
+    <div className="inv-card" style={{ marginTop: '24px', borderRadius: '14px', overflow: 'hidden', border: '1px solid #e9ecef' }}>
+      <div className="inv-card-head" style={{ padding: '18px 24px', borderBottom: '1px solid #f0f2f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+        <h2 style={{ fontSize: '16px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Package size={17} /> Station Inventory
+        </h2>
+        <span style={{ fontSize: '13px', color: '#555' }}>{stationInventory.length} entries</span>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="inv-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Expand</th>
+              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Station</th>
+              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Item</th>
+              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Type</th>
+              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Total Qty</th>
+              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Unit</th>
+              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Brand</th>
+              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Expiration Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {stationInventory.length > 0 ? stationInventory.map((group, groupIndex) => {
+              const isExpanded = expandedStationRows[group.groupKey];
+              return (
+                <React.Fragment key={group.groupKey}>
+                  {/* Parent Row */}
+                  <tr style={{ borderBottom: '1px solid #f0f2f5', backgroundColor: '#fafbfc' }}>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', textAlign: 'center' }}>
+                      <button
+                        onClick={() => setExpandedStationRows(prev => ({
+                          ...prev,
+                          [group.groupKey]: !prev[group.groupKey]
+                        }))}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: '0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <ChevronDown
+                          size={16}
+                          style={{
+                            transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+                            transition: 'transform 0.2s',
+                            color: '#666'
+                          }}
+                        />
+                      </button>
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', fontWeight: '600' }}>{group.station}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', fontWeight: '600' }}>{group.item_name}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{group.item_type}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '600', textAlign: 'center', color: '#2c5282' }}>{group.totalQuantity}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{group.unit}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>{group.brand || 'N/A'}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>{group.expiration_date ? new Date(group.expiration_date).toLocaleDateString() : 'N/A'}</td>
+                  </tr>
+
+                  {/* Child Rows (Batch Variants) */}
+                  {isExpanded && group.variants.map((variant, variantIndex) => (
+                    <tr key={`${group.groupKey}-variant-${variantIndex}`} style={{ borderBottom: '1px solid #f0f2f5', backgroundColor: '#fff9f9' }}>
+                      <td style={{ padding: '8px 16px' }}></td>
+                      <td style={{ padding: '8px 16px', fontSize: '12px', color: '#666', fontStyle: 'italic' }}></td>
+                      <td style={{ padding: '8px 16px', fontSize: '12px', color: '#666' }}>
+                        Batch: <strong>{variant.batch}</strong>
+                      </td>
+                      <td style={{ padding: '8px 16px', fontSize: '12px', color: '#666' }}></td>
+                      <td style={{ padding: '8px 16px', fontSize: '12px', textAlign: 'center', color: '#555' }}>{variant.quantity}</td>
+                      <td style={{ padding: '8px 16px', fontSize: '11px', color: '#999' }}></td>
+                      <td style={{ padding: '8px 16px', fontSize: '11px', color: '#999' }}></td>
+                      <td style={{ padding: '8px 16px', fontSize: '11px', color: '#999' }}>
+                        Updated: {variant.last_updated ? new Date(variant.last_updated).toLocaleDateString() : 'N/A'}
+                      </td>
+                    </tr>
+                  ))}
+                </React.Fragment>
+              );
+            }) : (
+              <tr>
+                <td colSpan="8" style={{ padding: '20px', textAlign: 'center', color: '#888', fontSize: '13px' }}>
+                  No station inventory records yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+      {/* ── STATION DISTRIBUTION HISTORY ── */}
+      <div className="inv-card" style={{ marginTop: '24px', borderRadius: '14px', overflow: 'hidden', border: '1px solid #e9ecef' }}>
+        <div className="inv-card-head" style={{ padding: '18px 24px', borderBottom: '1px solid #f0f2f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <h2 style={{ fontSize: '16px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Truck size={17} /> Station Distribution History
+          </h2>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative' }}>
+              <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#999', pointerEvents: 'none' }} />
+              <input
+                type="text"
+                placeholder="Search items..."
+                value={historySearch}
+                onChange={e => setHistorySearch(e.target.value)}
+                style={{ paddingLeft: '30px', paddingRight: '10px', paddingTop: '7px', paddingBottom: '7px', border: '1px solid #e9ecef', borderRadius: '8px', fontSize: '13px', width: '180px' }}
+              />
+            </div>
+            <select
+              value={isAdmin ? historyStationFilter : (visibleStations.includes(historyStationFilter) ? historyStationFilter : (visibleStations[0] || 'All'))}
+              onChange={e => setHistoryStationFilter(e.target.value)}
+              disabled={!isAdmin && visibleStations.length <= 1}
+              style={{ padding: '7px 10px', border: '1px solid #e9ecef', borderRadius: '8px', fontSize: '13px', background: '#fff', cursor: !isAdmin && visibleStations.length <= 1 ? 'not-allowed' : 'pointer' }}
+            >
+              {isAdmin ? <option value="All">All Stations</option> : null}
+              {(isAdmin ? availableStations : visibleStations).map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select
+              value={historyTypeFilter}
+              onChange={e => setHistoryTypeFilter(e.target.value)}
+              style={{ padding: '7px 10px', border: '1px solid #e9ecef', borderRadius: '8px', fontSize: '13px', background: '#fff', cursor: 'pointer' }}
+            >
+              <option value="All">All Types</option>
+              <option value="Vaccine">Vaccine</option>
+              <option value="Supplement">Supplement</option>
+            </select>
+            <input
+              type="date"
+              value={historyDateFilter}
+              onChange={e => setHistoryDateFilter(e.target.value)}
+              style={{ padding: '7px 10px', border: '1px solid #e9ecef', borderRadius: '8px', fontSize: '13px' }}
+            />
+            {(historySearch || historyStationFilter !== 'All' || historyTypeFilter !== 'All' || historyDateFilter) && (
+              <button
+                className="btn btn-outline"
+                style={{ padding: '6px 12px', fontSize: '12px' }}
+                onClick={() => { setHistorySearch(''); setHistoryStationFilter('All'); setHistoryTypeFilter('All'); setHistoryDateFilter(''); }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="inv-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Date</th>
+                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Item</th>
+                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Type</th>
+                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Qty</th>
+                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Destination Station</th>
+                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Released By</th>
+                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Remarks</th>
+                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {distributionHistory
+                .filter(rec => {
+                  const search = historySearch.toLowerCase();
+                  const matchesSearch = !search || rec.item_name?.toLowerCase().includes(search) || rec.destination_station?.toLowerCase().includes(search) || rec.released_by?.toLowerCase().includes(search);
+                  const matchesStation = historyStationFilter === 'All' || rec.destination_station === historyStationFilter;
+                  const matchesType = historyTypeFilter === 'All' || rec.item_type === historyTypeFilter;
+                  const matchesDate = !historyDateFilter || rec.distribution_date === historyDateFilter;
+                  return matchesSearch && matchesStation && matchesType && matchesDate;
+                })
+                .map(rec => (
+                  <tr key={rec.id} style={{ borderBottom: '1px solid #f0f2f5', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'} onMouseLeave={e => e.currentTarget.style.background = ''}>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap' }}>{formatReadableDate(rec.distribution_date)}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>
+                      <div style={{ fontWeight: '600' }}>{rec.item_name}</div>
+                      {rec.brand && <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>{rec.brand}{rec.batch && rec.batch !== 'N/A' ? ` · Batch ${rec.batch}` : ''}</div>}
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '600', background: rec.item_type === 'Vaccine' ? 'rgba(91,174,208,0.12)' : 'rgba(147,111,199,0.12)', color: rec.item_type === 'Vaccine' ? '#3a8db5' : '#7a4fa8' }}>
+                        {rec.item_type === 'Vaccine' ? <Syringe size={11} /> : <Pill size={11} />}
+                        {rec.item_type}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '600', color: '#333', textAlign: 'center' }}>{rec.quantity} <span style={{ fontWeight: 400, color: '#888', fontSize: '11px' }}>{rec.unit}</span></td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{rec.destination_station}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>{rec.released_by}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '12px', color: '#777', maxWidth: '200px' }}>
+                      <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{rec.remarks || '—'}</span>
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                      <button
+                        className="btn btn-outline"
+                        style={{ padding: '5px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        onClick={() => setSelectedDistRecord(rec)}
+                      >
+                        <Eye size={13} /> View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              {distributionHistory.filter(rec => {
+                const search = historySearch.toLowerCase();
+                const matchesSearch = !search || rec.item_name?.toLowerCase().includes(search) || rec.destination_station?.toLowerCase().includes(search) || rec.released_by?.toLowerCase().includes(search);
+                const matchesStation = historyStationFilter === 'All' || rec.destination_station === historyStationFilter;
+                const matchesType = historyTypeFilter === 'All' || rec.item_type === historyTypeFilter;
+                const matchesDate = !historyDateFilter || rec.distribution_date === historyDateFilter;
+                return matchesSearch && matchesStation && matchesType && matchesDate;
+              }).length === 0 && (
+                <tr>
+                  <td colSpan="8" style={{ padding: '40px', textAlign: 'center', color: '#aaa', fontSize: '13px', fontStyle: 'italic' }}>
+                    No distribution records found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showAddModal && (
+        <div
+          className="modal-overlay"
+          onClick={() => setShowAddModal(false)}
+        >
+          <div
+            className="modal-content"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2>Add New Item</h2>
+              <p>Search existing items or add a new one.</p>
+            </div>
+            <form onSubmit={handleAddSubmit}>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label>Item Category</label>
+                  <select
+                    value={activeTab}
+                    onChange={e => {
+                      const nextTab = e.target.value;
+                      setActiveTab(nextTab);
+                      setForm(prev => ({
+                        ...prev,
+                        unit: nextTab === 'vaccines' ? 'vials' : 'pcs',
+                        brand: '',
+                        expiration_date: '',
+                        batch_number: '',
+                        manufactured_date: ''
+                      }));
+                      setSearchResults([]);
+                      setModalSearchTerm('');
+                      setSelectedExistingItem(null);
+                    }}
+                    className="form-control"
+                  >
+                    <option value="vaccines">Vaccine</option>
+                    <option value="supplements">Supplement</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Search Existing Items</label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      value={modalSearchTerm}
+                      onChange={e => handleSearchInventory(e.target.value)}
+                      placeholder="Search by item name..."
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #ddd', borderRadius: '6px' }}
+                    />
+                    {searchResults.length > 0 && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        background: 'white',
+                        border: '1px solid #ddd',
+                        borderRadius: '6px',
+                        marginTop: '4px',
+                        maxHeight: '200px',
+                        overflowY: 'auto',
+                        zIndex: 1000,
+                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                      }}>
+                        {searchResults.map((item, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => handleSelectExistingItem(item)}
+                            style={{
+                              padding: '10px 12px',
+                              cursor: 'pointer',
+                              borderBottom: '1px solid #f0f0f0',
+                              transition: 'background 0.2s'
+                            }}
+                            onMouseEnter={e => e.target.style.background = '#f5f5f5'}
+                            onMouseLeave={e => e.target.style.background = 'white'}
+                          >
+                            <div style={{ fontWeight: '600', fontSize: '13px' }}>
+                              {activeTab === 'vaccines' ? item.vaccine_name : item.supplement_name}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#666' }}>
+                              Brand: {item.brand || 'N/A'} | Qty: {item.quantity} {item.unit}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>Item Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={form.item_name}
+                    onChange={e =>
+                      setForm({ ...form, item_name: e.target.value })
+                    }
+                    placeholder="e.g. Iron Tablets"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Brand</label>
+                  <input
+                    type="text"
+                    value={form.brand}
+                    onChange={e =>
+                      setForm({ ...form, brand: e.target.value })
+                    }
+                    placeholder="e.g. Pfizer"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Batch Number (Auto-generated)</label>
+                  <input
+                    type="text"
+                    value={form.batch_number || 'Auto-generated on save'}
+                    readOnly
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      backgroundColor: '#f5f5f5',
+                      color: '#666'
+                    }}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Manufactured Date</label>
+                  <input
+                    type="date"
+                    value={form.manufactured_date}
+                    onChange={e =>
+                      setForm({ ...form, manufactured_date: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Expiration Date</label>
+                  <input
+                    type="date"
+                    value={form.expiration_date}
+                    onChange={e =>
+                      setForm({ ...form, expiration_date: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label>Initial Quantity</label>
+                    <input
+                      type="number"
+                      required
+                      value={form.quantity}
+                      onChange={e =>
+                        setForm({ ...form, quantity: e.target.value })
+                      }
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Maximum Stock Capacity</label>
+                    <input
+                      type="number"
+                      required
+                      value={form.max_stock}
+                      onChange={e =>
+                        setForm({ ...form, max_stock: e.target.value })
+                      }
+                      placeholder={activeTab === 'vaccines' ? '500' : '1000'}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Unit</label>
+                    <select
+                      required
+                      value={form.unit}
+                      onChange={e =>
+                        setForm({ ...form, unit: e.target.value })
+                      }
+                    >
+                      {unitOptions.map(option => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setModalSearchTerm('');
+                    setSearchResults([]);
+                    setSelectedExistingItem(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Adding...' : 'Add Item'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showUpdateModal && (
+        <div
+          className="modal-overlay"
+          onClick={() => setShowUpdateModal(null)}
+        >
+          <div
+            className="modal-content"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '420px' }}
+          >
+            <div className="modal-header">
+              <h2>Update Stock</h2>
+              <p>{showUpdateModal.item.item_name}</p>
+            </div>
+            <form onSubmit={handleUpdateQuantity}>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label style={{ textTransform: 'none', fontSize: '13px', fontWeight: 600 }}>
+                    Current Stock: <strong>{showUpdateModal.item.quantity} {showUpdateModal.item.unit}</strong>
+                  </label>
+                </div>
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label>New Quantity</label>
+                    <input
+                      type="number"
+                      required
+                      value={form.quantity}
+                      onChange={e =>
+                        setForm({ ...form, quantity: e.target.value })
+                      }
+                      placeholder="Enter quantity"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Max Capacity</label>
+                    <input
+                      type="number"
+                      required
+                      value={form.max_stock}
+                      onChange={e =>
+                        setForm({ ...form, max_stock: e.target.value })
+                      }
+                      placeholder="Enter max stock"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setShowUpdateModal(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── STATION DISTRIBUTION MODAL ── */}
+      {showDistributionModal && (
+        <div className="modal-overlay" onClick={() => setShowDistributionModal(false)}>
+          <div
+            className="modal-content"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '580px' }}
+          >
+            <div className="modal-header">
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Truck size={18} /> Station Distribution</h2>
+              <p>Distribute vaccines or supplements from CHO inventory to a Barangay Health Station.</p>
+            </div>
+            <form onSubmit={handleDistributionSubmit}>
+              <div className="modal-body">
+                {/* Item Type */}
+                <div className="form-group">
+                  <label>Item Type <span style={{ color: '#e05c73' }}>*</span></label>
+                  <select
+                    required
+                    value={distForm.item_type}
+                    onChange={e => setDistForm({ ...distForm, item_type: e.target.value, item_id: '' })}
+                    className="form-control"
+                  >
+                    <option value="vaccine">Vaccine</option>
+                    <option value="supplement">Supplement</option>
+                  </select>
+                </div>
+
+                {/* Item */}
+                <div className="form-group">
+                  <label>Item <span style={{ color: '#e05c73' }}>*</span></label>
+                  <select
+                    required
+                    value={distForm.item_id}
+                    onChange={e => setDistForm({ ...distForm, item_id: e.target.value })}
+                    className="form-control"
+                  >
+                    <option value="">— Select item —</option>
+                    {(distForm.item_type === 'vaccine' ? vaccines : supplements)
+                      .filter(item => item.quantity > 0 && item.status !== 'archived')
+                      .map(item => (
+                        <option key={item.id} value={item.id}>
+                          {item.item_name}{item.brand ? ` (${item.brand})` : ''} — {item.quantity} {item.unit} available
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                {/* Unit (read-only) and Quantity */}
+                {distForm.item_id && (() => {
+                  const sel = (distForm.item_type === 'vaccine' ? vaccines : supplements).find(i => i.id === distForm.item_id);
+                  if (!sel) return null;
+                  const qtyNum = Number(distForm.quantity);
+                  const exceedsStock = qtyNum > sel.quantity;
+                  return (
+                    <div className="form-grid">
+                      <div className="form-group">
+                        <label>Quantity <span style={{ color: '#e05c73' }}>*</span></label>
+                        <input
+                          type="number"
+                          required
+                          min="1"
+                          max={sel.quantity}
+                          value={distForm.quantity}
+                          onChange={e => setDistForm({ ...distForm, quantity: e.target.value })}
+                          placeholder={`Max: ${sel.quantity}`}
+                          style={{ borderColor: exceedsStock ? '#e05c73' : undefined }}
+                        />
+                        {exceedsStock && (
+                          <span style={{ color: '#e05c73', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                            Exceeds available stock ({sel.quantity} {sel.unit}).
+                          </span>
+                        )}
+                      </div>
+                      <div className="form-group">
+                        <label>Unit</label>
+                        <input
+                          type="text"
+                          readOnly
+                          value={sel.unit}
+                          style={{ backgroundColor: '#f5f5f5', color: '#666', cursor: 'not-allowed' }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Destination Health Station */}
+                <div className="form-group">
+                  <label>Destination Health Station <span style={{ color: '#e05c73' }}>*</span></label>
+                  <select
+                    required
+                    value={distForm.destination_station}
+                    onChange={e => setDistForm({ ...distForm, destination_station: e.target.value })}
+                    className="form-control"
+                  >
+                    <option value="">— Select station —</option>
+                    {availableStations.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+
+                {/* Station Batch (station-specific) */}
+                <div className="form-group">
+                  <label>Station Batch <span style={{ color: '#999', fontWeight: 400 }}>(optional)</span></label>
+                  <input
+                    type="text"
+                    value={distForm.station_batch}
+                    onChange={e => setDistForm({ ...distForm, station_batch: e.target.value })}
+                    placeholder="e.g. Batch A-2026"
+                    className="form-control"
+                  />
+                </div>
+
+                {/* Distribution Date & Released By */}
+                <div className="form-grid">
+                  <div className="form-group">
+                    <label>Distribution Date <span style={{ color: '#e05c73' }}>*</span></label>
+                    <input
+                      type="date"
+                      required
+                      value={distForm.distribution_date}
+                      onChange={e => setDistForm({ ...distForm, distribution_date: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Released By <span style={{ color: '#e05c73' }}>*</span></label>
+                    <input
+                      type="text"
+                      required
+                      value={distForm.released_by}
+                      onChange={e => setDistForm({ ...distForm, released_by: e.target.value })}
+                      placeholder="Staff name"
+                    />
+                  </div>
+                </div>
+
+                {/* Remarks */}
+                <div className="form-group">
+                  <label>Remarks <span style={{ color: '#999', fontWeight: 400 }}>(optional)</span></label>
+                  <textarea
+                    rows={3}
+                    value={distForm.remarks}
+                    onChange={e => setDistForm({ ...distForm, remarks: e.target.value })}
+                    placeholder="Notes or reason for this distribution..."
+                    style={{ width: '100%', resize: 'vertical', padding: '8px 12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '13px', fontFamily: 'inherit' }}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setShowDistributionModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={isSubmitting}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Truck size={15} />
+                  {isSubmitting ? 'Processing...' : 'Confirm Distribution'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── VIEW DISTRIBUTION DETAILS MODAL ── */}
+      {selectedDistRecord && (
+        <div className="modal-overlay" onClick={() => setSelectedDistRecord(null)}>
+          <div
+            className="modal-content"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '480px' }}
+          >
+            <div className="modal-header">
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Eye size={17} /> Distribution Details</h2>
+              <p>Transaction log for this distribution record.</p>
+            </div>
+            <div className="modal-body">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                {[
+                  { label: 'Date', value: formatReadableDate(selectedDistRecord.distribution_date) },
+                  { label: 'Item Type', value: selectedDistRecord.item_type },
+                  { label: 'Item Name', value: selectedDistRecord.item_name, fullWidth: true },
+                  { label: 'Brand', value: selectedDistRecord.brand || '—' },
+                  { label: 'Batch', value: selectedDistRecord.batch || '—' },
+                  { label: 'Quantity', value: `${selectedDistRecord.quantity} ${selectedDistRecord.unit}` },
+                  { label: 'Destination Station', value: selectedDistRecord.destination_station, fullWidth: true },
+                  { label: 'Released By', value: selectedDistRecord.released_by, fullWidth: true },
+                  { label: 'Remarks', value: selectedDistRecord.remarks || '—', fullWidth: true }
+                ].map(({ label, value, fullWidth }) => (
+                  <div key={label} style={{ gridColumn: fullWidth ? '1 / -1' : undefined }}>
+                    <div style={{ fontSize: '11px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>{label}</div>
+                    <div style={{ fontSize: '14px', color: '#333', fontWeight: label === 'Item Name' || label === 'Quantity' ? '600' : '400' }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setSelectedDistRecord(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  </div>
+  );

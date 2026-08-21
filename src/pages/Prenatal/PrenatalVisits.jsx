@@ -845,7 +845,7 @@ const PrenatalVisits = () => {
                                                     <div 
                                                         key={item.id} 
                                                         className={`schedule-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
-                                                        onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit(item); }}
+                                                        onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit({ ...item, type: visitTypeTab === 'vaccination' ? 'Vaccination' : 'Prenatal' }); }}
                                                     >
                                                         <div className="schedule-details">
                                                             <span className="schedule-patient">{item.patientName}</span>
@@ -910,7 +910,7 @@ const PrenatalVisits = () => {
                                                         <div 
                                                             key={item.id} 
                                                             className={`visit-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
-                                                            onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit(item); }}
+                                                            onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit({ ...item, type: visitTypeTab === 'vaccination' ? 'Vaccination' : 'Prenatal' }); }}
                                                         >
                                                             <span className="visit-patient">{item.patientName}</span>
                                                             <span className="visit-status">{visitTypeTab === 'vaccination' ? item.vaccineName : visitTypeTab === 'postpartum' ? 'Postpartum' : (item.status || 'Scheduled')}</span>
@@ -957,7 +957,7 @@ const PrenatalVisits = () => {
                                                                 <div 
                                                                     key={item.id} 
                                                                     className={`visit-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
-                                                                    onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit(item); }}
+                                                                    onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit({ ...item, type: visitTypeTab === 'vaccination' ? 'Vaccination' : 'Prenatal' }); }}
                                                                 >
                                                                     <span className="visit-patient">{item.patientName}</span>
                                                                     <span className="visit-status">{visitTypeTab === 'vaccination' ? item.vaccineName : visitTypeTab === 'postpartum' ? 'Postpartum' : (item.status || 'Scheduled')}</span>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     X, Calendar, Clock, MapPin, User, FileText, 
     CheckCircle2, AlertCircle, ExternalLink, Plus, 
-    Activity, Users
+    Activity, Users, Syringe
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PatientService from '../../services/patientservice';
@@ -132,14 +132,32 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
                 <div className="sv-modal-body">
                     {/* Primary Action */}
                     <div className="sv-section" style={{ borderBottom: 'none', paddingBottom: '0' }}>
-                        <button 
-                            className="btn btn-primary" 
-                            style={{ width: '100%', justifyContent: 'center', padding: '12px' }}
-                            onClick={() => navigate(`/dashboard/prenatal/add/${visit.patientId}`)}
-                            title="Record Prenatal Visit"
-                        >
-                            <Plus size={18} style={{ marginRight: '8px' }} /> Record Prenatal Visit
-                        </button>
+                        {visit.type === 'Vaccination' ? (
+                            <button 
+                                className="btn btn-primary" 
+                                style={{ width: '100%', justifyContent: 'center', padding: '12px' }}
+                                onClick={() => navigate('/dashboard/vaccinations', { 
+                                    state: { 
+                                        openRecordModal: true, 
+                                        patientId: visit.patientId,
+                                        patientName: visit.patientName,
+                                        patientType: visit.patientType || 'Mother'
+                                    } 
+                                })}
+                                title="Record Vaccination Visit"
+                            >
+                                <Syringe size={18} style={{ marginRight: '8px' }} /> Record Vaccination Visit
+                            </button>
+                        ) : (
+                            <button 
+                                className="btn btn-primary" 
+                                style={{ width: '100%', justifyContent: 'center', padding: '12px' }}
+                                onClick={() => navigate(`/dashboard/prenatal/add/${visit.patientId}`)}
+                                title="Record Prenatal Visit"
+                            >
+                                <Plus size={18} style={{ marginRight: '8px' }} /> Record Prenatal Visit
+                            </button>
+                        )}
                     </div>
 
                     {/* Visit Details */}

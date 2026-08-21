@@ -1089,6 +1089,7 @@ const Inventory = () => {
                 <th>Item Name</th>
                 <th>Total Stock</th>
                 <th>Unit</th>
+                <th>Batch Info</th>
                 <th>Status</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
@@ -1096,7 +1097,7 @@ const Inventory = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="text-center py-8">
+                  <td colSpan="7" className="text-center py-8">
                     Loading inventory data...
                   </td>
                 </tr>
@@ -1159,18 +1160,22 @@ const Inventory = () => {
                       <td className="unit-cell">{item.unit || 'tablets'}</td>
                       <td className="expiration-cell">
                         {item.items.length > 0 ? (
-                          <div className="batch-list">
-                            {item.items.map((subItem, idx) => (
-                              <div key={idx} className="batch-item">
-                                {subItem.expiration_date ? 
-                                  new Date(subItem.expiration_date).toLocaleDateString() : 
-                                  '-'
-                                }
-                              </div>
-                            ))}
+                          <div className="batch-list" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            {item.items.map((subItem, idx) => {
+                              const batchNumber = activeTab === 'vaccines' ? subItem.batch : subItem.batch_number;
+                              const batchLabel = batchNumber ? `Batch ${batchNumber}` : 'Batch';
+                              return (
+                                <div key={idx} className="batch-item" style={{ fontSize: '11px', color: '#666' }}>
+                                  <strong style={{ color: '#444' }}>{batchLabel}:</strong> {subItem.expiration_date ? 
+                                    `Expires ${new Date(subItem.expiration_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : 
+                                    'No Expiry'
+                                  }
+                                </div>
+                              );
+                            })}
                           </div>
                         ) : (
-                          '-'
+                          <span style={{ fontSize: '11px', color: '#999' }}>-</span>
                         )}
                       </td>
                       <td>
@@ -1236,7 +1241,7 @@ const Inventory = () => {
                     </tr>
                     {expandedRow === rowNumber && item.items.length > 0 && (
                       <tr key={`detail-${item.item_name}-${index}`} className="inv-row-detail">
-                        <td colSpan="6" style={{ padding: '0' }}>
+                        <td colSpan="7" style={{ padding: '0' }}>
                           <div style={{
                             padding: '16px 20px',
                             background: '#f8f9fa',
@@ -1389,7 +1394,7 @@ const Inventory = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan="6" className="text-center py-8">
+                  <td colSpan="7" className="text-center py-8">
                     No items found
                   </td>
                 </tr>
