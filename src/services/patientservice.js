@@ -225,7 +225,7 @@ export default class PatientService {
       // 2. Get all pregnancy history rows so current patient status is based on the latest entry.
       const { data: pregnancies, error: err2 } = await this.supabase
         .from('pregnancy_info')
-        .select('patient_id, lmd, edd, pregn_postp, gravida, para, created_at');
+        .select('patient_id, lmd, edd, pregn_postp, gravida, para, miscarriage_info, created_at');
       if (err2) throw err2;
 
       const latestPregMap = new Map();
@@ -355,6 +355,7 @@ export default class PatientService {
           type: patientType,
           archiveStatus,
           pregnancyStatus,
+          pregnancyOutcome: pgi?.miscarriage_info?.outcome || (pregnancyStatus === 'postpartum' ? 'Live Birth' : null),
           daysOverdue: isMissedDelivery ? daysOverdue : 0
         };
       };
@@ -887,7 +888,6 @@ export default class PatientService {
       visit_date: visit.visit_date,
       visitDate: visit.visit_date,
       visitDateOnly: visit.visit_date,
-      visitTime: this.generateTimeSlot(visit.patient_id, visit.visit_date),
       attendedDate: visit.attended_date,
       patientName: `${visit.patient_basic_info?.first_name || ''} ${visit.patient_basic_info?.middle_name ? visit.patient_basic_info.middle_name[0] + '. ' : ''}${visit.patient_basic_info?.last_name || ''}`.trim(),
       patientId: visit.patient_id,
@@ -978,7 +978,6 @@ export default class PatientService {
     return (data || []).map(appointment => ({
       id: appointment.id,
       date: appointment.visit_date,
-      time: this.generateTimeSlot(appointment.patient_id, appointment.visit_date),
       patient: `${appointment.patient_basic_info?.first_name || ''} ${appointment.patient_basic_info?.last_name || ''}`.trim() || 'Unknown',
       patientId: appointment.patient_id,
       type: appointment.next_appt_type || 'Prenatal Checkup',
@@ -1869,6 +1868,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       risk: latestAttendedVisit?.calculated_risk || 'Low Risk',
       gravida: preg.gravida || 0,
       para: preg.para || 0,
+      miscarriageInfo: preg.miscarriage_info || null,
       lmp: preg.lmd || null,
       edd: preg.edd || null,
       trimester: this.calculateTrimester(preg.lmd),

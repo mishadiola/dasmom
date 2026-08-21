@@ -12,6 +12,7 @@ import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/NewbornTracking.css';
 import Legend from '../../components/Legend/Legend';
 import { MapPin, Activity } from 'lucide-react';
+import { formatNewbornId } from '../../utils/displayIds';
 
 /* ════════════════════════════
    CALENDAR HELPERS
@@ -844,7 +845,7 @@ const NewbornTracking = () => {
                                                 </div>
                                                 <div>
                                                     <span className="nb-baby-name">{b.babyName}</span>
-                                                    <span className="nb-baby-id" title={b.id}>{b.id?.substring(0, 8)}...</span>
+                                                    <span className="nb-baby-id" title={b.id}>{formatNewbornId(b.id)}</span>
                                                 </div>
                                             </div>
                                         </td>

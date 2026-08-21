@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
 import '../../styles/pages/UserAccount.css';
+import { formatMotherId } from '../../utils/displayIds';
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 const getInitials = (name = '') =>
@@ -176,7 +177,7 @@ const UserAccount = () => {
                         </div>
                         <div>
                             <h2>{userData.name}</h2>
-                            <p className="ua-subtext">Patient ID: <code>{userData.id}</code></p>
+                            <p className="ua-subtext">Patient ID: <code>{formatMotherId(userData.id)}</code></p>
                         </div>
                     </div>
 

@@ -11,6 +11,7 @@ import {
 import '../../styles/pages/PatientProfile.css';
 import PatientService from '../../services/patientservice';
 import EditPatientModal from '../../components/Patient/EditPatientModal';
+import { formatMotherId } from '../../utils/displayIds';
 
 // Helper function for readable date formatting
 const formatReadableDate = (dateString) => {
@@ -27,9 +28,7 @@ const formatReadableDate = (dateString) => {
 
 // Helper function to extract first 4 numeric digits from patient ID
 const getShortPatientId = (id) => {
-    if (!id) return '';
-    const numericOnly = String(id).replace(/[^0-9]/g, '');
-    return numericOnly.substring(0, 4) || String(id).substring(0, 4);
+    return formatMotherId(id);
 };
 
 // Helper function for proper ordinal formatting

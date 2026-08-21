@@ -17,9 +17,25 @@ import * as XLSX from 'xlsx';
 import { formatTime12Hour } from '../../utils/pregnancyUtils';
 import { useModal } from '../../context/ModalContext';
 import Legend from '../../components/Legend/Legend';
+import { formatMotherId } from '../../utils/displayIds';
 
 const COMPLICATION_OPTIONS = ['None', 'Hemorrhage', 'Infection', 'Preeclampsia', 'Placenta Previa', 'Preterm'];
 const DELIVERY_TYPES = ['NSD', 'CS', 'Breech'];
+const MISCARRIAGE_SYMPTOMS = ['Cramping', 'Vaginal bleeding', 'Lower back pain', 'Abdominal pain', 'Fever', 'Dizziness'];
+
+const getSections = (outcome) => outcome === 'Miscarriage'
+    ? [
+        { id: 'patient', label: 'Patient Info' },
+        { id: 'delivery', label: 'Pregnancy Outcome' },
+        { id: 'miscarriage', label: 'Miscarriage Details' }
+    ]
+    : [
+        { id: 'patient', label: 'Patient Info' },
+        { id: 'delivery', label: 'Delivery Details' },
+        { id: 'complications', label: 'Complications' },
+        { id: 'baby', label: 'Baby Info' },
+        { id: 'plan', label: 'Postpartum Plan' }
+    ];
 
 const DeliveryOutcomes = () => {
     const navigate = useNavigate();
@@ -45,20 +61,69 @@ const DeliveryOutcomes = () => {
     const [loading, setLoading] = useState(true);
     const [stations, setStations] = useState(['All Stations']);
     const [staffList, setStaffList] = useState([]);
+    const [careSchedules, setCareSchedules] = useState([]);
 
     const loadData = async () => {
         setLoading(true);
         try {
-            const [allDeliv, allStats] = await Promise.all([
+            const patientService = new PatientService();
+            const [allDeliv, allStats, prenatalVisits, vaccinationResult, postpartumResult] = await Promise.all([
                 babyService.getAllDeliveries(),
-                babyService.getDeliveryStats()
+                babyService.getDeliveryStats(),
+                patientService.getPrenatalVisits({ includeArchived: true }),
+                supabase
+                    .from('vaccinations')
+                    .select('id, patient_id, scheduled_vaccination, vaccinated_date, status, notes, vaccine_inventory(vaccine_name), patient_basic_info!vaccinations_patient_id_fkey(first_name, last_name, stations:station_ass(station_name))')
+                    .not('patient_id', 'is', null)
+                    .order('scheduled_vaccination', { ascending: true, nullsFirst: false }),
+                supabase
+                    .from('deliveries')
+                    .select('id, mother_id, delivery_date, postpartum_visit_date, patient_basic_info!deliveries_mother_id_fkey(first_name, last_name, stations:station_ass(station_name))')
+                    .not('postpartum_visit_date', 'is', null)
+                    .order('postpartum_visit_date', { ascending: true })
             ]);
             setDeliveries(allDeliv || []);
             setStats(allStats || []);
+
+            const vaccinationRows = vaccinationResult.data || [];
+            const postpartumRows = postpartumResult.data || [];
+            setCareSchedules([
+                ...(prenatalVisits || []).map(visit => ({
+                    id: `prenatal-${visit.id}`,
+                    patientId: visit.patientId,
+                    patientName: visit.patientName,
+                    station: '',
+                    scheduleType: 'Prenatal Visit',
+                    date: visit.visitDate || visit.visit_date,
+                    status: visit.status || 'Scheduled',
+                    details: visit.risk || 'Routine prenatal care'
+                })),
+                ...vaccinationRows.map(record => ({
+                    id: `vaccine-${record.id}`,
+                    patientId: record.patient_id,
+                    patientName: `${record.patient_basic_info?.first_name || ''} ${record.patient_basic_info?.last_name || ''}`.trim() || record.patient_id,
+                    station: record.patient_basic_info?.stations?.station_name || '',
+                    scheduleType: 'Vaccination',
+                    date: record.scheduled_vaccination || record.vaccinated_date,
+                    status: record.status || 'Pending',
+                    details: record.vaccine_inventory?.vaccine_name || record.notes || 'Vaccine'
+                })),
+                ...postpartumRows.map(record => ({
+                    id: `postpartum-${record.id}`,
+                    patientId: record.mother_id,
+                    patientName: `${record.patient_basic_info?.first_name || ''} ${record.patient_basic_info?.last_name || ''}`.trim() || record.mother_id,
+                    station: record.patient_basic_info?.stations?.station_name || '',
+                    scheduleType: 'Postpartum Follow-up',
+                    date: record.postpartum_visit_date || record.delivery_date,
+                    status: 'Scheduled',
+                    details: 'Postpartum care'
+                }))
+            ].filter(schedule => schedule.date));
         } catch (err) {
             console.error('Error loading delivery outcomes:', err);
             setDeliveries([]);
             setStats([]);
+            setCareSchedules([]);
         } finally {
             setLoading(false);
         }
@@ -88,7 +153,7 @@ const DeliveryOutcomes = () => {
     const handleExport = () => {
         const exportData = filtered.map(d => ({
             'Patient Name': d.patientName,
-            'Patient ID': d.patientId,
+            'Patient ID': formatMotherId(d.patientId),
             'Station': d.station,
             'Delivery Date': d.deliveryDate,
             'Delivery Time': formatTime12Hour(d.deliveryTime) || '',
@@ -495,7 +560,7 @@ const DeliveryOutcomes = () => {
                                                     </div>
                                                     <div>
                                                         <span className="do-name">{d.patientName}</span>
-                                                        <span className="do-pid">{d.patientId} · {d.station}</span>
+                                                        <span className="do-pid">{formatMotherId(d.patientId)} · {d.station}</span>
                                                     </div>
                                                 </div>
                                             </td>
@@ -536,6 +601,47 @@ const DeliveryOutcomes = () => {
                                                 <p>No matching records found</p>
                                             </td>
                                         </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div className="do-card">
+                        <div className="do-card-head">
+                            <h2><Calendar size={17} /> Care Schedules ({careSchedules.length})</h2>
+                            <span className="do-count">Prenatal, vaccination, and postpartum</span>
+                        </div>
+                        <div className="table-responsive">
+                            <table className="do-table">
+                                <thead>
+                                    <tr>
+                                        <th>Patient</th>
+                                        <th>Schedule Type</th>
+                                        <th>Date</th>
+                                        <th>Status</th>
+                                        <th>Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {careSchedules.length > 0 ? careSchedules.map(schedule => (
+                                        <tr key={schedule.id}>
+                                            <td>
+                                                <div className="do-patient">
+                                                    <div className="do-avatar">{schedule.patientName?.split(' ').slice(0, 2).map(name => name[0]).join('')}</div>
+                                                    <div>
+                                                        <span className="do-name">{schedule.patientName}</span>
+                                                        <span className="do-pid">{formatMotherId(schedule.patientId)}{schedule.station ? ` · ${schedule.station}` : ''}</span>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td><span className="dt-badge dt-na">{schedule.scheduleType}</span></td>
+                                            <td>{new Date(schedule.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</td>
+                                            <td><span className="status-badge">{schedule.status}</span></td>
+                                            <td>{schedule.details}</td>
+                                        </tr>
+                                    )) : (
+                                        <tr><td colSpan="5" className="do-empty">No care schedules found.</td></tr>
                                     )}
                                 </tbody>
                             </table>
@@ -618,6 +724,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
         patientId: '',
         patientName: '',
         station: '',
+        stationId: '',
         gestationalAge: '',
         riskLevel: '',
         pregnancyType: '',
@@ -629,6 +736,20 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
         attendingStaffName: '',
         facility: '',
         complications: [],
+        miscarriageInfo: {
+            outcome: 'Miscarriage',
+            date: '',
+            symptoms: [],
+            bleeding: '',
+            pain: '',
+            suspected_cause: '',
+            pregnancy_tissue_passed: '',
+            vital_signs: { blood_pressure: '', pulse: '', temperature: '' },
+            assessment: '',
+            management: '',
+            referral: '',
+            notes: ''
+        },
         newborns: [{
             babyName: '',
             babyGender: 'Female',
@@ -652,10 +773,10 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
         }
         if (sectionId === 'delivery') {
             if (!formData.deliveryDate) errors.push('Delivery Date');
-            if (!formData.deliveryType) errors.push('Delivery Type');
+            if (formData.pregnancyOutcome !== 'Miscarriage' && !formData.deliveryType) errors.push('Delivery Type');
             if (!formData.pregnancyOutcome) errors.push('Pregnancy Outcome');
         }
-        if (sectionId === 'baby') {
+        if (sectionId === 'baby' && formData.pregnancyOutcome !== 'Miscarriage') {
             formData.newborns.forEach((nb, i) => {
                 const label = formData.newborns.length > 1 ? ` (Newborn ${i + 1})` : '';
                 if (!nb.babyName?.trim()) errors.push(`Baby Name${label}`);
@@ -667,7 +788,9 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
     };
 
     const validateAllSections = (formData = form) => {
-        const sectionOrder = ['patient', 'delivery', 'complications', 'baby', 'plan'];
+        const sectionOrder = formData.pregnancyOutcome === 'Miscarriage'
+            ? ['patient', 'delivery', 'miscarriage']
+            : ['patient', 'delivery', 'complications', 'baby', 'plan'];
         for (const sec of sectionOrder) {
             const errors = validateSection(sec, formData);
             if (errors.length > 0) {
@@ -678,9 +801,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
     };
 
     const handleNextClick = () => {
-        const SECTIONS_LIST = [
-            { id: 'patient' }, { id: 'delivery' }, { id: 'complications' }, { id: 'baby' }, { id: 'plan' }
-        ];
+        const SECTIONS_LIST = getSections(form.pregnancyOutcome);
         const currentErrors = validateSection(section);
         if (currentErrors.length > 0) {
             setValidationErrors(currentErrors);
@@ -698,9 +819,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
     };
 
     const handleTabClick = (targetSectionId) => {
-        const SECTIONS_LIST = [
-            { id: 'patient' }, { id: 'delivery' }, { id: 'complications' }, { id: 'baby' }, { id: 'plan' }
-        ];
+        const SECTIONS_LIST = getSections(form.pregnancyOutcome);
         const currentIdx = SECTIONS_LIST.findIndex(s => s.id === section);
         const targetIdx = SECTIONS_LIST.findIndex(s => s.id === targetSectionId);
 
@@ -766,15 +885,11 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
         }
     }, [show]);
     const filteredStaffList = useMemo(() => {
-        const targetBarangay = form.station?.split(',')[0]?.trim().toLowerCase();
-        if (!targetBarangay) return [];
+        if (!form.stationId) return [];
 
         const sourceStaff = localStaff.length ? localStaff : staffList;
-        return sourceStaff.filter(staff => {
-            const stationName = (staff.stations?.station_name || '').toLowerCase();
-            return stationName.includes(targetBarangay);
-        });
-    }, [form.station, localStaff, staffList]);
+        return sourceStaff.filter(staff => staff.station_ass === form.stationId);
+    }, [form.stationId, localStaff, staffList]);
 
     const updateForm = (key, value) => {
         setForm(prev => {
@@ -784,6 +899,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
             if (key === 'pregnancyOutcome') {
                 if (value === 'Miscarriage') {
                     next.deliveryType = 'N/A - Not Applicable';
+                    next.facility = '';
                     next.newborns = [{
                         babyName: 'N/A - No Baby',
                         babyGender: 'Female',
@@ -824,6 +940,32 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
             setSearchResults([]);
         }
     };
+
+    const updateMiscarriageInfo = (key, value) => {
+        setForm(prev => ({
+            ...prev,
+            miscarriageInfo: { ...prev.miscarriageInfo, [key]: value }
+        }));
+    };
+
+    const updateMiscarriageVital = (key, value) => {
+        setForm(prev => ({
+            ...prev,
+            miscarriageInfo: {
+                ...prev.miscarriageInfo,
+                vital_signs: { ...prev.miscarriageInfo.vital_signs, [key]: value }
+            }
+        }));
+    };
+
+    const toggleMiscarriageSymptom = (symptom) => {
+        setForm(prev => {
+            const symptoms = prev.miscarriageInfo.symptoms.includes(symptom)
+                ? prev.miscarriageInfo.symptoms.filter(item => item !== symptom)
+                : [...prev.miscarriageInfo.symptoms, symptom];
+            return { ...prev, miscarriageInfo: { ...prev.miscarriageInfo, symptoms } };
+        });
+    };
     
     // Auto-calculate postpartum visit date (48 hours after delivery)
     useEffect(() => {
@@ -848,16 +990,24 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                 patientId: editDelivery.patientId || '',
                 patientName: editDelivery.patientName || '',
                 station: editDelivery.station || '',
+                stationId: editDelivery.stationId || '',
                 gestationalAge: editDelivery.gestationalAge || '',
                 riskLevel: editDelivery.riskLevel || '',
                 pregnancyType: editDelivery.pregnancyType || '',
                 deliveryDate: editDelivery.deliveryDate || '',
                 deliveryTime: editDelivery.deliveryTime || '',
                 deliveryType: editDelivery.deliveryType || '',
+                pregnancyOutcome: editDelivery.pregnancyOutcome || 'Live Birth',
                 attendingStaffId: editDelivery.attendingStaffId || '',
                 attendingStaffName: editDelivery.staff || '',
                 facility: editDelivery.facility || '',
                 complications: editDelivery.complications ? editDelivery.complications.split(', ') : [],
+                miscarriageInfo: {
+                    outcome: 'Miscarriage', date: '', symptoms: [], bleeding: '', pain: '',
+                    suspected_cause: '', pregnancy_tissue_passed: '',
+                    vital_signs: { blood_pressure: '', pulse: '', temperature: '' },
+                    assessment: '', management: '', referral: '', notes: ''
+                },
                 newborns: [{
                     babyName: editDelivery.babyName || '',
                     babyGender: editDelivery.babyGender || 'Female',
@@ -871,23 +1021,31 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                 postpartumDate: editDelivery.postpartum_visit_date || editDelivery.postpartumDate || '',
                 notes: editDelivery.notes || ''
             });
-            setSection('newborn');
+            setSection('baby');
         } else if (!editDelivery && show) {
             // Reset form for new delivery
             setForm({
                 patientId: '',
                 patientName: '',
                 station: '',
+                stationId: '',
                 gestationalAge: '',
                 riskLevel: '',
                 pregnancyType: '',
                 deliveryDate: '',
                 deliveryTime: '',
                 deliveryType: '',
+                pregnancyOutcome: '',
                 attendingStaffId: '',
                 attendingStaffName: '',
                 facility: '',
                 complications: [],
+                miscarriageInfo: {
+                    outcome: 'Miscarriage', date: '', symptoms: [], bleeding: '', pain: '',
+                    suspected_cause: '', pregnancy_tissue_passed: '',
+                    vital_signs: { blood_pressure: '', pulse: '', temperature: '' },
+                    assessment: '', management: '', referral: '', notes: ''
+                },
                 newborns: [{
                     babyName: '',
                     babyGender: 'Female',
@@ -909,30 +1067,8 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
     }, [editDelivery, show]);
     const handleSearch = async (query) => {
         try {
-            // Search for both pregnant mothers and all patients to handle both scenarios:
-            // 1. Patient who gives birth with existing record (pregnant)
-            // 2. Adding patient that already gave birth (post-delivery recording)
-            const [pregnantMothers, allPatients] = await Promise.all([
-                babyService.searchPregnantMothers(query),
-                patientService.searchPatients(query)
-            ]);
-
-            // Combine results, prioritizing pregnant mothers
-            const patientIds = new Set(pregnantMothers.map(p => p.id));
-            const otherPatients = allPatients.filter(p => !patientIds.has(p.id)).map(p => ({
-                id: p.id,
-                name: p.name,
-                station: p.station,
-                riskLevel: 'Normal', // Default for non-pregnant patients
-                isPregnant: false,
-                pregnancyType: 'Singleton',
-                gestationalAge: '',
-                gravida: null,
-                para: null
-            }));
-
-            const combinedResults = [...pregnantMothers, ...otherPatients];
-            setSearchResults(combinedResults);
+            const pregnantMothers = await babyService.searchPregnantMothers(query);
+            setSearchResults(pregnantMothers);
         } catch (err) {
             console.error('Search failed:', err);
             setSearchResults([]);
@@ -945,7 +1081,8 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
             patientId: patient.id,
             patientName: patient.name,
             station: patient.station,
-            facility: patient.station || prev.facility,
+            stationId: patient.stationId || '',
+            facility: prev.facility,
             riskLevel: patient.riskLevel,
             pregnancyType: patient.pregnancyType || 'Singleton',
             gestationalAge: patient.gestationalAge || '',
@@ -1037,16 +1174,24 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
             const deliveryData = {
                 mother_id: form.patientId,
                 delivery_date: form.deliveryDate,
-                delivery_time: form.deliveryTime || '09:00',
+                delivery_time: form.deliveryTime || '00:00',
                 delivery_type: form.deliveryType,
                 gestational_age: form.gestationalAge || null,
                 risk_level: form.riskLevel || 'Normal',
                 complications: form.complications.filter(c => c !== 'None'),
                 attending_staff: form.attendingStaffId || null,
-                facility: form.facility || form.station || null,
+                facility: form.pregnancyOutcome === 'Miscarriage' ? null : (form.facility || null),
                 postpartum_visit_date: form.postpartumDate || null,
                 notes: form.notes || null
             };
+
+            if (form.pregnancyOutcome === 'Miscarriage') {
+                deliveryData.outcome = 'Miscarriage';
+                deliveryData.miscarriage_info = {
+                    ...form.miscarriageInfo,
+                    date: form.miscarriageInfo.date || form.deliveryDate
+                };
+            }
 
             const newbornData = form.newborns.map(n => ({
                 baby_name: n.babyName?.trim() || null,
@@ -1065,7 +1210,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
             const result = await babyService.recordDelivery(deliveryData, newbornData, deliveryId);
             
             // Only schedule vaccinations for new deliveries (not edits)
-            if (!deliveryId) {
+            if (!deliveryId && !result.miscarriage) {
                 const vaccService = new VaccinationService();
                 const newbornIds = result.newborn_ids || [];
                 const createdBy = await new PatientService().getCurrentUserId();
@@ -1076,7 +1221,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
             }
             
             onSuccess();
-            setSaveSuccessMsg(deliveryId ? 'Delivery updated successfully!' : 'Delivery recorded and vaccinations scheduled successfully!');
+            setSaveSuccessMsg(result.miscarriage ? 'Miscarriage recorded successfully!' : deliveryId ? 'Delivery updated successfully!' : 'Delivery recorded and vaccinations scheduled successfully!');
             setTimeout(() => { setSaveSuccessMsg(''); onClose(); }, 1800);
         } catch (err) {
             console.error('Save failed:', err);
@@ -1089,13 +1234,10 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
     if (!show) return null;
 
 
-    const SECTIONS = [
-        { id: 'patient', label: 'Patient Info', icon: User },
-        { id: 'delivery', label: 'Delivery Details', icon: Stethoscope },
-        { id: 'complications', label: 'Complications', icon: AlertTriangle },
-        { id: 'baby', label: 'Baby Info', icon: Baby },
-        { id: 'plan', label: 'Postpartum Plan', icon: Calendar }
-    ];
+    const SECTIONS = getSections(form.pregnancyOutcome).map(sectionItem => ({
+        ...sectionItem,
+        icon: sectionItem.id === 'patient' ? User : sectionItem.id === 'delivery' ? Stethoscope : sectionItem.id === 'complications' ? AlertTriangle : sectionItem.id === 'baby' ? Baby : sectionItem.id === 'miscarriage' ? AlertCircle : Calendar
+    }));
 
     return (
         <div className="modal-backdrop" onClick={onClose}>
@@ -1227,11 +1369,53 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                                 </select>
                             </div>
                             <div className="form-group">
-                                <label>Facility/Station</label>
-                                <select value={form.facility} onChange={e => updateForm('facility', e.target.value)}>
-                                    {stations.map(s => <option key={s} value={s}>{s}</option>)}
+                                <label>Mother&apos;s Station</label>
+                                <input value={form.station} readOnly className="readonly-field" />
+                            </div>
+                            <div className="form-group">
+                                <label>Place of Delivery</label>
+                                <select
+                                    value={form.facility}
+                                    onChange={e => updateForm('facility', e.target.value)}
+                                    disabled={form.pregnancyOutcome === 'Miscarriage'}
+                                >
+                                    <option value="">Select place...</option>
+                                    {stations.filter(station => station !== 'All Stations').map(station => (
+                                        <option key={station} value={station}>{station}</option>
+                                    ))}
                                 </select>
                             </div>
+                        </div>
+                    )}
+
+                    {section === 'miscarriage' && (
+                        <div className="form-grid-2">
+                            <div className="form-group">
+                                <label>Miscarriage Date</label>
+                                <input type="date" value={form.miscarriageInfo.date || form.deliveryDate} onChange={e => { updateMiscarriageInfo('date', e.target.value); updateForm('deliveryDate', e.target.value); }} />
+                            </div>
+                            <div className="form-group">
+                                <label>Symptoms</label>
+                                <div className="complication-grid">
+                                    {MISCARRIAGE_SYMPTOMS.map(symptom => (
+                                        <label key={symptom} className={`complication-chip ${form.miscarriageInfo.symptoms.includes(symptom) ? 'selected' : ''}`}>
+                                            <input type="checkbox" checked={form.miscarriageInfo.symptoms.includes(symptom)} onChange={() => toggleMiscarriageSymptom(symptom)} />
+                                            {symptom}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="form-group"><label>Bleeding</label><input value={form.miscarriageInfo.bleeding} onChange={e => updateMiscarriageInfo('bleeding', e.target.value)} /></div>
+                            <div className="form-group"><label>Pain</label><input value={form.miscarriageInfo.pain} onChange={e => updateMiscarriageInfo('pain', e.target.value)} /></div>
+                            <div className="form-group"><label>Suspected Cause</label><input value={form.miscarriageInfo.suspected_cause} onChange={e => updateMiscarriageInfo('suspected_cause', e.target.value)} /></div>
+                            <div className="form-group"><label>Pregnancy Tissue Passed</label><input value={form.miscarriageInfo.pregnancy_tissue_passed} onChange={e => updateMiscarriageInfo('pregnancy_tissue_passed', e.target.value)} /></div>
+                            <div className="form-group"><label>Blood Pressure</label><input value={form.miscarriageInfo.vital_signs.blood_pressure} onChange={e => updateMiscarriageVital('blood_pressure', e.target.value)} placeholder="120/80" /></div>
+                            <div className="form-group"><label>Pulse</label><input type="number" value={form.miscarriageInfo.vital_signs.pulse} onChange={e => updateMiscarriageVital('pulse', e.target.value)} /></div>
+                            <div className="form-group"><label>Temperature</label><input type="number" step="0.1" value={form.miscarriageInfo.vital_signs.temperature} onChange={e => updateMiscarriageVital('temperature', e.target.value)} /></div>
+                            <div className="form-group"><label>Assessment</label><textarea value={form.miscarriageInfo.assessment} onChange={e => updateMiscarriageInfo('assessment', e.target.value)} rows="3" /></div>
+                            <div className="form-group"><label>Management</label><textarea value={form.miscarriageInfo.management} onChange={e => updateMiscarriageInfo('management', e.target.value)} rows="3" /></div>
+                            <div className="form-group"><label>Referral</label><textarea value={form.miscarriageInfo.referral} onChange={e => updateMiscarriageInfo('referral', e.target.value)} rows="3" /></div>
+                            <div className="form-group"><label>Notes</label><textarea value={form.miscarriageInfo.notes} onChange={e => updateMiscarriageInfo('notes', e.target.value)} rows="3" /></div>
                         </div>
                     )}
 
@@ -1340,7 +1524,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
 
                 <div className="modal-footer">
                     <button className="btn btn-outline" onClick={onClose} disabled={loading}>Cancel</button>
-                    {section !== 'plan' ? (
+                    {section !== 'plan' && section !== 'miscarriage' ? (
                         <button 
                             className="btn btn-primary" 
                             onClick={handleNextClick}
@@ -1383,7 +1567,7 @@ const ViewDeliveryModal = ({ show, onClose, delivery }) => {
                                 </div>
                                 <div className="view-field">
                                     <label>Patient ID:</label>
-                                    <span>{delivery.patientId}</span>
+                                    <span>{formatMotherId(delivery.patientId)}</span>
                                 </div>
                                 <div className="view-field">
                                     <label>Station:</label>

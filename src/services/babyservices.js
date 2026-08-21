@@ -53,11 +53,8 @@ class BabyService {
       const term = (query || '').trim();
       if (!term || term.length < 2) return [];
 
-      const safeTerm = encodeURIComponent(term.trim().replace(/%/g, '\\%'));
-
-      const { data: patients, error } = await supabase
-        .from('patient_basic_info')
-        .select(`
+      const safeTerm = term.replace(/%/g, '\\%');
+      const patientSelect = `
           id,
           first_name,
           last_name,
@@ -71,21 +68,28 @@ class BabyService {
             pregnancy_type,
             lmd,
             gravida,
-            para
+            para,
+            created_at
           )
-        `)
-        .or(
-          `first_name.ilike.%${safeTerm}%,last_name.ilike.%${safeTerm}%,stations.station_name.ilike.%${safeTerm}%`
-        )
-        .order('created_at', { ascending: false })
-        .limit(10);
+        `;
+      const [firstNameResult, lastNameResult, stationResult] = await Promise.all([
+        supabase.from('patient_basic_info').select(patientSelect).ilike('first_name', `%${safeTerm}%`).order('created_at', { ascending: false }).limit(10),
+        supabase.from('patient_basic_info').select(patientSelect).ilike('last_name', `%${safeTerm}%`).order('created_at', { ascending: false }).limit(10),
+        supabase.from('patient_basic_info').select(patientSelect).ilike('stations.station_name', `%${safeTerm}%`).order('created_at', { ascending: false }).limit(10)
+      ]);
 
-      if (error) throw error;
+      const queryError = firstNameResult.error || lastNameResult.error || stationResult.error;
+      if (queryError) throw queryError;
+
+      const patients = [...(firstNameResult.data || []), ...(lastNameResult.data || []), ...(stationResult.data || [])]
+        .filter((patient, index, rows) => rows.findIndex(row => row.id === patient.id) === index)
+        .slice(0, 10);
 
       return (patients || []).map(patient => {
-        const preg = Array.isArray(patient.pregnancy_info)
-          ? patient.pregnancy_info[0]
-          : patient.pregnancy_info;
+        const pregnancyRows = Array.isArray(patient.pregnancy_info) ? patient.pregnancy_info : [patient.pregnancy_info];
+        const preg = pregnancyRows
+          .filter(Boolean)
+          .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0];
 
         // Calculate gestational age from LMP
         let gestationalAge = '';
@@ -103,16 +107,17 @@ class BabyService {
         return {
           id: patient.id,
           name: `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
+          stationId: patient.station_ass || null,
           station: `${patient.stations?.station_name || 'No Station'}, ${patient.province || 'N/A'}`,
           riskLevel: 'Normal', // Default risk level since calculated_risk field doesn't exist
-          isPregnant: !!preg?.id,
+          isPregnant: preg?.pregn_postp?.toLowerCase() === 'pregnant',
           pregnancyType: preg?.pregnancy_type || 'Singleton',
           lmp: preg?.lmd || null,
           gestationalAge: gestationalAge,
           gravida: preg?.gravida || 1,
           para: preg?.para || 0
         };
-      });
+      }).filter(patient => patient.isPregnant);
     } catch (error) {
       console.error('Error in searchPregnantMothers:', error);
       return [];
@@ -208,6 +213,16 @@ class BabyService {
     });
   }
 
+  calculateWeeksAtDate(lmp, targetDate) {
+    if (!lmp || !targetDate) return 0;
+
+    const lmpDate = new Date(lmp);
+    const target = new Date(targetDate);
+    if (Number.isNaN(lmpDate.getTime()) || Number.isNaN(target.getTime())) return 0;
+
+    return Math.max(0, Math.floor((target - lmpDate) / (1000 * 60 * 60 * 24 * 7)));
+  }
+
   async getAllDeliveries() {
     try {
       const { role, stationId } = await this.getCurrentUserAccess();
@@ -253,6 +268,28 @@ class BabyService {
 
       if (error) throw error;
 
+      const { data: miscarriageRows, error: miscarriageError } = await supabase
+        .from('pregnancy_info')
+        .select(`
+          id,
+          patient_id,
+          lmd,
+          edd,
+          miscarriage_info,
+          created_at,
+          patient_basic_info!pregnancy_info_patient_id_fkey (
+            id,
+            first_name,
+            last_name,
+            station_ass,
+            stations:station_ass (station_name)
+          )
+        `)
+        .not('miscarriage_info', 'is', null)
+        .order('created_at', { ascending: false });
+
+      if (miscarriageError) throw miscarriageError;
+
       const filtered = (data || []).filter(d => {
         if (role === 'admin') return true;
         if (['cho personnel', 'staff'].includes(role)) {
@@ -262,13 +299,22 @@ class BabyService {
         return false;
       });
 
-        return filtered.map(d => {
+      const filteredMiscarriages = (miscarriageRows || []).filter(row => {
+        if (role === 'admin') return true;
+        if (['cho personnel', 'staff'].includes(role)) {
+          return row.patient_basic_info?.station_ass === stationId;
+        }
+        return false;
+      });
+
+        const deliveryRecords = filtered.map(d => {
         const newborn = Array.isArray(d.newborns) ? d.newborns[0] : d.newborns;
         const staff = Array.isArray(d.staff_profiles) ? d.staff_profiles[0] : d.staff_profiles;
         return {
           id: d.id,
           patientId: d.patient_basic_info?.id || '',
           patientName: `${d.patient_basic_info?.first_name || ''} ${d.patient_basic_info?.last_name || ''}`.trim(),
+          stationId: d.patient_basic_info?.station_ass || null,
           station: d.patient_basic_info?.stations?.station_name || d.patient_basic_info?.station_ass || 'Unassigned',
           deliveryDate: d.delivery_date,
           deliveryTime: d.delivery_time,
@@ -289,9 +335,46 @@ class BabyService {
           facility: d.facility || 'N/A',
           postpartumVisitDate: d.postpartum_visit_date || null,
           notes: d.notes || '',
-          pregnancyOutcome: (d.delivery_type === 'N/A - Not Applicable' && (newborn?.condition_at_birth === 'N/A - No Baby')) ? 'Miscarriage' : (newborn?.condition_at_birth === 'Stillbirth' ? 'Stillbirth' : 'Live Birth')
+          pregnancyOutcome: (d.delivery_type === 'N/A - Not Applicable' && newborn?.condition_at_birth === 'N/A - No Baby')
+            ? 'Miscarriage'
+            : newborn?.condition_at_birth === 'Stillbirth' ? 'Stillbirth' : 'Live Birth'
         };
       });
+
+      const miscarriageRecords = filteredMiscarriages.map(row => {
+        const mother = row.patient_basic_info;
+        const info = row.miscarriage_info || {};
+        return {
+          id: `miscarriage-${row.id}`,
+          pregnancyId: row.id,
+          patientId: mother?.id || row.patient_id,
+          patientName: `${mother?.first_name || ''} ${mother?.last_name || ''}`.trim(),
+          station: mother?.stations?.station_name || 'Unassigned',
+          deliveryDate: info.date || row.created_at?.split('T')[0] || null,
+          deliveryTime: null,
+          deliveryType: 'N/A - Not Applicable',
+          deliveryMode: 'N/A',
+          gestationalAge: row.lmd ? `${this.calculateWeeksAtDate(row.lmd, info.date || row.created_at)} weeks` : 'N/A',
+          riskLevel: 'Normal',
+          complications: 'None',
+          babyName: null,
+          babyOutcome: 'N/A - No Baby',
+          babyGender: 'N/A',
+          birthWeight: null,
+          birthLength: null,
+          headCircumference: null,
+          apgar1: null,
+          apgar5: null,
+          staff: 'Unassigned',
+          facility: null,
+          postpartumVisitDate: null,
+          notes: info.notes || '',
+          miscarriageInfo: info,
+          pregnancyOutcome: 'Miscarriage'
+        };
+      });
+
+      return [...deliveryRecords, ...miscarriageRecords].sort((a, b) => new Date(b.deliveryDate || 0) - new Date(a.deliveryDate || 0));
     } catch (error) {
       console.error('Error in getAllDeliveries:', error);
       return [];
@@ -301,6 +384,67 @@ class BabyService {
   async recordDelivery(deliveryData, newbornData, deliveryId = null) {
     const createdBy = await this.getCurrentUserId();
     if (!createdBy) throw new Error('No logged-in user');
+
+    if (deliveryData.outcome === 'Miscarriage') {
+      const { data: currentPregnancy, error: pregnancyError } = await supabase
+        .from('pregnancy_info')
+        .select('*')
+        .eq('patient_id', deliveryData.mother_id)
+        .eq('pregn_postp', 'Pregnant')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (pregnancyError) throw pregnancyError;
+      if (!currentPregnancy) throw new Error('No pregnancy record found for this patient');
+
+      const miscarriageInfo = {
+        outcome: 'Miscarriage',
+        date: deliveryData.miscarriage_info?.date || deliveryData.delivery_date,
+        symptoms: Array.isArray(deliveryData.miscarriage_info?.symptoms)
+          ? deliveryData.miscarriage_info.symptoms
+          : [],
+        bleeding: deliveryData.miscarriage_info?.bleeding || '',
+        pain: deliveryData.miscarriage_info?.pain || '',
+        suspected_cause: deliveryData.miscarriage_info?.suspected_cause || '',
+        pregnancy_tissue_passed: deliveryData.miscarriage_info?.pregnancy_tissue_passed || '',
+        vital_signs: {
+          blood_pressure: deliveryData.miscarriage_info?.vital_signs?.blood_pressure || '',
+          pulse: deliveryData.miscarriage_info?.vital_signs?.pulse || '',
+          temperature: deliveryData.miscarriage_info?.vital_signs?.temperature || ''
+        },
+        assessment: deliveryData.miscarriage_info?.assessment || '',
+        management: deliveryData.miscarriage_info?.management || '',
+        referral: deliveryData.miscarriage_info?.referral || '',
+        notes: deliveryData.miscarriage_info?.notes || ''
+      };
+
+      const { data: miscarriagePregnancy, error: miscarriageInsertError } = await supabase
+        .from('pregnancy_info')
+        .insert({
+          patient_id: deliveryData.mother_id,
+          created_by: createdBy,
+          pregn_postp: null,
+          lmd: currentPregnancy.lmd,
+          edd: currentPregnancy.edd,
+          pregnancy_type: currentPregnancy.pregnancy_type,
+          place_of_delivery: null,
+          gravida: (currentPregnancy.gravida || 0) + 1,
+          para: currentPregnancy.para || 0,
+          miscarriage_info: miscarriageInfo
+        })
+        .select('id')
+        .single();
+
+      if (miscarriageInsertError) throw miscarriageInsertError;
+
+      return {
+        delivery_id: null,
+        pregnancy_id: miscarriagePregnancy.id,
+        newborn_ids: [],
+        miscarriage: true
+      };
+    }
 
     const newbornArray = Array.isArray(newbornData) ? newbornData : [newbornData];
 

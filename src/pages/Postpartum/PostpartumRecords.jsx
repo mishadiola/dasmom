@@ -10,6 +10,7 @@ import BabyService from '../../services/babyservices';
 import * as XLSX from 'xlsx';
 import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/PostpartumRecords.css';
+import { formatMotherId } from '../../utils/displayIds';
 
 const formatReadableDate = (dateString) => {
     if (!dateString || dateString === 'N/A' || dateString === 'Not scheduled' || dateString === 'None') return dateString;
@@ -98,7 +99,7 @@ const DetailModal = ({ mother, onClose }) => {
                 <div className="modal-header">
                     <div>
                         <h2>{mother.name}</h2>
-                        <p>{mother.patientId} · {mother.deliveryType} · Day {mother.daysPostpartum} Postpartum</p>
+                        <p>{formatMotherId(mother.patientId)} · {mother.deliveryType} · Day {mother.daysPostpartum} Postpartum</p>
                     </div>
                     <button className="modal-close" onClick={onClose}><X size={20} /></button>
                 </div>
@@ -209,7 +210,7 @@ const PostpartumRecords = () => {
     const handleExportReport = () => {
         const exportData = filtered.map(m => ({
             'Patient Name': m.name,
-            'Patient ID': m.patientId,
+            'Patient ID': formatMotherId(m.patientId),
             'Station': m.station,
             'Delivery Type': m.deliveryType,
             'Delivery Date': m.deliveryDate,
@@ -473,7 +474,7 @@ const PostpartumRecords = () => {
                                                     <div className="pp-avatar">{m.name.split(' ').map(n => n[0]).slice(0, 2).join('')}</div>
                                                     <div>
                                                         <span className="pp-name patient-name-link">{m.name}</span>
-                                                        <span className="pp-meta">{m.patientId} · {m.station}</span>
+                                                        <span className="pp-meta">{formatMotherId(m.patientId)} · {m.station}</span>
                                                     </div>
                                                 </div>
                                             </td>

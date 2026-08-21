@@ -14,6 +14,7 @@ import PatientModal from '../../components/Prenatal/PatientModal';
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/PrenatalVisits.css';
 import Legend from '../../components/Legend/Legend';
+import { formatMotherId } from '../../utils/displayIds';
 
 const toLocalDateStr = (d) => {
     const offset = d.getTimezoneOffset() * 60000;
@@ -43,16 +44,6 @@ const formatCalendarDate = (dateString) => {
         day: 'numeric' 
     };
     return date.toLocaleDateString('en-US', options);
-};
-
-// Helper to convert TIME_SLOTS format (12-hour) to 24-hour format
-const convertTo24Hour = (timeStr) => {
-    const [time, period] = timeStr.trim().split(' ');
-    const [hours, minutes] = time.split(':');
-    let h = parseInt(hours);
-    if (period === 'PM' && h !== 12) h += 12;
-    if (period === 'AM' && h === 12) h = 0;
-    return `${String(h).padStart(2, '0')}:${minutes}`;
 };
 
 const SearchableDropdown = ({ patients, value, onChange }) => {
@@ -268,7 +259,6 @@ const PrenatalVisits = () => {
                     doseText: v.dose_number ? `Dose ${v.dose_number}` : '',
                     visitDate: dateStr,
                     visitDateOnly: dateStr,
-                    visitTime: '09:00 AM',
                     status: v.status || 'Pending',
                     vaccinatedDate: v.vaccinated_date,
                     scheduledVaccination: v.scheduled_vaccination,
@@ -384,7 +374,6 @@ const PrenatalVisits = () => {
                         doseText: '',
                         visitDate: dateStr,
                         visitDateOnly: dateStr,
-                        visitTime: '09:00 AM',
                         status: dateStr && dateStr < new Date().toISOString().split('T')[0] ? 'Missed' : 'Scheduled',
                         vaccinatedDate: null,
                         scheduledVaccination: dateStr,
@@ -571,47 +560,6 @@ const PrenatalVisits = () => {
     };
 
 
-    const getSlotStatus = useCallback((date, time) => {
-        const visitsForSlot = visitsTable.filter(v => {
-            return v.visitDateOnly === date && v.visitTime === time;
-        });
-
-        const uniqueVisits = [];
-        const seenPatients = new Set();
-        for (const v of visitsForSlot) {
-            if (!seenPatients.has(v.patientId)) {
-                uniqueVisits.push(v);
-                seenPatients.add(v.patientId);
-            }
-        }
-
-        if (uniqueVisits.length > 0) {
-            const visit = uniqueVisits[0];
-            return { hasVisit: true, visits: uniqueVisits, status: visit.status, patient: visit.patientName, type: 'Prenatal Visit' };
-        }
-
-        const dayAppts = appointments.filter(a => a.date === date);
-        const timeAppts = dayAppts.filter(a => a.time === time);
-        
-        if (dayAppts.length >= 35) return { status: 'FULL_DAY', label: 'FULL DAY' };
-        if (timeAppts.length >= 2) return { status: 'FULL', label: 'FULL' };
-        if (timeAppts.length === 1) return timeAppts[0];
-        return { status: 'AVAILABLE', label: 'Available' };
-    }, [visitsTable, appointments]);
-
-    const handleSlotClick = (date, time, status) => {
-        // Calendar is now view-only - no manual scheduling allowed
-        if (status !== 'Available') {
-            setSelectedVisit({
-                ...status,
-                visitDate: date,
-                time
-            });
-            return;
-        }
-        // Do nothing for available slots - no booking panel will open
-    };
-
     const visibleDays = getVisibleDays(currentDate, calendarView);
     const filteredVisits = visitsTable.filter(v => {
         const matchesSearch = (v.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -704,10 +652,9 @@ const PrenatalVisits = () => {
             vaccineName: v.vaccineName,
             doseText: v.doseText,
             visitDate: v.visitDateOnly || v.visitDate,
-            visitTime: v.visitTime || '09:00 AM',
             status: v.status,
             attendedDate: v.attendedDate || v.vaccinatedDate,
-            visitDateTime: new Date(`${v.visitDateOnly || v.visitDate || today}T${v.visitTime ? convertTo24Hour(v.visitTime) : '09:00'}`)
+            visitDateTime: new Date(v.visitDateOnly || v.visitDate || today)
         }));
 
         const upcoming = allEntries.filter(v => 
@@ -890,13 +837,9 @@ const PrenatalVisits = () => {
                                                         className={`schedule-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
                                                         onClick={(e) => { e.stopPropagation(); setSelectedVisit(item); }}
                                                     >
-                                                        <div className="schedule-time">
-                                                            <Clock size={14} />
-                                                            <span>{item.visitTime || 'TBD'}</span>
-                                                        </div>
                                                         <div className="schedule-details">
                                                             <span className="schedule-patient">{item.patientName}</span>
-                                                            <span className="schedule-id">{visitTypeTab === 'vaccination' ? item.vaccineName : visitTypeTab === 'postpartum' ? 'Postpartum Follow-up' : item.patientId}</span>
+                                                            <span className="schedule-id">{visitTypeTab === 'vaccination' ? item.vaccineName : visitTypeTab === 'postpartum' ? 'Postpartum Follow-up' : formatMotherId(item.patientId)}</span>
                                                         </div>
                                                         <span className={`schedule-status status-${(item.status || 'scheduled').toLowerCase()}`}>
                                                             {item.status || 'Scheduled'}
@@ -906,13 +849,9 @@ const PrenatalVisits = () => {
                                             ) : dayAppts.length > 0 ? (
                                                 dayAppts.map((a, idx) => (
                                                     <div key={`appt-${idx}`} className={`schedule-item status-${a.status?.toLowerCase() || 'scheduled'}`}>
-                                                        <div className="schedule-time">
-                                                            <Clock size={14} />
-                                                            <span>{a.time || 'TBD'}</span>
-                                                        </div>
                                                         <div className="schedule-details">
                                                             <span className="schedule-patient">{a.patientName || 'Appointment'}</span>
-                                                            <span className="schedule-id">{a.patientId || ''}</span>
+                                                            <span className="schedule-id">{formatMotherId(a.patientId)}</span>
                                                         </div>
                                                         <span className={`schedule-status status-${a.status?.toLowerCase() || 'scheduled'}`}>
                                                             {a.status || 'Scheduled'}
@@ -924,10 +863,6 @@ const PrenatalVisits = () => {
                                             )}
                                             {dayManual.map(mv => (
                                                 <div key={mv.id} className={`schedule-item manual-visit-item manual-${mv.visit_type}`}>
-                                                    <div className="schedule-time">
-                                                        <Clock size={14} />
-                                                        <span>{mv.visit_time || 'TBD'}</span>
-                                                    </div>
                                                     <div className="schedule-details">
                                                         <span className="schedule-patient">{mv.patient_name}</span>
                                                         <span className="visit-type-badge badge-manual-type badge-{mv.visit_type}">{mv.visit_type === 'emergency' ? 'Emergency' : 'Follow-up'}</span>
@@ -1091,7 +1026,7 @@ const PrenatalVisits = () => {
                                     <th style={{ textAlign: 'center', width: '50px' }}>#</th>
                                     <th>Patient Name</th>
                                     <th>Risk Level</th>
-                                    <th>Date & Time</th>
+                                    <th>Date</th>
                                     <th>Status</th>
                                     <th className="text-right">Actions</th>
                                 </tr>
@@ -1104,7 +1039,7 @@ const PrenatalVisits = () => {
                                             <td>
                                                 <div className="p-info">
                                                     <span className="p-name">{visit.patientName}</span>
-                                                    <span className="p-id">{visit.patientId}</span>
+                                                    <span className="p-id">{formatMotherId(visit.patientId)}</span>
                                                 </div>
                                             </td>
                                             <td>
@@ -1113,10 +1048,7 @@ const PrenatalVisits = () => {
                                                 </span>
                                             </td>
                                             <td>
-                                                <div className="visit-datetime">
-                                                    <span className="visit-date">{formatReadableDate(visit.visitDate)}</span>
-                                                    <span className="visit-time">{visit.visitTime || 'TBD'}</span>
-                                                </div>
+                                                <span className="visit-date">{formatReadableDate(visit.visitDate)}</span>
                                             </td>
                                             <td>
                                                 <span className={`status-badge status-${visit.status?.toLowerCase() || 'scheduled'}`}>
@@ -1186,7 +1118,7 @@ const PrenatalVisits = () => {
                                             <td>
                                                 <div className="p-info">
                                                     <span className="p-name">{vacc.patientName}</span>
-                                                    <span className="p-id">{vacc.patientId}</span>
+                                                    <span className="p-id">{formatMotherId(vacc.patientId)}</span>
                                                 </div>
                                             </td>
                                             <td>
@@ -1196,10 +1128,7 @@ const PrenatalVisits = () => {
                                                 </div>
                                             </td>
                                             <td>
-                                                <div className="visit-datetime">
-                                                    <span className="visit-date">{formatReadableDate(vacc.visitDate)}</span>
-                                                    <span className="visit-time">{vacc.visitTime || 'TBD'}</span>
-                                                </div>
+                                                <span className="visit-date">{formatReadableDate(vacc.visitDate)}</span>
                                             </td>
                                             <td>
                                                 <span className={`status-badge status-${vacc.status?.toLowerCase() || 'scheduled'}`}>
@@ -1269,7 +1198,7 @@ const PrenatalVisits = () => {
                                             <td>
                                                 <div className="p-info">
                                                     <span className="p-name">{visit.patientName}</span>
-                                                    <span className="p-id">{visit.patientId}</span>
+                                                    <span className="p-id">{formatMotherId(visit.patientId)}</span>
                                                 </div>
                                             </td>
                                             <td>
@@ -1279,10 +1208,7 @@ const PrenatalVisits = () => {
                                                 </div>
                                             </td>
                                             <td>
-                                                <div className="visit-datetime">
-                                                    <span className="visit-date">{formatReadableDate(visit.visitDate)}</span>
-                                                    <span className="visit-time">{visit.visitTime || '09:00 AM'}</span>
-                                                </div>
+                                                <span className="visit-date">{formatReadableDate(visit.visitDate)}</span>
                                             </td>
                                             <td>
                                                 <span className={`status-badge status-${visit.status?.toLowerCase() || 'scheduled'}`}>

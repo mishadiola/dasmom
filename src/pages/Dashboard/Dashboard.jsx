@@ -103,7 +103,7 @@ const Dashboard = () => {
                 supabase.from('prenatal_visits').select(`
                     id, visit_date, patient_id, created_at,
                     patient_basic_info!inner ( 
-                        first_name, last_name, barangay, date_of_birth
+                        first_name, last_name, station_ass, stations:station_ass (station_name), date_of_birth
                     )
                 `).eq('visit_date', todayStr).order('created_at', { ascending: true }),
                 
@@ -111,7 +111,12 @@ const Dashboard = () => {
                 supabase.from('pregnancy_info').select('patient_id, lmd, created_at').eq('pregn_postp', 'Pregnant').order('created_at', { ascending: false })
             ]);
 
-            const activePatientIds = new Set((patientRows || []).filter((row) => !archivedPatientIds.has(row.id)).map((row) => row.id));
+            const pregnantPatientIds = new Set((pregnancyData || []).map(row => row.patient_id).filter(Boolean));
+            const activePatientIds = new Set(
+                (patientRows || [])
+                    .filter(row => !archivedPatientIds.has(row.id) && pregnantPatientIds.has(row.id))
+                    .map(row => row.id)
+            );
             const activeNewbornIds = new Set(
                 (newbornRows || [])
                     .filter((row) => row.mother_id && !archivedPatientIds.has(row.mother_id))
@@ -164,11 +169,10 @@ const Dashboard = () => {
                     return {
                         id: v.id,
                         name: `${info.first_name || ''} ${info.last_name || ''}`.trim() || 'Unknown',
-                        station: info.barangay || 'N/A',
+                        station: info.stations?.station_name || 'N/A',
                         age: age,
                         weeks: Math.max(0, weeks),
                         type: 'Checkup',
-                        time: patientService.generateTimeSlot(v.patient_id, v.visit_date),
                         risk: pregInfo.calculated_risk || 'Normal'
                     };
                 });
@@ -189,18 +193,6 @@ const Dashboard = () => {
                     return acc;
                 }, []);
                 
-                // Sort chronologically using internal patientService algorithm rules
-                uniqueAppts.sort((a, b) => {
-                   const parseTime = (t) => {
-                       const [val, ampm] = t.split(' ');
-                       let [hr, min] = val.split(':').map(Number);
-                       if (ampm === 'PM' && hr !== 12) hr += 12;
-                       if (ampm === 'AM' && hr === 12) hr = 0;
-                       return hr * 60 + min;
-                   };
-                   return parseTime(a.time) - parseTime(b.time);
-                });
-
                 setTodayAppts(uniqueAppts);
             }
 
@@ -523,8 +515,8 @@ const Dashboard = () => {
                                         return priority[a.status] - priority[b.status];
                                     })
                                     .slice(0, 5)
-                                    .map((v) => (
-                                    <div key={v.name} className={`stock-item stock-item--${v.status}`}>
+                                    .map((v, index) => (
+                                    <div key={`${v.name}-${index}`} className={`stock-item stock-item--${v.status}`}>
                                         <div className="stock-info">
                                             <span className="stock-name">{v.name}</span>
                                             <div className="stock-bar-wrap">

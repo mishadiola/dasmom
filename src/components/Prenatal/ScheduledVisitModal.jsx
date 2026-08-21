@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import PatientService from '../../services/patientservice';
 import '../../styles/components/ScheduledVisitModal.css';
 import supabase from '../../config/supabaseclient';
+import { formatMotherId } from '../../utils/displayIds';
 
 const ScheduledVisitModal = ({ visit, onClose }) => {
     const navigate = useNavigate();
@@ -124,7 +125,7 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
                             {visit.patientName} <ExternalLink size={16} />
                         </h2>
                         <div className="sv-header-meta">
-                            <span>ID: {visit.patientId || visit.motherId || 'PT-2026-N1'}</span>
+                            <span>ID: {formatMotherId(visit.patientId || visit.motherId)}</span>
                             <span className="sv-type-tag">{visit.type || visit.visitType}</span>
                         </div>
                     </div>

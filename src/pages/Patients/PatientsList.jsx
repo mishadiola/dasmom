@@ -13,12 +13,11 @@ import PatientService from '../../services/patientservice';
 import EditPatientModal from '../../components/Patient/EditPatientModal';
 import { useModal } from '../../context/ModalContext';
 import Legend from '../../components/Legend/Legend';
+import { formatMotherId } from '../../utils/displayIds';
 
 // Helper function to extract first 4 numeric digits from patient ID
 const getShortPatientId = (id) => {
-    if (!id) return '';
-    const numericOnly = String(id).replace(/[^0-9]/g, '');
-    return numericOnly.substring(0, 4) || String(id).substring(0, 4);
+    return formatMotherId(id);
 };
 
 // Helper function to format station names in Title Case
@@ -192,7 +191,8 @@ const PatientsList = () => {
     const [patients, setPatients] = useState([]);
 
     const [searchTerm, setSearchTerm] = useState('');
-    const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
+    const [archiveFilter, setArchiveFilter] = useState('all'); // 'active' | 'archived' | 'all'
+    const [outcomeFilter, setOutcomeFilter] = useState('all');
     const [filters, setFilters] = useState({
         trimesters: [],
         risks: [],
@@ -281,8 +281,8 @@ const PatientsList = () => {
     const fetchPatients = async () => {
         try {
             const patientService = new PatientService();  
-            const data = await patientService.getAllPatients(); 
-            setPatients(data);
+            const data = await patientService.getAllPatients({ includeArchived: true });
+            setPatients(data || []);
         } catch (err) {
             console.error(err);
         }
@@ -320,6 +320,8 @@ const PatientsList = () => {
         const matchesRisk = filters.risks.length === 0 || filters.risks.includes(derivedRisk);
         const matchesType = filters.patientType === 'All' || (p.patientType || p.type) === filters.patientType;
         const matchesStation = filters.stations.length === 0 || filters.stations.includes(p.station);
+        const outcome = p.pregnancyOutcome || (p.pregnancyStatus?.toLowerCase() === 'pregnant' ? 'Pregnant' : 'Other');
+        const matchesOutcome = outcomeFilter === 'all' || outcome === outcomeFilter;
         
         const isArchived = (p.archiveStatus || 'active') === 'archived';
         const matchesArchive = archiveFilter === 'all'
@@ -328,7 +330,7 @@ const PatientsList = () => {
                 ? isArchived
                 : !isArchived;
 
-        return matchesSearch && matchesTri && matchesRisk && matchesType && matchesStation && matchesArchive;
+        return matchesSearch && matchesTri && matchesRisk && matchesType && matchesStation && matchesArchive && matchesOutcome;
     });
 
     const sortedPatients = [...filteredPatients].sort((a, b) => {
@@ -374,17 +376,18 @@ const PatientsList = () => {
 
     const clearFilters = () => {
         setFilters({ trimesters: [], risks: [], stations: [], patientType: 'All', sortBy: 'newest' });
-        setArchiveFilter('active');
+        setArchiveFilter('all');
+        setOutcomeFilter('all');
         setSearchTerm('');
         setCurrentPage(1);
         setActivePopover(null);
     };
 
-    const hasActiveFilters = filters.trimesters.length > 0 || filters.risks.length > 0 || filters.stations.length > 0 || filters.sortBy !== 'newest' || archiveFilter !== 'active';
+    const hasActiveFilters = filters.trimesters.length > 0 || filters.risks.length > 0 || filters.stations.length > 0 || filters.sortBy !== 'newest' || archiveFilter !== 'all' || outcomeFilter !== 'all';
 
     const handleExport = () => {
         const exportData = sortedPatients.map(p => ({
-            'Patient ID': p.id || '',
+            'Patient ID': formatMotherId(p.id),
             'Name': p.name || '',
             'Type': p.patientType || p.type || 'Mother',
             'Station': p.station || 'Unassigned',
@@ -612,7 +615,7 @@ const PatientsList = () => {
                     {/* Archive Filter */}
                     <div className="filter-dropdown-container">
                         <button 
-                            className={`filter-btn ${archiveFilter !== 'active' ? 'active-filter' : ''}`}
+                            className={`filter-btn ${archiveFilter !== 'all' ? 'active-filter' : ''}`}
                             onClick={() => setActivePopover(activePopover === 'archive' ? null : 'archive')}
                             style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                         >
@@ -628,6 +631,41 @@ const PatientsList = () => {
                                     <button className={`popover-opt-btn ${archiveFilter === 'active' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('active'); setActivePopover(null); setCurrentPage(1); }}>Active</button>
                                     <button className={`popover-opt-btn ${archiveFilter === 'archived' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('archived'); setActivePopover(null); setCurrentPage(1); }}>Archived</button>
                                     <button className={`popover-opt-btn ${archiveFilter === 'all' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('all'); setActivePopover(null); setCurrentPage(1); }}>All</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Pregnancy Outcome Filter */}
+                    <div className="filter-dropdown-container">
+                        <button
+                            className={`filter-btn ${outcomeFilter !== 'all' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'outcome' ? null : 'outcome')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            <Activity size={14} className="filter-btn-icon" />
+                            <span>{outcomeFilter === 'all' ? 'All Outcomes' : outcomeFilter}</span>
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        {activePopover === 'outcome' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Pregnancy Outcome</div>
+                                <div className="popover-options">
+                                    {[
+                                        ['all', 'All Outcomes'],
+                                        ['Pregnant', 'Currently Pregnant'],
+                                        ['Live Birth', 'Successful Delivery'],
+                                        ['Miscarriage', 'Miscarriage'],
+                                        ['Other', 'Other / No Outcome']
+                                    ].map(([value, label]) => (
+                                        <button
+                                            key={value}
+                                            className={`popover-opt-btn ${outcomeFilter === value ? 'selected' : ''}`}
+                                            onClick={() => { setOutcomeFilter(value); setActivePopover(null); setCurrentPage(1); }}
+                                        >
+                                            {label}
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
                         )}
