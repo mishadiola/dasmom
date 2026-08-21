@@ -239,6 +239,8 @@ class BabyService {
           complications,
           facility,
           postpartum_visit_date,
+          postpartum_attended_date,
+          postpartum_remarks,
           notes,
           created_at,
           patient_basic_info!deliveries_mother_id_fkey (
@@ -334,6 +336,8 @@ class BabyService {
           staff: staff?.full_name || 'Unassigned',
           facility: d.facility || 'N/A',
           postpartumVisitDate: d.postpartum_visit_date || null,
+          postpartumAttendedDate: d.postpartum_attended_date || null,
+          postpartumRemarks: d.postpartum_remarks || null,
           notes: d.notes || '',
           pregnancyOutcome: (d.delivery_type === 'N/A - Not Applicable' && newborn?.condition_at_birth === 'N/A - No Baby')
             ? 'Miscarriage'
@@ -368,6 +372,8 @@ class BabyService {
           staff: 'Unassigned',
           facility: null,
           postpartumVisitDate: null,
+          postpartumAttendedDate: null,
+          postpartumRemarks: null,
           notes: info.notes || '',
           miscarriageInfo: info,
           pregnancyOutcome: 'Miscarriage'
@@ -744,6 +750,8 @@ class BabyService {
                 delivery_type, 
                 complications, 
                 postpartum_visit_date,
+                postpartum_attended_date,
+                postpartum_remarks,
                 notes,
                 patient_basic_info!deliveries_mother_id_fkey (
                     id, first_name, last_name, station_ass,
@@ -826,6 +834,7 @@ class BabyService {
                 id: d.id,
                 patientId: mother?.id || '',
                 name: `${mother?.first_name || ''} ${mother?.last_name || ''}`.trim(),
+                stationId: mother?.station_ass || null,
                 station: mother?.stations?.station_name || mother?.station_ass || 'Unassigned',
                 deliveryDate: d.delivery_date,
                 deliveryType: d.delivery_type || 'NSD',
@@ -833,9 +842,12 @@ class BabyService {
                 babyOutcome: newborns?.[0]?.condition_at_birth || 'Healthy',
                 recoveryStatus,
                 progress: Math.min(100, Math.round((daysPP / 42) * 100)),
-                lastCheckup: 'N/A', // Potentially join with visits table
+                lastCheckup: d.postpartum_attended_date || null,
                 nextFollowUp: d.postpartum_visit_date || 'TBD',
-                followUpStatus,
+                visitDate: d.postpartum_attended_date || d.postpartum_visit_date || null,
+                postpartumAttendedDate: d.postpartum_attended_date || null,
+                postpartumRemarks: d.postpartum_remarks || null,
+                followUpStatus: d.postpartum_attended_date ? 'Completed' : followUpStatus,
                 complications: d.complications && d.complications.length > 0 ? d.complications.join(', ') : 'None'
             };
         });
@@ -843,6 +855,18 @@ class BabyService {
         console.error('Error in getPostpartumRecords:', error);
         return [];
     }
+  }
+
+  async savePostpartumVisit(deliveryId, visitData) {
+    const { error } = await supabase
+      .from('deliveries')
+      .update({
+        postpartum_attended_date: visitData.date,
+        postpartum_remarks: visitData.remarks,
+      })
+      .eq('id', deliveryId);
+
+    if (error) throw error;
   }
 
   /**

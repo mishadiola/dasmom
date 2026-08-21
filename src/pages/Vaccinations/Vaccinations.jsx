@@ -35,7 +35,7 @@ const formatReadableDate = (dateString) => {
     if (isNaN(date.getTime())) return dateString;
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 };
-const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAutoSelectId, onClose, onSave }) => {
+export const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAutoSelectId, onClose, onSave }) => {
     const { alert: customAlert } = useModal();
     const babyService = new BabyService();
     const [form, setForm] = useState({

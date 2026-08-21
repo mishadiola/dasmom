@@ -11,6 +11,8 @@ import {
 import { AuthContext } from '../../context/AuthContext';
 import ScheduledVisitModal from '../../components/Prenatal/ScheduledVisitModal';
 import PatientModal from '../../components/Prenatal/PatientModal';
+import PostpartumVisitModal from '../../components/PostpartumVisitModal';
+import { RecordModal } from '../Vaccinations/Vaccinations';
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/PrenatalVisits.css';
 import Legend from '../../components/Legend/Legend';
@@ -131,6 +133,8 @@ const PrenatalVisits = () => {
     const [toast, setToast] = useState(null);
     const [calendarView, setCalendarView] = useState('day');
     const [selectedVisit, setSelectedVisit] = useState(null);
+    const [postpartumVisitMother, setPostpartumVisitMother] = useState(null);
+    const [vaccinationRecordModal, setVaccinationRecordModal] = useState(null);
 
     // -- Derived Data --
     const [appointments, setAppointments] = useState([]);
@@ -655,6 +659,7 @@ const PrenatalVisits = () => {
             status: v.status,
             attendedDate: v.attendedDate || v.vaccinatedDate,
             visitDateTime: new Date(v.visitDateOnly || v.visitDate || today)
+            , raw: v.raw || v
         }));
 
         const upcoming = allEntries.filter(v => 
@@ -690,6 +695,18 @@ const PrenatalVisits = () => {
     };
 
     const tabVisits = getTabVisits();
+
+    const openPostpartumVisit = (visit) => {
+        const raw = visit.raw || {};
+        setPostpartumVisitMother({
+            id: visit.id,
+            patientId: visit.patientId,
+            name: visit.patientName,
+            station: raw.patient_basic_info?.stations?.station_name || raw.station || 'Assigned station',
+            stationId: raw.patient_basic_info?.station_ass || raw.stationId || null,
+            deliveryType: raw.delivery_type || 'NSD',
+        });
+    };
     
     // Deduplicate visits by patient ID - keep only the most recent visit per patient
     const deduplicatedVisits = tabVisits.reduce((acc, visit) => {
@@ -835,7 +852,7 @@ const PrenatalVisits = () => {
                                                     <div 
                                                         key={item.id} 
                                                         className={`schedule-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
-                                                        onClick={(e) => { e.stopPropagation(); setSelectedVisit(item); }}
+                                                        onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit(item); }}
                                                     >
                                                         <div className="schedule-details">
                                                             <span className="schedule-patient">{item.patientName}</span>
@@ -900,7 +917,7 @@ const PrenatalVisits = () => {
                                                         <div 
                                                             key={item.id} 
                                                             className={`visit-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
-                                                            onClick={(e) => { e.stopPropagation(); setSelectedVisit(item); }}
+                                                            onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit(item); }}
                                                         >
                                                             <span className="visit-patient">{item.patientName}</span>
                                                             <span className="visit-status">{visitTypeTab === 'vaccination' ? item.vaccineName : visitTypeTab === 'postpartum' ? 'Postpartum' : (item.status || 'Scheduled')}</span>
@@ -947,7 +964,7 @@ const PrenatalVisits = () => {
                                                                 <div 
                                                                     key={item.id} 
                                                                     className={`visit-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
-                                                                    onClick={(e) => { e.stopPropagation(); setSelectedVisit(item); }}
+                                                                    onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit(item); }}
                                                                 >
                                                                     <span className="visit-patient">{item.patientName}</span>
                                                                     <span className="visit-status">{visitTypeTab === 'vaccination' ? item.vaccineName : visitTypeTab === 'postpartum' ? 'Postpartum' : (item.status || 'Scheduled')}</span>
@@ -1137,7 +1154,7 @@ const PrenatalVisits = () => {
                                             </td>
                                             <td className="text-right">
                                                 <div className="row-actions">
-                                                    <button className="action-btn-text action-btn-primary" onClick={() => navigate('/dashboard/vaccinations')} title="Manage Vaccinations">
+                                                    <button className="action-btn-text action-btn-primary" onClick={() => setVaccinationRecordModal({ mode: 'vaccine', initialPatientType: 'Mother', initialPatientName: vacc.patientName, initialAutoSelectId: vacc.id })} title="Record Vaccination">
                                                         <Syringe size={14} /> Record
                                                     </button>
                                                     <button className="action-btn-text action-btn-secondary" onClick={() => setSelectedVisit({ ...vacc, type: 'Vaccination' })} title="View Vaccination Details">
@@ -1217,8 +1234,8 @@ const PrenatalVisits = () => {
                                             </td>
                                             <td className="text-right">
                                                 <div className="row-actions">
-                                                    <button className="action-btn-text action-btn-primary" onClick={() => navigate('/dashboard/postpartum')} title="Open Postpartum Records">
-                                                        <Users size={14} /> Record
+                                                    <button className="action-btn-text action-btn-primary" onClick={() => openPostpartumVisit(visit)} title="Record Postpartum Visit">
+                                                        <Plus size={14} /> Record
                                                     </button>
                                                     <button className="action-btn-text action-btn-secondary" onClick={() => setSelectedVisit({ ...visit, type: 'Postpartum' })} title="View Follow-up Details">
                                                         <Eye size={14} /> View
@@ -1444,6 +1461,20 @@ const PrenatalVisits = () => {
                 <PatientModal 
                     patientId={selectedPatient}
                     onClose={() => setSelectedPatient(null)}
+                />
+            )}
+            {postpartumVisitMother && (
+                <PostpartumVisitModal
+                    mother={postpartumVisitMother}
+                    onClose={() => setPostpartumVisitMother(null)}
+                    onSave={() => { setPostpartumVisitMother(null); fetchData(); }}
+                />
+            )}
+            {vaccinationRecordModal && (
+                <RecordModal
+                    {...vaccinationRecordModal}
+                    onClose={() => setVaccinationRecordModal(null)}
+                    onSave={() => { setVaccinationRecordModal(null); fetchData(); }}
                 />
             )}
         </div>

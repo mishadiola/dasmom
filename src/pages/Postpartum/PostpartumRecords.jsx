@@ -4,13 +4,14 @@ import {
     Search, Filter, Baby, Heart, AlertTriangle, Clock,
     CheckCircle2, XCircle, ChevronRight, ChevronLeft, Eye,
     AlertCircle, FileText, MapPin, Activity, Thermometer,
-    Brain, Milk, Calendar, TrendingUp, Download, X, ChevronDown
+    Brain, Milk, Calendar, TrendingUp, Download, X, ChevronDown, ClipboardList
 } from 'lucide-react';
 import BabyService from '../../services/babyservices';
 import * as XLSX from 'xlsx';
 import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/PostpartumRecords.css';
 import { formatMotherId } from '../../utils/displayIds';
+import PostpartumVisitModal from '../../components/PostpartumVisitModal';
 
 const formatReadableDate = (dateString) => {
     if (!dateString || dateString === 'N/A' || dateString === 'Not scheduled' || dateString === 'None') return dateString;
@@ -49,6 +50,8 @@ const DetailModal = ({ mother, onClose }) => {
                         complications,
                         facility,
                         postpartum_visit_date,
+                        postpartum_attended_date,
+                        postpartum_remarks,
                         staff_profiles!deliveries_attending_staff_fkey (full_name),
                         newborns (birth_weight, condition_at_birth),
                         patient_basic_info (barangay, province)
@@ -67,6 +70,8 @@ const DetailModal = ({ mother, onClose }) => {
                     deliveryComplications: mother.complications || 'None',
                     woundCondition: mother.deliveryType === 'CS' ? 'Healing Well' : 'N/A (NSD)',
                     postpartumVisitDate: postpartumVisitDate
+                    , postpartumAttendedDate: deliveries?.postpartum_attended_date || null
+                    , postpartumRemarks: deliveries?.postpartum_remarks || null
                 };
                 setDetail(updatedDetail);
             } catch (error) {
@@ -117,6 +122,19 @@ const DetailModal = ({ mother, onClose }) => {
                             <div className="detail-item"><span>Baby Outcome</span><strong>{mother.babyOutcome}</strong></div>
                         </div>
                     </section>
+
+                    {detail.postpartumRemarks?.assessment && (
+                        <section className="modal-section">
+                            <h3 className="modal-section-title"><ClipboardList size={15} /> Recorded Postpartum Assessment</h3>
+                            <div className="detail-grid">
+                                <div className="detail-item"><span>Visit Date</span><strong>{formatReadableDate(detail.postpartumAttendedDate)}</strong></div>
+                                <div className="detail-item"><span>Personnel Present</span><strong>{detail.postpartumRemarks.personnel_present?.name || 'N/A'}</strong></div>
+                                {Object.entries(detail.postpartumRemarks.assessment).filter(([, value]) => value).map(([key, value]) => (
+                                    <div className="detail-item" key={key}><span>{key.replaceAll('_', ' ')}</span><strong>{value}</strong></div>
+                                ))}
+                            </div>
+                        </section>
+                    )}
 
                     {/* B. Postpartum Visit Schedule */}
                     <section className="modal-section">
@@ -170,6 +188,7 @@ const PostpartumRecords = () => {
         deliveryType: 'All', recovery: 'All', station: 'All', followUp: 'All'
     });
     const [selectedMother, setSelectedMother] = useState(null);
+    const [visitMother, setVisitMother] = useState(null);
     const [activePopover, setActivePopover] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
@@ -205,6 +224,11 @@ const PostpartumRecords = () => {
     const handleFilter = (key, val) => {
         setFilters(prev => ({ ...prev, [key]: val }));
         setCurrentPage(1);
+    };
+
+    const refreshRecords = async () => {
+        const records = await babyService.getPostpartumRecords();
+        setMothers(records || []);
     };
 
     const handleExportReport = () => {
@@ -457,8 +481,7 @@ const PostpartumRecords = () => {
                                         <th>Days PP</th>
                                         <th>Baby</th>
                                         <th>Recovery</th>
-                                        <th>Last Checkup</th>
-                                        <th>Next Follow-up</th>
+                                        <th>Visit Date</th>
                                         <th>Complications</th>
                                         <th>Actions</th>
                                     </tr>
@@ -491,9 +514,8 @@ const PostpartumRecords = () => {
                                             <td>
                                                 <span className={`recovery-badge ${getRecoveryBadge(m.recoveryStatus)}`}>{m.recoveryStatus}</span>
                                             </td>
-                                            <td className="pp-date-cell">{formatReadableDate(m.lastCheckup)}</td>
                                             <td>
-                                                <div className="pp-date-cell">{formatReadableDate(m.nextFollowUp)}</div>
+                                                <div className="pp-date-cell">{formatReadableDate(m.visitDate) || 'Not scheduled'}</div>
                                                 <span className={`fu-badge ${getFollowUpBadge(m.followUpStatus)}`}>{m.followUpStatus}</span>
                                             </td>
                                             <td>
@@ -503,6 +525,7 @@ const PostpartumRecords = () => {
                                             </td>
                                             <td>
                                                 <div className="pp-actions">
+                                                    {!m.postpartumAttendedDate && <button className="action-btn record-btn" title="Record Postpartum Visit" onClick={() => setVisitMother(m)}><ClipboardList size={15} /></button>}
                                                     <button className="action-btn view-btn" title="View Profile" onClick={() => setSelectedMother(m)}>
                                                         <Eye size={15} />
                                                     </button>
@@ -512,7 +535,7 @@ const PostpartumRecords = () => {
                                     ))}
                                     {filtered.length === 0 && (
                                         <tr>
-                                            <td colSpan="10" className="pp-empty">
+                                            <td colSpan="9" className="pp-empty">
                                                 <Baby size={28} />
                                                 <p>No postpartum records matching your filters.</p>
                                             </td>
@@ -611,6 +634,7 @@ const PostpartumRecords = () => {
 
             {/* ── Detail Modal ── */}
             {selectedMother && <DetailModal mother={selectedMother} onClose={() => setSelectedMother(null)} />}
+            {visitMother && <PostpartumVisitModal mother={visitMother} onClose={() => setVisitMother(null)} onSave={refreshRecords} />}
 
         </div>
     );

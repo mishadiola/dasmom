@@ -135,6 +135,98 @@
     color: var(--color-text);
 }
 
+.pp-visit-modal {
+    width: min(900px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+}
+
+.pp-visit-modal .modal-body {
+    overflow-y: auto;
+}
+
+.pp-visit-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+.pp-visit-meta label,
+.pp-assessment-grid label,
+.pp-general-remarks {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--color-text-muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.pp-visit-meta input,
+.pp-visit-meta select,
+.pp-assessment-grid input,
+.pp-assessment-grid select,
+.pp-assessment-grid textarea,
+.pp-general-remarks textarea {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid #e4e7ec;
+    border-radius: 8px;
+    background: #fff;
+    color: var(--color-text);
+    font: inherit;
+    font-weight: 400;
+    resize: vertical;
+}
+
+.pp-visit-meta label {
+    gap: 7px;
+}
+
+.pp-visit-meta label svg {
+    margin-right: 4px;
+}
+
+.pp-readonly-note {
+    padding: 9px 11px;
+    margin: -4px 0 16px;
+    border-radius: 8px;
+    background: #fff7e8;
+    color: #946b1d;
+    font-size: 12px;
+}
+
+.pp-assessment-section {
+    padding: 16px 0;
+    border-top: 1px solid #f0f2f5;
+}
+
+.pp-assessment-section h3 {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 0 0 12px;
+    color: var(--color-text);
+    font-size: 14px;
+}
+
+.pp-assessment-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.pp-general-remarks {
+    margin-top: 14px;
+}
+
+@media (max-width: 700px) {
+    .pp-visit-meta,
+    .pp-assessment-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 .pp-count {
     font-size: 12px;
     font-weight: 600;
