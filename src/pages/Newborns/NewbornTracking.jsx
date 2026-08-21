@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import useClickOutside from '../../hooks/useClickOutside';
 import { useNavigate } from 'react-router-dom';
 import {
     Search, Filter, X, Baby, Heart, AlertTriangle,
@@ -7,6 +8,7 @@ import {
     TrendingUp, ShieldCheck, Timer, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import NewbornService from '../../services/newbornservice';
+import PatientService from '../../services/patientservice';
 import * as XLSX from 'xlsx';
 import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/NewbornTracking.css';
@@ -177,12 +179,25 @@ const VaccinationDetailModal = ({ baby, onClose }) => {
 ════════════════════════════ */
 const NewbornTracking = () => {
     const navigate = useNavigate();
+    const patientService = useMemo(() => new PatientService(), []);
+    const [availableStations, setAvailableStations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState({ status: 'All', progress: 'All', station: 'All' });
+
+    const hasActiveFilters = filters.status !== 'All' || filters.progress !== 'All' || filters.station !== 'All' || searchTerm !== '';
+
+    const clearFilters = () => {
+        setFilters({ status: 'All', progress: 'All', station: 'All' });
+        setSearchTerm('');
+        setActivePopover(null);
+    };
+
     const [selectedBaby, setSelectedBaby] = useState(null);
     const [expandedRow, setExpandedRow] = useState(null);
     const [activePopover, setActivePopover] = useState(null);
+    const filterRowRef = useRef(null);
+    useClickOutside(filterRowRef, () => setActivePopover(null));
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
@@ -243,6 +258,18 @@ const NewbornTracking = () => {
             setLoading(false);
         }
     }, []);
+
+    useEffect(() => {
+        const fetchStations = async () => {
+            try {
+                const data = await patientService.getAllStations();
+                setAvailableStations(data);
+            } catch (err) {
+                console.error('Error fetching stations:', err);
+            }
+        };
+        fetchStations();
+    }, [patientService]);
 
     useEffect(() => {
         loadNewbornData();
@@ -461,7 +488,19 @@ const NewbornTracking = () => {
         return 'progress-started';
     };
 
-    const handleExport = () => {
+    const [showExportMenu, setShowExportMenu] = useState(false);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (showExportMenu && !event.target.closest('.export-dropdown-container')) {
+                setShowExportMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showExportMenu]);
+
+    const handleExportExcel = () => {
         const exportData = filtered.map(b => {
             const progress = getVaccinationProgress(b);
             const nextVaccine = getNextVaccine(b);
@@ -494,6 +533,50 @@ const NewbornTracking = () => {
         XLSX.writeFile(wb, `Newborn_Vaccination_Tracking_${dateStr}.xlsx`);
     };
 
+    const handleExportPDF = async () => {
+        try {
+            const jsPDF = (await import('jspdf')).default;
+            const autoTable = (await import('jspdf-autotable')).default;
+            
+            const doc = new jsPDF('landscape');
+            
+            const tableColumn = ["Baby Name", "Mother Name", "Baby ID", "Station", "Birth Date", "Completed", "Total", "Progress", "Next Vaccine", "Next Due"];
+            const tableRows = [];
+
+            filtered.forEach(b => {
+                const progress = getVaccinationProgress(b);
+                const nextVaccine = getNextVaccine(b);
+                tableRows.push([
+                    b.babyName || '',
+                    b.motherName || '',
+                    b.id || '',
+                    b.station || '',
+                    formatDateLong(b.birthDate) || '',
+                    progress.completed || 0,
+                    progress.total || 0,
+                    `${progress.percentage}%`,
+                    nextVaccine ? `${nextVaccine.vaccine} (${nextVaccine.dose})` : 'All Completed',
+                    nextVaccine?.date || '—'
+                ]);
+            });
+
+            doc.text("Newborn Vaccination Tracking List", 14, 15);
+            
+            autoTable(doc, {
+                head: [tableColumn],
+                body: tableRows,
+                startY: 20,
+                styles: { fontSize: 8 },
+                headStyles: { fillColor: [147, 111, 199] }
+            });
+
+            const dateStr = new Date().toISOString().split('T')[0];
+            doc.save(`Newborn_Vaccination_Tracking_${dateStr}.pdf`);
+        } catch (error) {
+            console.error("Error generating PDF:", error);
+        }
+    };
+
     const SUMMARY_CARDS = [
         { label: 'Total Newborns', value: newborns.length, color: 'lilac', icon: Baby },
         { label: 'Fully Vaccinated', value: stats.fullyVaccinated, color: 'sage', icon: CheckCircle2 },
@@ -521,9 +604,26 @@ const NewbornTracking = () => {
                     <p className="page-subtitle">View and manage newborn records, including vaccination status and newborn information.</p>
                 </div>
                 <div className="header-actions">
-                    <button className="btn btn-outline" onClick={handleExport}>
-                        <Download size={14} /> Export Report
-                    </button>
+                    <div className="export-dropdown-container" style={{ position: 'relative' }}>
+                        <button className="btn btn-outline" onClick={() => setShowExportMenu(!showExportMenu)}>
+                            <Download size={14} /> Export
+                        </button>
+                        {showExportMenu && (
+                            <div className="export-dropdown" style={{
+                                position: 'absolute', top: '100%', right: 0, marginTop: '8px',
+                                background: '#fff', border: '1px solid #eaeaea', borderRadius: '8px',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '8px',
+                                display: 'flex', flexDirection: 'column', gap: '4px', zIndex: 100, minWidth: '150px'
+                            }}>
+                                <button className="btn btn-text" onClick={() => { handleExportExcel(); setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
+                                    <Download size={14} style={{ marginRight: '8px' }} /> Excel (.xlsx)
+                                </button>
+                                <button className="btn btn-text" onClick={() => { handleExportPDF(); setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
+                                    <Download size={14} style={{ marginRight: '8px' }} /> PDF (.pdf)
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -560,7 +660,7 @@ const NewbornTracking = () => {
                         }}
                     />
                 </div>
-                <div className="shared-filters-row">
+                <div className="shared-filters-row" ref={filterRowRef}>
                     <span className="filters-label"><Filter size={13} /> Filters:</span>
                     
                     {/* Status Filter */}
@@ -629,13 +729,36 @@ const NewbornTracking = () => {
                                 <div className="popover-title">Station</div>
                                 <div className="popover-options">
                                     <button className={`popover-opt-btn ${filters.station === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('station', 'All'); setCurrentPage(1); setActivePopover(null); }}>All Stations</button>
-                                    {[1,2,3,4,5,6,7].map(n => (
-                                        <button key={n} className={`popover-opt-btn ${filters.station === `Station ${n}` ? 'selected' : ''}`} onClick={() => { handleFilter('station', `Station ${n}`); setCurrentPage(1); setActivePopover(null); }}>Station {n}</button>
+                                    {availableStations.map(s => (
+                                        <button key={s} className={`popover-opt-btn ${filters.station === s ? 'selected' : ''}`} onClick={() => { handleFilter('station', s); setCurrentPage(1); setActivePopover(null); }}>{s}</button>
                                     ))}
                                 </div>
                             </div>
                         )}
                     </div>
+                    {hasActiveFilters && (
+                        <button className="clear-filters-btn" onClick={clearFilters}>Clear All</button>
+                    )}
+                    <Legend 
+                        categories={[
+                            {
+                                title: "VACCINATION STATUS",
+                                items: [
+                                    { label: "Fully Vaccinated", className: "chip-completed" },
+                                    { label: "In Progress", className: "chip-progress" },
+                                    { label: "Needs Attention", className: "chip-overdue" }
+                                ]
+                            },
+                            {
+                                title: "SCHEDULE STATUS",
+                                items: [
+                                    { label: "Scheduled", className: "vacc-mini-status pending" },
+                                    { label: "Completed", className: "vacc-mini-status completed" },
+                                    { label: "Missed", className: "vacc-mini-status overdue" }
+                                ]
+                            }
+                        ]}
+                    />
                 </div>
             </div>
 
@@ -669,19 +792,6 @@ const NewbornTracking = () => {
                                 </button>
                             ))}
                         </div>
-                        <Legend 
-                            categories={[
-                                {
-                                    title: "Schedule Status",
-                                    items: [
-                                        { label: "Scheduled", icon: <i className="dot vacc-dot-scheduled"></i> },
-                                        { label: "Completed", icon: <i className="dot vacc-dot-completed"></i> },
-                                        { label: "Missed", icon: <i className="dot vacc-dot-missed"></i> },
-                                        { label: "Overdue", icon: <i className="dot vacc-dot-overdue"></i> }
-                                    ]
-                                }
-                            ]}
-                        />
                     </div>
                 </div>
 
@@ -798,18 +908,6 @@ const NewbornTracking = () => {
             <div className="nb-card vacc-table-card">
                 <div className="nb-card-head registry-table-head">
                     <h2><Baby size={17} /> Newborn Registry</h2>
-                    <Legend 
-                        categories={[
-                            {
-                                title: "Status",
-                                items: [
-                                    { label: "Fully Vaccinated", className: "chip-completed", icon: <CheckCircle2 size={11} /> },
-                                    { label: "In Progress", className: "chip-progress", icon: <TrendingUp size={11} /> },
-                                    { label: "Needs Attention", className: "chip-overdue", icon: <AlertTriangle size={11} /> }
-                                ]
-                            }
-                        ]}
-                    />
                     <span className="nb-count">{filtered.length} newborns</span>
                 </div>
 

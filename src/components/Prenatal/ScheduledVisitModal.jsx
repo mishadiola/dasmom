@@ -13,11 +13,10 @@ import { formatMotherId } from '../../utils/displayIds';
 const ScheduledVisitModal = ({ visit, onClose }) => {
     const navigate = useNavigate();
     const patientService = useMemo(() => new PatientService(), []);
-    const [status, setStatus] = useState(visit.status || 'Upcoming');
-    const [notes, setNotes] = useState('');
-    const [isSaving, setIsSaving] = useState(false);
+    const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
     const [patientVisits, setPatientVisits] = useState([]);
     const [loadingVisits, setLoadingVisits] = useState(true);
+    const [patientStation, setPatientStation] = useState('');
 
     if (!visit) return null;
 
@@ -43,34 +42,29 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
         if (visit.patientId) fetchPatientVisits();
     }, [visit.patientId]);
 
-    const handleStatusChange = (newStatus) => {
-        setStatus(newStatus);
-    };
+    // Fetch patient station
+    useEffect(() => {
+        const fetchPatientStation = async () => {
+            if (!visit?.patientId) return;
+            try {
+                const { data, error } = await supabase
+                    .from('patient_basic_info')
+                    .select('station')
+                    .eq('id', visit.patientId)
+                    .single();
+                
+                if (data?.station) {
+                    setPatientStation(data.station);
+                }
+            } catch (error) {
+                console.error('Error fetching patient station:', error);
+            }
+        };
+        
+        fetchPatientStation();
+    }, [visit]);
 
-    const handleSave = async () => {
-    const updates = {
-        status,
-        clinical_notes: notes.trim() || null,
-        attended_date: status === 'Attended' ? new Date().toISOString().split('T')[0] : null,
-    };
-    
-    setIsSaving(true);
-    try {
-        // 🔥 DIRECT SUPABASE - skips service cache issue
-        const { data, error } = await supabase
-            .from('prenatal_visits')
-            .update(updates)
-            .eq('id', visit.id)
-            .select();
-            
-        if (error) throw error;
-        console.log('✅ DIRECT UPDATE SUCCESS:', data);
-    } catch (error) {
-        console.error('❌ Supabase ERROR:', error);
-    }
-    setIsSaving(false);
-    onClose();
-};
+
 
     const getStatusClass = (s) => {
         switch (s.toLowerCase()) {
@@ -136,66 +130,21 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
 
                 {/* ── Scrollable Body ── */}
                 <div className="sv-modal-body">
-                    {/* Action Buttons Section */}
-                    <div className="sv-section">
-                        <h3 className="sv-section-title">Actions</h3>
-                        <div className="sv-action-buttons">
-                            <button 
-                                className="action-btn-text action-btn-primary" 
-                                onClick={() => navigate(`/dashboard/prenatal/add/${visit.patientId}`)}
-                                title="Record Prenatal Visit"
-                            >
-                                <Plus size={14} /> Record Visit
-                            </button>
-                            <button 
-                                className="action-btn-text action-btn-secondary"
-                                onClick={() => document.getElementById('visit-history').scrollIntoView({ behavior: 'smooth' })}
-                                title="View Visit History"
-                            >
-                                <Activity size={14} /> View History
-                            </button>
-                            <button 
-                                className="action-btn-text action-btn-accent"
-                                onClick={() => navigate(`/dashboard/patients/${visit.patientId}`)}
-                                title="View Patient Profile"
-                            >
-                                <Users size={14} /> View Profile
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Visit Status & Outcome Section */}
-                    <div className="sv-section">
-                        <h3 className="sv-section-title">Visit Status & Outcome</h3>
-                        <div className="sv-status-options">
-                            {[
-                                { label: 'Attended', icon: CheckCircle2, value: 'Attended', class: 'completed' },
-                                { label: 'Missed', icon: AlertCircle, value: 'Missed', class: 'missed' }
-                            ].map(opt => (
-                                <button 
-                                    key={opt.value}
-                                    className={`sv-status-btn ${status === opt.value ? `active ${opt.class}` : ''}`}
-                                    onClick={() => handleStatusChange(opt.value)}
-                                >
-                                    <opt.icon size={18} />
-                                    {opt.label}
-                                </button>
-                            ))}
-                        </div>
-                        <div className="sv-notes-field">
-                            <label className="sv-label">Visit Notes / Remarks</label>
-                            <textarea 
-                                className="sv-textarea" 
-                                placeholder="Add reasoning for status or follow-up instructions..."
-                                rows={3}
-                                value={notes}
-                                onChange={(e) => setNotes(e.target.value)}
-                            />
-                        </div>
+                    {/* Primary Action */}
+                    <div className="sv-section" style={{ borderBottom: 'none', paddingBottom: '0' }}>
+                        <button 
+                            className="btn btn-primary" 
+                            style={{ width: '100%', justifyContent: 'center', padding: '12px' }}
+                            onClick={() => navigate(`/dashboard/prenatal/add/${visit.patientId}`)}
+                            title="Record Prenatal Visit"
+                        >
+                            <Plus size={18} style={{ marginRight: '8px' }} /> Record Prenatal Visit
+                        </button>
                     </div>
 
                     {/* Visit Details */}
                     <div className="sv-section">
+                        <h3 className="sv-section-title">Visit Details</h3>
                         <div className="sv-details-grid">
                             <div className="sv-field">
                                 <label className="sv-label">Scheduled Date & Time</label>
@@ -207,13 +156,7 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
                             <div className="sv-field">
                                 <label className="sv-label">Location / Facility</label>
                                 <div className="sv-value">
-                                    <MapPin size={16} /> {visit.location || 'Station Health Station'}
-                                </div>
-                            </div>
-                            <div className="sv-field">
-                                <label className="sv-label">Staff Assigned</label>
-                                <div className="sv-value">
-                                    <User size={16} /> {visit.midwife || visit.staff || 'Midwife Elena P.'}
+                                    <MapPin size={16} /> {patientStation || visit.location || 'CHO 3'}
                                 </div>
                             </div>
                             <div className="sv-field">
@@ -233,79 +176,91 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
                         </div>
                     </div>
 
-                    {/* Visit History Section */}
-                    <div className="sv-section" id="visit-history">
-                        <h3 className="sv-section-title"><Activity size={18} /> Visit History</h3>
-                        {loadingVisits ? (
-                            <div className="loading-visits">Loading visit history...</div>
-                        ) : sortedVisits.length > 0 ? (
-                            <div className="sv-visit-history">
-                                {upcomingVisits.length > 0 && (
-                                    <>
-                                        <div className="visit-section-label">Upcoming Visits</div>
-                                        {upcomingVisits.map(v => (
-                                            <div key={v.id} className={`visit-card visit-${v.status?.toLowerCase()}`}>
-                                                <div className="visit-header">
-                                                    <div className="visit-date">{formatDate(v.visit_date)}</div>
-                                                    <div className={`visit-status status-${v.status?.toLowerCase()}`}>{v.status}</div>
-                                                </div>
-                                                <div className="visit-details">
-                                                    <div className="visit-meta">
-                                                        <span>Visit #{v.visit_number || 'N/A'}</span>
-                                                        <span>{v.gestational_age || 'N/A'}</span>
-                                                    </div>
-                                                    {v.clinical_notes && (
-                                                        <div className="visit-notes">
-                                                            <strong>Notes:</strong> {v.clinical_notes}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </>
-                                )}
-                                {pastVisits.length > 0 && (
-                                    <>
-                                        <div className="visit-section-label">Past Visits</div>
-                                        {pastVisits.map(v => (
-                                            <div key={v.id} className={`visit-card visit-${v.status?.toLowerCase()}`}>
-                                                <div className="visit-header">
-                                                    <div className="visit-date">{formatDate(v.visit_date)}</div>
-                                                    <div className={`visit-status status-${v.status?.toLowerCase()}`}>{v.status}</div>
-                                                </div>
-                                                <div className="visit-details">
-                                                    <div className="visit-meta">
-                                                        <span>Visit #{v.visit_number || 'N/A'}</span>
-                                                        <span>{v.gestational_age || 'N/A'}</span>
-                                                    </div>
-                                                    {v.clinical_notes && (
-                                                        <div className="visit-notes">
-                                                            <strong>Notes:</strong> {v.clinical_notes}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="no-visits">
-                                <Calendar size={48} />
-                                <p>No visits recorded yet.</p>
-                            </div>
-                        )}
+                    {/* Secondary Actions */}
+                    <div className="sv-section" style={{ display: 'flex', gap: '10px', borderBottom: isHistoryExpanded ? '1px solid #eee' : 'none' }}>
+                        <button 
+                            className="btn btn-outline"
+                            style={{ flex: 1, justifyContent: 'center' }}
+                            onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
+                            title="View Visit History"
+                        >
+                            <Activity size={14} style={{ marginRight: '8px' }} /> {isHistoryExpanded ? 'Hide History' : 'View History'}
+                        </button>
+                        <button 
+                            className="btn btn-outline"
+                            style={{ flex: 1, justifyContent: 'center' }}
+                            onClick={() => navigate(`/dashboard/patients/${visit.patientId}`)}
+                            title="View Patient Profile"
+                        >
+                            <Users size={14} style={{ marginRight: '8px' }} /> View Profile
+                        </button>
                     </div>
-                </div>
 
-                {/* ── Footer ── */}
-                <div className="sv-modal-footer">
-                    <button className="btn btn-outline" onClick={onClose} disabled={isSaving}>
-                        Cancel
-                    </button>
-                    <button className="btn btn-primary" onClick={handleSave} disabled={isSaving}>
-                        {isSaving ? 'Saving...' : 'Update Visit Record'}
-                    </button>
+                    {/* Visit History Section (Expandable) */}
+                    {isHistoryExpanded && (
+                        <div className="sv-section" id="visit-history">
+                            <h3 className="sv-section-title"><Activity size={18} /> Visit History</h3>
+                            {loadingVisits ? (
+                                <div className="loading-visits">Loading visit history...</div>
+                            ) : sortedVisits.length > 0 ? (
+                                <div className="sv-visit-history">
+                                    {upcomingVisits.length > 0 && (
+                                        <>
+                                            <div className="visit-section-label">Upcoming Visits</div>
+                                            {upcomingVisits.map(v => (
+                                                <div key={v.id} className={`visit-card visit-${v.status?.toLowerCase()}`}>
+                                                    <div className="visit-header">
+                                                        <div className="visit-date">{formatDate(v.visit_date)}</div>
+                                                        <div className={`visit-status status-${v.status?.toLowerCase()}`}>{v.status}</div>
+                                                    </div>
+                                                    <div className="visit-details">
+                                                        <div className="visit-meta">
+                                                            <span>Visit #{v.visit_number || 'N/A'}</span>
+                                                            <span>{v.gestational_age || 'N/A'}</span>
+                                                        </div>
+                                                        {v.clinical_notes && (
+                                                            <div className="visit-notes">
+                                                                <strong>Notes:</strong> {v.clinical_notes}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </>
+                                    )}
+                                    {pastVisits.length > 0 && (
+                                        <>
+                                            <div className="visit-section-label">Past Visits</div>
+                                            {pastVisits.map(v => (
+                                                <div key={v.id} className={`visit-card visit-${v.status?.toLowerCase()}`}>
+                                                    <div className="visit-header">
+                                                        <div className="visit-date">{formatDate(v.visit_date)}</div>
+                                                        <div className={`visit-status status-${v.status?.toLowerCase()}`}>{v.status}</div>
+                                                    </div>
+                                                    <div className="visit-details">
+                                                        <div className="visit-meta">
+                                                            <span>Visit #{v.visit_number || 'N/A'}</span>
+                                                            <span>{v.gestational_age || 'N/A'}</span>
+                                                        </div>
+                                                        {v.clinical_notes && (
+                                                            <div className="visit-notes">
+                                                                <strong>Notes:</strong> {v.clinical_notes}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="no-visits">
+                                    <Calendar size={48} />
+                                    <p>No visits recorded yet.</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

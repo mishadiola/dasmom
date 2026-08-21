@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import useClickOutside from '../../hooks/useClickOutside';
 import { useNavigate } from 'react-router-dom';
 import {
     Search, Filter, Plus, X, Baby, Heart, AlertTriangle,
@@ -49,6 +50,15 @@ const DeliveryOutcomes = () => {
         station: 'All',
         view: 'outcomes'
     });
+
+    const hasActiveFilters = filters.type !== 'All' || filters.outcome !== 'All' || filters.complication !== 'All' || filters.station !== 'All' || searchTerm !== '';
+
+    const clearFilters = () => {
+        setFilters({ ...filters, type: 'All', outcome: 'All', complication: 'All', station: 'All' });
+        setSearchTerm('');
+        setActivePopover(null);
+    };
+
     const [showModal, setShowModal] = useState(false);
     const [showViewModal, setShowViewModal] = useState(false);
     const [showLegend, setShowLegend] = useState(false);
@@ -56,6 +66,8 @@ const DeliveryOutcomes = () => {
     const [sortField, setSortField] = useState('deliveryDate');
     const [sortAsc, setSortAsc] = useState(false);
     const [activePopover, setActivePopover] = useState(null);
+    const filterRowRef = useRef(null);
+    useClickOutside(filterRowRef, () => setActivePopover(null));
     const [deliveries, setDeliveries] = useState([]);
     const [stats, setStats] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -385,7 +397,7 @@ const DeliveryOutcomes = () => {
                         onChange={e => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <div className="shared-filters-row">
+                <div className="shared-filters-row" ref={filterRowRef}>
                     <span className="filters-label"><Filter size={13} /> Filters:</span>
                     
                     {/* Type Filter */}
@@ -482,6 +494,9 @@ const DeliveryOutcomes = () => {
                             </div>
                         )}
                     </div>
+                    {hasActiveFilters && (
+                        <button className="clear-filters-btn" onClick={clearFilters}>Clear All</button>
+                    )}
                     <Legend 
                         categories={[
                             {

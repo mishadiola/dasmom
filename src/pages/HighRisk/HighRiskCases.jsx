@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import useClickOutside from '../../hooks/useClickOutside';
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -51,13 +52,41 @@ const HighRiskCases = () => {
   const [filterType, setFilterType] = useState('All');
   const [filterRiskLevel, setFilterRiskLevel] = useState('All');
   const [filterTrimester, setFilterTrimester] = useState('All');
-  const [filterStatus, setFilterStatus] = useState('All');
   const [filterDateRange, setFilterDateRange] = useState('All');
+  const [availableStations, setAvailableStations] = useState([]);
+
+  const hasActiveFilters = filterStation !== 'All' || filterType !== 'All' || filterRiskLevel !== 'All' || filterTrimester !== 'All' || filterDateRange !== 'All' || searchTerm !== '';
+
+  const clearFilters = () => {
+      setFilterStation('All');
+      setFilterType('All');
+      setFilterRiskLevel('All');
+      setFilterTrimester('All');
+      setFilterDateRange('All');
+      setSearchTerm('');
+      setActivePopover(null);
+      setCurrentPage(1);
+  };
+
   const [activePopover, setActivePopover] = useState(null);
+  const filterRowRef = useRef(null);
+  useClickOutside(filterRowRef, () => setActivePopover(null));
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
   const service = useMemo(() => new PatientService(), []);
+
+  useEffect(() => {
+    const fetchStations = async () => {
+      try {
+        const data = await service.getAllStations();
+        setAvailableStations(data);
+      } catch (err) {
+        console.error('Error fetching stations:', err);
+      }
+    };
+    fetchStations();
+  }, [service]);
 
   const loadHighRiskData = useCallback(async () => {
     try {
@@ -241,48 +270,33 @@ const HighRiskCases = () => {
     if (p.weeks >= 27) patientTrimester = 3;
     const matchesTrimester = filterTrimester === 'All' || patientTrimester.toString() === filterTrimester;
     
-    // Status Filter (based on next visit)
-    const today = new Date();
-    const nextVisitDate = p.nextVisit !== 'Initial' ? new Date(p.nextVisit) : null;
-    let status = 'Active';
-    if (nextVisitDate) {
-      const daysDiff = Math.ceil((nextVisitDate - today) / (1000 * 60 * 60 * 24));
-      if (daysDiff < 0) status = 'Overdue';
-      else if (daysDiff <= 7) status = 'Upcoming';
-      else status = 'Scheduled';
-    }
-    const matchesStatus = filterStatus === 'All' || status === filterStatus;
-    
     // Exclude postpartum patients - they should not appear in high risk list
     // as they are now managed through DeliveryOutcomes
     const isPostpartum = p.pregnancyStatus === 'Postpartum' || p.pregnancyStatus === 'postpartum';
     const matchesPostpartum = !isPostpartum;
     
     // Date Range Filter
+    const today = new Date();
     let matchesDateRange = filterDateRange === 'All';
     if (filterDateRange !== 'All' && p.nextVisit !== 'Initial') {
       const visitDate = new Date(p.nextVisit);
-      const daysDiff = Math.ceil((visitDate - today) / (1000 * 60 * 60 * 24));
+      const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const startOfTomorrow = new Date(startOfToday);
+      startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+      const endOfWeek = new Date(startOfToday);
+      endOfWeek.setDate(endOfWeek.getDate() + (7 - endOfWeek.getDay()));
+      const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
       
-      switch (filterDateRange) {
-        case 'today':
-          matchesDateRange = daysDiff === 0;
-          break;
-        case 'week':
-          matchesDateRange = daysDiff >= 0 && daysDiff <= 7;
-          break;
-        case 'month':
-          matchesDateRange = daysDiff >= 0 && daysDiff <= 30;
-          break;
-        case 'overdue':
-          matchesDateRange = daysDiff < 0;
-          break;
-        default:
-          matchesDateRange = true;
+      if (filterDateRange === 'Today') {
+          matchesDateRange = visitDate >= startOfToday && visitDate < startOfTomorrow;
+      } else if (filterDateRange === 'This Week') {
+          matchesDateRange = visitDate >= startOfToday && visitDate <= endOfWeek;
+      } else if (filterDateRange === 'This Month') {
+          matchesDateRange = visitDate >= startOfToday && visitDate <= endOfMonth;
       }
     }
     
-    return matchesSearch && matchesStation && matchesType && matchesRiskLevel && matchesTrimester && matchesStatus && matchesDateRange && matchesPostpartum;
+    return matchesSearch && matchesStation && matchesType && matchesRiskLevel && matchesTrimester && matchesDateRange && matchesPostpartum;
   });
 
   const totalPages = Math.ceil(filteredPatients.length / itemsPerPage);
@@ -294,8 +308,10 @@ const HighRiskCases = () => {
 
   const getStationDistribution = () => {
     const counts = {};
-    patients.forEach((p) => {
-      counts[p.station] = (counts[p.station] || 0) + 1;
+    filteredPatients.forEach((p) => {
+      if (p.station && p.station !== 'Unassigned') {
+        counts[p.station] = (counts[p.station] || 0) + 1;
+      }
     });
     return Object.entries(counts)
       .map(([name, count]) => ({ name, count }))
@@ -303,8 +319,21 @@ const HighRiskCases = () => {
   };
 
   const stationDistribution = getStationDistribution();
+  const totalAssignedCases = stationDistribution.reduce((sum, item) => sum + item.count, 0);
 
-  const handleExport = () => {
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showExportMenu && !event.target.closest('.export-dropdown-container')) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showExportMenu]);
+
+  const handleExportExcel = () => {
     const exportData = filteredPatients.map(p => ({
         'Patient ID': p.id || '',
         'Name': p.name || '',
@@ -320,6 +349,45 @@ const HighRiskCases = () => {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'High Risk Cases');
     XLSX.writeFile(workbook, 'high_risk_cases.xlsx');
+  };
+
+  const handleExportPDF = async () => {
+    try {
+      const jsPDF = (await import('jspdf')).default;
+      const autoTable = (await import('jspdf-autotable')).default;
+      
+      const doc = new jsPDF('landscape');
+      
+      const tableColumn = ["Patient ID", "Name", "Station", "Age", "Gestation", "Risk Level", "Conditions", "Next Appt"];
+      const tableRows = [];
+
+      filteredPatients.forEach(p => {
+        tableRows.push([
+          p.id || '',
+          p.name || '',
+          p.station || 'Unassigned',
+          p.age || 'N/A',
+          p.weeks ? `${p.weeks} weeks` : 'N/A',
+          p.riskLevel || 'High Risk',
+          p.condition || '',
+          p.nextVisit || 'Initial'
+        ]);
+      });
+
+      doc.text("High Risk Cases List", 14, 15);
+      
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: 20,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [147, 111, 199] }
+      });
+
+      doc.save("high_risk_cases.pdf");
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+    }
   };
 
   const getRowClass = (p) => {
@@ -365,10 +433,26 @@ const HighRiskCases = () => {
         </div>
 
         <div className="header-actions">
-          <button className="btn btn-outline" onClick={handleExport}>
-            <FileText size={16} />
-            Export List
-          </button>
+          <div className="export-dropdown-container" style={{ position: 'relative' }}>
+            <button className="btn btn-outline" onClick={() => setShowExportMenu(!showExportMenu)}>
+              <FileText size={16} /> Export
+            </button>
+            {showExportMenu && (
+              <div className="export-dropdown" style={{
+                position: 'absolute', top: '100%', right: 0, marginTop: '8px',
+                background: '#fff', border: '1px solid #eaeaea', borderRadius: '8px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '8px',
+                display: 'flex', flexDirection: 'column', gap: '4px', zIndex: 100, minWidth: '150px'
+              }}>
+                <button className="btn btn-text" onClick={() => { handleExportExcel(); setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
+                  <FileText size={14} style={{ marginRight: '8px' }} /> Excel (.xlsx)
+                </button>
+                <button className="btn btn-text" onClick={() => { handleExportPDF(); setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
+                  <FileText size={14} style={{ marginRight: '8px' }} /> PDF (.pdf)
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -387,7 +471,7 @@ const HighRiskCases = () => {
             }}
           />
         </div>
-        <div className="shared-filters-row">
+        <div className="shared-filters-row" ref={filterRowRef}>
           <span className="filters-label">
             <Filter size={13} /> Filters:
           </span>
@@ -408,8 +492,8 @@ const HighRiskCases = () => {
                       <div className="popover-title">Station</div>
                       <div className="popover-options">
                           <button className={`popover-opt-btn ${filterStation === 'All' ? 'selected' : ''}`} onClick={() => { setFilterStation('All'); setActivePopover(null); setCurrentPage(1); }}>All Stations</button>
-                          {stationDistribution.map((b) => (
-                              <button key={b.name} className={`popover-opt-btn ${filterStation === b.name ? 'selected' : ''}`} onClick={() => { setFilterStation(b.name); setActivePopover(null); setCurrentPage(1); }}>{b.name}</button>
+                          {availableStations.map((station) => (
+                              <button key={station} className={`popover-opt-btn ${filterStation === station ? 'selected' : ''}`} onClick={() => { setFilterStation(station); setActivePopover(null); setCurrentPage(1); }}>{station}</button>
                           ))}
                       </div>
                   </div>
@@ -441,28 +525,12 @@ const HighRiskCases = () => {
           </div>
           
           {/* Status Filter */}
-          <div className="filter-dropdown-container">
-              <button 
-                  className={`filter-btn ${filterStatus !== 'All' ? 'active-filter' : ''}`}
-                  onClick={() => setActivePopover(activePopover === 'status' ? null : 'status')}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-              >
-                  <Archive size={14} className="filter-btn-icon" />
-                  <span>{filterStatus === 'All' ? 'All Statuses' : filterStatus}</span>
-                  <ChevronDown size={14} className="filter-btn-icon" />
-              </button>
-              {activePopover === 'status' && (
-                  <div className="filter-popover">
-                      <div className="popover-title">Status</div>
-                      <div className="popover-options">
-                          <button className={`popover-opt-btn ${filterStatus === 'Active' ? 'selected' : ''}`} onClick={() => { setFilterStatus('Active'); setActivePopover(null); setCurrentPage(1); }}>Active</button>
-                          <button className={`popover-opt-btn ${filterStatus === 'Archived' ? 'selected' : ''}`} onClick={() => { setFilterStatus('Archived'); setActivePopover(null); setCurrentPage(1); }}>Archived</button>
-                          <button className={`popover-opt-btn ${filterStatus === 'All' ? 'selected' : ''}`} onClick={() => { setFilterStatus('All'); setActivePopover(null); setCurrentPage(1); }}>All Statuses</button>
-                      </div>
-                  </div>
-              )}
-          </div>
+
           
+          {hasActiveFilters && (
+              <button className="clear-filters-btn" onClick={clearFilters}>Clear All</button>
+          )}
+
           {/* Legend Popover */}
           <Legend 
               categories={[
@@ -648,32 +716,35 @@ const HighRiskCases = () => {
               </h2>
             </div>
             <div className="station-dist-list">
-              {stationDistribution.map((b) => (
-                <div key={b.name} className="station-dist-item">
-                  <span>{b.name}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div className="station-bar-wrap">
-                      <div
-                        className="station-bar-fill"
+              {stationDistribution.map((b) => {
+                const percentage = totalAssignedCases > 0 ? ((b.count / totalAssignedCases) * 100).toFixed(1) : 0;
+                return (
+                  <div key={b.name} className="station-dist-item">
+                    <span>{b.name}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div className="station-bar-wrap">
+                        <div
+                          className="station-bar-fill"
+                          style={{
+                            width: `${percentage}%`,
+                          }}
+                        ></div>
+                      </div>
+                      <span
                         style={{
-                          width: `${(b.count / Math.max(patients.length, 1)) * 100}%`,
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          color: 'var(--color-rose)',
+                          minWidth: '45px',
+                          textAlign: 'right',
                         }}
-                      ></div>
+                      >
+                        {percentage}%
+                      </span>
                     </div>
-                    <span
-                      style={{
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        color: 'var(--color-rose)',
-                        minWidth: '20px',
-                        textAlign: 'right',
-                      }}
-                    >
-                      {b.count}
-                    </span>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {stationDistribution.length === 0 && (
                 <p className="empty-alerts">No records found.</p>
               )}

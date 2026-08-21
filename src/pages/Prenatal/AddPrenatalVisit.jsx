@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useContext } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-    ArrowLeft, Save, X, Activity, Baby, HeartPulse,
+    ArrowLeft, ArrowRight, ChevronRight, Save, X, Activity, Baby, HeartPulse,
     Thermometer, AlertTriangle, Calculator,
     Stethoscope, FileText, CheckCircle2, XCircle, CalendarCheck
 } from 'lucide-react';
 import PatientService from '../../services/patientservice';
+import { AuthContext } from '../../context/AuthContext';
 import '../../styles/pages/AddPrenatalVisit.css';
 
 const patientService = new PatientService();
@@ -23,8 +24,10 @@ const VITAL_RANGES = {
 const AddPrenatalVisit = () => {
     const navigate = useNavigate();
     const { patientId } = useParams();
+    const { user } = useContext(AuthContext);
     const [toast, setToast] = useState(null);
 
+    const [activeTab, setActiveTab] = useState('vitals'); // 'vitals', 'fetal', 'labs', 'danger'
     const [patient, setPatient] = useState(null);
     const [vitalWarnings, setVitalWarnings] = useState({});
     const [tempWarning, setTempWarning] = useState(null);
@@ -41,8 +44,8 @@ const AddPrenatalVisit = () => {
         bpSystolic: '', bpDiastolic: '', weight: '', temp: '', pulse: '', rr: '',
         fundalHeight: '', fhr: '', fetalMovement: 'Normal', presentation: 'Cephalic',
         clinicalNotes: '', adviceGiven: '',
-        referred: false, referredTo: '', referralReason: '', referralDate: '',
-        nextApptDate: '', remiderEnabled: true, nextApptType: 'Routine Checkup',
+        referred: false, referralReason: [], referralDate: '',
+        nextApptDate: '',
         calculatedRisk: 'Normal'
     });
 
@@ -79,22 +82,20 @@ const AddPrenatalVisit = () => {
                 trimester: patient.trimester || '',
                 visitDate: new Date().toISOString().split('T')[0],
                 visitNumber: attendedCount + 1,
-                attendingMidwife: '',
-                healthFacility: 'Dasma CHO',
-                visitType: 'Facility Visit',
+                attendingMidwife: user?.id || '',
+                healthFacility: patient.station || 'CHO 3 – Main Health Facility',
                 bpSystolic: '', bpDiastolic: '', weight: '', temp: '', pulse: '', rr: '',
                 fundalHeight: '', fhr: '', fetalMovement: 'Normal', presentation: 'Cephalic',
                 testsDone: [], 
                 riskFactors: patient.medicalConditions || [],
                 calculatedRisk: patient.risk || 'Normal',
                 clinicalNotes: '', adviceGiven: '',
-                referred: false, referredTo: '', referralReason: '', referralDate: '',
-                nextApptDate: (mostRecentScheduled?.visit_date) ? new Date(mostRecentScheduled.visit_date).toISOString().split('T')[0] : '',
-                remiderEnabled: true, nextApptType: 'Routine Checkup'
+                referred: false, referralReason: [], referralDate: '',
+                nextApptDate: (mostRecentScheduled?.visit_date) ? new Date(mostRecentScheduled.visit_date).toISOString().split('T')[0] : ''
             }));
             setIsFormInitialized(true);
         }
-    }, [patient, isFormInitialized]);
+    }, [patient, isFormInitialized, user]);
 
     // Smart Calculators: EDD, GA, Trimester
     useEffect(() => {
@@ -325,10 +326,10 @@ const AddPrenatalVisit = () => {
                 clinical_notes: formData.clinicalNotes || null,
                 advice_given: formData.adviceGiven || null,
                 is_referred: formData.referred || false,
-                referred_to: formData.referredTo || null,
-                referral_reason: formData.referralReason || null,
+                referred_to: null,
+                referral_reason: formData.referralReason?.length > 0 ? formData.referralReason.join(', ') : null,
                 next_appt_date: formData.nextApptDate || null,
-                next_appt_type: formData.nextApptType || null,
+                next_appt_type: null,
                 status: 'Attended',
                 attended_date: formData.visitDate || new Date().toISOString().split('T')[0],
                 assigned_staff: formData.attendingMidwife || null,
@@ -415,29 +416,46 @@ const AddPrenatalVisit = () => {
                 <div className="apv-main-col">
 
                     {/* SECTION 1: Patient Info */}
-                    <section className="apv-section sticky-patient-info">
-                        <div className="pi-grid">
-                            <div className="pi-main">
-                                <h2>{formData.name}</h2>
-                                <span>{formData.id} · {formData.age} yrs · {formData.station}</span>
+                    <section className="apv-section sticky-patient-info" style={{ background: '#fff3cd', border: '1px solid #ffe69c', padding: '24px 32px' }}>
+                        <div className="pi-grid" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div className="pi-main" style={{ color: 'var(--color-text)', flex: 1, borderRight: '1px solid rgba(0,0,0,0.08)', paddingRight: '24px' }}>
+                                <h2 style={{ color: 'var(--color-text)', marginBottom: '8px', fontSize: '24px', fontWeight: '700' }}>{formData.name}</h2>
+                                <span style={{ color: 'var(--color-text-muted)', fontWeight: '500', fontSize: '14px' }}>{formData.id}</span>
+                                <div style={{ color: 'var(--color-text-muted)', fontWeight: '500', fontSize: '14px', marginTop: '4px' }}>{formData.age} yrs · {formData.station}</div>
                             </div>
-                            <div className="pi-stats">
-                                <div className="pi-stat-box">
-                                    <small>Gestation</small>
-                                    <strong>{formData.gestationalAge || '--'}</strong>
+                            <div className="pi-stats" style={{ background: 'transparent', display: 'flex', gap: '32px', paddingLeft: '32px', flex: 2, justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                    <small style={{ color: 'var(--color-text-muted)', fontWeight: '600', fontSize: '11px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Gestation</small>
+                                    <strong style={{ color: 'var(--color-text)', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <CalendarCheck size={18} /> {formData.gestationalAge || '--'}
+                                    </strong>
                                 </div>
-                                <div className="pi-stat-box">
-                                    <small>Trimester</small>
-                                    <strong>{formData.trimester || '--'}</strong>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                    <small style={{ color: 'var(--color-text-muted)', fontWeight: '600', fontSize: '11px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Trimester</small>
+                                    <strong style={{ color: 'var(--color-text)', fontSize: '1.1rem', backgroundColor: '#fff', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #ffe69c' }}>
+                                        {formData.trimester || '--'}
+                                    </strong>
                                 </div>
-                                <div className="pi-stat-box">
-                                    <small>Gravida/Para</small>
-                                    <strong>G{formData.gravida} P{formData.para}</strong>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                    <small style={{ color: 'var(--color-text-muted)', fontWeight: '600', fontSize: '11px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Gravida/Para</small>
+                                    <strong style={{ color: 'var(--color-text)', fontSize: '1.1rem', backgroundColor: '#fff', padding: '6px 16px', borderRadius: '20px', border: '1px solid #ffe69c' }}>
+                                        G{formData.gravida} P{formData.para}
+                                    </strong>
                                 </div>
-                                <div className={`pi-stat-box risk-box rb-${formData.calculatedRisk.replace(' ', '-').toLowerCase()}`}>
-                                    <small>Risk Level</small>
-                                    <strong>
-                                        {formData.calculatedRisk === 'High Risk' && <AlertTriangle size={14} />}
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', borderLeft: '1px solid rgba(0,0,0,0.08)', paddingLeft: '32px' }}>
+                                    <small style={{ color: 'var(--color-text-muted)', fontWeight: '600', fontSize: '11px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Risk Level</small>
+                                    <strong style={{ 
+                                        fontSize: '1.05rem', 
+                                        backgroundColor: formData.calculatedRisk === 'High Risk' ? '#fee2e2' : '#d1fae5', 
+                                        color: formData.calculatedRisk === 'High Risk' ? '#b91c1c' : '#065f46',
+                                        padding: '6px 16px', 
+                                        borderRadius: '20px',
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        gap: '6px',
+                                        border: formData.calculatedRisk === 'High Risk' ? '1px solid #fecaca' : '1px solid #a7f3d0'
+                                    }}>
+                                        {formData.calculatedRisk === 'High Risk' && <AlertTriangle size={16} />}
                                         {formData.calculatedRisk}
                                     </strong>
                                 </div>
@@ -445,134 +463,151 @@ const AddPrenatalVisit = () => {
                         </div>
                     </section>
 
-                    {/* SECTION 3: Maternal Vitals */}
-                    <section className="apv-section">
-                        <h3 className="section-head"><Activity size={18} /> Maternal Vital Signs</h3>
+                    {/* TABS CONTAINER */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '12px' }}>
+                        {/* TABS HEADER */}
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', borderBottom: '1px solid #eef0f4' }}>
+                            <button type="button" className={`apv-tab-btn ${activeTab === 'vitals' ? 'active' : ''}`} onClick={() => setActiveTab('vitals')}>
+                                <Activity size={16} style={{ marginRight: '8px' }} /> Maternal Vital Signs
+                            </button>
+                            <ChevronRight size={16} style={{ color: '#d1d6e0', margin: '0 4px' }} />
+                            <button type="button" className={`apv-tab-btn ${activeTab === 'fetal' ? 'active' : ''}`} onClick={() => setActiveTab('fetal')}>
+                                <Baby size={16} style={{ marginRight: '8px' }} /> Fetal Assessment
+                            </button>
+                            <ChevronRight size={16} style={{ color: '#d1d6e0', margin: '0 4px' }} />
+                            <button type="button" className={`apv-tab-btn ${activeTab === 'danger' ? 'active' : ''}`} onClick={() => setActiveTab('danger')}>
+                                <AlertTriangle size={16} style={{ marginRight: '8px' }} /> Danger Signs / Risk Factors
+                            </button>
+                        </div>
 
-                        <div className="vitals-grid">
-                            <div className={`form-group bp-group ${isHighBP ? 'has-warning' : ''}`}>
-                                <label>Blood Pressure
-                                    {isHighBP && <span className="inline-warn"><AlertTriangle size={12} /> High BP Alert</span>}
-                                </label>
-                                <div className="bp-inputs">
-                                    <input type="number" name="bpSystolic" value={formData.bpSystolic} onChange={handleChange} placeholder="Sys" required />
-                                    <span>/</span>
-                                    <input type="number" name="bpDiastolic" value={formData.bpDiastolic} onChange={handleChange} placeholder="Dia" required />
+                        {/* TAB CONTENT AREA */}
+                        <div className="apv-tab-content">
+                            {activeTab === 'vitals' && (
+                                <section className="apv-section" style={{ margin: 0 }}>
+                                <h3 className="section-head"><Activity size={18} /> Maternal Vital Signs</h3>
+
+                                <div className="vitals-grid">
+                                    <div className={`form-group bp-group ${isHighBP ? 'has-warning' : ''}`}>
+                                        <label>Blood Pressure
+                                            {isHighBP && <span className="inline-warn"><AlertTriangle size={12} /> High BP Alert</span>}
+                                        </label>
+                                        <div className="bp-inputs">
+                                            <input type="number" name="bpSystolic" value={formData.bpSystolic} onChange={handleChange} placeholder="Sys" required />
+                                            <span>/</span>
+                                            <input type="number" name="bpDiastolic" value={formData.bpDiastolic} onChange={handleChange} placeholder="Dia" required />
+                                        </div>
+                                    </div>
+
+                                    <div className="form-group">
+                                        <label>Weight (kg)</label>
+                                        <div className="input-with-icon">
+                                            <input type="number" step="0.1" name="weight" value={formData.weight} onChange={handleChange} required />
+                                        </div>
+                                    </div>
+
+                                    <div className="form-group">
+                                        <label>Temp (°C)</label>
+                                        <input type="number" step="0.1" name="temp" value={formData.temp} onChange={handleChange} placeholder="ex: 36.5" required />
+                                        {tempWarning && (
+                                            <div className={`temp-warning temp-warning--${tempWarning.type}`}>
+                                                <AlertTriangle size={14} />
+                                                <span>{tempWarning.label} detected. Please double-check.</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="form-group">
+                                        <label>Pulse (bpm)</label>
+                                        <input type="number" name="pulse" value={formData.pulse} onChange={handleChange} required />
+                                        {vitalWarnings.pulse && (
+                                            <div className="vital-warning">
+                                                <AlertTriangle size={14} />
+                                                <span>Abnormal: {formData.pulse} bpm (Normal: 60-100 bpm)</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="form-group">
+                                        <label>Resp. Rate (cpm)</label>
+                                        <input type="number" name="rr" value={formData.rr} onChange={handleChange} />
+                                    </div>
                                 </div>
-                            </div>
-
-                            <div className="form-group">
-                                <label>Weight (kg)</label>
-                                <div className="input-with-icon">
-                                    <input type="number" step="0.1" name="weight" value={formData.weight} onChange={handleChange} required />
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+                                    <button type="button" className="btn-next-tab" onClick={() => setActiveTab('fetal')} title="Next Section">
+                                        <ArrowRight size={20} />
+                                    </button>
                                 </div>
-                            </div>
+                            </section>
+                        )}
 
-                            <div className="form-group">
-                                <label>Temp (°C)</label>
-                                <input type="number" step="0.1" name="temp" value={formData.temp} onChange={handleChange} placeholder="ex: 36.5" required />
-                                {tempWarning && (
-                                    <div className={`temp-warning temp-warning--${tempWarning.type}`}>
-                                        <AlertTriangle size={14} />
-                                        <span>{tempWarning.label} detected. Please double-check.</span>
+                        {activeTab === 'fetal' && (
+                            <section className="apv-section" style={{ margin: 0 }}>
+                                <h3 className="section-head"><Baby size={18} /> Fetal Assessment</h3>
+
+                                <div className="fetal-grid">
+                                    <div className="form-group">
+                                        <label>Fundal Height (cm)</label>
+                                        <input type="number" name="fundalHeight" value={formData.fundalHeight} onChange={handleChange} />
                                     </div>
-                                )}
-                            </div>
-
-                            <div className="form-group">
-                                <label>Pulse (bpm)</label>
-                                <input type="number" name="pulse" value={formData.pulse} onChange={handleChange} required />
-                                {vitalWarnings.pulse && (
-                                    <div className="vital-warning">
-                                        <AlertTriangle size={14} />
-                                        <span>Abnormal: {formData.pulse} bpm (Normal: 60-100 bpm)</span>
+                                    <div className="form-group">
+                                        <label>Fetal Heart Rate (bpm)</label>
+                                        <input type="number" name="fhr" value={formData.fhr} onChange={handleChange} />
+                                        {vitalWarnings.fhr && (
+                                            <div className="vital-warning">
+                                                <AlertTriangle size={14} />
+                                                <span>Abnormal: {formData.fhr} bpm (Normal: 110-160 bpm)</span>
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-                            </div>
-
-                            <div className="form-group">
-                                <label>Resp. Rate (cpm)</label>
-                                <input type="number" name="rr" value={formData.rr} onChange={handleChange} />
-                            </div>
-                        </div>
-                    </section>
-
-                    {/* SECTION 4: Fetal Assessment */}
-                    <section className="apv-section">
-                        <h3 className="section-head"><Baby size={18} /> Fetal Assessment</h3>
-
-                        <div className="fetal-grid">
-                            <div className="form-group">
-                                <label>Fundal Height (cm)</label>
-                                <input type="number" name="fundalHeight" value={formData.fundalHeight} onChange={handleChange} />
-                            </div>
-                            <div className="form-group">
-                                <label>Fetal Heart Rate (bpm)</label>
-                                <input type="number" name="fhr" value={formData.fhr} onChange={handleChange} />
-                                {vitalWarnings.fhr && (
-                                    <div className="vital-warning">
-                                        <AlertTriangle size={14} />
-                                        <span>Abnormal: {formData.fhr} bpm (Normal: 110-160 bpm)</span>
+                                    <div className="form-group">
+                                        <label>Fetal Movement</label>
+                                        <select name="fetalMovement" value={formData.fetalMovement} onChange={handleChange}>
+                                            <option value="Normal">Normal</option>
+                                            <option value="Decreased">Decreased</option>
+                                            <option value="Absent">Absent</option>
+                                        </select>
                                     </div>
-                                )}
-                            </div>
-                            <div className="form-group">
-                                <label>Fetal Movement</label>
-                                <select name="fetalMovement" value={formData.fetalMovement} onChange={handleChange}>
-                                    <option value="Normal">Normal</option>
-                                    <option value="Decreased">Decreased</option>
-                                    <option value="Absent">Absent</option>
-                                </select>
-                            </div>
-                            <div className="form-group">
-                                <label>Presentation</label>
-                                <select name="presentation" value={formData.presentation} onChange={handleChange}>
-                                    <option value="Cephalic">Cephalic (Head down)</option>
-                                    <option value="Breech">Breech</option>
-                                    <option value="Transverse">Transverse</option>
-                                    <option value="Unknown">Unknown / Too early</option>
-                                </select>
-                            </div>
-                        </div>
-                    </section>
+                                    <div className="form-group">
+                                        <label>Presentation</label>
+                                        <select name="presentation" value={formData.presentation} onChange={handleChange}>
+                                            <option value="Cephalic">Cephalic (Head down)</option>
+                                            <option value="Breech">Breech</option>
+                                            <option value="Transverse">Transverse</option>
+                                            <option value="Unknown">Unknown / Too early</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+                                    <button type="button" className="btn-next-tab" onClick={() => setActiveTab('danger')} title="Next Section">
+                                        <ArrowRight size={20} />
+                                    </button>
+                                </div>
+                            </section>
+                        )}
 
-                    {/* SECTION 5: Laboratory Tests */}
-                    <section className="apv-section">
-                        <h3 className="section-head"><Thermometer size={18} /> Laboratory Tests</h3>
-                        <div className="check-list">
-                            {MEDICAL_TESTS.map(test => (
-                                <label key={test} className="check-lbl">
-                                    <input
-                                        type="checkbox"
-                                        checked={formData.testsDone.includes(test)}
-                                        onChange={() => handleArrayToggle('testsDone', test)}
-                                    />
-                                    <span>{test}</span>
-                                </label>
-                            ))}
-                        </div>
-                    </section>
+                        {activeTab === 'danger' && (
+                            <section className="apv-section alert-section" style={{ margin: 0 }}>
+                                <h3 className="section-head text-danger"><AlertTriangle size={18} /> Danger Signs / Risk Factors observed</h3>
+                                <p className="section-sub">Select any applicable symptoms. System will auto-flag patient as High Risk.</p>
 
-                    {/* SECTION 6 & 7: Risk & Notes */}
-                    <section className="apv-section alert-section">
-                        <h3 className="section-head text-danger"><AlertTriangle size={18} /> Danger Signs / Risk Factors observed</h3>
-                        <p className="section-sub">Select any applicable symptoms. System will auto-flag patient as High Risk.</p>
+                                <div className="risk-tags">
+                                    {RISK_FACTORS.map(factor => (
+                                        <button
+                                            type="button"
+                                            key={factor}
+                                            className={`risk-btn ${formData.riskFactors.includes(factor) ? 'active' : ''}`}
+                                            onClick={() => handleArrayToggle('riskFactors', factor)}
+                                        >
+                                            {factor}
+                                        </button>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+                    </div>
+                </div>
 
-                        <div className="risk-tags">
-                            {RISK_FACTORS.map(factor => (
-                                <button
-                                    type="button"
-                                    key={factor}
-                                    className={`risk-btn ${formData.riskFactors.includes(factor) ? 'active' : ''}`}
-                                    onClick={() => handleArrayToggle('riskFactors', factor)}
-                                >
-                                    {factor}
-                                </button>
-                            ))}
-                        </div>
-                    </section>
-
-                    <section className="apv-section">
+                <section className="apv-section" style={{ margin: 0 }}>
                         <h3 className="section-head"><FileText size={18} /> Clinical Notes & Findings</h3>
                         <div className="notes-grid">
                             <div className="form-group">
@@ -612,15 +647,13 @@ const AddPrenatalVisit = () => {
                             <input type="number" readOnly className="read-only" value={formData.visitNumber} />
                         </div>
                         <div className="form-group mt-2">
-                            <label>Visit Type</label>
-                            <select name="visitType" value={formData.visitType} onChange={handleChange}>
-                                <option value="Facility Visit">Facility Visit</option>
-                                <option value="Home Visit">Home Visit</option>
-                            </select>
-                        </div>
-                        <div className="form-group mt-2">
                             <label>Health Facility</label>
-                            <input type="text" name="healthFacility" value={formData.healthFacility} onChange={handleChange} />
+                            <select name="healthFacility" value={formData.healthFacility} onChange={handleChange}>
+                                {patient?.station && patient.station !== 'CHO 3 – Main Health Facility' && (
+                                    <option value={patient.station}>{patient.station}</option>
+                                )}
+                                <option value="CHO 3 – Main Health Facility">CHO 3 – Main Health Facility</option>
+                            </select>
                         </div>
                         <div className="form-group mt-2">
                             <label>Attending Midwife / Doctor</label>
@@ -637,7 +670,16 @@ const AddPrenatalVisit = () => {
                         </div>
                     </div>
 
-                    {/* SECTION 8: Referral */}
+                    {/* SECTION 8: Next Appointment */}
+                    <div className="apv-side-card appt-card">
+                        <h3 className="side-head text-primary"><CalendarCheck size={18} /> Next Appointment</h3>
+                        <div className="form-group mt-2">
+                            <label>Next Visit Date</label>
+                            <input type="date" name="nextApptDate" value={formData.nextApptDate} readOnly className="read-only" />
+                        </div>
+                    </div>
+
+                    {/* SECTION 9: Referral */}
                     <div className="apv-side-card referral-card">
                         <div className="ref-toggle">
                             <label className="check-lbl">
@@ -651,40 +693,6 @@ const AddPrenatalVisit = () => {
                             </label>
                         </div>
 
-                        {formData.referred && (
-                            <div className="ref-body animate-fade">
-                                <div className="form-group mt-2">
-                                    <label>Referred To</label>
-                                    <input type="text" name="referredTo" value={formData.referredTo} onChange={handleChange} required={formData.referred} placeholder="Hospital name" />
-                                </div>
-                                <div className="form-group mt-2">
-                                    <label>Reason for Referral</label>
-                                    <input type="text" name="referralReason" value={formData.referralReason} onChange={handleChange} required={formData.referred} />
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* SECTION 9: Next Appointment */}
-                    <div className="apv-side-card appt-card">
-                        <h3 className="side-head text-primary"><CalendarCheck size={18} /> Next Appointment</h3>
-                        <div className="form-group mt-2">
-                            <label>Next Visit Date</label>
-                            <input type="date" name="nextApptDate" value={formData.nextApptDate} readOnly className="read-only" />
-                        </div>
-                        <div className="form-group mt-2">
-                            <label>Visit Type</label>
-                            <select name="nextApptType" value={formData.nextApptType} onChange={handleChange}>
-                                <option value="Routine Checkup">Routine Checkup</option>
-                                <option value="Lab Results Review">Lab Results Review</option>
-                                <option value="Ultrasound">Ultrasound</option>
-                                <option value="Post-Referral Check">Post-Referral Check</option>
-                            </select>
-                        </div>
-                        <label className="check-lbl mt-3">
-                            <input type="checkbox" name="remiderEnabled" checked={formData.remiderEnabled} onChange={handleChange} />
-                            <span>Enable auto-reminder 3 days before</span>
-                        </label>
                     </div>
 
                 </div>

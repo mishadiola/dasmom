@@ -197,7 +197,7 @@ const PatientProfile = () => {
                 <div class="header">
                     <h1 class="patient-name">${p.name}</h1>
                     <p class="patient-info">Patient ID: ${getShortPatientId(p.id)} | Age: ${p.age} years | Station: ${p.station}</p>
-                    <p class="patient-info">Risk Level: <span class="risk-badge">${p.risk || 'Normal'}</span></p>
+                    <p class="patient-info">Risk Level: <span class="risk-badge">${(p.risk || 'Normal').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}</span></p>
                     <p class="patient-info">Generated on: ${new Date().toLocaleDateString()}</p>
                 </div>
 
@@ -274,7 +274,7 @@ const PatientProfile = () => {
                         </div>
                         <div class="info-item">
                             <span class="info-label">Risk Level:</span>
-                            <span class="info-value">${p.risk || 'Normal'}</span>
+                            <span class="info-value">${(p.risk || 'Normal').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}</span>
                         </div>
                     </div>
                 </div>
@@ -428,7 +428,7 @@ const PatientProfile = () => {
             <body>
                 <div class="header">
                     <h1 class="patient-name">${p.name}</h1>
-                    <p class="patient-info">Patient ID: ${getShortPatientId(p.id)} | Age: ${p.age} years | Station: ${p.station} | Risk: ${p.risk}</p>
+                    <p class="patient-info">Patient ID: ${getShortPatientId(p.id)} | Age: ${p.age} years | Station: ${p.station} | Risk: ${p.risk ? p.risk.toLowerCase().replace(/\b\w/g, l => l.toUpperCase()) : ''}</p>
                     <p class="patient-info">Prenatal Visits Schedule</p>
                     <p class="patient-info">Generated on: ${new Date().toLocaleDateString()}</p>
                 </div>
@@ -515,7 +515,7 @@ const PatientProfile = () => {
                         <div className="profile-title-row">
                             <h1 className="profile-name">{p.name}</h1>
                             <span className={`risk-badge risk-${p.risk?.toLowerCase().split(' ')[0]}`}>
-                                {p.risk}
+                                {p.risk ? p.risk.toLowerCase().replace(/\b\w/g, l => l.toUpperCase()) : ''}
                             </span>
                         </div>
                         <p className="profile-meta">
@@ -682,7 +682,7 @@ const PatientProfile = () => {
                                         </div>
                                         <div className={`gpa-box box-risk-${(p.risk || 'normal').toLowerCase().split(' ')[0]}`}>
                                             <span className="gpa-label">Risk Level</span>
-                                            <span className="gpa-value str">{p.risk || 'Normal'}</span>
+                                            <span className="gpa-value str">{(p.risk || 'Normal').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}</span>
                                             <span className="gpa-sub">Calculated</span>
                                         </div>
                                     </div>
@@ -712,9 +712,9 @@ const PatientProfile = () => {
                                                                 {visit.calculated_risk || 'Normal'} Risk
                                                             </div>
                                                         </div>
-                                                        {visit.risk_factors && visit.risk_factors.split(',').filter(f => f.trim()).length > 0 && (
+                                                        {visit.risk_factors && visit.risk_factors.split(',').filter(f => f.trim() && f.trim().toLowerCase() !== 'none').length > 0 && (
                                                             <div className="risk-factors-list">
-                                                                {visit.risk_factors.split(',').map((factor, i) => (
+                                                                {visit.risk_factors.split(',').filter(f => f.trim() && f.trim().toLowerCase() !== 'none').map((factor, i) => (
                                                                     <span key={i} className="risk-factor-tag">
                                                                         {factor.trim()}
                                                                     </span>
@@ -763,7 +763,7 @@ const PatientProfile = () => {
                                         <span className="track-icon-wrap"><AlertTriangle size={24} /></span>
                                         <div className="track-hero-content">
                                             <span className="track-hero-label">Risk Level</span>
-                                            <span className="track-hero-val">{p.risk || 'Normal'}</span>
+                                            <span className="track-hero-val">{(p.risk || 'Normal').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}</span>
                                             <span className="track-hero-sub">Based on delivery outcome</span>
                                         </div>
                                     </div>
@@ -822,7 +822,7 @@ const PatientProfile = () => {
                                         <span className="track-icon-wrap"><AlertTriangle size={24} /></span>
                                         <div className="track-hero-content">
                                             <span className="track-hero-label">Assessed Risk Level</span>
-                                            <span className="track-hero-val">{p.risk || 'Normal'}</span>
+                                            <span className="track-hero-val">{(p.risk || 'Normal').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}</span>
                                             <span className="track-hero-sub">{p.medicalConditions?.length || 0} Risk Factors Detected</span>
                                         </div>
                                     </div>
@@ -1206,7 +1206,7 @@ const PatientProfile = () => {
                                                 </div>
                                                 <div style={{ padding: '0 12px' }}>
                                                     <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Risk Level</label>
-                                                    <p style={{ fontWeight: '600', color: '#1e293b', margin: 0, fontSize: '14px', lineHeight: '1.3' }}>{delivery.risk_level || 'Normal'}</p>
+                                                    <p style={{ fontWeight: '600', color: '#1e293b', margin: 0, fontSize: '14px', lineHeight: '1.3' }}>{(delivery.risk_level || 'Normal').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}</p>
                                                 </div>
                                                 <div style={{ padding: '0 0 0 12px' }}>
                                                     <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Facility</label>

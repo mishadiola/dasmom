@@ -2109,6 +2109,28 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       .replace(/[^a-z0-9]+/g, '');
   }
 
+  async getAllStations() {
+    try {
+      const { data, error } = await this.supabase
+        .from('stations')
+        .select('station_name')
+        .order('station_name', { ascending: true });
+
+      if (error) throw error;
+
+      const stations = [...new Set(
+        (data || [])
+          .map(s => s.station_name)
+          .filter(Boolean)
+      )];
+
+      return stations;
+    } catch (error) {
+      console.error('Error in getAllStations:', error);
+      return [];
+    }
+  }
+
   async getStationIdByName(stationName) {
     const normalized = String(stationName || '').trim();
     if (!normalized) return null;

@@ -92,6 +92,18 @@ const StationReports = () => {
     const coverageColor = (v) => v >= 90 ? '#80a06c' : v >= 80 ? '#b08d70' : '#926674';
     const coverageBg = (v) => v >= 90 ? 'rgba(160,194,130,0.12)' : v >= 80 ? 'rgba(237,189,154,0.12)' : 'rgba(182,129,145,0.12)';
 
+    const [showExportMenu, setShowExportMenu] = useState(false);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (showExportMenu && !event.target.closest('.export-dropdown-container')) {
+                setShowExportMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showExportMenu]);
+
     return (
         <div className="st-page">
 
@@ -105,7 +117,26 @@ const StationReports = () => {
                     <button className="btn btn-outline" onClick={() => setShowCharts(v => !v)}>
                         <Activity size={16} /> {showCharts ? 'Hide Charts' : 'Show Charts'}
                     </button>
-                    <button className="btn btn-outline"><Download size={16} /> Export All</button>
+                    <div className="export-dropdown-container" style={{ position: 'relative' }}>
+                        <button className="btn btn-outline" onClick={() => setShowExportMenu(!showExportMenu)}>
+                            <Download size={16} /> Export
+                        </button>
+                        {showExportMenu && (
+                            <div className="export-dropdown" style={{
+                                position: 'absolute', top: '100%', right: 0, marginTop: '8px',
+                                background: '#fff', border: '1px solid #eaeaea', borderRadius: '8px',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '8px',
+                                display: 'flex', flexDirection: 'column', gap: '4px', zIndex: 100, minWidth: '150px'
+                            }}>
+                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
+                                    <Download size={14} style={{ marginRight: '8px' }} /> Excel (.xlsx)
+                                </button>
+                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
+                                    <Download size={14} style={{ marginRight: '8px' }} /> PDF (.pdf)
+                                </button>
+                            </div>
+                        )}
+                    </div>
                     <button className="btn btn-primary"><FileText size={16} /> Generate Report</button>
                 </div>
             </div>
@@ -196,9 +227,9 @@ const StationReports = () => {
                             {
                                 title: "Status",
                                 items: [
-                                    { label: "Normal", className: "chip-normal", icon: <CheckCircle2 size={11} /> },
-                                    { label: "Monitor", className: "chip-monitor", icon: <AlertTriangle size={11} /> },
-                                    { label: "Critical", className: "chip-critical", icon: <AlertCircle size={11} /> }
+                                    { label: "Normal", className: "chip-normal" },
+                                    { label: "Monitor", className: "chip-monitor" },
+                                    { label: "Critical", className: "chip-critical" }
                                 ]
                             }
                         ]}
@@ -360,6 +391,17 @@ const TriBar = ({ b }) => {
 ════════════════════════════ */
 const DetailModal = ({ station, onClose, navigate }) => {
     const [tab, setTab] = useState('overview');
+    const [showExportMenu, setShowExportMenu] = useState(false);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (showExportMenu && !event.target.closest('.export-dropdown-container')) {
+                setShowExportMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showExportMenu]);
 
     const TABS = [
         { id: 'overview',   label: 'Patients Overview', icon: Users },
@@ -548,7 +590,26 @@ const DetailModal = ({ station, onClose, navigate }) => {
 
                 <div className="modal-footer">
                     <button className="btn btn-outline" onClick={onClose}>Close</button>
-                    <button className="btn btn-outline"><Download size={14} /> Export PDF</button>
+                    <div className="export-dropdown-container" style={{ position: 'relative' }}>
+                        <button className="btn btn-outline" onClick={() => setShowExportMenu(!showExportMenu)}>
+                            <Download size={14} /> Export
+                        </button>
+                        {showExportMenu && (
+                            <div className="export-dropdown" style={{
+                                position: 'absolute', bottom: '100%', right: 0, marginBottom: '8px',
+                                background: '#fff', border: '1px solid #eaeaea', borderRadius: '8px',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '8px',
+                                display: 'flex', flexDirection: 'column', gap: '4px', zIndex: 100, minWidth: '150px'
+                            }}>
+                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
+                                    <Download size={14} style={{ marginRight: '8px' }} /> Excel (.xlsx)
+                                </button>
+                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
+                                    <Download size={14} style={{ marginRight: '8px' }} /> PDF (.pdf)
+                                </button>
+                            </div>
+                        )}
+                    </div>
                     <button className="btn btn-primary"><FileText size={14} /> Generate Full Report</button>
                 </div>
             </div>

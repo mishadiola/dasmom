@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import useClickOutside from '../../hooks/useClickOutside';
 import { useNavigate } from 'react-router-dom';
 import {
     Search, Filter, Baby, Heart, AlertTriangle, Clock,
@@ -7,7 +8,9 @@ import {
     Brain, Milk, Calendar, TrendingUp, Download, X, ChevronDown, ClipboardList
 } from 'lucide-react';
 import BabyService from '../../services/babyservices';
+import PatientService from '../../services/patientservice';
 import * as XLSX from 'xlsx';
+import Legend from '../../components/Legend/Legend';
 import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/PostpartumRecords.css';
 import { formatMotherId } from '../../utils/displayIds';
@@ -179,19 +182,44 @@ const DetailModal = ({ mother, onClose }) => {
 const PostpartumRecords = () => {
     const navigate = useNavigate();
     const babyService = new BabyService();
+    const patientService = useMemo(() => new PatientService(), []);
+    const [availableStations, setAvailableStations] = useState([]);
     const [stats, setStats] = useState([]);
     const [stationStats, setStationStats] = useState([]);
     const [mothers, setMothers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState({
-        deliveryType: 'All', recovery: 'All', station: 'All', followUp: 'All'
+        deliveryType: 'All', station: 'All', followUp: 'All'
     });
+
+    const hasActiveFilters = filters.deliveryType !== 'All' || filters.station !== 'All' || filters.followUp !== 'All' || searchTerm !== '';
+
+    const clearFilters = () => {
+        setFilters({ deliveryType: 'All', station: 'All', followUp: 'All' });
+        setSearchTerm('');
+        setActivePopover(null);
+    };
+
     const [selectedMother, setSelectedMother] = useState(null);
     const [visitMother, setVisitMother] = useState(null);
     const [activePopover, setActivePopover] = useState(null);
+    const filterRowRef = useRef(null);
+    useClickOutside(filterRowRef, () => setActivePopover(null));
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
+
+    useEffect(() => {
+        const fetchStations = async () => {
+            try {
+                const data = await patientService.getAllStations();
+                setAvailableStations(data);
+            } catch (err) {
+                console.error('Error fetching stations:', err);
+            }
+        };
+        fetchStations();
+    }, [patientService]);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -221,6 +249,18 @@ const PostpartumRecords = () => {
         CheckCircle2
     };
 
+    const [showExportMenu, setShowExportMenu] = useState(false);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (showExportMenu && !event.target.closest('.export-dropdown-container')) {
+                setShowExportMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showExportMenu]);
+
     const handleFilter = (key, val) => {
         setFilters(prev => ({ ...prev, [key]: val }));
         setCurrentPage(1);
@@ -231,7 +271,14 @@ const PostpartumRecords = () => {
         setMothers(records || []);
     };
 
-    const handleExportReport = () => {
+    const getRecoveryBadge = (status) => {
+        if (!status) return 'recovery-normal';
+        if (status.toLowerCase().includes('good') || status.toLowerCase().includes('normal')) return 'recovery-normal';
+        if (status.toLowerCase().includes('complication') || status.toLowerCase().includes('alert')) return 'recovery-alert';
+        return 'recovery-normal';
+    };
+
+    const handleExportExcel = () => {
         const exportData = filtered.map(m => ({
             'Patient Name': m.name,
             'Patient ID': formatMotherId(m.patientId),
@@ -285,27 +332,57 @@ const PostpartumRecords = () => {
         XLSX.writeFile(wb, `Postpartum_Records_${dateStr}.xlsx`);
     };
 
+    const handleExportPDF = async () => {
+        try {
+            const jsPDF = (await import('jspdf')).default;
+            const autoTable = (await import('jspdf-autotable')).default;
+            
+            const doc = new jsPDF('landscape');
+            
+            const tableColumn = ["Patient", "ID", "Station", "Del. Type", "Del. Date", "Days PP", "Baby Outcome", "Recovery", "Next FU", "FU Status", "Complications"];
+            const tableRows = [];
+
+            filtered.forEach(m => {
+                tableRows.push([
+                    m.name || '',
+                    m.patientId || '',
+                    m.station || '',
+                    m.deliveryType || '',
+                    m.deliveryDate || '',
+                    m.daysPostpartum || '',
+                    m.babyOutcome || '',
+                    m.recoveryStatus || '',
+                    m.nextFollowUp || '',
+                    m.followUpStatus || '',
+                    m.complications || 'None'
+                ]);
+            });
+
+            doc.text("Postpartum Records List", 14, 15);
+            
+            autoTable(doc, {
+                head: [tableColumn],
+                body: tableRows,
+                startY: 20,
+                styles: { fontSize: 7 },
+                headStyles: { fillColor: [147, 111, 199] }
+            });
+
+            const dateStr = new Date().toISOString().split('T')[0];
+            doc.save(`Postpartum_Records_${dateStr}.pdf`);
+        } catch (error) {
+            console.error("Error generating PDF:", error);
+        }
+    };
+
     const filtered = mothers.filter(m => {
         const s = searchTerm.toLowerCase();
         const matchSearch = m.name.toLowerCase().includes(s) || m.patientId.toLowerCase().includes(s) || m.station.toLowerCase().includes(s);
         const matchDT = filters.deliveryType === 'All' || m.deliveryType === filters.deliveryType;
-        const matchRec = filters.recovery === 'All' || m.recoveryStatus === filters.recovery;
         const matchStation = filters.station === 'All' || m.station === filters.station;
         const matchFU = filters.followUp === 'All' || m.followUpStatus === filters.followUp;
-        return matchSearch && matchDT && matchRec && matchStation && matchFU;
+        return matchSearch && matchDT && matchStation && matchFU;
     });
-
-    const getRecoveryClass = (status) => {
-        if (status === 'Normal') return 'tr-normal';
-        if (status === 'Monitoring') return 'tr-monitoring';
-        return 'tr-complication';
-    };
-
-    const getRecoveryBadge = (status) => {
-        if (status === 'Normal') return 'badge-normal';
-        if (status === 'Monitoring') return 'badge-monitoring';
-        return 'badge-complication';
-    };
 
     const getFollowUpBadge = (status) => {
         if (status === 'Completed') return 'fu-badge-completed';
@@ -323,7 +400,26 @@ const PostpartumRecords = () => {
                     <p className="page-subtitle">Monitor mothers after delivery, including recovery, complications, and follow-up visits.</p>
                 </div>
                 <div className="header-actions">
-                    <button className="btn btn-outline" onClick={handleExportReport}><Download size={16} /> Export Report</button>
+                    <div className="export-dropdown-container" style={{ position: 'relative' }}>
+                        <button className="btn btn-outline" onClick={() => setShowExportMenu(!showExportMenu)}>
+                            <Download size={16} /> Export
+                        </button>
+                        {showExportMenu && (
+                            <div className="export-dropdown" style={{
+                                position: 'absolute', top: '100%', right: 0, marginTop: '8px',
+                                background: '#fff', border: '1px solid #eaeaea', borderRadius: '8px',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '8px',
+                                display: 'flex', flexDirection: 'column', gap: '4px', zIndex: 100, minWidth: '150px'
+                            }}>
+                                <button className="btn btn-text" onClick={() => { handleExportExcel(); setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
+                                    <Download size={14} style={{ marginRight: '8px' }} /> Excel (.xlsx)
+                                </button>
+                                <button className="btn btn-text" onClick={() => { handleExportPDF(); setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
+                                    <Download size={14} style={{ marginRight: '8px' }} /> PDF (.pdf)
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -361,7 +457,7 @@ const PostpartumRecords = () => {
                         }}
                     />
                 </div>
-                <div className="shared-filters-row">
+                <div className="shared-filters-row" ref={filterRowRef}>
                     <span className="filters-label"><Filter size={13} /> Filters:</span>
                     
                     {/* Delivery Type Filter */}
@@ -382,34 +478,12 @@ const PostpartumRecords = () => {
                                     <button className={`popover-opt-btn ${filters.deliveryType === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('deliveryType', 'All'); setActivePopover(null); }}>All Delivery Types</button>
                                     <button className={`popover-opt-btn ${filters.deliveryType === 'NSD' ? 'selected' : ''}`} onClick={() => { handleFilter('deliveryType', 'NSD'); setActivePopover(null); }}>NSD (Normal)</button>
                                     <button className={`popover-opt-btn ${filters.deliveryType === 'CS' ? 'selected' : ''}`} onClick={() => { handleFilter('deliveryType', 'CS'); setActivePopover(null); }}>CS (Cesarean)</button>
+                                    <button className={`popover-opt-btn ${filters.deliveryType === 'Breech' ? 'selected' : ''}`} onClick={() => { handleFilter('deliveryType', 'Breech'); setActivePopover(null); }}>Breech</button>
                                 </div>
                             </div>
                         )}
                     </div>
 
-                    {/* Recovery Status Filter */}
-                    <div className="filter-dropdown-container">
-                        <button 
-                            className={`filter-btn ${filters.recovery !== 'All' ? 'active-filter' : ''}`}
-                            onClick={() => setActivePopover(activePopover === 'recovery' ? null : 'recovery')}
-                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-                        >
-                            <Heart size={14} className="filter-btn-icon" />
-                            <span>{filters.recovery === 'All' ? 'All Recovery Status' : filters.recovery}</span>
-                            <ChevronDown size={14} className="filter-btn-icon" />
-                        </button>
-                        {activePopover === 'recovery' && (
-                            <div className="filter-popover">
-                                <div className="popover-title">Recovery Status</div>
-                                <div className="popover-options">
-                                    <button className={`popover-opt-btn ${filters.recovery === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('recovery', 'All'); setActivePopover(null); }}>All Recovery Status</button>
-                                    <button className={`popover-opt-btn ${filters.recovery === 'Normal' ? 'selected' : ''}`} onClick={() => { handleFilter('recovery', 'Normal'); setActivePopover(null); }}>Normal</button>
-                                    <button className={`popover-opt-btn ${filters.recovery === 'Monitoring' ? 'selected' : ''}`} onClick={() => { handleFilter('recovery', 'Monitoring'); setActivePopover(null); }}>Monitoring</button>
-                                    <button className={`popover-opt-btn ${filters.recovery === 'Complication' ? 'selected' : ''}`} onClick={() => { handleFilter('recovery', 'Complication'); setActivePopover(null); }}>Complication</button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
 
                     {/* Follow-up Status Filter */}
                     <div className="filter-dropdown-container">
@@ -451,13 +525,44 @@ const PostpartumRecords = () => {
                                 <div className="popover-title">Station</div>
                                 <div className="popover-options">
                                     <button className={`popover-opt-btn ${filters.station === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('station', 'All'); setActivePopover(null); }}>All Stations</button>
-                                    {[...new Set(mothers.map(m => m.station))].map(s => (
+                                    {availableStations.map(s => (
                                         <button key={s} className={`popover-opt-btn ${filters.station === s ? 'selected' : ''}`} onClick={() => { handleFilter('station', s); setActivePopover(null); }}>{s}</button>
                                     ))}
                                 </div>
                             </div>
                         )}
                     </div>
+                    {hasActiveFilters && (
+                        <button className="clear-filters-btn" onClick={clearFilters}>Clear All</button>
+                    )}
+
+                    <Legend 
+                        categories={[
+                            {
+                                title: "Delivery Type",
+                                items: [
+                                    { label: "NSD — Normal Spontaneous Delivery", style: { backgroundColor: 'rgba(109, 184, 160, 0.2)', color: '#3d8870' } },
+                                    { label: "Breech — Breech Delivery", style: { backgroundColor: 'rgba(230, 184, 110, 0.2)', color: '#8a6a10' } },
+                                    { label: "C-Section — Cesarean Delivery", style: { backgroundColor: 'rgba(122, 162, 219, 0.2)', color: '#3b5a8c' } }
+                                ]
+                            },
+                            {
+                                title: "Baby Status",
+                                items: [
+                                    { label: "Healthy — Baby is healthy", style: { backgroundColor: 'rgba(109, 184, 160, 0.2)', color: '#3d8870' } },
+                                    { label: "Stillbirth — Stillbirth", style: { backgroundColor: 'rgba(185, 129, 138, 0.15)', color: '#8a505b' } }
+                                ]
+                            },
+                            {
+                                title: "Follow-up Status",
+                                items: [
+                                    { label: "Upcoming — Follow-up is scheduled", style: { backgroundColor: 'rgba(230, 184, 110, 0.2)', color: '#8a6a10' } },
+                                    { label: "Missed — Follow-up was missed", style: { backgroundColor: 'rgba(224, 122, 138, 0.15)', color: '#a04070' } },
+                                    { label: "Completed — Follow-up was completed", style: { backgroundColor: 'rgba(109, 184, 160, 0.2)', color: '#3d8870' } }
+                                ]
+                            }
+                        ]}
+                    />
                 </div>
             </div>
 
@@ -481,14 +586,15 @@ const PostpartumRecords = () => {
                                         <th>Days PP</th>
                                         <th>Baby</th>
                                         <th>Recovery</th>
-                                        <th>Visit Date</th>
+                                        <th>Last Checkup</th>
+                                        <th>Next Visit</th>
                                         <th>Complications</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((m, index) => (
-                                        <tr key={m.id} className={getRecoveryClass(m.recoveryStatus)}>
+                                        <tr key={m.id}>
                                             <td className="row-number-cell" style={{ width: '50px' }}>
                                                 {(currentPage - 1) * itemsPerPage + index + 1}
                                             </td>
@@ -514,6 +620,7 @@ const PostpartumRecords = () => {
                                             <td>
                                                 <span className={`recovery-badge ${getRecoveryBadge(m.recoveryStatus)}`}>{m.recoveryStatus}</span>
                                             </td>
+                                            <td className="pp-date-cell">{formatReadableDate(m.lastCheckup)}</td>
                                             <td>
                                                 <div className="pp-date-cell">{formatReadableDate(m.visitDate) || 'Not scheduled'}</div>
                                                 <span className={`fu-badge ${getFollowUpBadge(m.followUpStatus)}`}>{m.followUpStatus}</span>

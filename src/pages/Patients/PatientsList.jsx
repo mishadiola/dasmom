@@ -26,6 +26,25 @@ const toTitleCase = (str) => {
     return str.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
 };
 
+// Helper functions for Risk Level display and classes
+const formatRiskDisplay = (risk) => {
+    if (!risk) return 'Low Risk';
+    const lower = risk.toLowerCase();
+    if (lower.includes('high')) return 'High Risk';
+    if (lower.includes('medium') || lower.includes('monitor')) return 'Medium Risk';
+    if (lower.includes('low') || lower.includes('normal')) return 'Low Risk';
+    return risk.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+};
+
+const getRiskClass = (risk) => {
+    if (!risk) return 'risk-low';
+    const lower = risk.toLowerCase();
+    if (lower.includes('high')) return 'risk-high';
+    if (lower.includes('medium') || lower.includes('monitor')) return 'risk-medium';
+    if (lower.includes('low') || lower.includes('normal')) return 'risk-low';
+    return `risk-${lower.split(' ')[0]}`;
+};
+
 const EMPTY_VITALS = {
     bpSystolic: '',
     bpDiastolic: '',
@@ -189,6 +208,7 @@ const PatientsList = () => {
     const { alert: customAlert, confirm } = useModal();
 
     const [patients, setPatients] = useState([]);
+    const [availableStations, setAvailableStations] = useState([]);
 
     const [searchTerm, setSearchTerm] = useState('');
     const [archiveFilter, setArchiveFilter] = useState('all'); // 'active' | 'archived' | 'all'
@@ -298,8 +318,19 @@ const PatientsList = () => {
         }
     };
 
+    const fetchStations = async () => {
+        try {
+            const patientService = new PatientService();
+            const data = await patientService.getAllStations();
+            setAvailableStations(data);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
     fetchPatients();
     fetchSupplements();
+    fetchStations();
 }, []);
 
 
@@ -311,11 +342,11 @@ const PatientsList = () => {
 
         const matchesTri = filters.trimesters.length === 0 || filters.trimesters.includes(String(p.trimester || 1));
         
-        const normalizedRisk = (p.risk || 'Normal').toLowerCase();
-        let derivedRisk = normalizedRisk;
+        const normalizedRisk = (p.risk || 'Low Risk').toLowerCase();
+        let derivedRisk = 'Normal';
         if (normalizedRisk.includes('high')) derivedRisk = 'High';
-        else if (normalizedRisk.includes('monitor')) derivedRisk = 'Monitor';
-        else derivedRisk = 'Normal';
+        else if (normalizedRisk.includes('medium') || normalizedRisk.includes('monitor')) derivedRisk = 'Monitor';
+        else if (normalizedRisk.includes('low') || normalizedRisk.includes('normal')) derivedRisk = 'Normal';
         
         const matchesRisk = filters.risks.length === 0 || filters.risks.includes(derivedRisk);
         const matchesType = filters.patientType === 'All' || (p.patientType || p.type) === filters.patientType;
@@ -352,7 +383,7 @@ const PatientsList = () => {
         return 0;
     });
 
-    const availableStations = [...new Set(patients.map(p => p.station).filter(Boolean))].sort();
+    // availableStations fetched dynamically from DB
 
     const totalPages = Math.ceil(sortedPatients.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -385,7 +416,19 @@ const PatientsList = () => {
 
     const hasActiveFilters = filters.trimesters.length > 0 || filters.risks.length > 0 || filters.stations.length > 0 || filters.sortBy !== 'newest' || archiveFilter !== 'all' || outcomeFilter !== 'all';
 
-    const handleExport = () => {
+    const [showExportMenu, setShowExportMenu] = useState(false);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (showExportMenu && !event.target.closest('.export-dropdown-container')) {
+                setShowExportMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showExportMenu]);
+
+    const handleExportExcel = () => {
         const exportData = sortedPatients.map(p => ({
             'Patient ID': formatMotherId(p.id),
             'Name': p.name || '',
@@ -403,6 +446,48 @@ const PatientsList = () => {
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Patient Profiles');
 
         XLSX.writeFile(workbook, 'patient_profiles.xlsx');
+    };
+
+    const handleExportPDF = async () => {
+        try {
+            const jsPDF = (await import('jspdf')).default;
+            const autoTable = (await import('jspdf-autotable')).default;
+            
+            const doc = new jsPDF();
+            
+            const tableColumn = ["Patient ID", "Name", "Type", "Station", "Age", "Gestation", "Risk", "Total Visits", "Next Appt"];
+            const tableRows = [];
+
+            sortedPatients.forEach(p => {
+                const patientData = [
+                    p.id || '',
+                    p.name || '',
+                    p.patientType || p.type || 'Mother',
+                    p.station || 'Unassigned',
+                    p.age || 'N/A',
+                    p.weeks ? `${p.weeks}w (T${p.trimester || 1})` : 'N/A',
+                    p.risk || 'Normal',
+                    p.totalVisits || 0,
+                    p.nextAppt || 'No upcoming appt'
+                ];
+                tableRows.push(patientData);
+            });
+
+            doc.text("Patient Profiles List", 14, 15);
+            
+            autoTable(doc, {
+                head: [tableColumn],
+                body: tableRows,
+                startY: 20,
+                styles: { fontSize: 8 },
+                headStyles: { fillColor: [147, 111, 199] }
+            });
+
+            doc.save("patient_profiles.pdf");
+        } catch (error) {
+            console.error("Error generating PDF:", error);
+            await customAlert({ title: 'Error', text: 'Unable to generate PDF right now.', iconType: 'danger' });
+        }
     };
 
     const handleSaveVitals = async (patientId, record, supplements) => {
@@ -500,10 +585,37 @@ const PatientsList = () => {
                     <p className="page-subtitle">Manage and monitor all registered pregnant patients, including archived records.</p>
                 </div>
                 <div className="header-actions">
-                    <button className="btn btn-outline" onClick={handleExport}>
-                        <FileText size={16} />
-                        Export List
-                    </button>
+                    <div className="export-dropdown-container" style={{ position: 'relative' }}>
+                        <button className="btn btn-outline" onClick={() => setShowExportMenu(!showExportMenu)}>
+                            <FileText size={16} />
+                            Export
+                        </button>
+                        {showExportMenu && (
+                            <div className="export-dropdown" style={{
+                                position: 'absolute',
+                                top: '100%',
+                                right: 0,
+                                marginTop: '8px',
+                                background: '#fff',
+                                border: '1px solid #eaeaea',
+                                borderRadius: '8px',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                                padding: '8px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '4px',
+                                zIndex: 100,
+                                minWidth: '150px'
+                            }}>
+                                <button className="btn btn-text" onClick={() => { handleExportExcel(); setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
+                                    <FileText size={14} style={{ marginRight: '8px' }} /> Excel (.xlsx)
+                                </button>
+                                <button className="btn btn-text" onClick={() => { handleExportPDF(); setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
+                                    <FileText size={14} style={{ marginRight: '8px' }} /> PDF (.pdf)
+                                </button>
+                            </div>
+                        )}
+                    </div>
                     <button className="btn btn-primary" onClick={() => navigate('/dashboard/patients/add')}>
                         <Plus size={16} />
                         Add Pregnancy
@@ -558,7 +670,7 @@ const PatientsList = () => {
                                     {['Normal', 'Monitor', 'High'].map(risk => (
                                         <label key={risk} className="popover-checkbox-label">
                                             <input type="checkbox" checked={filters.risks.includes(risk)} onChange={() => toggleArrayFilter('risks', risk)} />
-                                            {risk} {risk === 'High' ? 'Risk' : ''}
+                                            {risk === 'Normal' ? 'Low Risk' : risk === 'Monitor' ? 'Medium Risk' : 'High Risk'}
                                         </label>
                                     ))}
                                 </div>
@@ -778,12 +890,12 @@ const PatientsList = () => {
 
                                         <td>
                                             <div>
-                                                <span className={`risk-badge risk-${(p.risk || 'Low Risk').toLowerCase().split(' ')[0]}`}>
-                                                    {p.risk || 'Low Risk'}
+                                                <span className={`risk-badge ${getRiskClass(p.risk)}`}>
+                                                    {formatRiskDisplay(p.risk)}
                                                 </span>
-                                                {p.riskFactors && p.riskFactors.length > 0 && (
+                                                {(p.riskFactors || []).filter(f => f && f.toLowerCase() !== 'none').length > 0 && (
                                                     <div className="risk-factors">
-                                                        {p.riskFactors.join(', ')}
+                                                        {(p.riskFactors || []).filter(f => f && f.toLowerCase() !== 'none').join(', ')}
                                                     </div>
                                                 )}
                                             </div>

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useContext, useMemo } from 'react';
+import React, { useState, useEffect, useContext, useMemo, useRef } from 'react';
+import useClickOutside from '../../hooks/useClickOutside';
 import {
   Search,
   Filter,
@@ -14,7 +15,11 @@ import {
   ChevronDown,
   Truck,
   Eye,
-  Activity
+  Activity,
+  ChevronUp,
+  Bell,
+  BarChart3,
+  ClipboardList
 } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
 import InventoryService from '../../services/inventoryservice';
@@ -51,14 +56,29 @@ const Inventory = () => {
     return [userScope.stationName];
   }, [availableStations, isAdmin, userScope.stationName]);
   const [activeTab, setActiveTab] = useState('vaccines');
+  const [mainTab, setMainTab] = useState('inventory');
+  const [distPage, setDistPage] = useState(1);
+  const distItemsPerPage = 10;
+  const [showStationInventory, setShowStationInventory] = useState(false);
   const [loading, setLoading] = useState(true);
   const [vaccines, setVaccines] = useState([]);
   const [supplements, setSupplements] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [activePopover, setActivePopover] = useState(null);
+  const filterRowRef = useRef(null);
+  useClickOutside(filterRowRef, () => setActivePopover(null));
   const [activeSummaryFilter, setActiveSummaryFilter] = useState(null);
   const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
+
+  const hasActiveFilters = statusFilter !== 'All' || archiveFilter !== 'active' || searchTerm !== '';
+
+  const clearFilters = () => {
+      setStatusFilter('All');
+      setArchiveFilter('active');
+      setSearchTerm('');
+      setActivePopover(null);
+  };
   const [archivedIds, setArchivedIds] = useState(() => {
     try {
       const stored = localStorage.getItem('inventory_archived_ids');
@@ -844,8 +864,22 @@ const Inventory = () => {
     }
   };
 
+  // Distribution history filtering + pagination
+  const filteredDistHistory = distributionHistory.filter(rec => {
+    const search = historySearch.toLowerCase();
+    const matchesSearch = !search || rec.item_name?.toLowerCase().includes(search) || rec.destination_station?.toLowerCase().includes(search) || rec.released_by?.toLowerCase().includes(search);
+    const matchesStation = historyStationFilter === 'All' || rec.destination_station === historyStationFilter;
+    const matchesType = historyTypeFilter === 'All' || rec.item_type === historyTypeFilter;
+    const matchesDate = !historyDateFilter || rec.distribution_date === historyDateFilter;
+    return matchesSearch && matchesStation && matchesType && matchesDate;
+  });
+  const distTotalPages = Math.ceil(filteredDistHistory.length / distItemsPerPage);
+  const distStartIndex = (distPage - 1) * distItemsPerPage;
+  const paginatedDistHistory = filteredDistHistory.slice(distStartIndex, distStartIndex + distItemsPerPage);
+
   return (
     <div className="inventory-page">
+      {/* ══════════ HEADER ══════════ */}
       <div className="page-header">
         <div>
           <h1 className="page-title">
@@ -962,7 +996,7 @@ const Inventory = () => {
             onChange={e => setSearchTerm(e.target.value)}
           />
         </div>
-        <div className="shared-filters-row">
+        <div className="shared-filters-row" ref={filterRowRef}>
           <span className="filters-label"><Filter size={13} /> Filters:</span>
           
           {/* Status Filter */}
@@ -1012,6 +1046,10 @@ const Inventory = () => {
                 </div>
             )}
           </div>
+
+          {hasActiveFilters && (
+              <button className="clear-filters-btn" onClick={clearFilters}>Clear All</button>
+          )}
 
           <button
             className="clear-filters-btn"

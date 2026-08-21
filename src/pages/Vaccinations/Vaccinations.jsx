@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import useClickOutside from '../../hooks/useClickOutside';
 import PatientService from '../../services/patientservice';
 import BabyService from '../../services/babyservices';
 import VaccinationService from '../../services/vaccinationservice';
@@ -1070,11 +1071,21 @@ const Vaccinations = () => {
     const [archivedPatientIds, setArchivedPatientIds] = useState(new Set());
     const [loading, setLoading] = useState(true);
     const [activePopover, setActivePopover] = useState(null);
+    const filterRowRef = useRef(null);
+    useClickOutside(filterRowRef, () => setActivePopover(null));
 
     const [activeTab, setActiveTab] = useState('vaccines');    // 'vaccines' | 'supplements'
     const [searchTerm, setSearchTerm] = useState('');
-    const [archiveFilter, setArchiveFilter] = useState('active');
     const [filters, setFilters] = useState({ patientType: 'All', status: 'All', item: 'All' });
+
+    const hasActiveFilters = filters.patientType !== 'All' || filters.status !== 'All' || filters.item !== 'All' || searchTerm !== '';
+
+    const clearFilters = () => {
+        setFilters({ patientType: 'All', status: 'All', item: 'All' });
+        setSearchTerm('');
+        setActivePopover(null);
+    };
+
     const [recordModal, setRecordModal] = useState(null);      // null | { mode: 'vaccine' | 'supplement', initialPatientType?, initialPatientName? }
     const [newbornVaccinationModal, setNewbornVaccinationModal] = useState(null);  // null | newborn object
     const [expirationSummaryModal, setExpirationSummaryModal] = useState(null);      // null | 'vaccine' | 'supplement'
@@ -1089,7 +1100,7 @@ const Vaccinations = () => {
     // Reset pagination on filter changes
     useEffect(() => {
         setCurrentPage(1);
-    }, [activeTab, searchTerm, filters, archiveFilter]);
+    }, [activeTab, searchTerm, filters]);
 
     const fetchData = async () => {
         try {
@@ -1178,10 +1189,6 @@ const Vaccinations = () => {
             console.log('🗺️ Sample NewbornMap entries:', Array.from(newbornMap.entries()).slice(0, 3));
 
             const isVisiblePatientRecord = (patientId, newbornId) => {
-                if (archiveFilter === 'all') return true;
-                if (archiveFilter === 'archived') {
-                    return (patientId && archivedIds.has(patientId)) || (newbornId && archivedNewbornIds.has(newbornId));
-                }
                 return !(patientId && archivedIds.has(patientId)) && !(newbornId && archivedNewbornIds.has(newbornId));
             };
 
@@ -1368,7 +1375,7 @@ const Vaccinations = () => {
 
     useEffect(() => {
         fetchData();
-    }, [archiveFilter]);
+    }, []);
 
     // Refresh data when modal closes (assuming new record was added)
     const handleModalClose = () => {
@@ -1605,6 +1612,18 @@ const Vaccinations = () => {
         currentPage * itemsPerPage
     );
 
+    const [showExportMenu, setShowExportMenu] = useState(false);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (showExportMenu && !event.target.closest('.export-dropdown-container')) {
+                setShowExportMenu(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showExportMenu]);
+
     const SortBtn = ({ field }) => (
         <button className="sort-btn" onClick={() => handleSort(field)}>
             {sortField === field ? (sortAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : <ChevronDown size={12} className="sort-inactive" />}
@@ -1643,7 +1662,26 @@ const Vaccinations = () => {
                     <p className="page-subtitle">This page is used to record and track vaccines and supplements that have been administered to patients.</p>
                 </div>
                 <div className="header-actions">
-                    <button className="btn btn-outline"><Download size={16} /> Export Report</button>
+                    <div className="export-dropdown-container" style={{ position: 'relative' }}>
+                        <button className="btn btn-outline" onClick={() => setShowExportMenu(!showExportMenu)}>
+                            <Download size={16} /> Export
+                        </button>
+                        {showExportMenu && (
+                            <div className="export-dropdown" style={{
+                                position: 'absolute', top: '100%', right: 0, marginTop: '8px',
+                                background: '#fff', border: '1px solid #eaeaea', borderRadius: '8px',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '8px',
+                                display: 'flex', flexDirection: 'column', gap: '4px', zIndex: 100, minWidth: '150px'
+                            }}>
+                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
+                                    <Download size={14} style={{ marginRight: '8px' }} /> Excel (.xlsx)
+                                </button>
+                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
+                                    <Download size={14} style={{ marginRight: '8px' }} /> PDF (.pdf)
+                                </button>
+                            </div>
+                        )}
+                    </div>
                     <button className="btn btn-outline" onClick={() => setRecordModal({ mode: 'supplement' })}><Pill size={16} /> Record Supplement</button>
                     <button className="btn btn-primary" onClick={() => setRecordModal({ mode: 'vaccine' })}><Syringe size={16} /> Record Vaccination</button>
                 </div>
@@ -1679,7 +1717,7 @@ const Vaccinations = () => {
                         onChange={e => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <div className="shared-filters-row">
+                <div className="shared-filters-row" ref={filterRowRef}>
                     <span className="filters-label"><Filter size={13} /> Filters:</span>
                     {/* Patient Type Filter */}
                     <div className="filter-dropdown-container">
@@ -1762,27 +1800,34 @@ const Vaccinations = () => {
                         )}
                     </div>
 
-                    {/* Archive Filter */}
-                    <div className="filter-dropdown-container">
-                        <button 
-                            className={`filter-btn ${archiveFilter !== 'active' ? 'active-filter' : ''}`}
-                            onClick={() => setActivePopover(activePopover === 'archive' ? null : 'archive')}
-                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-                        >
-                            <Archive size={14} className="filter-btn-icon" />
-                            <span>{archiveFilter === 'active' ? 'Active' : 'Archived'}</span>
-                            <ChevronDown size={14} className="filter-btn-icon" />
-                        </button>
-                        {activePopover === 'archive' && (
-                            <div className="filter-popover">
-                                <div className="popover-title">Status</div>
-                                <div className="popover-options">
-                                    <button className={`popover-opt-btn ${archiveFilter === 'active' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('active'); setActivePopover(null); }}>Active</button>
-                                    <button className={`popover-opt-btn ${archiveFilter === 'archived' ? 'selected' : ''}`} onClick={() => { setArchiveFilter('archived'); setActivePopover(null); }}>Archived</button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
+
+                    {hasActiveFilters && (
+                        <button className="clear-filters-btn" onClick={clearFilters}>Clear All</button>
+                    )}
+
+                    <Legend 
+                        categories={[
+                            {
+                                title: "Type",
+                                items: [
+                                    { label: "Mother", className: "type-mother" },
+                                    { label: "Newborn", className: "type-newborn" }
+                                ]
+                            },
+                            {
+                                title: "Status",
+                                items: activeTab === 'vaccines' ? [
+                                    { label: "Completed", className: "chip-completed" },
+                                    { label: "Pending", className: "chip-pending" },
+                                    { label: "Overdue", className: "chip-overdue" }
+                                ] : [
+                                    { label: "Completed", className: "chip-completed" },
+                                    { label: "Ongoing", className: "chip-pending" },
+                                    { label: "Missed", className: "chip-missed" }
+                                ]
+                            }
+                        ]}
+                    />
                 </div>
             </div>
             {/* ── Main 2-col layout ── */}
@@ -1804,22 +1849,6 @@ const Vaccinations = () => {
                     <div className="vacc-card">
                         <div className="vacc-card-head">
                             <h2>{activeTab === 'vaccines' ? <><Syringe size={16} /> Distribution Records</> : <><Pill size={16} /> Distribution Records</>}</h2>
-                            <Legend 
-                                categories={[
-                                    {
-                                        title: "Status",
-                                        items: activeTab === 'vaccines' ? [
-                                            { label: "Completed", className: "chip-completed", icon: <CheckCircle2 size={11} /> },
-                                            { label: "Pending", className: "chip-pending", icon: <Clock size={11} /> },
-                                            { label: "Overdue", className: "chip-overdue", icon: <AlertTriangle size={11} /> }
-                                        ] : [
-                                            { label: "Completed", className: "chip-completed", icon: <CheckCircle2 size={11} /> },
-                                            { label: "Ongoing", className: "chip-pending", icon: <Pill size={11} /> },
-                                            { label: "Missed", className: "chip-missed", icon: <XCircle size={11} /> }
-                                        ]
-                                    }
-                                ]}
-                            />
                         </div>
 
                         {/* VACCINES TABLE */}
