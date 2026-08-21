@@ -26,6 +26,13 @@ const formatReadableDate = (dateString) => {
     return date.toLocaleDateString('en-US', options);
 };
 
+const getPostpartumStatus = (delivery) => {
+    if (delivery.postpartum_attended_date) return 'Completed';
+    const scheduledDate = String(delivery.postpartum_visit_date || '').split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
+    return scheduledDate && scheduledDate < today ? 'Missed' : 'Scheduled';
+};
+
 // Helper function to extract first 4 numeric digits from patient ID
 const getShortPatientId = (id) => {
     return formatMotherId(id);
@@ -1210,6 +1217,30 @@ const PatientProfile = () => {
                                                 <div style={{ marginTop: '16px', padding: '10px 14px', backgroundColor: '#fef2f2', borderRadius: '8px', borderLeft: '3px solid #ef4444' }}>
                                                     <label style={{ fontSize: '10.5px', color: '#b91c1c', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Complications</label>
                                                     <p style={{ margin: '4px 0 0', color: '#991b1b', fontSize: '13px', fontWeight: '500' }}>{Array.isArray(delivery.complications) ? delivery.complications.join(', ') : delivery.complications}</p>
+                                                </div>
+                                            )}
+                                            {(delivery.postpartum_visit_date || delivery.postpartum_attended_date) && (
+                                                <div style={{ marginTop: '16px', padding: '12px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', borderLeft: '3px solid #b9818a' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                                                        <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Postpartum Follow-up</label>
+                                                        <span style={{ fontSize: '12px', fontWeight: '700', color: getPostpartumStatus(delivery) === 'Completed' ? '#059669' : getPostpartumStatus(delivery) === 'Missed' ? '#dc2626' : '#b45309' }}>
+                                                            {getPostpartumStatus(delivery)}
+                                                        </span>
+                                                    </div>
+                                                    <p style={{ margin: '6px 0 0', color: '#475569', fontSize: '13px' }}>
+                                                        Scheduled: {formatReadableDate(delivery.postpartum_visit_date)}
+                                                        {delivery.postpartum_attended_date && ` · Attended: ${formatReadableDate(delivery.postpartum_attended_date)}`}
+                                                    </p>
+                                                    {delivery.postpartum_remarks?.personnel_present?.name && (
+                                                        <p style={{ margin: '5px 0 0', color: '#475569', fontSize: '13px' }}>
+                                                            Personnel present: {delivery.postpartum_remarks.personnel_present.name}
+                                                        </p>
+                                                    )}
+                                                    {delivery.postpartum_remarks?.assessment && (
+                                                        <p style={{ margin: '5px 0 0', color: '#64748b', fontSize: '12px' }}>
+                                                            Assessment recorded: {Object.values(delivery.postpartum_remarks.assessment).filter(Boolean).length} field(s)
+                                                        </p>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>

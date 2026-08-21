@@ -799,6 +799,7 @@ class BabyService {
         });
 
         const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
         return filtered
             .filter(d => {
@@ -825,8 +826,11 @@ class BabyService {
 
             // Determine follow-up status
             let followUpStatus = 'Upcoming';
-            if (d.postpartum_visit_date) {
+            if (d.postpartum_attended_date) {
+              followUpStatus = 'Completed';
+            } else if (d.postpartum_visit_date) {
                 const fuDate = new Date(d.postpartum_visit_date);
+              fuDate.setHours(0, 0, 0, 0);
                 if (fuDate < today) followUpStatus = 'Missed';
             }
 
@@ -847,7 +851,7 @@ class BabyService {
                 visitDate: d.postpartum_attended_date || d.postpartum_visit_date || null,
                 postpartumAttendedDate: d.postpartum_attended_date || null,
                 postpartumRemarks: d.postpartum_remarks || null,
-                followUpStatus: d.postpartum_attended_date ? 'Completed' : followUpStatus,
+                followUpStatus,
                 complications: d.complications && d.complications.length > 0 ? d.complications.join(', ') : 'None'
             };
         });

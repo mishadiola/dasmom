@@ -28,6 +28,15 @@ const formatCalendarDate = (dateString) => {
     return date.toLocaleDateString('en-US', options);
 };
 
+const getDateOnly = (value) => String(value || '').split('T')[0];
+
+const getPostpartumStatus = (delivery) => {
+    if (delivery.postpartum_attended_date) return 'Completed';
+    const scheduledDate = getDateOnly(delivery.postpartum_visit_date);
+    const today = new Date().toISOString().split('T')[0];
+    return scheduledDate && scheduledDate < today ? 'Missed' : 'Scheduled';
+};
+
 const MyAppointments = () => {
     const navigate = useNavigate();
     const [viewMode, setViewMode] = useState('calendar'); // 'calendar' or 'list'
@@ -80,7 +89,31 @@ const MyAppointments = () => {
                         color: 'yellow'
                     }));
 
-                const combined = [...visitAppts, ...vacAppts];
+                const postpartumAppts = (patient.deliveries || [])
+                    .filter(d => d.postpartum_visit_date || d.postpartum_attended_date)
+                    .map((d, idx) => {
+                        const status = getPostpartumStatus(d);
+                        const date = d.postpartum_attended_date || d.postpartum_visit_date;
+                        return {
+                            id: d.id || `postpartum-${idx}`,
+                            date,
+                            scheduledDate: d.postpartum_visit_date,
+                            attendedDate: d.postpartum_attended_date,
+                            time: '',
+                            type: 'Postpartum',
+                            status,
+                            location: patient.station || '',
+                            notes: status === 'Completed'
+                                ? 'Postpartum follow-up attended'
+                                : status === 'Missed'
+                                    ? 'Postpartum follow-up was not attended'
+                                    : 'Postpartum follow-up scheduled',
+                            assessment: d.postpartum_remarks,
+                            color: 'pink'
+                        };
+                    });
+
+                const combined = [...visitAppts, ...vacAppts, ...postpartumAppts];
                 setAppointmentsData(combined);
             } catch (err) {
                 console.error('Failed to load appointments:', err);

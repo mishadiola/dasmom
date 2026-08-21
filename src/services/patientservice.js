@@ -21,6 +21,15 @@ const calculateVisitStatus = (visitDate) => {
   return 'Completed';
 };
 
+const normalizeVisitStatus = (visit) => {
+  if (visit.attended_date || visit.status === 'Attended') return 'Attended';
+  if (visit.status === 'Cancelled' || visit.status === 'Missed') return visit.status;
+
+  const visitDate = String(visit.visit_date || '').split('T')[0];
+  const today = new Date().toISOString().split('T')[0];
+  return visitDate && visitDate < today ? 'Missed' : (visit.status || 'Scheduled');
+};
+
 export default class PatientService {
   constructor() {
     this.supabase = supabase;
@@ -894,7 +903,7 @@ export default class PatientService {
       ga: visit.gestational_age || 'N/A',
       bp: visit.bp_systolic && visit.bp_diastolic ? `${visit.bp_systolic}/${visit.bp_diastolic}` : 'N/A',
       weight: visit.weight_kg ? `${visit.weight_kg}kg` : 'N/A',
-      status: visit.status || 'Scheduled',
+      status: normalizeVisitStatus(visit),
       nextApptDate: visit.next_appt_date,
       visitNumber: visit.visit_number,
       trimester: visit.trimester,
@@ -1874,7 +1883,10 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       trimester: this.calculateTrimester(preg.lmd),
       weeks: this.calculateWeeks(preg.lmd),
 
-      visits: visitsData || [],
+      visits: (visitsData || []).map(visit => ({
+        ...visit,
+        status: normalizeVisitStatus(visit)
+      })),
       vaccines: (vaccinesData || []).map(v => ({
         vaccine_name: v.vaccine_inventory?.vaccine_name || 'Unknown',
         dose_number: v.dose_number,
@@ -1908,7 +1920,9 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         risk_level: d.risk_level,
         complications: d.complications,
         facility: d.facility,
-        postpartum_visit_date: d.postpartum_visit_date
+        postpartum_visit_date: d.postpartum_visit_date,
+        postpartum_attended_date: d.postpartum_attended_date,
+        postpartum_remarks: d.postpartum_remarks
       })),
       pregnancyStatus: preg.pregn_postp || 'Unknown'
     };

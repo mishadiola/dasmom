@@ -357,6 +357,8 @@ const PrenatalVisits = () => {
                         mother_id,
                         delivery_date,
                         postpartum_visit_date,
+                        postpartum_attended_date,
+                        postpartum_remarks,
                         patient_basic_info!deliveries_mother_id_fkey (id, first_name, last_name)
                     `)
                     .not('postpartum_visit_date', 'is', null)
@@ -365,7 +367,9 @@ const PrenatalVisits = () => {
                 if (error) throw error;
 
                 const rows = (data || []).map(d => {
-                    const dateStr = d.postpartum_visit_date || d.delivery_date || '';
+                    const attendedDate = d.postpartum_attended_date || null;
+                    const scheduledDate = d.postpartum_visit_date || d.delivery_date || '';
+                    const dateStr = attendedDate || scheduledDate;
                     const patientName = d.patient_basic_info
                         ? `${d.patient_basic_info.first_name || ''} ${d.patient_basic_info.last_name || ''}`.trim()
                         : d.mother_id;
@@ -378,7 +382,12 @@ const PrenatalVisits = () => {
                         doseText: '',
                         visitDate: dateStr,
                         visitDateOnly: dateStr,
-                        status: dateStr && dateStr < new Date().toISOString().split('T')[0] ? 'Missed' : 'Scheduled',
+                        status: attendedDate
+                            ? 'Attended'
+                            : dateStr && dateStr < new Date().toISOString().split('T')[0]
+                                ? 'Missed'
+                                : 'Scheduled',
+                        attendedDate,
                         vaccinatedDate: null,
                         scheduledVaccination: dateStr,
                         notes: 'Postpartum follow-up',

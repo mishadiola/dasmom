@@ -24,6 +24,7 @@ const MotherDashboard = () => {
     const [pregnancyData, setPregnancyData] = useState({ lmp: null, weeks: null, trimester: null });
     const [appointments, setAppointments] = useState([]);
     const [healthRecords, setHealthRecords] = useState([]);
+    const [postpartumVisit, setPostpartumVisit] = useState(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -37,7 +38,8 @@ const MotherDashboard = () => {
                 if (!authUser?.id) return;
 
                 const patient = await patientService.getPatientById(authUser.id);
-                if (patient && patient.lmp) {
+                if (patient) {
+                    if (patient.lmp) {
                     // Calculate weeks pregnant from LMP
                     const lmpDate = new Date(patient.lmp);
                     const today = new Date();
@@ -63,6 +65,7 @@ const MotherDashboard = () => {
                         daysUntilDue: Math.max(0, daysUntilDue),
                         trimester: trimester 
                     });
+                    }
                     
                     // map visits to appointment-like objects for display (next 3 upcoming)
                     const now = new Date();
@@ -80,6 +83,20 @@ const MotherDashboard = () => {
                             location: patient.station || ''
                         }));
                     setAppointments(appts);
+
+                    const latestDelivery = (patient.deliveries || [])[0];
+                    if (latestDelivery?.postpartum_visit_date || latestDelivery?.postpartum_attended_date) {
+                        const scheduledDate = String(latestDelivery.postpartum_visit_date || '').split('T')[0];
+                        const attendedDate = latestDelivery.postpartum_attended_date || null;
+                        const todayDate = new Date().toISOString().split('T')[0];
+                        setPostpartumVisit({
+                            status: attendedDate ? 'Completed' : scheduledDate < todayDate ? 'Missed' : 'Scheduled',
+                            date: attendedDate || latestDelivery.postpartum_visit_date,
+                            scheduledDate,
+                            attendedDate,
+                            remarks: latestDelivery.postpartum_remarks
+                        });
+                    }
 
                     // health records: latest vitals from visits
                     const records = (patient.visits || [])
@@ -204,6 +221,28 @@ const MotherDashboard = () => {
                             ))}
                         </div>
                     </div>
+
+                    {postpartumVisit && (
+                        <div className="mother-card modern-card">
+                            <div className="mother-card-header">
+                                <h2 className="mother-card-title"><Calendar size={18} /> Postpartum Follow-up</h2>
+                                <span className={`timeline-status status-${postpartumVisit.status.toLowerCase()}`}>
+                                    {postpartumVisit.status === 'Completed' ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                                    {postpartumVisit.status}
+                                </span>
+                            </div>
+                            <p className="support-text">
+                                {postpartumVisit.status === 'Completed'
+                                    ? `Attended on ${postpartumVisit.attendedDate}.`
+                                    : postpartumVisit.status === 'Missed'
+                                        ? `Scheduled for ${postpartumVisit.scheduledDate}, but no attendance was recorded.`
+                                        : `Scheduled for ${postpartumVisit.scheduledDate}.`}
+                            </p>
+                            {postpartumVisit.remarks?.personnel_present?.name && (
+                                <div className="timeline-staff">Personnel present: {postpartumVisit.remarks.personnel_present.name}</div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Health Records - Expandable Cards */}
                     <div className="mother-card modern-card health-card">
