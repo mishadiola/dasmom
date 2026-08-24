@@ -128,20 +128,22 @@ const MyVitals = () => {
 
     return (
         <div className="my-vitals-page">
-            <header className="mother-page-header">
-                <div className="mother-page-header-content">
-                    <button className="back-btn" onClick={() => navigate('/mother-home')}>
-                        <ArrowLeft size={18} />
+            <div className="page-header">
+                <div>
+                    <h1 className="page-title">
+                        <Activity size={22} className="header-icon" /> Vital Records
+                    </h1>
+                    <p className="page-subtitle">View your pregnancy health records and vital signs history</p>
+                </div>
+                <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => navigate('/mother-home')}>
+                        <ArrowLeft size={16} /> Back
                     </button>
-                    <div className="mother-page-header-text">
-                        <h1>Vital Records</h1>
-                        <p>View your pregnancy health records and vital signs history</p>
-                    </div>
+                    <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handleDownloadPDF}>
+                        <Download size={16} /> Download PDF
+                    </button>
                 </div>
-                <div className="mother-page-header-actions">
-                    <button className="action-btn-primary" onClick={handleDownloadPDF}><Download size={16} /> Download PDF</button>
-                </div>
-            </header>
+            </div>
 
             <div className="vitals-content">
                 {/* ── Top Summary Cards ── */}

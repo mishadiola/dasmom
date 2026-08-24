@@ -580,17 +580,19 @@ const PregnancyTips = () => {
 
     return (
         <div className="pregnancy-tips-container">
-            <header className="mother-page-header">
-                <div className="mother-page-header-content">
-                    <button className="back-btn" onClick={() => navigate('/mother-home')}>
-                        <ArrowLeft size={18} />
-                    </button>
-                    <div className="mother-page-header-text">
-                        <h1>Pregnancy Tips</h1>
-                        <p>Expert guidance and care for every stage of your journey</p>
-                    </div>
+            <div className="page-header">
+                <div>
+                    <h1 className="page-title">
+                        <BookOpen size={22} className="header-icon" /> Pregnancy Tips
+                    </h1>
+                    <p className="page-subtitle">Expert guidance and care for every stage of your journey</p>
                 </div>
-            </header>
+                <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => navigate('/mother-home')}>
+                        <ArrowLeft size={16} /> Back
+                    </button>
+                </div>
+            </div>
 
         {/* ── Tip of the Day Banner ── */}
         {!isActiveFiler && tipOfTheDay && (

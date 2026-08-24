@@ -6,6 +6,7 @@
     margin: 0 auto;
     padding: 20px;
     padding-bottom: 40px;
+    box-sizing: border-box;
     animation: fadeIn 0.4s ease-out;
 }
 
@@ -454,30 +455,22 @@
     opacity: 0.8;
 }
 
-.visit-item.status-attended,
-.visit-item.status-completed {
-    background: rgba(16, 185, 129, 0.08);
-    border-left: 3px solid #10b981;
-    color: #065f46;
+.visit-item.type-prenatal {
+    background: rgba(122, 162, 219, 0.15);
+    border-left: 3px solid #7aa2db;
+    color: #3b5a8c;
 }
 
-.visit-item.status-scheduled,
-.visit-item.status-upcoming {
-    background: rgba(245, 158, 11, 0.08);
-    border-left: 3px solid #f59e0b;
-    color: #92400e;
+.visit-item.type-vaccination {
+    background: rgba(230, 184, 110, 0.2);
+    border-left: 3px solid #e6b86e;
+    color: #8a6a10;
 }
 
-.visit-item.status-missed {
-    background: rgba(220, 53, 69, 0.08);
-    border-left: 3px solid #dc3545;
-    color: #842029;
-}
-
-.visit-item.status-cancelled {
-    background: rgba(108, 117, 125, 0.08);
-    border-left: 3px solid #6c757d;
-    color: #495057;
+.visit-item.type-postpartum {
+    background: rgba(109, 184, 160, 0.2);
+    border-left: 3px solid #6db8a0;
+    color: #3d8870;
 }
 
 /* ── Day View Schedule List ── */

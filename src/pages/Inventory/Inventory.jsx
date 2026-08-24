@@ -19,7 +19,12 @@ import {
   ChevronUp,
   Bell,
   BarChart3,
-  ClipboardList
+  ClipboardList,
+  ArrowLeft,
+  MapPin,
+  Calendar,
+  Send,
+  Hash
 } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
 import InventoryService from '../../services/inventoryservice';
@@ -877,8 +882,32 @@ const Inventory = () => {
   const distStartIndex = (distPage - 1) * distItemsPerPage;
   const paginatedDistHistory = filteredDistHistory.slice(distStartIndex, distStartIndex + distItemsPerPage);
 
+  // Distribution summary stats
+  const distSummary = useMemo(() => {
+    const now = new Date();
+    const thisMonth = now.getMonth();
+    const thisYear = now.getFullYear();
+
+    const totalDistributed = distributionHistory.reduce((sum, rec) => sum + (Number(rec.quantity) || 0), 0);
+    const thisMonthDists = distributionHistory.filter(rec => {
+      const d = new Date(rec.distribution_date);
+      return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+    });
+    const distributionsThisMonth = thisMonthDists.length;
+    const stationsSupplied = [...new Set(distributionHistory.map(r => r.destination_station).filter(Boolean))].length;
+    const itemsDistributed = [...new Set(distributionHistory.map(r => r.item_name).filter(Boolean))].length;
+
+    return { totalDistributed, distributionsThisMonth, stationsSupplied, itemsDistributed };
+  }, [distributionHistory]);
+
   return (
     <div className="inventory-page">
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* ═══════════ VIEW 1: CHO INVENTORY MANAGEMENT ═══════════ */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {mainTab === 'inventory' && (
+      <>
       {/* ══════════ HEADER ══════════ */}
       <div className="page-header">
         <div>
@@ -891,18 +920,7 @@ const Inventory = () => {
           <button
             className="btn btn-outline"
             style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-            onClick={() => {
-              setDistForm({
-                item_type: 'vaccine',
-                item_id: '',
-                quantity: '',
-                destination_station: '',
-                distribution_date: new Date().toISOString().split('T')[0],
-                released_by: user?.fullName || user?.email?.split('@')[0] || '',
-                remarks: ''
-              });
-              setShowDistributionModal(true);
-            }}
+            onClick={() => setMainTab('distribution')}
           >
             <Truck size={16} /> Station Distribution
           </button>
@@ -1479,13 +1497,149 @@ const Inventory = () => {
         </div>
       </div>
     </div>
+    </div>
+    </>
+    )}
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* ═══════════ VIEW 2: STATION DISTRIBUTION ═══════════ */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {mainTab === 'distribution' && (
+      <>
+      {/* ══════════ DISTRIBUTION HEADER ══════════ */}
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">
+            <Truck size={22} className="header-icon" /> Station Distribution
+          </h1>
+          <p className="page-subtitle">Transfer vaccines and supplements from CHO inventory to registered health stations.</p>
+        </div>
+        <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+          <button
+            className="btn btn-outline"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            onClick={() => setMainTab('inventory')}
+          >
+            <ArrowLeft size={16} /> Back to Inventory
+          </button>
+          <button
+            className="btn btn-primary"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            onClick={() => {
+              setDistForm({
+                item_type: 'vaccine',
+                item_id: '',
+                quantity: '',
+                destination_station: '',
+                distribution_date: new Date().toISOString().split('T')[0],
+                released_by: user?.fullName || user?.email?.split('@')[0] || '',
+                remarks: '',
+                station_batch: ''
+              });
+              setShowDistributionModal(true);
+            }}
+          >
+            <Plus size={16} /> New Distribution
+          </button>
+        </div>
+      </div>
+
+      {/* ── DISTRIBUTION SUMMARY CARDS ── */}
+      <div className="inv-stats-grid">
+        <div className="stat-card stat-card--lilac">
+          <div className="stat-top">
+            <div className="stat-icon stat-icon--lilac">
+              <Send size={20} />
+            </div>
+          </div>
+          <div className="stat-value">{distSummary.totalDistributed}</div>
+          <div className="stat-label">Total Distributed</div>
+        </div>
+        <div className="stat-card stat-card--sage">
+          <div className="stat-top">
+            <div className="stat-icon stat-icon--sage">
+              <Calendar size={20} />
+            </div>
+          </div>
+          <div className="stat-value">{distSummary.distributionsThisMonth}</div>
+          <div className="stat-label">Distributions This Month</div>
+        </div>
+        <div className="stat-card stat-card--orange">
+          <div className="stat-top">
+            <div className="stat-icon stat-icon--orange">
+              <MapPin size={20} />
+            </div>
+          </div>
+          <div className="stat-value">{distSummary.stationsSupplied}</div>
+          <div className="stat-label">Stations Supplied</div>
+        </div>
+        <div className="stat-card stat-card--yellow">
+          <div className="stat-top">
+            <div className="stat-icon stat-icon--yellow">
+              <Package size={20} />
+            </div>
+          </div>
+          <div className="stat-value">{distSummary.itemsDistributed}</div>
+          <div className="stat-label">Items Distributed</div>
+        </div>
+      </div>
+
+      {/* ── DISTRIBUTION SEARCH & FILTERS ── */}
+      <div className="shared-controls-card">
+        <div className="shared-search-wrap">
+          <Search size={16} className="shared-search-icon" />
+          <input
+            type="text"
+            className="shared-search-input"
+            placeholder="Search item or station..."
+            value={historySearch}
+            onChange={e => setHistorySearch(e.target.value)}
+          />
+        </div>
+        <div className="shared-filters-row" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <span className="filters-label"><Filter size={13} /> Filters:</span>
+          <select
+            value={isAdmin ? historyStationFilter : (visibleStations.includes(historyStationFilter) ? historyStationFilter : (visibleStations[0] || 'All'))}
+            onChange={e => setHistoryStationFilter(e.target.value)}
+            disabled={!isAdmin && visibleStations.length <= 1}
+            className="filter-btn"
+            style={{ cursor: !isAdmin && visibleStations.length <= 1 ? 'not-allowed' : 'pointer' }}
+          >
+            {isAdmin ? <option value="All">All Stations</option> : null}
+            {(isAdmin ? availableStations : visibleStations).map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select
+            value={historyTypeFilter}
+            onChange={e => setHistoryTypeFilter(e.target.value)}
+            className="filter-btn"
+            style={{ cursor: 'pointer' }}
+          >
+            <option value="All">All Item Types</option>
+            <option value="Vaccine">Vaccines</option>
+            <option value="Supplement">Supplements</option>
+          </select>
+          <input
+            type="date"
+            value={historyDateFilter}
+            onChange={e => setHistoryDateFilter(e.target.value)}
+            className="filter-btn"
+            style={{ cursor: 'pointer' }}
+          />
+          {(historySearch || historyStationFilter !== 'All' || historyTypeFilter !== 'All' || historyDateFilter) && (
+            <button className="clear-filters-btn" onClick={() => { setHistorySearch(''); setHistoryStationFilter('All'); setHistoryTypeFilter('All'); setHistoryDateFilter(''); }}>Clear All</button>
+          )}
+        </div>
+      </div>
 
     {/* ── STATION INVENTORY ── */}
-    <div className="inv-card" style={{ marginTop: '24px', borderRadius: '14px', overflow: 'hidden', border: '1px solid #e9ecef' }}>
+    <div className="inv-card" style={{ borderRadius: '14px', overflow: 'hidden', border: '1px solid #e9ecef' }}>
       <div className="inv-card-head" style={{ padding: '18px 24px', borderBottom: '1px solid #f0f2f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-        <h2 style={{ fontSize: '16px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Package size={17} /> Station Inventory
-        </h2>
+        <div>
+          <h2 style={{ fontSize: '16px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Package size={17} /> Station Inventory
+          </h2>
+          <p style={{ fontSize: '13px', color: '#888', margin: '4px 0 0' }}>Current stock held by each registered health station.</p>
+        </div>
         <span style={{ fontSize: '13px', color: '#555' }}>{stationInventory.length} entries</span>
       </div>
       <div style={{ overflowX: 'auto' }}>
@@ -1576,65 +1730,22 @@ const Inventory = () => {
     </div>
 
       {/* ── STATION DISTRIBUTION HISTORY ── */}
-      <div className="inv-card" style={{ marginTop: '24px', borderRadius: '14px', overflow: 'hidden', border: '1px solid #e9ecef' }}>
-        <div className="inv-card-head" style={{ padding: '18px 24px', borderBottom: '1px solid #f0f2f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+      <div className="inv-card" style={{ borderRadius: '14px', overflow: 'hidden', border: '1px solid #e9ecef' }}>
+        <div className="inv-card-head" style={{ padding: '18px 24px', borderBottom: '1px solid #f0f2f5' }}>
           <h2 style={{ fontSize: '16px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Truck size={17} /> Station Distribution History
+            <ClipboardList size={17} /> Distribution History
           </h2>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative' }}>
-              <Search size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#999', pointerEvents: 'none' }} />
-              <input
-                type="text"
-                placeholder="Search items..."
-                value={historySearch}
-                onChange={e => setHistorySearch(e.target.value)}
-                style={{ paddingLeft: '30px', paddingRight: '10px', paddingTop: '7px', paddingBottom: '7px', border: '1px solid #e9ecef', borderRadius: '8px', fontSize: '13px', width: '180px' }}
-              />
-            </div>
-            <select
-              value={isAdmin ? historyStationFilter : (visibleStations.includes(historyStationFilter) ? historyStationFilter : (visibleStations[0] || 'All'))}
-              onChange={e => setHistoryStationFilter(e.target.value)}
-              disabled={!isAdmin && visibleStations.length <= 1}
-              style={{ padding: '7px 10px', border: '1px solid #e9ecef', borderRadius: '8px', fontSize: '13px', background: '#fff', cursor: !isAdmin && visibleStations.length <= 1 ? 'not-allowed' : 'pointer' }}
-            >
-              {isAdmin ? <option value="All">All Stations</option> : null}
-              {(isAdmin ? availableStations : visibleStations).map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <select
-              value={historyTypeFilter}
-              onChange={e => setHistoryTypeFilter(e.target.value)}
-              style={{ padding: '7px 10px', border: '1px solid #e9ecef', borderRadius: '8px', fontSize: '13px', background: '#fff', cursor: 'pointer' }}
-            >
-              <option value="All">All Types</option>
-              <option value="Vaccine">Vaccine</option>
-              <option value="Supplement">Supplement</option>
-            </select>
-            <input
-              type="date"
-              value={historyDateFilter}
-              onChange={e => setHistoryDateFilter(e.target.value)}
-              style={{ padding: '7px 10px', border: '1px solid #e9ecef', borderRadius: '8px', fontSize: '13px' }}
-            />
-            {(historySearch || historyStationFilter !== 'All' || historyTypeFilter !== 'All' || historyDateFilter) && (
-              <button
-                className="btn btn-outline"
-                style={{ padding: '6px 12px', fontSize: '12px' }}
-                onClick={() => { setHistorySearch(''); setHistoryStationFilter('All'); setHistoryTypeFilter('All'); setHistoryDateFilter(''); }}
-              >
-                Clear
-              </button>
-            )}
-          </div>
+          <p style={{ fontSize: '13px', color: '#888', margin: '4px 0 0' }}>Track supplies released from CHO inventory to health stations.</p>
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table className="inv-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
+                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>#</th>
                 <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Date</th>
                 <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Item</th>
                 <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Type</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Qty</th>
+                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Quantity</th>
                 <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Destination Station</th>
                 <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Released By</th>
                 <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Remarks</th>
@@ -1642,17 +1753,10 @@ const Inventory = () => {
               </tr>
             </thead>
             <tbody>
-              {distributionHistory
-                .filter(rec => {
-                  const search = historySearch.toLowerCase();
-                  const matchesSearch = !search || rec.item_name?.toLowerCase().includes(search) || rec.destination_station?.toLowerCase().includes(search) || rec.released_by?.toLowerCase().includes(search);
-                  const matchesStation = historyStationFilter === 'All' || rec.destination_station === historyStationFilter;
-                  const matchesType = historyTypeFilter === 'All' || rec.item_type === historyTypeFilter;
-                  const matchesDate = !historyDateFilter || rec.distribution_date === historyDateFilter;
-                  return matchesSearch && matchesStation && matchesType && matchesDate;
-                })
-                .map(rec => (
+              {paginatedDistHistory.length > 0 ? (
+                paginatedDistHistory.map((rec, idx) => (
                   <tr key={rec.id} style={{ borderBottom: '1px solid #f0f2f5', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'} onMouseLeave={e => e.currentTarget.style.background = ''}>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#888', textAlign: 'center', fontWeight: '600' }}>{distStartIndex + idx + 1}</td>
                     <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap' }}>{formatReadableDate(rec.distribution_date)}</td>
                     <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>
                       <div style={{ fontWeight: '600' }}>{rec.item_name}</div>
@@ -1680,17 +1784,10 @@ const Inventory = () => {
                       </button>
                     </td>
                   </tr>
-                ))}
-              {distributionHistory.filter(rec => {
-                const search = historySearch.toLowerCase();
-                const matchesSearch = !search || rec.item_name?.toLowerCase().includes(search) || rec.destination_station?.toLowerCase().includes(search) || rec.released_by?.toLowerCase().includes(search);
-                const matchesStation = historyStationFilter === 'All' || rec.destination_station === historyStationFilter;
-                const matchesType = historyTypeFilter === 'All' || rec.item_type === historyTypeFilter;
-                const matchesDate = !historyDateFilter || rec.distribution_date === historyDateFilter;
-                return matchesSearch && matchesStation && matchesType && matchesDate;
-              }).length === 0 && (
+                ))
+              ) : (
                 <tr>
-                  <td colSpan="8" style={{ padding: '40px', textAlign: 'center', color: '#aaa', fontSize: '13px', fontStyle: 'italic' }}>
+                  <td colSpan="9" style={{ padding: '40px', textAlign: 'center', color: '#aaa', fontSize: '13px', fontStyle: 'italic' }}>
                     No distribution records found.
                   </td>
                 </tr>
@@ -1698,7 +1795,36 @@ const Inventory = () => {
             </tbody>
           </table>
         </div>
+        {/* Distribution History Pagination */}
+        {filteredDistHistory.length > distItemsPerPage && (
+          <div className="pagination-container">
+            <div className="pagination-info">
+              Showing {distStartIndex + 1}-{Math.min(distStartIndex + distItemsPerPage, filteredDistHistory.length)} of {filteredDistHistory.length}
+            </div>
+            <div className="pagination-controls">
+              <button
+                className="pagination-btn"
+                onClick={() => setDistPage(prev => Math.max(1, prev - 1))}
+                disabled={distPage === 1}
+              >
+                Previous
+              </button>
+              <span className="pagination-page-info">
+                Page {distPage} of {distTotalPages}
+              </span>
+              <button
+                className="pagination-btn"
+                onClick={() => setDistPage(prev => Math.min(distTotalPages, prev + 1))}
+                disabled={distPage === distTotalPages}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+      </>
+      )}
 
       {showAddModal && (
         <div
@@ -1998,8 +2124,8 @@ const Inventory = () => {
             style={{ maxWidth: '580px' }}
           >
             <div className="modal-header">
-              <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Truck size={18} /> Station Distribution</h2>
-              <p>Distribute vaccines or supplements from CHO inventory to a Barangay Health Station.</p>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Truck size={18} /> New Station Distribution</h2>
+              <p>Transfer available CHO stock to a registered station.</p>
             </div>
             <form onSubmit={handleDistributionSubmit}>
               <div className="modal-body">
@@ -2037,42 +2163,59 @@ const Inventory = () => {
                   </select>
                 </div>
 
-                {/* Unit (read-only) and Quantity */}
+                {/* Available CHO Stock + Quantity + Remaining */}
                 {distForm.item_id && (() => {
                   const sel = (distForm.item_type === 'vaccine' ? vaccines : supplements).find(i => i.id === distForm.item_id);
                   if (!sel) return null;
-                  const qtyNum = Number(distForm.quantity);
+                  const qtyNum = Number(distForm.quantity) || 0;
                   const exceedsStock = qtyNum > sel.quantity;
+                  const remaining = sel.quantity - qtyNum;
                   return (
-                    <div className="form-grid">
-                      <div className="form-group">
-                        <label>Quantity <span style={{ color: '#e05c73' }}>*</span></label>
-                        <input
-                          type="number"
-                          required
-                          min="1"
-                          max={sel.quantity}
-                          value={distForm.quantity}
-                          onChange={e => setDistForm({ ...distForm, quantity: e.target.value })}
-                          placeholder={`Max: ${sel.quantity}`}
-                          style={{ borderColor: exceedsStock ? '#e05c73' : undefined }}
-                        />
-                        {exceedsStock && (
-                          <span style={{ color: '#e05c73', fontSize: '12px', marginTop: '4px', display: 'block' }}>
-                            Exceeds available stock ({sel.quantity} {sel.unit}).
-                          </span>
-                        )}
+                    <>
+                      {/* Available CHO Stock */}
+                      <div style={{ background: 'rgba(109,184,160,0.08)', border: '1px solid rgba(109,184,160,0.2)', borderRadius: '10px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#555' }}>Available CHO Stock</span>
+                        <span style={{ fontSize: '16px', fontWeight: '700', color: '#3d8870' }}>{sel.quantity.toLocaleString()} {sel.unit}</span>
                       </div>
-                      <div className="form-group">
-                        <label>Unit</label>
-                        <input
-                          type="text"
-                          readOnly
-                          value={sel.unit}
-                          style={{ backgroundColor: '#f5f5f5', color: '#666', cursor: 'not-allowed' }}
-                        />
+
+                      <div className="form-grid">
+                        <div className="form-group">
+                          <label>Quantity to Distribute <span style={{ color: '#e05c73' }}>*</span></label>
+                          <input
+                            type="number"
+                            required
+                            min="1"
+                            max={sel.quantity}
+                            value={distForm.quantity}
+                            onChange={e => setDistForm({ ...distForm, quantity: e.target.value })}
+                            placeholder={`Max: ${sel.quantity}`}
+                            style={{ borderColor: exceedsStock ? '#e05c73' : undefined }}
+                          />
+                          {exceedsStock && (
+                            <span style={{ color: '#e05c73', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                              Cannot exceed available stock ({sel.quantity} {sel.unit}).
+                            </span>
+                          )}
+                        </div>
+                        <div className="form-group">
+                          <label>Unit</label>
+                          <input
+                            type="text"
+                            readOnly
+                            value={sel.unit}
+                            style={{ backgroundColor: '#f5f5f5', color: '#666', cursor: 'not-allowed' }}
+                          />
+                        </div>
                       </div>
-                    </div>
+
+                      {/* Remaining CHO Stock */}
+                      {qtyNum > 0 && (
+                        <div style={{ background: exceedsStock ? 'rgba(224,92,115,0.06)' : 'rgba(91,174,208,0.06)', border: `1px solid ${exceedsStock ? 'rgba(224,92,115,0.2)' : 'rgba(91,174,208,0.2)'}`, borderRadius: '10px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '13px', fontWeight: '600', color: '#555' }}>Remaining CHO Stock</span>
+                          <span style={{ fontSize: '16px', fontWeight: '700', color: exceedsStock ? '#e05c73' : '#3a8db5' }}>{remaining < 0 ? '—' : remaining.toLocaleString()} {remaining >= 0 ? sel.unit : ''}</span>
+                        </div>
+                      )}
+                    </>
                   );
                 })()}
 
@@ -2206,7 +2349,6 @@ const Inventory = () => {
       )}
 
     </div>
-  </div>
   );
 };
 

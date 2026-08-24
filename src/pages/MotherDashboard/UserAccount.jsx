@@ -107,17 +107,19 @@ const UserAccount = () => {
     if (loading) {
         return (
             <div className="user-account-page">
-                <header className="mother-page-header">
-                    <div className="mother-page-header-content">
-                        <button className="back-btn" onClick={() => navigate('/mother-home')}>
-                            <ArrowLeft size={18} />
-                        </button>
-                        <div className="mother-page-header-text">
-                            <h1>Account</h1>
-                            <p>Loading your account information...</p>
-                        </div>
+                <div className="page-header">
+                    <div>
+                        <h1 className="page-title">
+                            <User size={22} className="header-icon" /> Account
+                        </h1>
+                        <p className="page-subtitle">Loading your account information...</p>
                     </div>
-                </header>
+                    <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+                        <button className="btn btn-outline" onClick={() => navigate('/mother-home')}>
+                            <ArrowLeft size={16} /> Back
+                        </button>
+                    </div>
+                </div>
                 <div style={{ padding: '40px', textAlign: 'center' }}>
                     <p>Loading...</p>
                 </div>
@@ -128,17 +130,19 @@ const UserAccount = () => {
     if (!userData) {
         return (
             <div className="user-account-page">
-                <header className="mother-page-header">
-                    <div className="mother-page-header-content">
-                        <button className="back-btn" onClick={() => navigate('/mother-home')}>
-                            <ArrowLeft size={18} />
-                        </button>
-                        <div className="mother-page-header-text">
-                            <h1>Account</h1>
-                            <p>Your account information</p>
-                        </div>
+                <div className="page-header">
+                    <div>
+                        <h1 className="page-title">
+                            <User size={22} className="header-icon" /> Account
+                        </h1>
+                        <p className="page-subtitle">Your account information</p>
                     </div>
-                </header>
+                    <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+                        <button className="btn btn-outline" onClick={() => navigate('/mother-home')}>
+                            <ArrowLeft size={16} /> Back
+                        </button>
+                    </div>
+                </div>
                 <div style={{ padding: '40px', textAlign: 'center' }}>
                     <AlertCircle size={40} style={{ color: '#e74c3c', marginBottom: '10px' }} />
                     <p>{error || 'Unable to load account information'}</p>
@@ -149,22 +153,22 @@ const UserAccount = () => {
 
     return (
         <div className="user-account-page">
-            <header className="mother-page-header">
-                <div className="mother-page-header-content">
-                    <button className="back-btn" onClick={() => navigate('/mother-home')}>
-                        <ArrowLeft size={18} />
-                    </button>
-                    <div className="mother-page-header-text">
-                        <h1>Account</h1>
-                        <p>View your account information</p>
-                    </div>
+            <div className="page-header">
+                <div>
+                    <h1 className="page-title">
+                        <User size={22} className="header-icon" /> Account
+                    </h1>
+                    <p className="page-subtitle">View your account information</p>
                 </div>
-                <div className="mother-page-header-actions">
-                    <button className="ua-btn ua-btn--logout" onClick={handleLogout}>
+                <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => navigate('/mother-home')}>
+                        <ArrowLeft size={16} /> Back
+                    </button>
+                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#e05c73', borderColor: 'rgba(224,92,115,0.3)' }} onClick={handleLogout}>
                         <LogOut size={16} /> Logout
                     </button>
                 </div>
-            </header>
+            </div>
 
             <div className="ua-content">
                 {/* ── Personal Information Section ── */}

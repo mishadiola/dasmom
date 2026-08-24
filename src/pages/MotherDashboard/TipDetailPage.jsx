@@ -76,26 +76,28 @@ const TipDetailPage = () => {
                 <span className="tdp-breadcrumb-current">{tip.title}</span>
             </nav>
 
-            <header className="mother-page-header">
-                <div className="mother-page-header-content">
-                    <button className="back-btn" onClick={() => navigate('/mother-home/user-tips')}>
-                        <ArrowLeft size={18} />
-                    </button>
-                    <div className="mother-page-header-text">
-                        <h1>{tip.title}</h1>
-                        <p>{tip.category} • {tip.readTime}</p>
-                    </div>
+            <div className="page-header">
+                <div>
+                    <h1 className="page-title">
+                        {tip.icon ? <span className="header-icon">{tip.icon}</span> : <BookOpen size={22} className="header-icon" />}
+                        {tip.title}
+                    </h1>
+                    <p className="page-subtitle">{tip.category} • {tip.readTime}</p>
                 </div>
-                <div className="mother-page-header-actions">
+                <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => navigate('/mother-home/user-tips')}>
+                        <ArrowLeft size={16} /> Back
+                    </button>
                     <button
-                        className={`tdp-action-btn ${isBookmarked ? 'bookmarked' : ''}`}
+                        className="btn btn-outline"
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                         onClick={toggleBookmark}
                     >
                         {isBookmarked ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
                         {isBookmarked ? 'Saved' : 'Save'}
                     </button>
                 </div>
-            </header>
+            </div>
 
             {/* ── Article Content ── */}
             <div className="tdp-layout">

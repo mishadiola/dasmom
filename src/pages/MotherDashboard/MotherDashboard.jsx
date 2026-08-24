@@ -8,6 +8,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/MotherDashboard.css';
 import PregnancyProgressCard from '../../components/MotherDashboard/PregnancyProgressCard';
+import WelcomeMotherModal from '../../components/MotherDashboard/WelcomeMotherModal';
 import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
 
@@ -16,6 +17,7 @@ const MotherDashboard = () => {
     const [expandedHealth, setExpandedHealth] = useState(false);
     const [currentTipIndex, setCurrentTipIndex] = useState(0);
     const [showSupportModal, setShowSupportModal] = useState(false);
+    const [showWelcome, setShowWelcome] = useState(false);
     
     const today = new Date().toLocaleDateString('en-PH', {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
@@ -36,6 +38,10 @@ const MotherDashboard = () => {
             try {
                 const authUser = await auth.getAuthUser();
                 if (!authUser?.id) return;
+
+                if (import.meta.env.DEV && authUser.email === "maria@gmail.com") {
+                    setShowWelcome(true);
+                }
 
                 const patient = await patientService.getPatientById(authUser.id);
                 if (patient) {
@@ -138,24 +144,23 @@ const MotherDashboard = () => {
 
     return (
         <div className="mother-dashboard">
-            {/* ── Welcome Banner ── */}
-            <div className="mother-welcome-banner">
-                <div className="welcome-content">
-                    <div className="welcome-emoji"><img src="/assets/images/dashboard/greeting-icon.png" alt="Greeting Icon" className="welcome-emoji-img" /></div>
-                    <div>
-                        <p className="welcome-greeting">Hello, Mommy! 👋</p>
-                        <h1>You are {pregnancyData.weeks || '?'} weeks pregnant</h1>
-                        <p className="welcome-sub">Welcome to your personal maternal health portal. {pregnancyData.daysUntilDue !== undefined && `Your baby is expected in ${pregnancyData.daysUntilDue} days.`}</p>
-                    </div>
+            {showWelcome && <WelcomeMotherModal onClose={() => setShowWelcome(false)} />}
+            <div className="page-header">
+                <div>
+                    <h1 className="page-title">
+                        <img src="/assets/images/dashboard/greeting-icon.png" alt="Greeting Icon" style={{ width: '22px', height: '22px', marginRight: '12px' }} />
+                        Hello, Mommy! 👋
+                    </h1>
+                    <p className="page-subtitle">
+                        You are {pregnancyData.weeks || '?'} weeks pregnant. Welcome to your personal maternal health portal. {pregnancyData.daysUntilDue !== undefined && `Your baby is expected in ${pregnancyData.daysUntilDue} days.`}
+                    </p>
                 </div>
-                <div className="welcome-meta">
-                    <div className="date-badge">
-                        <Calendar size={14} />
-                        {today}
+                <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+                    <div className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px', pointerEvents: 'none' }}>
+                        <Calendar size={16} /> {today}
                     </div>
-                    <div className="trimester-badge modern-trimester">
-                        <Baby size={14} />
-                        {pregnancyData.trimester}
+                    <div className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px', pointerEvents: 'none' }}>
+                        <Baby size={16} /> {pregnancyData.trimester}
                     </div>
                 </div>
             </div>

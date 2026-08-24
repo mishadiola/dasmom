@@ -284,17 +284,19 @@ const PregnancyDeliveryInfo = () => {
     if (loading) {
         return (
             <div className="pdi-page">
-                <header className="mother-page-header">
-                    <div className="mother-page-header-content">
-                        <button className="back-btn" onClick={() => navigate('/mother-home')}>
-                            <ArrowLeft size={18} />
-                        </button>
-                        <div className="mother-page-header-text">
-                            <h1>Delivery Info</h1>
-                            <p>Loading your pregnancy and delivery information...</p>
-                        </div>
+                <div className="page-header">
+                    <div>
+                        <h1 className="page-title">
+                            <ClipboardList size={22} className="header-icon" /> Delivery Info
+                        </h1>
+                        <p className="page-subtitle">Loading your pregnancy and delivery information...</p>
                     </div>
-                </header>
+                    <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+                        <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => navigate('/mother-home')}>
+                            <ArrowLeft size={16} /> Back
+                        </button>
+                    </div>
+                </div>
                 <div style={{ padding: '40px', textAlign: 'center' }}>
                     <p>Loading...</p>
                 </div>
@@ -304,30 +306,31 @@ const PregnancyDeliveryInfo = () => {
 
     return (
         <div className="pdi-page">
-            <header className="mother-page-header">
-                <div className="mother-page-header-content">
-                    <button className="back-btn" onClick={() => navigate('/mother-home')}>
-                        <ArrowLeft size={18} />
-                    </button>
-                    <div className="mother-page-header-text">
-                        <h1>Delivery Info</h1>
-                        <p>Your past pregnancy history and delivery preferences</p>
-                    </div>
+            <div className="page-header">
+                <div>
+                    <h1 className="page-title">
+                        <ClipboardList size={22} className="header-icon" /> Delivery Info
+                    </h1>
+                    <p className="page-subtitle">Your past pregnancy history and delivery preferences</p>
                 </div>
-                <div className="mother-page-header-actions">
-                    <button className="pdi-btn pdi-btn--outline" onClick={handlePrint}>
-                        <Printer size={15} /> Print / Export
+                <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => navigate('/mother-home')}>
+                        <ArrowLeft size={16} /> Back
+                    </button>
+                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handlePrint}>
+                        <Printer size={16} /> Print / Export
                     </button>
                     <button
-                        className={`pdi-btn pdi-btn--save ${saved ? 'pdi-btn--saved' : ''}`}
+                        className="btn btn-primary"
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                         onClick={handleSave}
                         disabled={!agreed}
                         title={!agreed ? 'Please agree to the terms before saving.' : ''}
                     >
-                        {saved ? <><Check size={15} /> Saved!</> : <><Save size={15} /> Save Changes</>}
+                        {saved ? <><Check size={16} /> Saved!</> : <><Save size={16} /> Save Changes</>}
                     </button>
                 </div>
-            </header>
+            </div>
 
             {error && (
                 <div className="pdi-error-banner">

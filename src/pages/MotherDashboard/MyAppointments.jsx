@@ -3,8 +3,8 @@ import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
 import { 
     Calendar as CalendarIcon, List, ChevronLeft, ChevronRight, 
-    Clock, ArrowLeft, Download, Printer,
-    CheckCircle2, AlertCircle, CalendarDays
+    Clock, ArrowLeft, Download, Printer, X,
+    CheckCircle2, AlertCircle, CalendarDays, MapPin
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/MyAppointments.css';
@@ -39,11 +39,11 @@ const getPostpartumStatus = (delivery) => {
 
 const MyAppointments = () => {
     const navigate = useNavigate();
-    const [viewMode, setViewMode] = useState('calendar'); // 'calendar' or 'list'
     const [currentDate, setCurrentDate] = useState(new Date());
     const [calendarView, setCalendarView] = useState('month'); // 'day', 'week', 'month'
-    const [filterTab, setFilterTab] = useState('All'); // 'All', 'Upcoming', 'Past' for list view
-    const [calendarFilter, setCalendarFilter] = useState('All'); // 'All', 'Prenatal', 'Vaccination', 'Postpartum'
+    const [typeFilter, setTypeFilter] = useState('All'); // 'All', 'Prenatal', 'Vaccination', 'Postpartum'
+    const [statusFilter, setStatusFilter] = useState('Upcoming'); // 'Upcoming', 'Attended', 'Missed'
+    const [selectedAppt, setSelectedAppt] = useState(null);
 
     const [appointmentsData, setAppointmentsData] = useState([]);
 
@@ -61,7 +61,6 @@ const MyAppointments = () => {
                     return;
                 }
 
-                // Map prenatal visits to unified appointment objects
                 const visitAppts = (patient.visits || [])
                     .filter(v => v.visit_date)
                     .map(v => ({
@@ -75,7 +74,6 @@ const MyAppointments = () => {
                         color: 'green'
                     }));
 
-                // Map vaccinations to appointment-like events (use vaccine name in notes)
                 const vacAppts = (patient.vaccines || [])
                     .filter(v => v.scheduled_vaccination || v.vaccinated_date)
                     .map((v, idx) => ({
@@ -150,7 +148,7 @@ const MyAppointments = () => {
         }
 
         if (view === 'month') {
-            const end = new Date(d.getFullYear(), d.getMonth() + 1, 0); // Last day
+            const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
             const days = [];
             for (let i = 1; i <= end.getDate(); i++) {
                 const curr = new Date(d.getFullYear(), d.getMonth(), i);
@@ -178,21 +176,6 @@ const MyAppointments = () => {
         return `${formatReadableDate(start)} – ${formatReadableDate(end)}`;
     };
 
-    const getAppointmentsForDay = (dateStr) => {
-        let appointments = (appointmentsData || []).filter(a => {
-            if (!a.date) return false;
-            // Handle both YYYY-MM-DD format and Date objects
-            const apptDate = typeof a.date === 'string' ? a.date.split('T')[0] : new Date(a.date).toISOString().split('T')[0];
-            return apptDate === dateStr;
-        });
-
-        if (calendarFilter === 'All') return appointments;
-        if (calendarFilter === 'Prenatal') return appointments.filter(a => a.type === 'Prenatal');
-        if (calendarFilter === 'Vaccination') return appointments.filter(a => a.type === 'Vaccination');
-        if (calendarFilter === 'Postpartum') return appointments.filter(a => a.type === 'Postpartum');
-        return appointments;
-    };
-
     const handlePrev = () => {
         setCurrentDate(prev => {
             const d = new Date(prev);
@@ -213,318 +196,357 @@ const MyAppointments = () => {
         });
     };
 
-    const getFilteredAppointments = () => {
+    const getAppointmentsForDay = (dateStr) => {
+        let appointments = (appointmentsData || []).filter(a => {
+            if (!a.date) return false;
+            const apptDate = typeof a.date === 'string' ? a.date.split('T')[0] : new Date(a.date).toISOString().split('T')[0];
+            return apptDate === dateStr;
+        });
+
+        if (typeFilter !== 'All') {
+            appointments = appointments.filter(a => a.type === typeFilter);
+        }
+        return appointments;
+    };
+
+    const getFilteredListAppointments = () => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         
-        if (filterTab === 'All') return appointmentsData;
-        if (filterTab === 'Upcoming') {
-            return (appointmentsData || [])
-                .filter(a => {
-                    const apptDate = new Date(a.date);
-                    apptDate.setHours(0, 0, 0, 0);
-                    return apptDate >= today && (a.status === 'Upcoming' || a.status === 'Scheduled' || a.status === 'Attended');
-                })
-                .sort((a, b) => new Date(a.date) - new Date(b.date));
+        let filtered = appointmentsData || [];
+        
+        // Filter by Type
+        if (typeFilter !== 'All') {
+            filtered = filtered.filter(a => a.type === typeFilter);
         }
-        if (filterTab === 'Past') {
-            return (appointmentsData || [])
-                .filter(a => {
-                    const apptDate = new Date(a.date);
-                    apptDate.setHours(0, 0, 0, 0);
-                    return apptDate < today || a.status === 'Completed' || a.status === 'Missed';
-                })
-                .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        // Filter by Status Tab
+        if (statusFilter === 'Upcoming') {
+            return filtered.filter(a => {
+                const apptDate = new Date(a.date);
+                apptDate.setHours(0, 0, 0, 0);
+                return apptDate >= today && ['Upcoming', 'Scheduled'].includes(a.status);
+            }).sort((a, b) => new Date(a.date) - new Date(b.date));
         }
-        return appointmentsData;
+        if (statusFilter === 'Attended') {
+            return filtered.filter(a => ['Attended', 'Completed'].includes(a.status))
+                           .sort((a, b) => new Date(b.date) - new Date(a.date));
+        }
+        if (statusFilter === 'Missed') {
+            return filtered.filter(a => ['Missed', 'Cancelled'].includes(a.status))
+                           .sort((a, b) => new Date(b.date) - new Date(a.date));
+        }
+        return filtered;
     };
 
-    const filteredAppointments = getFilteredAppointments();
+    const filteredList = getFilteredListAppointments();
 
     return (
         <div className="my-appointments-page">
-            <button className="back-btn-small" onClick={() => navigate('/mother-home')}>
-                <ArrowLeft size={16} /> Back
-            </button>
-
-            <div className="appt-gradient-header-card">
-                <div className="appt-header-left">
-                    <div className="appt-title-block">
-                        <div className="appt-title-row">
-                            <h1 className="appt-title">Appointments</h1>
-                        </div>
-                        <p className="appt-meta">
-                            Keep track of your upcoming visits and health schedule
-                        </p>
-                    </div>
+            <div className="page-header">
+                <div>
+                    <h1 className="page-title">
+                        <CalendarIcon size={22} className="header-icon" /> Appointments
+                    </h1>
+                    <p className="page-subtitle">Keep track of your upcoming visits and health schedule</p>
                 </div>
-                <div className="appt-header-right">
-                    <div className="header-actions">
-                        <div className="view-toggle" style={{ background: 'rgba(255, 255, 255, 0.4)', border: '1px solid rgba(255,255,255,0.6)' }}>
-                            <button 
-                                className={`toggle-btn ${viewMode === 'calendar' ? 'active' : ''}`}
-                                onClick={() => setViewMode('calendar')}
-                            >
-                                <CalendarIcon size={16} /> Calendar
-                            </button>
-                            <button 
-                                className={`toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
-                                onClick={() => setViewMode('list')}
-                            >
-                                <List size={16} /> List
-                            </button>
-                        </div>
-                    </div>
+                <div className="header-actions">
+                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => navigate('/mother-home')}>
+                        <ArrowLeft size={16} /> Back
+                    </button>
                 </div>
             </div>
 
             <div className="appt-content">
-                {viewMode === 'calendar' ? (
-                    <>
-                    {/* Event Category Tabs — above the calendar, matching Staff Calendar tab style */}
-                    <div className="visit-type-tabs">
-                        <button
-                            className={`visit-type-tab ${calendarFilter === 'All' ? 'active' : ''}`}
-                            onClick={() => setCalendarFilter('All')}
-                        >
-                            All
-                        </button>
-                        <button
-                            className={`visit-type-tab ${calendarFilter === 'Prenatal' ? 'active' : ''}`}
-                            onClick={() => setCalendarFilter('Prenatal')}
-                        >
-                            Prenatal
-                        </button>
-                        <button
-                            className={`visit-type-tab ${calendarFilter === 'Vaccination' ? 'active' : ''}`}
-                            onClick={() => setCalendarFilter('Vaccination')}
-                        >
-                            Vaccination
-                        </button>
-                        <button
-                            className={`visit-type-tab ${calendarFilter === 'Postpartum' ? 'active' : ''}`}
-                            onClick={() => setCalendarFilter('Postpartum')}
-                        >
-                            Postpartum
-                        </button>
-                    </div>
+                {/* Event Category Tabs */}
+                <div className="visit-type-tabs">
+                    <button
+                        className={`visit-type-tab ${typeFilter === 'All' ? 'active' : ''}`}
+                        onClick={() => setTypeFilter('All')}
+                    >
+                        All
+                    </button>
+                    <button
+                        className={`visit-type-tab ${typeFilter === 'Prenatal' ? 'active' : ''}`}
+                        onClick={() => setTypeFilter('Prenatal')}
+                    >
+                        Prenatal
+                    </button>
+                    <button
+                        className={`visit-type-tab ${typeFilter === 'Vaccination' ? 'active' : ''}`}
+                        onClick={() => setTypeFilter('Vaccination')}
+                    >
+                        Vaccination
+                    </button>
+                    <button
+                        className={`visit-type-tab ${typeFilter === 'Postpartum' ? 'active' : ''}`}
+                        onClick={() => setTypeFilter('Postpartum')}
+                    >
+                        Postpartum
+                    </button>
+                </div>
 
-                    <div className="pv-calendar-section">
-                        <div className="section-head-bar">
-                            <div className="date-nav">
-                                <button className="icon-btn-sm" onClick={handlePrev} title="Previous">
-                                    <ChevronLeft size={16} />
-                                </button>
-                                <h2>{formatNavLabel()}</h2>
-                                <button className="icon-btn-sm" onClick={handleNext} title="Next">
-                                    <ChevronRight size={16} />
-                                </button>
+                <div className="pv-calendar-section" style={{marginBottom: '32px'}}>
+                    <div className="section-head-bar">
+                        <div className="date-nav">
+                            <button className="icon-btn-sm" onClick={handlePrev} title="Previous">
+                                <ChevronLeft size={16} />
+                            </button>
+                            <h2>{formatNavLabel()}</h2>
+                            <button className="icon-btn-sm" onClick={handleNext} title="Next">
+                                <ChevronRight size={16} />
+                            </button>
+                        </div>
+                        <div className="cal-head-right">
+                            <div className="view-toggles">
+                                {['day', 'week', 'month'].map(v => (
+                                    <button
+                                        key={v}
+                                        className={`view-toggle-btn ${calendarView === v ? 'active' : ''}`}
+                                        onClick={() => {
+                                            setCalendarView(v);
+                                            if (v === 'day') setCurrentDate(new Date());
+                                        }}
+                                    >
+                                        {v.charAt(0).toUpperCase() + v.slice(1)}
+                                    </button>
+                                ))}
                             </div>
-                            <div className="cal-head-right">
-                                <div className="view-toggles">
-                                    {['day', 'week', 'month'].map(v => (
-                                        <button
-                                            key={v}
-                                            className={`view-toggle-btn ${calendarView === v ? 'active' : ''}`}
-                                            onClick={() => {
-                                                setCalendarView(v);
-                                                if (v === 'day') setCurrentDate(new Date());
-                                            }}
-                                        >
-                                            {v.charAt(0).toUpperCase() + v.slice(1)}
-                                        </button>
-                                    ))}
-                                </div>
-                                <div className="legend-pills">
-                                    <span><i className="dot d-prenatal"></i> Prenatal</span>
-                                    <span><i className="dot d-postpartum"></i> Postpartum</span>
-                                    <span><i className="dot d-vaccination"></i> Vaccination</span>
-                                </div>
+                            <div className="legend-pills">
+                                <span><i className="dot d-prenatal"></i> Prenatal</span>
+                                <span><i className="dot d-vaccination"></i> Vaccination</span>
+                                <span><i className="dot d-postpartum"></i> Postpartum</span>
                             </div>
                         </div>
+                    </div>
 
-                        <div className="pv-grid-container">
-                            {calendarView === 'day' ? (
-                                <div className="day-view-container">
-                                    {visibleDays.map(day => {
-                                        const dayAppts = getAppointmentsForDay(day.date);
-                                        return (
-                                            <div key={day.date} className={`day-schedule-card ${day.date === TODAY ? 'day-today' : ''}`}>
-                                                <div className="day-schedule-header">
-                                                    <h3 className="day-schedule-title">
-                                                        {day.label}
+                    <div className="pv-grid-container">
+                        {calendarView === 'day' ? (
+                            <div className="day-view-container">
+                                {visibleDays.map(day => {
+                                    const dayAppts = getAppointmentsForDay(day.date);
+                                    return (
+                                        <div key={day.date} className={`day-schedule-card ${day.date === TODAY ? 'day-today' : ''}`}>
+                                            <div className="day-schedule-header">
+                                                <h3 className="day-schedule-title">
+                                                    {day.label}
+                                                    {day.date === TODAY && <span className="today-badge">TODAY</span>}
+                                                </h3>
+                                                <span className="day-schedule-count">
+                                                    {dayAppts.length} schedule{dayAppts.length !== 1 ? 's' : ''}
+                                                </span>
+                                            </div>
+                                            <div className="day-schedule-list">
+                                                {dayAppts.length > 0 ? (
+                                                    dayAppts.map(appt => (
+                                                        <div 
+                                                            key={appt.id} 
+                                                            className={`schedule-item type-${appt.type.toLowerCase()}`}
+                                                            onClick={() => setSelectedAppt(appt)}
+                                                            style={{cursor: 'pointer'}}
+                                                        >
+                                                            <div className="schedule-time">
+                                                                <Clock size={14} />
+                                                                <span>{appt.time || 'TBD'}</span>
+                                                            </div>
+                                                            <div className="schedule-details">
+                                                                <span className="schedule-patient">{appt.type === 'Vaccination' ? appt.notes : `${appt.type} Visit`}</span>
+                                                                <span className="schedule-id">{appt.location || ''}</span>
+                                                            </div>
+                                                            <span className={`schedule-status status-${(appt.status || 'scheduled').toLowerCase()}`}>
+                                                                {appt.status || 'Scheduled'}
+                                                            </span>
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <div className="no-schedules">No schedules for this day</div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className={`day-grid ${calendarView}-grid`}>
+                                {calendarView === 'week' ? (
+                                    <div className="week-row">
+                                        {visibleDays.map(day => {
+                                            const dayAppts = getAppointmentsForDay(day.date);
+                                            return (
+                                                <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`} onClick={() => { setCalendarView('day'); setCurrentDate(new Date(day.date)); }}>
+                                                    <h4 className="day-header">
+                                                        {formatCalendarDate(day.date)}
                                                         {day.date === TODAY && <span className="today-badge">TODAY</span>}
-                                                    </h3>
-                                                    <span className="day-schedule-count">
-                                                        {dayAppts.length} schedule{dayAppts.length !== 1 ? 's' : ''}
-                                                    </span>
-                                                </div>
-                                                <div className="day-schedule-list">
-                                                    {dayAppts.length > 0 ? (
-                                                        dayAppts.map(appt => (
+                                                    </h4>
+                                                    <div className="day-visits">
+                                                        {dayAppts.map(appt => (
                                                             <div 
                                                                 key={appt.id} 
-                                                                className={`schedule-item status-${(appt.status || 'scheduled').toLowerCase()} type-${appt.type.toLowerCase()}`}
+                                                                className={`visit-item type-${appt.type.toLowerCase()}`}
+                                                                title={`${appt.type} - ${appt.notes || ''}`}
+                                                                onClick={(e) => { e.stopPropagation(); setSelectedAppt(appt); }}
                                                             >
-                                                                <div className="schedule-time">
-                                                                    <Clock size={14} />
-                                                                    <span>{appt.time || 'TBD'}</span>
-                                                                </div>
-                                                                <div className="schedule-details">
-                                                                    <span className="schedule-patient">{appt.type === 'Vaccination' ? appt.notes : `${appt.type} Visit`}</span>
-                                                                    <span className="schedule-id">{appt.location || ''}</span>
-                                                                </div>
-                                                                <span className={`schedule-status status-${(appt.status || 'scheduled').toLowerCase()}`}>
-                                                                    {appt.status || 'Scheduled'}
-                                                                </span>
+                                                                <span className="visit-title">{appt.type === 'Vaccination' ? appt.notes : `${appt.type} Visit`}</span>
+                                                                <span className="visit-status">{appt.time || 'TBD'}</span>
                                                             </div>
-                                                        ))
-                                                    ) : (
-                                                        <div className="no-schedules">No schedules for this day</div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                                <div className={`day-grid ${calendarView}-grid`}>
-                                    {calendarView === 'week' ? (
-                                        <div className="week-row">
-                                            {visibleDays.map(day => {
-                                                const dayAppts = getAppointmentsForDay(day.date);
-                                                return (
-                                                    <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`} onClick={() => { setCalendarView('day'); setCurrentDate(new Date(day.date)); }}>
-                                                        <h4 className="day-header">
-                                                            {formatCalendarDate(day.date)}
-                                                            {day.date === TODAY && <span className="today-badge">TODAY</span>}
-                                                        </h4>
-                                                        <div className="day-visits">
-                                                            {dayAppts.map(appt => (
-                                                                <div 
-                                                                    key={appt.id} 
-                                                                    className={`visit-item status-${(appt.status || 'scheduled').toLowerCase()} type-${appt.type.toLowerCase()} color-${appt.color}`}
-                                                                    title={`${appt.type} - ${appt.notes || ''}`}
-                                                                >
-                                                                    <span className="visit-title">{appt.type === 'Vaccination' ? appt.notes : `${appt.type} Visit`}</span>
-                                                                    <span className="visit-status">{appt.status || 'Scheduled'}</span>
-                                                                </div>
-                                                            ))}
-                                                            {dayAppts.length === 0 && (
-                                                                <div className="no-visits" style={{color: '#94a3b8', fontSize: '11px', textAlign: 'center', padding: '10px 0'}}>No schedules</div>
-                                                            )}
-                                                        </div>
+                                                        ))}
+                                                        {dayAppts.length === 0 && (
+                                                            <div className="no-visits" style={{color: '#94a3b8', fontSize: '11px', textAlign: 'center', padding: '10px 0'}}>No schedules</div>
+                                                        )}
                                                     </div>
-                                                );
-                                            })}
-                                        </div>
-                                    ) : (
-                                        // Month view
-                                        (() => {
-                                            const weeks = [];
-                                            for (let i = 0; i < visibleDays.length; i += 7) {
-                                                weeks.push(visibleDays.slice(i, i + 7));
-                                            }
-                                            return weeks.map((week, wIdx) => (
-                                                <div key={wIdx} className="week-row">
-                                                    {week.map(day => {
-                                                        const dayAppts = getAppointmentsForDay(day.date);
-                                                        return (
-                                                            <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`} onClick={() => { setCalendarView('day'); setCurrentDate(new Date(day.date)); }}>
-                                                                <h4 className="day-header">
-                                                                    {new Date(day.date).getDate()}
-                                                                    {day.date === TODAY && <span className="today-badge">TODAY</span>}
-                                                                </h4>
-                                                                <div className="day-visits">
-                                                                    {dayAppts.map(appt => (
-                                                                        <div 
-                                                                            key={appt.id} 
-                                                                            className={`visit-item status-${(appt.status || 'scheduled').toLowerCase()} type-${appt.type.toLowerCase()} color-${appt.color}`}
-                                                                            title={`${appt.type} - ${appt.notes || ''}`}
-                                                                        >
-                                                                            <span className="visit-title">{appt.type === 'Vaccination' ? appt.notes : `${appt.type} Visit`}</span>
-                                                                            <span className="visit-status">{appt.status || 'Scheduled'}</span>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
                                                 </div>
-                                            ));
-                                        })()
-                                    )}
-                                </div>
-                            )}
-                        </div>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    // Month view
+                                    (() => {
+                                        const weeks = [];
+                                        for (let i = 0; i < visibleDays.length; i += 7) {
+                                            weeks.push(visibleDays.slice(i, i + 7));
+                                        }
+                                        return weeks.map((week, wIdx) => (
+                                            <div key={wIdx} className="week-row">
+                                                {week.map(day => {
+                                                    const dayAppts = getAppointmentsForDay(day.date);
+                                                    return (
+                                                        <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`} onClick={() => { setCalendarView('day'); setCurrentDate(new Date(day.date)); }}>
+                                                            <h4 className="day-header">
+                                                                {new Date(day.date).getDate()}
+                                                                {day.date === TODAY && <span className="today-badge">TODAY</span>}
+                                                            </h4>
+                                                            <div className="day-visits">
+                                                                {dayAppts.map(appt => (
+                                                                    <div 
+                                                                        key={appt.id} 
+                                                                        className={`visit-item type-${appt.type.toLowerCase()}`}
+                                                                        title={`${appt.type} - ${appt.notes || ''}`}
+                                                                        onClick={(e) => { e.stopPropagation(); setSelectedAppt(appt); }}
+                                                                    >
+                                                                        <span className="visit-title">{appt.type === 'Vaccination' ? appt.notes : `${appt.type} Visit`}</span>
+                                                                        <span className="visit-status">{appt.time || 'TBD'}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ));
+                                    })()
+                                )}
+                            </div>
+                        )}
                     </div>
-                    </>
-                ) : (
-                    <div className="list-container">
-                        <div className="list-filters">
-                            <button 
-                                className={`filter-btn ${filterTab === 'All' ? 'active' : ''}`}
-                                onClick={() => setFilterTab('All')}
-                            >
-                                All
-                            </button>
-                            <button 
-                                className={`filter-btn ${filterTab === 'Upcoming' ? 'active' : ''}`}
-                                onClick={() => setFilterTab('Upcoming')}
-                            >
-                                Upcoming
-                            </button>
-                            <button 
-                                className={`filter-btn ${filterTab === 'Past' ? 'active' : ''}`}
-                                onClick={() => setFilterTab('Past')}
-                            >
-                                Past
-                            </button>
-                        </div>
+                </div>
 
-                        <div className="appt-list">
-                            {filteredAppointments.length > 0 ? (
-                                filteredAppointments.sort((a, b) => new Date(b.date) - new Date(a.date)).map(a => (
-                                <div key={a.id} className="appt-list-item">
-                                    <div className={`appt-date-box ${a.color}`}>
-                                        <span className="m">{new Date(a.date || a.visit_date || Date.now()).toLocaleString('default', { month: 'short' }).toUpperCase()}</span>
-                                        <span className="d">{(a.date || a.visit_date || '').split('-')[2] || ''}</span>
-                                    </div>
-                                    <div className="appt-main-info">
-                                        <div className="appt-title-row">
-                                            <h3>{a.type} Visit</h3>
-                                            <span className={`status-badge ${a.status.toLowerCase()}`}>
-                                                   {String(a.status || '').toLowerCase() === 'completed' ? <CheckCircle2 size={12} /> : <Clock size={12} />}
-                                                   {a.status || 'Unknown'}
-                                            </span>
-                                        </div>
-                                        <div className="appt-meta-row">
-                                            <span><Clock size={14} /> {a.time}</span>
-                                            <span><MapPin size={14} /> {a.location}</span>
-                                        </div>
-                                        <p className="appt-desc">{a.notes}</p>
-                                    </div>
-                                    <div className="appt-actions">
-                                        <button className="btn-icon-outline" title="Print Details"><Printer size={16} /></button>
-                                        <button className="btn-icon-outline" title="Download"><Download size={16} /></button>
-                                    </div>
-                                </div>
-                            ))
-                            ) : (
-                                <div className="empty-state">
-                                    <CalendarDays size={32} />
-                                    <p>No appointments found for this filter.</p>
-                                </div>
-                            )}
-                        </div>
+                <div className="list-container">
+                    <div className="list-filters">
+                        <button 
+                            className={`filter-btn ${statusFilter === 'Upcoming' ? 'active' : ''}`}
+                            onClick={() => setStatusFilter('Upcoming')}
+                        >
+                            Upcoming
+                        </button>
+                        <button 
+                            className={`filter-btn ${statusFilter === 'Attended' ? 'active' : ''}`}
+                            onClick={() => setStatusFilter('Attended')}
+                        >
+                            Attended / Completed
+                        </button>
+                        <button 
+                            className={`filter-btn ${statusFilter === 'Missed' ? 'active' : ''}`}
+                            onClick={() => setStatusFilter('Missed')}
+                        >
+                            Missed
+                        </button>
                     </div>
-                )}
+
+                    <div className="appt-list">
+                        {filteredList.length > 0 ? (
+                            filteredList.map(a => (
+                            <div key={a.id} className="appt-list-item" onClick={() => setSelectedAppt(a)} style={{cursor: 'pointer'}}>
+                                <div className={`appt-date-box ${a.color}`}>
+                                    <span className="m">{new Date(a.date || a.visit_date || Date.now()).toLocaleString('default', { month: 'short' }).toUpperCase()}</span>
+                                    <span className="d">{(a.date || a.visit_date || '').split('-')[2] || ''}</span>
+                                </div>
+                                <div className="appt-main-info">
+                                    <div className="appt-title-row">
+                                        <h3>{a.type === 'Vaccination' ? a.notes : `${a.type} Visit`}</h3>
+                                        <span className={`status-badge ${a.status.toLowerCase()}`}>
+                                                {String(a.status || '').toLowerCase() === 'completed' || String(a.status || '').toLowerCase() === 'attended' ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                                                {a.status || 'Unknown'}
+                                        </span>
+                                    </div>
+                                    <div className="appt-meta-row">
+                                        <span><Clock size={14} /> {a.time || 'TBD'}</span>
+                                        <span><MapPin size={14} /> {a.location || 'Your Station'}</span>
+                                    </div>
+                                </div>
+                                <div className="appt-actions">
+                                    <button className="btn-icon-outline" title="Print Details" onClick={(e) => e.stopPropagation()}><Printer size={16} /></button>
+                                </div>
+                            </div>
+                        ))
+                        ) : (
+                            <div className="empty-state" style={{textAlign: 'center', padding: '40px 0', color: '#64748b', background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0'}}>
+                                <CalendarDays size={32} style={{margin: '0 auto 12px', color: '#cbd5e1'}}/>
+                                <p style={{margin: 0, fontWeight: 500}}>No {statusFilter.toLowerCase()} appointments found.</p>
+                                <p style={{margin: '4px 0 0', fontSize: '13px', opacity: 0.8}}>Try changing the filters above to see more records.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
 
             <footer className="appt-footer">
                 <AlertCircle size={14} />
                 <p>Appointments are managed by healthcare staff. Please contact your local health station for rescheduling.</p>
             </footer>
+
+            {/* Read-Only Appointment Modal */}
+            {selectedAppt && (
+                <div className="modal-overlay" onClick={() => setSelectedAppt(null)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '450px', padding: 0}}>
+                        <div className="modal-header" style={{padding: '24px 24px 16px', borderBottom: '1px solid #eef0f4', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                            <h2 style={{margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                                <CalendarIcon size={20} color="var(--color-rose)"/> Appointment Details
+                            </h2>
+                            <button className="btn-icon" onClick={() => setSelectedAppt(null)}><X size={18} /></button>
+                        </div>
+                        <div className="modal-body" style={{padding: '24px'}}>
+                            <div style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
+                                <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                                    <span style={{color: '#64748b', fontSize: '13px', fontWeight: 600}}>Type</span>
+                                    <span style={{fontWeight: 600}}>{selectedAppt.type}</span>
+                                </div>
+                                <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                                    <span style={{color: '#64748b', fontSize: '13px', fontWeight: 600}}>Status</span>
+                                    <span className={`status-badge ${selectedAppt.status.toLowerCase()}`}>{selectedAppt.status}</span>
+                                </div>
+                                <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                                    <span style={{color: '#64748b', fontSize: '13px', fontWeight: 600}}>Date</span>
+                                    <span style={{fontWeight: 600}}>{formatReadableDate(selectedAppt.date)}</span>
+                                </div>
+                                <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                                    <span style={{color: '#64748b', fontSize: '13px', fontWeight: 600}}>Time</span>
+                                    <span style={{fontWeight: 600}}>{selectedAppt.time || 'Not specified'}</span>
+                                </div>
+                                <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                                    <span style={{color: '#64748b', fontSize: '13px', fontWeight: 600}}>Location</span>
+                                    <span style={{fontWeight: 600}}>{selectedAppt.location || 'Your Station'}</span>
+                                </div>
+                                {selectedAppt.notes && (
+                                    <div style={{marginTop: '8px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0'}}>
+                                        <span style={{display: 'block', color: '#64748b', fontSize: '12px', fontWeight: 600, marginBottom: '4px'}}>Notes</span>
+                                        <p style={{margin: 0, fontSize: '13px', color: '#334155', lineHeight: '1.5'}}>{selectedAppt.notes}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -83,21 +83,25 @@ const UserVaccinations = () => {
 
     return (
         <div className="user-vaccinations-page">
-            <header className="mother-page-header">
-                <div className="mother-page-header-content">
-                    <button className="back-btn" onClick={() => navigate('/mother-home')}>
-                        <ArrowLeft size={18} />
+            <div className="page-header">
+                <div>
+                    <h1 className="page-title">
+                        <Syringe size={22} className="header-icon" /> Vaccinations
+                    </h1>
+                    <p className="page-subtitle">Keep track of your and your baby's vaccinations to ensure safety and healthy development</p>
+                </div>
+                <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => navigate('/mother-home')}>
+                        <ArrowLeft size={16} /> Back
                     </button>
-                    <div className="mother-page-header-text">
-                        <h1>Vaccinations</h1>
-                        <p>Keep track of your and your baby's vaccinations to ensure safety and healthy development</p>
-                    </div>
+                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} title="Print Schedule">
+                        <Printer size={16} /> Print
+                    </button>
+                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} title="Download PDF">
+                        <Download size={16} /> Download
+                    </button>
                 </div>
-                <div className="mother-page-header-actions">
-                    <button className="uv-btn-icon" title="Print Schedule"><Printer size={18} /></button>
-                    <button className="uv-btn-icon" title="Download PDF"><Download size={18} /></button>
-                </div>
-            </header>
+            </div>
 
             <div className="uv-progress-section">
                 <div className="uv-progress-card">

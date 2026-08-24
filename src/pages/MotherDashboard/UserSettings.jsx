@@ -45,17 +45,19 @@ const UserSettings = () => {
 
     return (
         <div className="user-settings-container">
-            <header className="mother-page-header">
-                <div className="mother-page-header-content">
-                    <button className="back-btn" onClick={() => navigate('/mother-home')}>
-                        <ArrowLeft size={18} />
-                    </button>
-                    <div className="mother-page-header-text">
-                        <h1>Settings</h1>
-                        <p>Manage your personal information and security</p>
-                    </div>
+            <div className="page-header">
+                <div>
+                    <h1 className="page-title">
+                        <Lock size={22} className="header-icon" /> Settings
+                    </h1>
+                    <p className="page-subtitle">Manage your personal information and security</p>
                 </div>
-            </header>
+                <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => navigate('/mother-home')}>
+                        <ArrowLeft size={16} /> Back
+                    </button>
+                </div>
+            </div>
 
             <div className="settings-content">
                 {/* ── Section A: Personal Information (Read-Only) ── */}
