@@ -91,9 +91,7 @@ const UserVaccinations = () => {
                     <p className="page-subtitle">Keep track of your and your baby's vaccinations to ensure safety and healthy development</p>
                 </div>
                 <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
-                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => navigate('/mother-home')}>
-                        <ArrowLeft size={16} /> Back
-                    </button>
+
                     <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} title="Print Schedule">
                         <Printer size={16} /> Print
                     </button>

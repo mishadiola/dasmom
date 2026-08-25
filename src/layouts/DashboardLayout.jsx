@@ -285,7 +285,7 @@ const DashboardLayout = () => {
                         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
                     >
                         <img src={logo} alt="DasMom+" className="sidebar-logo" />
-                        {sidebarOpen && (
+                        {(sidebarOpen || sidebarMobile) && (
                             <div className="sidebar-brand-text">
                                 <span className="sidebar-brand-name">DasMom<span>+</span></span>
                                 <span className="sidebar-brand-sub">Health System</span>
@@ -305,7 +305,7 @@ const DashboardLayout = () => {
                 <nav className="sidebar-nav">
                     {filteredNavItems.map((group) => (
                         <div key={group.section} className="nav-group">
-                            {sidebarOpen && (
+                            {(sidebarOpen || sidebarMobile) && (
                                 <span className="nav-group-label">{group.section}</span>
                             )}
                             {group.items.map(({ label, icon: Icon, path }) => (
@@ -329,11 +329,11 @@ const DashboardLayout = () => {
                                         const isPrefixMatch = location.pathname.startsWith(path) && location.pathname !== '/dashboard';
                                         return `nav-item${isPrefixMatch ? ' nav-item--active' : ''}`;
                                     }}
-                                    title={!sidebarOpen ? label : undefined}
+                                    title={!(sidebarOpen || sidebarMobile) ? label : undefined}
                                     onClick={() => setSidebarMobile(false)}
                                 >
                                     <Icon size={18} className="nav-icon" aria-hidden="true" />
-                                    {sidebarOpen && (
+                                    {(sidebarOpen || sidebarMobile) && (
                                         <span className="nav-label">{label}</span>
                                     )}
                                 </NavLink>
@@ -346,7 +346,7 @@ const DashboardLayout = () => {
                 <div className="sidebar-footer">
                     <button className="sidebar-logout" onClick={handleLogout} aria-label="Logout">
                         <LogOut size={17} aria-hidden="true" />
-                        {sidebarOpen && <span>Logout</span>}
+                        {(sidebarOpen || sidebarMobile) && <span>Logout</span>}
                     </button>
                 </div>
             </aside>

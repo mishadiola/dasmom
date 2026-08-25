@@ -39,8 +39,12 @@ const MotherDashboard = () => {
                 const authUser = await auth.getAuthUser();
                 if (!authUser?.id) return;
 
-                if (import.meta.env.DEV && authUser.email === "maria@gmail.com") {
-                    setShowWelcome(true);
+                if (authUser.role === 'mother' || authUser.role === 'patient') {
+                    const onboardingKey = `dasmom_onboarding_completed_${authUser.id}`;
+                    const hasCompletedOnboarding = localStorage.getItem(onboardingKey) === 'true';
+                    if (!hasCompletedOnboarding) {
+                        setShowWelcome(true);
+                    }
                 }
 
                 const patient = await patientService.getPatientById(authUser.id);
@@ -142,13 +146,21 @@ const MotherDashboard = () => {
         setCurrentTipIndex((prev) => (prev - 1 + healthTips.length) % healthTips.length);
     };
 
+    const handleCloseWelcome = async () => {
+        const auth = new AuthService();
+        const authUser = await auth.getAuthUser();
+        if (authUser?.id) {
+            localStorage.setItem(`dasmom_onboarding_completed_${authUser.id}`, 'true');
+        }
+        setShowWelcome(false);
+    };
+
     return (
         <div className="mother-dashboard">
-            {showWelcome && <WelcomeMotherModal onClose={() => setShowWelcome(false)} />}
+            {showWelcome && <WelcomeMotherModal onClose={handleCloseWelcome} />}
             <div className="page-header">
                 <div>
                     <h1 className="page-title">
-                        <img src="/assets/images/dashboard/greeting-icon.png" alt="Greeting Icon" style={{ width: '22px', height: '22px', marginRight: '12px' }} />
                         Hello, Mommy! 👋
                     </h1>
                     <p className="page-subtitle">

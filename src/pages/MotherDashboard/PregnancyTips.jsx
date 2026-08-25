@@ -588,9 +588,7 @@ const PregnancyTips = () => {
                     <p className="page-subtitle">Expert guidance and care for every stage of your journey</p>
                 </div>
                 <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
-                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => navigate('/mother-home')}>
-                        <ArrowLeft size={16} /> Back
-                    </button>
+
                 </div>
             </div>
 
@@ -615,8 +613,8 @@ const PregnancyTips = () => {
             </div>
         )}
 
-            {/* ── Controls ── */}
-            <div className="pt-controls">
+            {/* ── Search & Saved Row ── */}
+            <div className="pt-search-row">
                 <div className="pt-search-wrap">
                     <Search size={17} className="pt-search-ico" />
                     <input
@@ -717,7 +715,7 @@ const PregnancyTips = () => {
                                 {/* Card Body */}
                                 <div className="pt-card-body">
                                     <h3>{tip.title}</h3>
-                                    <p>{tip.description}</p>
+                                    <p className="pt-card-desc">{tip.description}</p>
                                 </div>
 
                                 {/* Card Footer */}

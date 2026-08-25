@@ -1,7 +1,5 @@
 .my-vitals-page {
     width: 100%;
-    margin: 0 auto;
-    padding: 20px;
     animation: fadeIn 0.4s ease-out;
 }
 
@@ -10,11 +8,62 @@
     to { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Tabs ── */
+.vitals-tabs {
+    display: flex;
+    gap: 28px;
+    margin-bottom: 32px;
+    border-bottom: 1px solid #eef0f4;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.vitals-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.vitals-tab {
+    background: transparent;
+    border: none;
+    padding: 12px 4px;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    position: relative;
+    transition: color 0.2s ease;
+}
+
+.vitals-tab:hover {
+    color: var(--color-text-dark);
+}
+
+.vitals-tab.active {
+    color: var(--color-rose);
+    font-weight: 600;
+}
+
+.vitals-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: var(--color-rose);
+    border-radius: 2px 2px 0 0;
+}
+
 /* ── Header ── */
 .vitals-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    padding: 24px 32px;
+    border-radius: var(--radius-xl);
+    background: linear-gradient(135deg, var(--color-pink-light) 0%, var(--color-yellow) 35%, var(--color-sage) 70%, var(--color-rose) 100%);
     margin-bottom: 32px;
     gap: 20px;
 }
@@ -66,7 +115,7 @@
     align-items: center;
     gap: 8px;
     padding: 10px 20px;
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-full);
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
@@ -214,14 +263,20 @@
     gap: 10px;
     font-size: 18px;
     color: var(--color-text-dark);
-    margin-bottom: 20px;
-    padding-left: 4px;
+    margin-bottom: 16px;
+    font-weight: 600;
+}
+
+.section-subtitle {
+    font-size: 14px;
+    color: var(--color-text-light);
+    margin-bottom: 24px;
 }
 
 .charts-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 20px;
+    gap: 24px;
     margin-bottom: 40px;
 }
 

@@ -47,8 +47,9 @@ function App() {
           <Routes>
 
           {/* PUBLIC ROUTES */}
-          <Route path="/" element={<Login />} />
-          <Route path="/landing" element={<Landing />} />
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/staff-login" element={<Login />} />
           <Route path="/admin-login" element={<Login />} />
           <Route path="/mother-login" element={<MotherLogin />} />
           

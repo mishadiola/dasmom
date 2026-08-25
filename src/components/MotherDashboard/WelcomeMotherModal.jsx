@@ -44,15 +44,15 @@ const WelcomeMotherModal = ({ onClose }) => {
                 <div className="welcome-modal-content">
                     {step === 1 && (
                         <div className="welcome-step fade-in">
-                            <div className="welcome-icon-wrapper">
-                                <Heart size={48} className="welcome-main-icon" />
+                            <div className="welcome-icon-wrapper" style={{ backgroundColor: '#fdf2f4' }}>
+                                <Heart size={48} className="welcome-main-icon" style={{ color: '#b9818a' }} />
                             </div>
-                            <h2 className="welcome-title">Welcome to DASMOM+</h2>
-                            <p className="welcome-subtitle">Care for you, every step of the way.</p>
+                            <h2 className="welcome-title">Hello, Mommy! Welcome to DASMOM+</h2>
+                            <p className="welcome-subtitle">We care for you just as much as you care for your baby.</p>
                             <p className="welcome-text">
-                                DASMOM+ is here to support you throughout your motherhood journey — from pregnancy to postpartum care.
+                                Your health and well-being matter too. DASMOM+ is here to support you through pregnancy, delivery, and postpartum care.
                             </p>
-                            <button className="welcome-btn-primary" onClick={nextStep} style={{marginTop: '24px'}}>
+                            <button className="welcome-btn-primary" onClick={nextStep} style={{marginTop: '32px'}}>
                                 Let's Get Started <ArrowRight size={18} />
                             </button>
                         </div>
@@ -60,50 +60,38 @@ const WelcomeMotherModal = ({ onClose }) => {
 
                     {step === 2 && (
                         <div className="welcome-step fade-in">
-                            <h2 className="welcome-title" style={{textAlign: 'left', marginBottom: '8px'}}>Your Care, Organized</h2>
-                            <p className="welcome-text" style={{textAlign: 'left', marginBottom: '24px'}}>Explore the features designed to support your journey.</p>
+                            <h2 className="welcome-title" style={{textAlign: 'left', marginBottom: '8px'}}>Everything You Need, In One Place</h2>
+                            <p className="welcome-text" style={{textAlign: 'left', marginBottom: '24px'}}>Keeping track of your care is easier when everything is right here.</p>
                             
                             <div className="welcome-feature-cards">
-                                <button 
-                                    className={`welcome-feature-card ${selectedFeature === 'appointments' ? 'selected' : ''}`}
-                                    onClick={() => setSelectedFeature('appointments')}
-                                    aria-pressed={selectedFeature === 'appointments'}
-                                >
+                                <div className="welcome-feature-card card-appointments">
                                     <div className="welcome-feature-icon"><Calendar size={24} /></div>
                                     <div className="welcome-feature-info">
                                         <h3>Appointments</h3>
-                                        <p>Keep track of your upcoming prenatal, vaccination, and postpartum visits.</p>
+                                        <p>Know what's coming up next.<br/>Keep track of your prenatal, vaccination, and postpartum visits.</p>
                                     </div>
-                                </button>
-                                <button 
-                                    className={`welcome-feature-card ${selectedFeature === 'records' ? 'selected' : ''}`}
-                                    onClick={() => setSelectedFeature('records')}
-                                    aria-pressed={selectedFeature === 'records'}
-                                >
+                                </div>
+                                <div className="welcome-feature-card card-records">
                                     <div className="welcome-feature-icon"><Activity size={24} /></div>
                                     <div className="welcome-feature-info">
                                         <h3>Health Records</h3>
-                                        <p>Keep your maternal health information organized and easy to access.</p>
+                                        <p>Keep your health journey close.<br/>View your important maternal health records and visit history anytime.</p>
                                     </div>
-                                </button>
-                                <button 
-                                    className={`welcome-feature-card ${selectedFeature === 'vaccines' ? 'selected' : ''}`}
-                                    onClick={() => setSelectedFeature('vaccines')}
-                                    aria-pressed={selectedFeature === 'vaccines'}
-                                >
+                                </div>
+                                <div className="welcome-feature-card card-vaccines">
                                     <div className="welcome-feature-icon"><Syringe size={24} /></div>
                                     <div className="welcome-feature-info">
                                         <h3>Vaccinations</h3>
-                                        <p>Stay updated with your recommended vaccinations and health services.</p>
+                                        <p>Stay protected and up to date.<br/>See your recommended vaccinations and keep track of your care.</p>
                                     </div>
-                                </button>
+                                </div>
                             </div>
 
                             <div className="welcome-actions-row">
                                 <button className="welcome-btn-secondary" onClick={prevStep}>
                                     <ArrowLeft size={16} /> Back
                                 </button>
-                                <button className="welcome-btn-primary" onClick={nextStep}>
+                                <button className="welcome-btn-primary" onClick={nextStep} style={{margin: 0}}>
                                     Next <ArrowRight size={16} />
                                 </button>
                             </div>
@@ -112,18 +100,21 @@ const WelcomeMotherModal = ({ onClose }) => {
 
                     {step === 3 && (
                         <div className="welcome-step fade-in">
-                            <h2 className="welcome-title">Your health matters.</h2>
-                            <p className="welcome-text" style={{marginBottom: '32px'}}>
-                                From pregnancy to postpartum, DASMOM+ helps you stay connected with the care and services you need.
+                            <h2 className="welcome-title">Your Journey Matters, Mommy.</h2>
+                            <p className="welcome-subtitle" style={{marginBottom: '24px', fontWeight: 500}}>
+                                From your first visit to postpartum care, DASMOM+ is here to support you every step of the way.
                             </p>
                             <div className="welcome-reassurance-box">
-                                <p>You're not just keeping track of your health.<br/>We're here to help you through the journey.</p>
+                                <p>You care so much for your little one.<br/>Don't forget to care for yourself, too.</p>
                             </div>
-                            <div className="welcome-actions-row" style={{marginTop: '40px', justifyContent: 'center', gap: '16px'}}>
+                            <p className="welcome-text" style={{marginTop: '24px'}}>
+                                We're here to help you stay connected with your health, your care team, and the services you need.
+                            </p>
+                            <div className="welcome-actions-row" style={{marginTop: 'auto', paddingTop: '24px'}}>
                                 <button className="welcome-btn-secondary" onClick={prevStep}>
                                     <ArrowLeft size={16} /> Back
                                 </button>
-                                <button className="welcome-btn-primary" onClick={handleClose}>
+                                <button className="welcome-btn-primary" onClick={handleClose} style={{margin: 0}}>
                                     Go to My Dashboard <ArrowRight size={16} />
                                 </button>
                             </div>

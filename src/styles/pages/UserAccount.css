@@ -14,10 +14,11 @@
     --radius-lg: 12px;
 }
 
-/* ── Page Structure ── */
 .user-account-page {
-    background: var(--color-bg-light);
-    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    width: 100%;
 }
 
 /* ── Header ── */

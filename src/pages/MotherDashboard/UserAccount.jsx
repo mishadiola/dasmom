@@ -115,9 +115,7 @@ const UserAccount = () => {
                         <p className="page-subtitle">Loading your account information...</p>
                     </div>
                     <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
-                        <button className="btn btn-outline" onClick={() => navigate('/mother-home')}>
-                            <ArrowLeft size={16} /> Back
-                        </button>
+
                     </div>
                 </div>
                 <div style={{ padding: '40px', textAlign: 'center' }}>
@@ -138,9 +136,7 @@ const UserAccount = () => {
                         <p className="page-subtitle">Your account information</p>
                     </div>
                     <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
-                        <button className="btn btn-outline" onClick={() => navigate('/mother-home')}>
-                            <ArrowLeft size={16} /> Back
-                        </button>
+
                     </div>
                 </div>
                 <div style={{ padding: '40px', textAlign: 'center' }}>
@@ -161,9 +157,7 @@ const UserAccount = () => {
                     <p className="page-subtitle">View your account information</p>
                 </div>
                 <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
-                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => navigate('/mother-home')}>
-                        <ArrowLeft size={16} /> Back
-                    </button>
+
                     <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#e05c73', borderColor: 'rgba(224,92,115,0.3)' }} onClick={handleLogout}>
                         <LogOut size={16} /> Logout
                     </button>

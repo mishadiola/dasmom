@@ -314,9 +314,7 @@ const PregnancyDeliveryInfo = () => {
                     <p className="page-subtitle">Your past pregnancy history and delivery preferences</p>
                 </div>
                 <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
-                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => navigate('/mother-home')}>
-                        <ArrowLeft size={16} /> Back
-                    </button>
+
                     <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handlePrint}>
                         <Printer size={16} /> Print / Export
                     </button>
@@ -441,7 +439,7 @@ const PregnancyDeliveryInfo = () => {
 
                 <div className="pdi-prefs-grid">
                     {/* Assisted by */}
-                    <div className="pdi-field pdi-field--full">
+                    <div className="pdi-field">
                         <label>
                             <Users size={13} /> Who will assist during delivery?
                             <span className="pdi-required">*</span>
@@ -455,7 +453,7 @@ const PregnancyDeliveryInfo = () => {
                     </div>
 
                     {/* Facility */}
-                    <div className="pdi-field pdi-field--full">
+                    <div className="pdi-field">
                         <label>
                             <MapPin size={13} /> Delivery location / facility
                             <span className="pdi-required">*</span>
@@ -469,7 +467,7 @@ const PregnancyDeliveryInfo = () => {
                     </div>
 
                     {/* PhilHealth toggles */}
-                    <div className="pdi-toggle-group">
+                    <div className="pdi-toggle-group pdi-field--full">
                         <div className="pdi-toggle-field">
                             <div className="pdi-toggle-label-wrap">
                                 <ShieldCheck size={15} className="pdi-toggle-ico pdi-toggle-ico--green" />

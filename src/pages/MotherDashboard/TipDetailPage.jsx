@@ -85,9 +85,7 @@ const TipDetailPage = () => {
                     <p className="page-subtitle">{tip.category} • {tip.readTime}</p>
                 </div>
                 <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
-                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => navigate('/mother-home/user-tips')}>
-                        <ArrowLeft size={16} /> Back
-                    </button>
+
                     <button
                         className="btn btn-outline"
                         style={{ display: 'flex', alignItems: 'center', gap: '6px' }}

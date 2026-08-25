@@ -3,14 +3,15 @@
 /* ─────────────────────────────────────────────
    PAGE SHELL
 ───────────────────────────────────────────── */
-.pt-page {
+.pregnancy-tips-container {
     display: flex;
     flex-direction: column;
-    gap: 24px;
     width: 100%;
-    margin: 0 auto;
-    padding-bottom: 48px;
     font-family: var(--font);
+}
+
+.page-header {
+    margin-bottom: 24px;
 }
 
 /* ─────────────────────────────────────────────
@@ -113,15 +114,16 @@
     position: relative;
     background: linear-gradient(135deg, #b9818a, #9c6672 60%, #7d4f59);
     border-radius: var(--radius-xl);
-    padding: 32px 200px 32px 36px;
+    padding: 28px 200px 28px 32px;
     cursor: pointer;
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
     transition: var(--t-normal);
-    min-height: 140px;
+    min-height: auto;
     justify-content: center;
+    margin-bottom: 24px;
 }
 
 .pt-tod-banner:hover {
@@ -221,10 +223,11 @@
 /* ─────────────────────────────────────────────
    CONTROLS (Search + Saved toggle)
 ───────────────────────────────────────────── */
-.pt-controls {
+.pt-search-row {
     display: flex;
     gap: 12px;
     align-items: center;
+    margin-bottom: 12px;
 }
 
 .pt-search-wrap {
@@ -320,6 +323,7 @@
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    margin-bottom: 12px;
 }
 .pt-cats-wrap::-webkit-scrollbar { display: none; }
 
@@ -334,7 +338,8 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 9px 18px;
+    padding: 0 16px;
+    height: 38px;
     border-radius: var(--radius-full);
     border: 1.5px solid #eef0f4;
     background: white;
@@ -370,6 +375,7 @@
     font-size: 13px;
     color: var(--color-text-light);
     font-weight: 600;
+    margin-bottom: 16px;
 }
 
 .pt-clear-all {
@@ -389,8 +395,8 @@
 ───────────────────────────────────────────── */
 .pt-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
-    gap: 24px;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 24px 20px;
 }
 
 /* ─────────────────────────────────────────────
@@ -569,11 +575,16 @@
     line-height: 1.4;
 }
 
-.pt-card-body p {
+.pt-card-body p.pt-card-desc {
     font-size: 13px;
     color: var(--color-text-muted);
-    line-height: 1.6;
+    line-height: 1.5;
     margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Card Footer */
@@ -693,7 +704,7 @@
         font-size: 18px;
     }
 
-    .pt-controls {
+    .pt-search-row {
         flex-direction: column;
         align-items: stretch;
     }

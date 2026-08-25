@@ -251,9 +251,7 @@ const MyAppointments = () => {
                     <p className="page-subtitle">Keep track of your upcoming visits and health schedule</p>
                 </div>
                 <div className="header-actions">
-                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => navigate('/mother-home')}>
-                        <ArrowLeft size={16} /> Back
-                    </button>
+
                 </div>
             </div>
 

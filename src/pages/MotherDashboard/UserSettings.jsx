@@ -53,9 +53,7 @@ const UserSettings = () => {
                     <p className="page-subtitle">Manage your personal information and security</p>
                 </div>
                 <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
-                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => navigate('/mother-home')}>
-                        <ArrowLeft size={16} /> Back
-                    </button>
+
                 </div>
             </div>
 

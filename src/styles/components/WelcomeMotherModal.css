@@ -189,7 +189,7 @@
 .welcome-feature-cards {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 16px;
 }
 
 .welcome-feature-card {
@@ -197,49 +197,49 @@
     align-items: flex-start;
     gap: 16px;
     padding: 16px;
-    background-color: #f8fafc;
-    border: 1px solid #e2e8f0;
     border-radius: 16px;
-    cursor: pointer;
-    transition: all 0.2s;
     text-align: left;
     width: 100%;
     box-sizing: border-box;
-}
-
-.welcome-feature-card:hover {
-    background-color: rgba(185, 129, 138, 0.03);
-    border-color: rgba(185, 129, 138, 0.3);
-}
-
-.welcome-feature-card:focus {
-    outline: 2px solid var(--color-rose, #b9818a);
-    outline-offset: 2px;
-}
-
-.welcome-feature-card.selected {
-    background-color: rgba(185, 129, 138, 0.05);
-    border-color: var(--color-rose, #b9818a);
-    box-shadow: 0 4px 12px rgba(185, 129, 138, 0.1);
+    border: 1px solid transparent;
 }
 
 .welcome-feature-icon {
     width: 48px;
     height: 48px;
     border-radius: 12px;
-    background-color: white;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #64748b;
     flex-shrink: 0;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
-    transition: all 0.2s;
 }
 
-.welcome-feature-card.selected .welcome-feature-icon {
-    background-color: var(--color-rose, #b9818a);
-    color: white;
+/* Card Specific Colors */
+.card-appointments {
+    background-color: rgba(167, 139, 250, 0.05);
+    border-color: rgba(167, 139, 250, 0.15);
+}
+.card-appointments .welcome-feature-icon {
+    background-color: rgba(167, 139, 250, 0.15);
+    color: #8b5cf6;
+}
+
+.card-records {
+    background-color: rgba(109, 184, 160, 0.05);
+    border-color: rgba(109, 184, 160, 0.15);
+}
+.card-records .welcome-feature-icon {
+    background-color: rgba(109, 184, 160, 0.15);
+    color: #4b8d76;
+}
+
+.card-vaccines {
+    background-color: rgba(245, 158, 11, 0.05);
+    border-color: rgba(245, 158, 11, 0.15);
+}
+.card-vaccines .welcome-feature-icon {
+    background-color: rgba(245, 158, 11, 0.15);
+    color: #d97706;
 }
 
 .welcome-feature-info h3 {
@@ -328,12 +328,13 @@
     }
 
     .welcome-actions-row {
-        flex-direction: column-reverse;
+        flex-direction: row;
         gap: 12px;
+        justify-content: space-between;
     }
     
     .welcome-btn-primary, .welcome-btn-secondary {
-        width: 100%;
+        width: auto;
     }
     
     .welcome-feature-card {
