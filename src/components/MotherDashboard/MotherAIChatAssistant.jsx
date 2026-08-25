@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageSquare, Send, X } from 'lucide-react';
+import { askAI } from '../../services/aichatservice';
 import '../../styles/components/MotherAIChatAssistant.css';
 
 const SUGGESTIONS = [
@@ -13,6 +14,7 @@ const SUGGESTIONS = [
 const MotherAIChatAssistant = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [inputText, setInputText] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
     const [messages, setMessages] = useState([
         {
             id: 'welcome',
@@ -32,9 +34,9 @@ const MotherAIChatAssistant = () => {
         }
     }, [messages, isOpen]);
 
-    const handleSend = (e) => {
+    const handleSend = async (e) => {
         if (e) e.preventDefault();
-        if (!inputText.trim()) return;
+        if (!inputText.trim() || isLoading) return;
 
         const userMessage = {
             id: `user-${Date.now()}`,
@@ -45,6 +47,29 @@ const MotherAIChatAssistant = () => {
 
         setMessages(prev => [...prev, userMessage]);
         setInputText('');
+        setIsLoading(true);
+
+        try {
+            const response = await askAI(userMessage.text);
+            const aiMessage = {
+                id: `ai-${Date.now()}`,
+                sender: 'ai',
+                text: response || "I'm having trouble processing your request. Please try again.",
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            setMessages(prev => [...prev, aiMessage]);
+        } catch (error) {
+            console.error('Error getting AI response:', error);
+            const errorMessage = {
+                id: `ai-${Date.now()}`,
+                sender: 'ai',
+                text: "Sorry, I encountered an error. Please try again later.",
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            setMessages(prev => [...prev, errorMessage]);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleSuggestionClick = (suggestion) => {
@@ -121,14 +146,15 @@ const MotherAIChatAssistant = () => {
                                 value={inputText}
                                 onChange={e => setInputText(e.target.value)}
                                 placeholder="Type your message..."
+                                disabled={isLoading}
                             />
                             <button 
                                 type="submit" 
                                 className="ai-send-btn"
-                                disabled={!inputText.trim()}
+                                disabled={!inputText.trim() || isLoading}
                                 aria-label="Send message"
                             >
-                                <Send size={14} />
+                                {isLoading ? '⏳' : <Send size={14} />}
                             </button>
                         </form>
                     </div>
