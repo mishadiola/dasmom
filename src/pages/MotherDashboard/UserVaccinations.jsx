@@ -10,6 +10,7 @@ import {
 import '../../styles/pages/UserVaccinations.css';
 import VaccineDetailModal from '../../components/MotherDashboard/VaccineDetailModal';
 import { useNavigate } from 'react-router-dom';
+import vaccinationsSilhouette from '../../assets/images/vaccinations-silhouette.png';
 
 const UserVaccinations = () => {
     const navigate = useNavigate();
@@ -83,21 +84,27 @@ const UserVaccinations = () => {
 
     return (
         <div className="user-vaccinations-page">
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">
-                        <Syringe size={22} className="header-icon" /> Vaccinations
-                    </h1>
-                    <p className="page-subtitle">Keep track of your and your baby's vaccinations to ensure safety and healthy development</p>
-                </div>
-                <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
-
-                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} title="Print Schedule">
-                        <Printer size={16} /> Print
-                    </button>
-                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} title="Download PDF">
-                        <Download size={16} /> Download
-                    </button>
+            <div className="page-header hero-header-with-img">
+                <img 
+                    src={vaccinationsSilhouette} 
+                    alt="Vaccinations Silhouette" 
+                    className="hero-silhouette-bg" 
+                />
+                <div className="hero-content-wrapper">
+                    <div className="hero-text-section">
+                        <h1 className="page-title">
+                            <Syringe size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> Vaccinations
+                        </h1>
+                        <p className="page-subtitle">Keep track of your and your baby's vaccinations to ensure safety and healthy development</p>
+                        <div className="hero-badges-row">
+                            <button className="vitals-badge-btn" title="Print Schedule">
+                                <Printer size={16} /> Print
+                            </button>
+                            <button className="vitals-badge-btn" title="Download PDF">
+                                <Download size={16} /> Download
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 

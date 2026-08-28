@@ -6,6 +6,7 @@ import {
     CheckCircle2, ChevronRight, Star, X, ShieldCheck, ArrowLeft
 } from 'lucide-react';
 import '../../styles/pages/PregnancyTips.css';
+import tipsSilhouette from '../../assets/images/tips-silhouette.png';
 
 // ─── Full Tips Data ────────────────────────────────────────────────────
 export const TIPS_DATA = [
@@ -580,15 +581,19 @@ const PregnancyTips = () => {
 
     return (
         <div className="pregnancy-tips-container">
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">
-                        <BookOpen size={22} className="header-icon" /> Pregnancy Tips
-                    </h1>
-                    <p className="page-subtitle">Expert guidance and care for every stage of your journey</p>
-                </div>
-                <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
-
+            <div className="page-header hero-header-with-img">
+                <img 
+                    src={tipsSilhouette} 
+                    alt="Pregnancy Tips Silhouette" 
+                    className="hero-silhouette-bg" 
+                />
+                <div className="hero-content-wrapper">
+                    <div className="hero-text-section">
+                        <h1 className="page-title">
+                            <BookOpen size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> Pregnancy Tips
+                        </h1>
+                        <p className="page-subtitle">Expert guidance and care for every stage of your journey</p>
+                    </div>
                 </div>
             </div>
 

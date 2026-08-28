@@ -135,7 +135,6 @@
 .ai-message {
     display: flex;
     flex-direction: column;
-    max-width: 82%;
     animation: msgFadeIn 0.25s ease forwards;
 }
 
@@ -146,10 +145,12 @@
 
 .ai-message--ai {
     align-self: flex-start;
+    max-width: 90%;
 }
 
 .ai-message--user {
     align-self: flex-end;
+    max-width: 75%;
 }
 
 .ai-message-bubble {
@@ -184,6 +185,61 @@
 
 .ai-message--ai .ai-message-time {
     align-self: flex-start;
+}
+
+/* ── Markdown Styling for AI ── */
+.ai-markdown {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--color-text);
+}
+
+.ai-markdown p {
+    margin-top: 0;
+    margin-bottom: 12px;
+}
+
+.ai-markdown p:last-child {
+    margin-bottom: 0;
+}
+
+.ai-markdown h1,
+.ai-markdown h2,
+.ai-markdown h3 {
+    margin-top: 20px;
+    margin-bottom: 12px;
+    color: var(--color-text-dark);
+    font-weight: 700;
+}
+
+.ai-markdown h1 {
+    font-size: 17px;
+    border-bottom: 1px solid rgba(185, 129, 138, 0.2);
+    padding-bottom: 6px;
+}
+
+.ai-markdown h2 {
+    font-size: 16px;
+}
+
+.ai-markdown h3 {
+    font-size: 15px;
+}
+
+.ai-markdown ul,
+.ai-markdown ol {
+    margin-top: 8px;
+    margin-bottom: 16px;
+    padding-left: 20px;
+}
+
+.ai-markdown li {
+    margin-bottom: 6px;
+}
+
+.ai-markdown strong {
+    font-weight: 700;
+    color: var(--color-rose-dark);
 }
 
 /* Suggestions Container */

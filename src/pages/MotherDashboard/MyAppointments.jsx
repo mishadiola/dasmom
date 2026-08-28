@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/MyAppointments.css';
+import appointmentSilhouette from '../../assets/images/appointments-silhouette.png';
 
 const toLocalDateStr = (d) => {
     const offset = d.getTimezoneOffset() * 60000;
@@ -251,21 +252,20 @@ const MyAppointments = () => {
 
     return (
         <div className="my-appointments-page">
-            <div className="page-header desktop-only">
-                <div>
-                    <h1 className="page-title">
-                        <CalendarIcon size={22} className="header-icon" /> Appointments
-                    </h1>
-                    <p className="page-subtitle">Keep track of your upcoming visits and health schedule</p>
+            <div className="page-header hero-header-with-img">
+                <img 
+                    src={appointmentSilhouette} 
+                    alt="Appointments Silhouette" 
+                    className="hero-silhouette-bg" 
+                />
+                <div className="hero-content-wrapper">
+                    <div className="hero-text-section">
+                        <h1 className="page-title">
+                            <CalendarIcon size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> Appointments
+                        </h1>
+                        <p className="page-subtitle">Keep track of your upcoming visits and health schedule</p>
+                    </div>
                 </div>
-                <div className="header-actions">
-
-                </div>
-            </div>
-
-            <div className="mobile-compact-header mobile-only">
-                <h1 className="mobile-page-title">📅 Appointments</h1>
-                <p className="mobile-page-subtitle">Keep track of your upcoming visits</p>
             </div>
 
             <div className="appt-content">

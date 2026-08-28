@@ -28,6 +28,130 @@
     margin-bottom: 24px;
 }
 
+/* ── Mother Welcome Header with Silhouette ── */
+.mother-welcome-header-with-img {
+    position: relative;
+    overflow: hidden;
+    min-height: 280px;
+    display: flex;
+    align-items: center;
+    padding: 32px 40px !important;
+}
+
+.mother-welcome-header-content-wrapper {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 60%;
+}
+
+.mother-welcome-text-section {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.mother-welcome-text-section .page-title {
+    font-size: 38px;
+    margin-bottom: 28px; /* Noticeably more spacing below title */
+    font-weight: 800;
+}
+
+.mother-welcome-text-section .page-subtitle {
+    font-size: 17px;
+    line-height: 1.5;
+    margin-bottom: 56px; /* Noticeably more spacing below subtitle */
+    opacity: 0.95;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.welcome-badges-row {
+    display: flex;
+    gap: 20px; /* Comfortable gap between buttons */
+    flex-wrap: wrap;
+}
+
+.welcome-badge {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 24px;
+    border-radius: 14px;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.welcome-badge-light {
+    background: #ffffff;
+    color: var(--color-text);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+}
+
+.welcome-badge-mauve {
+    background: var(--color-rose);
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(185, 129, 138, 0.35);
+}
+
+.pregnancy-silhouette-bg {
+    position: absolute;
+    right: -2%;
+    top: -12%; /* Move upward slightly */
+    bottom: auto;
+    height: 145%; /* Keep current large size */
+    max-width: 60%;
+    width: 55%;
+    object-fit: contain;
+    object-position: right top;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.95;
+}
+
+@media (max-width: 768px) {
+    .mother-welcome-header-with-img {
+        min-height: 340px;
+        padding: 24px !important;
+        align-items: flex-start;
+    }
+
+    .mother-welcome-header-content-wrapper {
+        max-width: 100%;
+    }
+    
+    .desktop-break {
+        display: none;
+    }
+    
+    .mother-welcome-text-section .page-title {
+        font-size: 28px;
+    }
+    
+    .mother-welcome-text-section .page-subtitle {
+        white-space: normal;
+        margin-bottom: 20px;
+    }
+
+    .pregnancy-silhouette-bg {
+        height: 110%;
+        width: 70%;
+        max-width: 70%;
+        right: -10%;
+        top: -8%;
+        bottom: auto;
+        object-position: right top;
+        opacity: 0.25;
+    }
+
+    .welcome-badges-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+}
+
+
 /* ── Standardized Mother Page Header (for all other pages) ── */
 .mother-page-header {
     background: linear-gradient(135deg,
@@ -234,15 +358,135 @@
     font-size: 14px;
 }
 
-/* ── Grid Layout ── */
-.mother-dash-grid {
-    display: grid;
-    grid-template-columns: 1.6fr 1fr;
-    gap: 24px;
+/* ── Dashboard Layout ── */
+.dashboard-content-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
 }
 
-.modern-grid {
-    gap: 28px;
+.mother-dash-row-2col {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: 20px;
+}
+
+.mother-dash-bottom-2col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+/* ── Appointments Timeline Override ── */
+.timeline-date-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    border: 1px solid rgba(185, 129, 138, 0.2);
+    border-radius: 12px;
+    padding: 8px;
+    min-width: 60px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+}
+.timeline-date-block .month { font-size: 11px; font-weight: 700; color: var(--color-rose); }
+.timeline-date-block .day { font-size: 20px; font-weight: 800; color: var(--color-text); line-height: 1; }
+.timeline-date-block .weekday { font-size: 10px; font-weight: 600; color: var(--color-text-muted); }
+
+.staff-name { color: var(--color-rose); font-weight: 700; }
+
+/* ── EDD Card ── */
+.edd-card {
+    background: linear-gradient(135deg, var(--color-rose) 0%, #d498a4 100%) !important;
+    color: white;
+}
+.edd-card .mother-card-title {
+    color: white;
+}
+.edd-content-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 120px;
+    text-align: center;
+}
+.edd-display {
+    font-size: 28px;
+    font-weight: 800;
+    margin: 0 0 8px;
+    color: white;
+}
+.edd-subtitle {
+    font-size: 14px;
+    font-weight: 600;
+    background: rgba(255,255,255,0.2);
+    padding: 6px 16px;
+    border-radius: 20px;
+    margin: 0;
+}
+
+/* ── Health Records Full Width ── */
+.health-records-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+.health-record-card-horizontal {
+    flex: 1;
+    min-width: 250px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px;
+    background: #f8f9fb;
+    border-radius: 16px;
+    border: 1px solid rgba(185, 129, 138, 0.1);
+}
+.hrc-icon-bg {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    background: #ffe4e8;
+    color: var(--color-rose);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.hrc-info {
+    display: flex;
+    flex-direction: column;
+}
+.hrc-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+}
+.hrc-value {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--color-text);
+}
+.hrc-status {
+    font-size: 11px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.hrc-status.normal { color: #6db8a0; }
+.hrc-empty { font-size: 13px; color: var(--color-text-muted); }
+
+/* ── Pregnancy Progress Layout Updates ── */
+.gestation-details-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
 }
 
 /* ── Mother Cards ── */
@@ -1037,6 +1281,12 @@
     }
     
     .modern-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .mother-dash-row-2col,
+    .mother-dash-bottom-2col,
+    .gestation-details-row {
         grid-template-columns: 1fr;
     }
 

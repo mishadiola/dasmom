@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageSquare, Send, X } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { askAI } from '../../services/aichatservice';
 import '../../styles/components/MotherAIChatAssistant.css';
 
@@ -113,7 +114,13 @@ const MotherAIChatAssistant = () => {
                                 className={`ai-message ai-message--${msg.sender}`}
                             >
                                 <div className="ai-message-bubble">
-                                    {msg.text}
+                                    {msg.sender === 'ai' && !msg.isWelcome ? (
+                                        <div className="ai-markdown">
+                                            <ReactMarkdown>{msg.text}</ReactMarkdown>
+                                        </div>
+                                    ) : (
+                                        msg.text
+                                    )}
                                     {msg.isWelcome && (
                                         <div className="ai-suggestions-wrap">
                                             <div className="ai-suggestions-title">Suggested questions:</div>

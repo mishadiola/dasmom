@@ -11,6 +11,7 @@ import PregnancyProgressCard from '../../components/MotherDashboard/PregnancyPro
 import WelcomeMotherModal from '../../components/MotherDashboard/WelcomeMotherModal';
 import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
+import pregnancySilhouette from '../../assets/images/pregnancy-silhouette.png';
 
 const MotherDashboard = () => {
     const navigate = useNavigate();
@@ -158,44 +159,40 @@ const MotherDashboard = () => {
     return (
         <div className="mother-dashboard">
             {showWelcome && <WelcomeMotherModal onClose={handleCloseWelcome} />}
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">
-                        Hello, Mommy! 🤍
-                    </h1>
-                    <p className="page-subtitle">
-                        You're {pregnancyData.weeks || '?'} weeks pregnant. {pregnancyData.daysUntilDue !== undefined && `Your baby is expected in ${pregnancyData.daysUntilDue} days.`}
-                    </p>
-                </div>
-                <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
-                    <div className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px', pointerEvents: 'none' }}>
-                        <Calendar size={16} /> {today}
-                    </div>
-                    <div className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px', pointerEvents: 'none' }}>
-                        <Baby size={16} /> {pregnancyData.trimester}
+            <div className="page-header mother-welcome-header-with-img">
+                <img 
+                    src={pregnancySilhouette} 
+                    alt="" 
+                    className="pregnancy-silhouette-bg" 
+                />
+                <div className="mother-welcome-header-content-wrapper">
+                    <div className="mother-welcome-text-section">
+                        <h1 className="page-title">
+                            Hello, Mommy! 🤍
+                        </h1>
+                        <p className="page-subtitle">
+                            You're {pregnancyData.weeks || '?'} weeks pregnant. {pregnancyData.daysUntilDue !== undefined && `Your baby is expected in ${pregnancyData.daysUntilDue} days.`}
+                        </p>
+                        
+                        <div className="welcome-badges-row">
+                            <div className="welcome-badge welcome-badge-light">
+                                <Calendar size={16} /> {today}
+                            </div>
+                            <div className="welcome-badge welcome-badge-mauve">
+                                <Baby size={16} /> {pregnancyData.trimester}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* ── Pregnancy Progress Section ── */}
-            {pregnancyData.lmp && (
-                <PregnancyProgressCard 
-                    lmpDate={pregnancyData.lmp}
-                    edd={pregnancyData.edd}
-                    weeks={pregnancyData.weeks}
-                    trimester={pregnancyData.trimester}
-                    daysUntilDue={pregnancyData.daysUntilDue}
-                />
-            )}
-
-            <div className="mother-dash-grid modern-grid">
-                {/* ── Left Column ── */}
-                <div className="mother-dash-left">
-                    {/* Upcoming Appointments - Timeline Style */}
+            <div className="dashboard-content-layout">
+                {/* ── Row 1: Appt and EDD ── */}
+                <div className="mother-dash-row-2col">
                     <div className="mother-card modern-card appointments-card">
                         <div className="mother-card-header">
                             <h2 className="mother-card-title">
-                                <Calendar size={18} /> Upcoming Visits
+                                Next Appointment
                             </h2>
                             <button 
                                 className="mother-card-link clickable"
@@ -205,13 +202,17 @@ const MotherDashboard = () => {
                             </button>
                         </div>
                         <div className="appointments-timeline">
-                            {appointments.slice(0, 1).map((appt, index) => (
+                            {appointments.slice(0, 1).map((appt) => (
                                 <div 
                                     key={appt.id} 
                                     className={`timeline-item ${String(appt.status || '').toLowerCase()}`}
                                     onClick={() => navigate('/mother-home/user-appointments')}
                                 >
-                                    <div className="timeline-dot"></div>
+                                    <div className="timeline-date-block">
+                                        <span className="month">{new Date(appt.date).toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}</span>
+                                        <span className="day">{new Date(appt.date).getDate()}</span>
+                                        <span className="weekday">{new Date(appt.date).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()}</span>
+                                    </div>
                                     <div className="timeline-content">
                                         <div className="timeline-header">
                                             <span className="timeline-type">{appt.type}</span>
@@ -221,16 +222,14 @@ const MotherDashboard = () => {
                                         </div>
                                         <div className="timeline-details">
                                             <div className="timeline-detail">
-                                                <Clock size={14} />
-                                                {appt.date} at {appt.time}
+                                                <Clock size={14} /> {appt.time}
                                             </div>
                                             <div className="timeline-detail">
-                                                <Info size={14} />
-                                                {appt.location || 'Health Station'}
+                                                <Info size={14} /> {appt.location || 'Health Station'}
                                             </div>
                                         </div>
                                         <div className="timeline-staff">
-                                            <span className="staff-label">With:</span> {appt.staff}
+                                            <span className="staff-label">With:</span> <span className="staff-name">{appt.staff}</span>
                                         </div>
                                     </div>
                                     <ChevronRight size={16} className="timeline-arrow" />
@@ -242,72 +241,75 @@ const MotherDashboard = () => {
                         </div>
                     </div>
 
-                    {postpartumVisit && (
-                        <div className="mother-card modern-card">
-                            <div className="mother-card-header">
-                                <h2 className="mother-card-title"><Calendar size={18} /> Postpartum Follow-up</h2>
-                                <span className={`timeline-status status-${postpartumVisit.status.toLowerCase()}`}>
-                                    {postpartumVisit.status === 'Completed' ? <CheckCircle2 size={12} /> : <Clock size={12} />}
-                                    {postpartumVisit.status}
-                                </span>
-                            </div>
-                            <p className="support-text">
-                                {postpartumVisit.status === 'Completed'
-                                    ? `Attended on ${postpartumVisit.attendedDate}.`
-                                    : postpartumVisit.status === 'Missed'
-                                        ? `Scheduled for ${postpartumVisit.scheduledDate}, but no attendance was recorded.`
-                                        : `Scheduled for ${postpartumVisit.scheduledDate}.`}
-                            </p>
-                            {postpartumVisit.remarks?.personnel_present?.name && (
-                                <div className="timeline-staff">Personnel present: {postpartumVisit.remarks.personnel_present.name}</div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Health Records - Expandable Cards */}
-                    <div className="mother-card modern-card health-card">
+                    <div className="mother-card modern-card edd-card">
                         <div className="mother-card-header">
-                            <h2 className="mother-card-title">
-                                <Activity size={18} /> My Health
-                            </h2>
-                            <button 
-                                className="expand-toggle"
-                                onClick={() => navigate('/mother-home/user-vitals')}
-                            >
-                                View Records
-                                <ChevronRight size={14} className={`chevron`} />
-                            </button>
+                            <h2 className="mother-card-title" style={{ color: '#fff' }}>Expected Due date</h2>
                         </div>
-                        <div className={`health-records-grid`}>
-                            {healthRecords.slice(0, 2).map((record, index) => {
-                                const Icon = record.icon;
-                                return (
-                                    <div key={index} className="health-record-card">
-                                        <div className="health-record-icon">
-                                            <Icon size={20} />
-                                        </div>
-                                        <div className="health-record-info">
-                                            <span className="health-record-label">{record.label}</span>
-                                            <span className="health-record-value">{record.value}</span>
-                                            <span className={`health-record-status ${String(record.status || '').toLowerCase()}`}>
-                                                <CheckCircle2 size={12} /> {record.status || 'Unknown'}
-                                            </span>
-                                            {record.trend !== 'stable' && (
-                                                <span className="health-record-trend">
-                                                    <TrendingUp size={12} /> {record.trend}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                        <div className="edd-content-box">
+                            {pregnancyData.edd ? (
+                                <h2 className="edd-display">
+                                    {new Date(pregnancyData.edd).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                                </h2>
+                            ) : (
+                                <h2 className="edd-display" style={{ opacity: 0.5 }}>N/A</h2>
+                            )}
+                            {pregnancyData.weeks && (
+                                <p className="edd-subtitle">Week {pregnancyData.weeks} {pregnancyData.daysUntilDue !== undefined ? `• ${pregnancyData.daysUntilDue} days remaining` : ''}</p>
+                            )}
                         </div>
                     </div>
                 </div>
 
-                {/* ── Right Column ── */}
-                <div className="mother-dash-right">
-                    {/* Health Tips - Carousel Style */}
+                {/* ── Row 2: Health Records ── */}
+                <div className="mother-card modern-card health-records-full">
+                    <div className="mother-card-header">
+                        <h2 className="mother-card-title">
+                            <Activity size={18} /> My Latest Health Records
+                        </h2>
+                        <button 
+                            className="mother-card-link clickable"
+                            onClick={() => navigate('/mother-home/user-vitals')}
+                        >
+                            Show More <ChevronRight size={14} />
+                        </button>
+                    </div>
+                    <div className="health-records-row">
+                        {healthRecords.length > 0 ? healthRecords.slice(0, 3).map((record, index) => {
+                            const Icon = record.icon;
+                            return (
+                                <div key={index} className="health-record-card-horizontal">
+                                    <div className="hrc-icon-bg">
+                                        <Icon size={20} />
+                                    </div>
+                                    <div className="hrc-info">
+                                        <span className="hrc-label">{record.label}</span>
+                                        <span className="hrc-value">{record.value}</span>
+                                        <span className={`hrc-status ${String(record.status || '').toLowerCase()}`}>
+                                            <CheckCircle2 size={12} /> {record.status || 'Normal'}
+                                        </span>
+                                    </div>
+                                </div>
+                            );
+                        }) : (
+                            <div className="hrc-empty">No health records available yet.</div>
+                        )}
+                    </div>
+                </div>
+
+                {/* ── Row 3: Pregnancy Progress ── */}
+                {pregnancyData.lmp && (
+                    <PregnancyProgressCard 
+                        lmpDate={pregnancyData.lmp}
+                        edd={pregnancyData.edd}
+                        weeks={pregnancyData.weeks}
+                        trimester={pregnancyData.trimester}
+                        daysUntilDue={pregnancyData.daysUntilDue}
+                    />
+                )}
+
+                {/* ── Row 4: Tips and Support ── */}
+                <div className="mother-dash-bottom-2col">
+                    {/* Health Tips */}
                     {healthTips.length > 0 && (
                         <div className="mother-card modern-card tips-card modern-tips">
                             <div className="mother-card-header">
@@ -351,7 +353,7 @@ const MotherDashboard = () => {
                         </div>
                     )}
 
-                    {/* Quick Support - Emergency Action Card */}
+                    {/* Quick Support */}
                     <div className="mother-card modern-card support-card emergency-card">
                         <div className="support-header">
                             <div className="support-icon-wrapper">

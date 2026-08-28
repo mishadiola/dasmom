@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/MyVitals.css';
+import vitalsSilhouette from '../../assets/images/vitals-silhouette.png';
 
 const MyVitals = () => {
     const navigate = useNavigate();
@@ -158,17 +159,25 @@ const MyVitals = () => {
 
     return (
         <div className="my-vitals-page">
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">
-                        <Activity size={22} className="header-icon" /> Vital Records
-                    </h1>
-                    <p className="page-subtitle">View your pregnancy health records and vital signs history</p>
-                </div>
-                <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
-                    <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handleDownloadPDF}>
-                        <Download size={16} /> Download PDF
-                    </button>
+            <div className="page-header vitals-hero-header-with-img">
+                <img 
+                    src={vitalsSilhouette} 
+                    alt="Vitals Silhouette" 
+                    className="vitals-silhouette-bg" 
+                />
+                <div className="vitals-hero-content-wrapper">
+                    <div className="vitals-hero-text-section">
+                        <h1 className="page-title">
+                            <Activity size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> Vital Records
+                        </h1>
+                        <p className="page-subtitle">View your pregnancy health records and vital signs history</p>
+                        
+                        <div className="vitals-hero-badges-row">
+                            <button className="vitals-badge-btn" onClick={handleDownloadPDF}>
+                                <Download size={16} /> Download PDF
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -188,54 +197,56 @@ const MyVitals = () => {
                 {activeTab === 'Current Health' && (
                     <>
                         {/* ── Top Summary Cards ── */}
-                        <h2 className="section-title">Current Health</h2>
-                        <div className="vitals-summary-grid">
-                            <div className="v-summary-card v-summary-card--green">
-                                <div className="v-card-top">
-                                    <div className="v-icon-wrap"><Weight size={20} /></div>
-                                    <span className="v-status">Normal</span>
+                        <div className="vitals-section-card">
+                            <h2 className="section-title">Current Health</h2>
+                            <div className="vitals-summary-grid">
+                                <div className="v-summary-card v-summary-card--green">
+                                    <div className="v-card-top">
+                                        <div className="v-icon-wrap"><Weight size={20} /></div>
+                                        <span className="v-status">Normal</span>
+                                    </div>
+                                    <div className="v-value-wrap">
+                                        <span className="v-value">{CURRENT_VITALS.weight || '--'}</span>
+                                        <span className="v-unit">kg</span>
+                                    </div>
+                                    <p className="v-label">Current Weight</p>
                                 </div>
-                                <div className="v-value-wrap">
-                                    <span className="v-value">{CURRENT_VITALS.weight || '--'}</span>
-                                    <span className="v-unit">kg</span>
-                                </div>
-                                <p className="v-label">Current Weight</p>
-                            </div>
 
-                            <div className="v-summary-card v-summary-card--yellow">
-                                <div className="v-card-top">
-                                    <div className="v-icon-wrap"><Activity size={20} /></div>
-                                    <span className="v-status">Monitor</span>
+                                <div className="v-summary-card v-summary-card--yellow">
+                                    <div className="v-card-top">
+                                        <div className="v-icon-wrap"><Activity size={20} /></div>
+                                        <span className="v-status">Monitor</span>
+                                    </div>
+                                    <div className="v-value-wrap">
+                                        <span className="v-value">{CURRENT_VITALS.bp || '--'}</span>
+                                        <span className="v-unit">mmHg</span>
+                                    </div>
+                                    <p className="v-label">Blood Pressure</p>
                                 </div>
-                                <div className="v-value-wrap">
-                                    <span className="v-value">{CURRENT_VITALS.bp || '--'}</span>
-                                    <span className="v-unit">mmHg</span>
-                                </div>
-                                <p className="v-label">Blood Pressure</p>
-                            </div>
 
-                            <div className="v-summary-card v-summary-card--green">
-                                <div className="v-card-top">
-                                    <div className="v-icon-wrap"><Heart size={20} /></div>
-                                    <span className="v-status">Normal</span>
+                                <div className="v-summary-card v-summary-card--pink">
+                                    <div className="v-card-top">
+                                        <div className="v-icon-wrap"><Heart size={20} /></div>
+                                        <span className="v-status">Normal</span>
+                                    </div>
+                                    <div className="v-value-wrap">
+                                        <span className="v-value">{CURRENT_VITALS.pulse || '--'}</span>
+                                        <span className="v-unit">BPM</span>
+                                    </div>
+                                    <p className="v-label">Heart Rate</p>
                                 </div>
-                                <div className="v-value-wrap">
-                                    <span className="v-value">{CURRENT_VITALS.pulse || '--'}</span>
-                                    <span className="v-unit">BPM</span>
-                                </div>
-                                <p className="v-label">Heart Rate</p>
-                            </div>
 
-                            <div className="v-summary-card v-summary-card--green">
-                                <div className="v-card-top">
-                                    <div className="v-icon-wrap"><Thermometer size={20} /></div>
-                                    <span className="v-status">Normal</span>
+                                <div className="v-summary-card v-summary-card--green">
+                                    <div className="v-card-top">
+                                        <div className="v-icon-wrap"><Thermometer size={20} /></div>
+                                        <span className="v-status">Normal</span>
+                                    </div>
+                                    <div className="v-value-wrap">
+                                        <span className="v-value">{CURRENT_VITALS.temp || '--'}</span>
+                                        <span className="v-unit">°C</span>
+                                    </div>
+                                    <p className="v-label">Temperature</p>
                                 </div>
-                                <div className="v-value-wrap">
-                                    <span className="v-value">{CURRENT_VITALS.temp || '--'}</span>
-                                    <span className="v-unit">°C</span>
-                                </div>
-                                <p className="v-label">Temperature</p>
                             </div>
                         </div>
                     </>
@@ -244,20 +255,22 @@ const MyVitals = () => {
                 {activeTab === 'Current Health' && (
                     <>
                         {/* ── Health Alerts (Conditional) ── */}
-                        <h2 className="section-title">Health Observations</h2>
-                        <div className="vitals-alerts">
-                            <div className="v-alert-banner v-alert-banner--warning">
-                                <AlertCircle size={20} />
-                                <div className="v-alert-text">
-                                    <h4>Recent High BP Observation</h4>
-                                    <p>Your blood pressure was slightly elevated (130/85) on Feb 26. Please continue to monitor and avoid salty foods.</p>
+                        <div className="vitals-observations-card">
+                            <h2 className="section-title">Health Observations</h2>
+                            <div className="vitals-alerts">
+                                <div className="v-alert-banner v-alert-banner--warning">
+                                    <AlertCircle size={20} />
+                                    <div className="v-alert-text">
+                                        <h4>Recent High BP Observation</h4>
+                                        <p>Your blood pressure was slightly elevated (130/85) on Feb 26. Please continue to monitor and avoid salty foods.</p>
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="v-alert-banner v-alert-banner--success">
-                                <CheckCircle2 size={20} />
-                                <div className="v-alert-text">
-                                    <h4>Steady Weight Gain</h4>
-                                    <p>Good job! Your weight gain is within the normal range for your current trimester.</p>
+                                <div className="v-alert-banner v-alert-banner--success">
+                                    <CheckCircle2 size={20} />
+                                    <div className="v-alert-text">
+                                        <h4>Steady Weight Gain</h4>
+                                        <p>Good job! Your weight gain is within the normal range for your current trimester.</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>

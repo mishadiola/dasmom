@@ -44,25 +44,9 @@ const PregnancyProgressCard = ({ lmpDate, weeks: propWeeks, trimester: propTrime
     }
 
     return (
-        <div className="mother-card pregnancy-progress-card">
+        <div className="mother-card modern-card pregnancy-progress-card">
             <div className="pregnancy-card-main">
-                <div className="due-date-section">
-                    <span className="section-label">Expected Due Date</span>
-                    <h2 className="due-date-val">
-                        <Calendar size={20} className="icon-inline" /> {edd ? formatDateLong(edd) : 'Not available'}
-                    </h2>
-                </div>
-
-                <div className="gestation-details">
-                    <div className="gest-item">
-                        <div className="gest-icon bg-rose-soft">
-                            <Baby size={18} />
-                        </div>
-                        <div className="gest-content">
-                            <span className="gest-label">You are currently:</span>
-                            <p className="gest-val">{gestAge.weeks} weeks pregnant</p>
-                        </div>
-                    </div>
+                <div className="gestation-details-row">
                     <div className="gest-item milestone-item">
                         <div className="gest-icon bg-yellow-soft">
                             <Sparkles size={18} />
@@ -73,7 +57,8 @@ const PregnancyProgressCard = ({ lmpDate, weeks: propWeeks, trimester: propTrime
                             <p className="gest-desc milestone-desc">{milestone.description}</p>
                         </div>
                     </div>
-                    <div className="gest-item">
+                    
+                    <div className="gest-item remaining-item">
                         <div className="gest-icon bg-blue-soft">
                             <Timer size={18} />
                         </div>
