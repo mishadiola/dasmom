@@ -1128,8 +1128,10 @@
 }
 .ldg-impact__grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
+  max-width: 900px;
+  margin: 0 auto;
 }
 .ldg-impact-card {
   border-radius: 20px;
@@ -1598,6 +1600,7 @@
   }
   .ldg-impact__grid {
     grid-template-columns: repeat(3, 1fr);
+    max-width: 800px;
   }
   .ldg-testimonials__grid {
     gap: 16px;
@@ -1753,7 +1756,8 @@
     display: none;
   }
   .ldg-impact__grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr;
+    max-width: 400px;
   }
   .ldg-testimonials__grid {
     grid-template-columns: 1fr;
@@ -1784,7 +1788,7 @@
     grid-template-columns: 1fr;
   }
   .ldg-impact__grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
   .ldg-benefits-matrix__header,
   .ldg-benefits-matrix__row {

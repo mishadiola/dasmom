@@ -64,6 +64,7 @@ const DashboardLayout = () => {
     const [notifications, setNotifications] = useState([]);
     const [notifCount, setNotifCount] = useState(0);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
+    const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
     const userMenuRef = useRef(null);
     const navigate = useNavigate();
     const location = useLocation();
@@ -506,11 +507,43 @@ const DashboardLayout = () => {
                             <Syringe size={20} />
                             <span>Vaccines</span>
                         </NavLink>
-                        <NavLink to="/mother-home/user-tips" className={({isActive}) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
+                        <button className={`bottom-nav-item ${mobileMoreOpen ? 'active' : ''}`} onClick={() => setMobileMoreOpen(!mobileMoreOpen)}>
                             <Menu size={20} />
                             <span>More</span>
-                        </NavLink>
+                        </button>
                     </nav>
+                )}
+
+                {/* ── Mobile More Menu Overlay ── */}
+                {isUserView && mobileMoreOpen && (
+                    <div className="mobile-more-overlay" onClick={() => setMobileMoreOpen(false)}>
+                        <div className="mobile-more-menu" onClick={e => e.stopPropagation()}>
+                            <div className="mobile-more-header">
+                                <h3>More Options</h3>
+                                <button className="mobile-more-close" onClick={() => setMobileMoreOpen(false)}>
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            <div className="mobile-more-content">
+                                <NavLink to="/mother-home/user-delivery-info" className="mobile-more-link" onClick={() => setMobileMoreOpen(false)}>
+                                    <div className="mobile-more-icon-wrap"><HeartPulse size={18} /></div>
+                                    <span>Pregnancy Information</span>
+                                </NavLink>
+                                <NavLink to="/mother-home/user-tips" className="mobile-more-link" onClick={() => setMobileMoreOpen(false)}>
+                                    <div className="mobile-more-icon-wrap"><FileText size={18} /></div>
+                                    <span>Daily Health Tips</span>
+                                </NavLink>
+                                <NavLink to="/mother-home/user-account" className="mobile-more-link" onClick={() => setMobileMoreOpen(false)}>
+                                    <div className="mobile-more-icon-wrap"><Users size={18} /></div>
+                                    <span>My Profile</span>
+                                </NavLink>
+                                <NavLink to="/mother-home/user-settings" className="mobile-more-link" onClick={() => setMobileMoreOpen(false)}>
+                                    <div className="mobile-more-icon-wrap"><Settings size={18} /></div>
+                                    <span>Settings</span>
+                                </NavLink>
+                            </div>
+                        </div>
+                    </div>
                 )}
             </div>
 

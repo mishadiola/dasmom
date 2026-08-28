@@ -29,15 +29,45 @@ import {
   Stethoscope,
 } from "lucide-react";
 import "../../styles/pages/Landing.css";
+import supabase from "../../config/supabaseclient";
 
 const Landing = () => {
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [dbStats, setDbStats] = useState({
+    mothers: "—",
+    vaccinations: "—",
+    stations: "—",
+    deliveries: "—"
+  });
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", handleScroll);
+    
+    const fetchStats = async () => {
+      try {
+        const [mothersRes, vaccinesRes, stationsRes, deliveriesRes] = await Promise.all([
+          supabase.from("patient_basic_info").select("*", { count: "exact", head: true }),
+          supabase.from("vaccinations").select("*", { count: "exact", head: true }),
+          supabase.from("stations").select("*", { count: "exact", head: true }),
+          supabase.from("deliveries").select("*", { count: "exact", head: true })
+        ]);
+
+        setDbStats({
+          mothers: mothersRes.count !== null ? mothersRes.count : "—",
+          vaccinations: vaccinesRes.count !== null ? vaccinesRes.count : "—",
+          stations: stationsRes.count !== null ? stationsRes.count : "—",
+          deliveries: deliveriesRes.count !== null ? deliveriesRes.count : "—"
+        });
+      } catch (err) {
+        console.error("Error fetching stats:", err);
+      }
+    };
+
+    fetchStats();
+
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
@@ -51,10 +81,10 @@ const Landing = () => {
 
   const navLinks = [
     { id: "home", label: "Home" },
-    { id: "who", label: "Who Can Use" },
     { id: "services", label: "Services" },
-    { id: "journey", label: "Maternal Journey" },
+    { id: "journey", label: "Your Care Journey" },
     { id: "impact", label: "Our Impact" },
+    { id: "about", label: "About DASMOM+" },
     { id: "benefits", label: "Benefits" },
   ];
 
@@ -63,49 +93,48 @@ const Landing = () => {
       icon: HeartPulse,
       title: "Prenatal Care Monitoring",
       description:
-        "Track pregnancy progress, trimester milestones, and important health updates throughout your pregnancy journey.",
-      benefit: "Never miss important checkups or pregnancy milestones.",
+        "Follow your pregnancy progress, prenatal visits, trimester milestones, and important health updates.",
+      benefit: "Stay informed about your pregnancy and keep track of your important checkups.",
       color: "mauve",
     },
     {
       icon: Calendar,
       title: "Appointment Scheduling",
       description:
-        "Manage prenatal appointments, schedule follow-up visits, and stay connected with your healthcare provider.",
-      benefit: "Always know when your next checkup is.",
+        "View your upcoming prenatal visits and keep track of your healthcare schedule.",
+      benefit: "Know when and where your next visit is.",
       color: "sage",
     },
     {
       icon: Syringe,
       title: "Vaccination Tracking",
       description:
-        "Complete immunization records for mothers and newborns — from tetanus shots to full infant vaccination timelines.",
-      benefit: "Keep your baby and yourself fully protected.",
+        "Keep track of vaccinations and supplements recommended during pregnancy and after your baby is born.",
+      benefit: "Help protect yourself and your baby through timely care.",
       color: "amber",
     },
     {
       icon: AlertTriangle,
       title: "Maternal Risk Monitoring",
       description:
-        "Automatic identification of high-risk pregnancies with early alerts so healthcare workers can act quickly.",
-      benefit:
-        "Early detection leads to better outcomes for you and your baby.",
+        "Helps healthcare workers identify mothers who may need closer monitoring and additional support.",
+      benefit: "Identifying concerns early can help healthcare workers provide timely care.",
       color: "rose",
     },
     {
       icon: Activity,
       title: "Postpartum Follow-Up",
       description:
-        "Postpartum care tracking, recovery support, and mother-baby wellness monitoring during the critical first weeks.",
-      benefit: "Support and guidance even after your baby is born.",
+        "Keep track of follow-up visits and care during the important weeks after delivery.",
+      benefit: "Your care continues even after your baby is born.",
       color: "sage",
     },
     {
       icon: Users,
       title: "Healthcare Coordination",
       description:
-        "Unified platform connecting midwives, Barangay Health Workers, and the City Health Office for seamless care.",
-      benefit: "Your healthcare team stays connected and informed.",
+        "Helps your healthcare team keep maternal health information organized and up to date.",
+      benefit: "Better coordination means your care team can better support you.",
       color: "mauve",
     },
   ];
@@ -115,159 +144,147 @@ const Landing = () => {
       icon: ClipboardList,
       step: "01",
       title: "Pregnancy Registration",
-      desc: "Register with your Barangay Health Station. A midwife records your health history and pregnancy details.",
+      desc: "Begin your maternal care journey through your local health station. Your pregnancy information and health history are recorded to help your healthcare team provide appropriate care.",
     },
     {
       icon: Stethoscope,
       step: "02",
       title: "Prenatal Monitoring",
-      desc: "Regular checkups are tracked digitally. Your health records are always up to date and accessible.",
+      desc: "Your prenatal visits and health information are recorded and kept up to date throughout your pregnancy.",
     },
     {
       icon: Syringe,
       step: "03",
-      title: "Vaccination Tracking",
-      desc: "Tetanus, micronutrients, and all prenatal vaccines are recorded and monitored for your protection.",
+      title: "Vaccination & Supplement Tracking",
+      desc: "Recommended vaccinations and supplements are recorded to help you stay on track with your maternal care.",
     },
     {
       icon: Building2,
       step: "04",
       title: "Delivery Care",
-      desc: "Delivery details, outcomes, and newborn information are safely logged in your maternal record.",
+      desc: "Important delivery and newborn information is recorded as part of your maternal health record.",
     },
     {
       icon: HeartPulse,
       step: "05",
       title: "Postpartum Recovery",
-      desc: "Follow-up care for the 6-week postpartum period is tracked to support your recovery.",
+      desc: "Your follow-up care after delivery is recorded to help support your recovery during the postpartum period.",
     },
     {
       icon: Baby,
       step: "06",
       title: "Newborn Monitoring",
-      desc: "Your newborn's immunization schedule, checkups, and growth milestones are tracked and managed.",
+      desc: "Your baby's vaccinations, checkups, and important health milestones can be tracked as part of continued care.",
     },
   ];
 
   const whoUsers = [
     {
       icon: Baby,
-      title: "Pregnant Mothers",
-      desc: "Track your prenatal appointments, vaccines, and pregnancy progress in one safe place.",
-      tag: "Patient Access",
+      title: "Pregnancy Care",
+      desc: "Keep track of your pregnancy progress, prenatal visits, important milestones, and health information.",
+      tag: "For Every Mother",
       color: "mauve",
     },
     {
       icon: Stethoscope,
-      title: "Midwives",
-      desc: "Monitor your patients, record prenatal visits, and coordinate maternal care efficiently.",
-      tag: "Healthcare Provider",
+      title: "Appointments",
+      desc: "Stay updated with your upcoming prenatal visits and important healthcare schedules.",
+      tag: "Easy to Keep Track",
       color: "sage",
     },
     {
       icon: Users,
-      title: "Barangay Health Workers",
-      desc: "Coordinate patient follow-ups, community outreach, and maternal health support in your area.",
-      tag: "Community Health",
+      title: "Vaccinations & Supplements",
+      desc: "Keep track of recommended vaccinations and supplements for you and your baby.",
+      tag: "Stay Protected",
       color: "amber",
     },
     {
       icon: Building2,
-      title: "Health Centers",
-      desc: "Manage maternal health records, monitor outcomes, and generate reports for the City Health Office.",
-      tag: "Administration",
+      title: "Postpartum Care",
+      desc: "Continue receiving support and follow-up care after delivery as you recover and care for your newborn.",
+      tag: "Care Beyond Pregnancy",
       color: "lavender",
     },
   ];
 
   const impactStats = [
-    { icon: Heart, val: "501+", lbl: "Mothers Supported", color: "mauve" },
-    {
-      icon: Baby,
-      val: "152",
-      lbl: "Healthy Deliveries Recorded",
-      color: "rose",
-    },
-    { icon: Syringe, val: "850+", lbl: "Vaccinations Tracked", color: "sage" },
-    { icon: Building2, val: "7", lbl: "Connected Health Stations", color: "amber" },
-    {
-      icon: ClipboardList,
-      val: "84%",
-      lbl: "Postpartum Follow-Up Rate",
-      color: "lavender",
-    },
+    { icon: Heart, val: dbStats.mothers, lbl: "Mothers Supported", color: "mauve" },
+    { icon: Syringe, val: dbStats.vaccinations, lbl: "Vaccinations Tracked", color: "sage" },
+    { icon: Building2, val: dbStats.stations, lbl: "Connected Health Stations", color: "amber" },
   ];
 
   const testimonialCards = [
     {
       icon: Baby,
       role: "For Mothers",
-      sub: "Pregnant & Postpartum",
+      sub: "Pregnant & Postpartum Mothers",
       type: "mother",
       quote:
-        '"DASMOM+ makes it easy to stay on top of my prenatal checkups. My midwife can see all my records and I always know when my next appointment is."',
+        '"It feels easier to keep track of my prenatal visits and health information. I know when my next appointment is and where I need to go."',
       benefits: [
-        "View your prenatal schedule anytime",
-        "Track your vaccination records",
-        "Stay connected with your midwife",
+        "View your care schedule",
+        "Keep track of your health records",
+        "Stay updated with your vaccinations",
       ],
     },
     {
       icon: Stethoscope,
-      role: "For Midwives",
-      sub: "Healthcare Professionals",
+      role: "For Your Healthcare Team",
+      sub: "City Health Office Healthcare Staff",
       type: "midwife",
       quote:
-        '"Managing records for hundreds of patients used to take so much time. Now everything is in one place and I can quickly see who needs follow-up care."',
+        '"DASMOM+ helps us keep maternal records organized and makes it easier to monitor mothers who need follow-up care."',
       benefits: [
-        "Access all patient records instantly",
-        "Get alerts for high-risk patients",
-        "Streamline appointment management",
+        "Keep maternal records organized",
+        "Monitor follow-up needs",
+        "Coordinate maternal healthcare",
       ],
     },
     {
       icon: Users,
-      role: "For Health Workers",
-      sub: "Barangay Health Workers & Staff",
+      role: "For the Community",
+      sub: "Dasmariñas City",
       type: "worker",
       quote:
-        '"Coordinating with the health center is now so much easier. We can share updates, track community health, and make sure no mother is missed."',
+        '"When maternal healthcare is organized and connected, mothers can receive better support throughout their journey."',
       benefits: [
-        "Coordinate community health visits",
-        "Track vaccination coverage rates",
-        "Support seamless care transitions",
+        "Support accessible maternal care",
+        "Improve healthcare coordination",
+        "Strengthen community maternal health",
       ],
     },
   ];
 
   const whyBenefits = [
     {
-      title: "Centralized Health Records",
-      cap: "Consolidates scattered manual logbooks into a single, secure electronic maternal registry accessible across barangay health stations.",
+      title: "Keeping Health Records Organized",
+      cap: "Maternal health information is organized in one secure digital record for easier access by your healthcare team.",
     },
     {
-      title: "Appointment Management",
-      cap: "Tracks scheduled visits, updates records automatically, and flags patients missing their critical checkups.",
+      title: "Remembering Appointments",
+      cap: "Upcoming visits are recorded so mothers can easily keep track of their maternal healthcare schedule.",
     },
     {
-      title: "Vaccination Monitoring",
-      cap: "Records immunization logs for both expectant mothers and infants, verifying local program compliance.",
+      title: "Keeping Vaccinations Updated",
+      cap: "Vaccination records help mothers and healthcare workers keep track of recommended immunizations.",
     },
     {
-      title: "Early Risk Identification",
-      cap: "Evaluates clinical indicators such as hypertension, advanced maternal age, and teenage pregnancy to flag high-risk cases instantly.",
+      title: "Identifying Mothers Who Need Extra Support",
+      cap: "Healthcare workers can identify and monitor mothers who may require closer attention.",
     },
     {
-      title: "Health Station Coordination",
-      cap: "Bridges Barangay Health Stations, Rural Health Units, and the central City Health Office for seamless care delivery.",
+      title: "Connecting Health Stations",
+      cap: "Helps participating City Health Office health stations coordinate maternal care and information.",
     },
     {
-      title: "Analytics & Reporting",
-      cap: "Provides real-time maternal health statistics, program coverage rates, and station performance to healthcare executives.",
+      title: "Understanding Community Health Needs",
+      cap: "Health information and reports help the City Health Office understand maternal healthcare needs across Dasmariñas.",
     },
     {
-      title: "Data Security & Confidentiality",
-      cap: "Restricts access to certified healthcare practitioners, protecting patient privacy under official health record frameworks.",
+      title: "Protecting Health Information",
+      cap: "Access to maternal health information is controlled and limited to authorized users.",
     },
   ];
 
@@ -287,7 +304,7 @@ const Landing = () => {
             <span className="ldg-nav__logo-text">
               DASMOM<span className="ldg-nav__plus">+</span>
             </span>
-            <span className="ldg-nav__tagline">Maternal Health Platform</span>
+            <span className="ldg-nav__tagline">Maternal Health Support</span>
           </div>
 
           <div
@@ -311,7 +328,7 @@ const Landing = () => {
               id="nav-login-btn"
             >
               <Lock size={13} />
-              Sign In
+              Login
             </button>
             <button
               className="ldg-nav__mobile-toggle"
@@ -351,9 +368,10 @@ const Landing = () => {
 
 
             <p className="ldg-hero__desc">
-              Dasmom+ is a maternal healthcare platform that helps mothers stay connected
-              with healthcare workers, monitor pregnancy progress, track
-              appointments, receive vaccinations, and access postpartum support.
+              DASMOM+ is here to support you through every step of your motherhood journey — from pregnancy to postpartum care.
+            </p>
+            <p className="ldg-hero__desc" style={{marginTop: '12px'}}>
+              Keep track of your prenatal visits, health records, vaccinations, pregnancy progress, and postpartum care while staying connected with your healthcare team.
             </p>
 
             <ul
@@ -362,9 +380,9 @@ const Landing = () => {
             >
               {[
                 "Easy to Use",
-                "Connected Health Stations",
+                "Keep Track of Your Care",
                 "Secure Maternal Records",
-                "Healthcare Worker Support",
+                "Connected to Your Health Center",
               ].map((item, i) => (
                 <li key={i} className="ldg-hero__trust-item">
                   <span className="ldg-hero__trust-check">✓</span>
@@ -400,21 +418,21 @@ const Landing = () => {
                 {/* Mini stat chips */}
                 <div className="ldg-hero__mini-stats">
                   <div className="ldg-hero__mini-stat">
-                    <span className="ldg-hero__mini-stat-val">501+</span>
+                    <span className="ldg-hero__mini-stat-val">{dbStats.mothers}</span>
                     <span className="ldg-hero__mini-stat-lbl">
-                      Mothers Registered
+                      Mothers Supported
                     </span>
                   </div>
                   <div className="ldg-hero__mini-stat">
-                    <span className="ldg-hero__mini-stat-val">7</span>
+                    <span className="ldg-hero__mini-stat-val">{dbStats.stations}</span>
                     <span className="ldg-hero__mini-stat-lbl">
-                      Health Stations
+                      Connected Health Stations
                     </span>
                   </div>
                   <div className="ldg-hero__mini-stat">
-                    <span className="ldg-hero__mini-stat-val">152</span>
+                    <span className="ldg-hero__mini-stat-val">{dbStats.deliveries}</span>
                     <span className="ldg-hero__mini-stat-lbl">
-                      Deliveries Logged
+                      Deliveries Recorded
                     </span>
                   </div>
                 </div>
@@ -428,11 +446,10 @@ const Landing = () => {
       <section id="who" className="ldg-who" aria-label="Who can use DASMOM+">
         <div className="ldg-who__inner">
           <div className="ldg-section-head ldg-section-head--center">
-            <span className="ldg-badge">Community Platform</span>
-            <h2 className="ldg-section-title">Who Can Use DASMOM+?</h2>
+            <span className="ldg-badge">Community Maternal Care</span>
+            <h2 className="ldg-section-title">Care Made for Every Mother</h2>
             <p className="ldg-section-sub">
-              DASMOM+ is designed for everyone involved in maternal healthcare —
-              from expecting mothers to healthcare administrators.
+              DASMOM+ helps mothers in Dasmariñas stay connected with maternal healthcare services provided by the City Health Office — from pregnancy registration to postpartum and newborn care.
             </p>
           </div>
 
@@ -463,10 +480,11 @@ const Landing = () => {
             <div className="ldg-about-visual-card">
               <div className="ldg-about-visual-card__header">
                 <div className="ldg-about-visual-card__title">
-                  💊 DASMOM+ — How It Works
+                  DASMOM+ — How It Works
                 </div>
                 <div className="ldg-about-visual-card__sub">
-                  Connecting mothers & healthcare workers across Dasmariñas City
+                  Your Care, Connected Across Dasmariñas
+                  <div style={{marginTop: '6px', fontSize: '11px', opacity: 0.8, lineHeight: 1.4}}>DASMOM+ helps connect mothers with the maternal healthcare services of the City Health Office and its participating health stations.</div>
                 </div>
               </div>
               <div className="ldg-about-visual-card__body">
@@ -582,14 +600,10 @@ const Landing = () => {
           <div className="ldg-about__content">
             <span className="ldg-badge">About the Platform</span>
             <h2 className="ldg-section-title">
-              A Caring Platform Built for Mothers and Communities
+              A Caring Platform Built for Mothers
             </h2>
             <p className="ldg-about__intro">
-              DASMOM+ is a maternal healthcare platform designed for Barangay
-              Health Stations, Rural Health Units, and the City Health Office of
-              Dasmariñas City. It brings together mothers, midwives, and
-              healthcare workers in one connected system — making prenatal care
-              more accessible, organized, and supportive for every family.
+              DASMOM+ is a maternal health monitoring platform of the City Health Office of Dasmariñas City. It helps organize maternal health information and connect mothers with the healthcare services they need throughout pregnancy, delivery, postpartum recovery, and newborn care.
             </p>
 
             <div className="ldg-about__mvp-cards">
@@ -599,9 +613,7 @@ const Landing = () => {
                 </div>
                 <h4>Our Mission</h4>
                 <p>
-                  To make maternal healthcare accessible, organized, and
-                  compassionate — ensuring every mother receives the care she
-                  deserves throughout her pregnancy journey.
+                  To make maternal healthcare more accessible, organized, and compassionate — so every mother can receive the care and support she deserves.
                 </p>
               </div>
               <div className="ldg-about-mvp-card">
@@ -610,9 +622,7 @@ const Landing = () => {
                 </div>
                 <h4>Our Vision</h4>
                 <p>
-                  A fully connected community healthcare network where every
-                  pregnant mother in Dasmariñas City has access to quality,
-                  timely, and caring maternal support.
+                  A caring and connected community where every mother in Dasmariñas City can access timely maternal healthcare and feel supported throughout her motherhood journey.
                 </p>
               </div>
               <div className="ldg-about-mvp-card">
@@ -621,9 +631,7 @@ const Landing = () => {
                 </div>
                 <h4>Our Promise</h4>
                 <p>
-                  Safe, private, and reliable health records — accessible only
-                  by your healthcare team and managed with the highest standards
-                  of data protection.
+                  Your health information is handled with care and kept secure, helping you and your healthcare team stay informed throughout your maternal care journey.
                 </p>
               </div>
             </div>
@@ -643,11 +651,10 @@ const Landing = () => {
               Healthcare Services
             </span>
             <h2 className="ldg-section-title">
-              Everything You Need, All in One Place
+              Care and Support for Every Step
             </h2>
             <p className="ldg-section-sub">
-              From your first prenatal visit to your baby's first checkup —
-              DASMOM+ supports every step of your maternal health journey.
+              From your first prenatal visit to postpartum recovery and your baby's early care, DASMOM+ helps you keep track of the care that matters most.
             </p>
           </div>
 
@@ -738,8 +745,7 @@ const Landing = () => {
               Supporting Mothers Across Dasmariñas City
             </h2>
             <p className="ldg-section-sub">
-              Real numbers from real communities — showing how DASMOM+ is making
-              a difference in maternal healthcare.
+              DASMOM+ supports the City Health Office in organizing maternal healthcare and keeping mothers connected with the care they need.
             </p>
           </div>
 
@@ -770,11 +776,10 @@ const Landing = () => {
           <div className="ldg-section-head ldg-section-head--center">
             <span className="ldg-badge ldg-badge--peach">Community Voices</span>
             <h2 className="ldg-section-title">
-              Supporting Better Maternal Healthcare
+              Built Around the Needs of Mothers
             </h2>
             <p className="ldg-section-sub">
-              DASMOM+ is built around the real needs of mothers, midwives, and
-              community health workers.
+              DASMOM+ is designed to make maternal healthcare easier to follow, easier to access, and more supportive for mothers in Dasmariñas City.
             </p>
           </div>
 
@@ -827,11 +832,10 @@ const Landing = () => {
               Platform Benefits
             </span>
             <h2 className="ldg-section-title">
-              Addressing Real Maternal Healthcare Needs
+              Making Maternal Care Easier
             </h2>
             <p className="ldg-section-sub">
-              How DASMOM+ solves the everyday challenges of maternal healthcare
-              delivery across Dasmariñas City.
+              DASMOM+ helps make maternal healthcare more organized, accessible, and easier to follow for mothers and their healthcare team.
             </p>
           </div>
 
@@ -868,20 +872,18 @@ const Landing = () => {
             Your Healthcare Portal
           </span>
           <h2 className="ldg-access-cta__title">
-            Access Your <span>DASMOM+</span> Account
+            Your Maternal Care, <span>All in One Place</span>
           </h2>
           <p className="ldg-access-cta__desc">
-            Sign in to access your maternal health records, appointments,
-            healthcare monitoring, and support services — all in one secure and
-            easy-to-use platform.
+            Access your DASMOM+ account to view your health records, upcoming appointments, vaccination information, pregnancy progress, and available support services.
           </p>
 
           <div className="ldg-access-cta__icons">
             {[
-              { icon: ShieldCheck, label: "Secure Access" },
-              { icon: Activity, label: "Health Monitoring" },
-              { icon: ClipboardList, label: "Maternal Records" },
-              { icon: UserCheck, label: "Healthcare Support" },
+              { icon: ShieldCheck, label: "Your Health Records" },
+              { icon: Activity, label: "Your Appointments" },
+              { icon: ClipboardList, label: "Your Pregnancy Care" },
+              { icon: UserCheck, label: "Your Support" },
             ].map((item, i) => (
               <div key={i} className="ldg-access-cta__icon-item">
                 <div className="ldg-access-cta__icon-circle">
@@ -899,7 +901,7 @@ const Landing = () => {
               id="access-cta-login-btn"
             >
               <Heart size={16} />
-              Sign In to DASMOM+
+              Login to DASMOM+
             </button>
             <button
               className="ldg-btn ldg-btn--outline ldg-btn--lg"
@@ -928,8 +930,7 @@ const Landing = () => {
                 </span>
               </div>
               <p className="ldg-footer__desc">
-                A maternal healthcare platform supporting pregnant mothers,
-                midwives, and community health workers across Dasmariñas City.
+                A public maternal healthcare platform of the City Health Office of Dasmariñas City, created to support mothers throughout pregnancy, delivery, postpartum recovery, and newborn care.
               </p>
               <div className="ldg-footer__heart">
                 <span className="ldg-footer__heart-icon">❤️</span>
@@ -970,9 +971,7 @@ const Landing = () => {
                 <li>
                   <span>Barangay Health Workers (BHW)</span>
                 </li>
-                <li>
-                  <span>Midwife Care Support Program</span>
-                </li>
+
               </ul>
             </div>
 
