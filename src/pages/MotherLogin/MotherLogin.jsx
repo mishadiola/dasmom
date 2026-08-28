@@ -9,6 +9,7 @@ import logo from '../../assets/images/dasmom_logo.png';
 import AuthService from '../../services/authservice';
 import { AuthContext } from '../../context/AuthContext';
 import { useModal } from '../../context/ModalContext';
+import supabase from '../../config/supabaseclient';
 
 const MotherLogin = () => {
     const navigate = useNavigate();
@@ -20,6 +21,29 @@ const MotherLogin = () => {
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+
+    const handleForgotPassword = async (event) => {
+        event.preventDefault();
+        const resetEmail = window.prompt('Enter the email address registered with DASMOM:');
+        if (!resetEmail?.trim()) return;
+
+        setIsLoading(true);
+        try {
+            await supabase.functions.invoke('create-mother', {
+                body: {
+                    action: 'password_reset',
+                    email: resetEmail.trim().toLowerCase(),
+                    redirectTo: `${window.location.origin}/reset-password`
+                }
+            });
+            await customAlert({ title: 'Check your email', text: 'If that account exists, a password reset link has been sent.', iconType: 'success' });
+        } catch (error) {
+            console.error('Password reset email failed:', error);
+            await customAlert({ title: 'Reset failed', text: 'Unable to send the reset email. Please try again.', iconType: 'danger' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
    const handleSubmit = async (e) => {
     e.preventDefault();
@@ -123,7 +147,7 @@ const MotherLogin = () => {
                             </button>
 
                             <div className="ml-form-footer">
-                                <a href="#" className="ml-forgot-link" onClick={(e) => e.preventDefault()}>
+                                <a href="#forgot-password" className="ml-forgot-link" onClick={handleForgotPassword}>
                                     Forgot your password?
                                 </a>
                             </div>

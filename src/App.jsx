@@ -8,6 +8,7 @@ import ProtectedRoute from './routes/ProtectedRoute';
 import Landing from './pages/Landing/Landing';
 import Login from './pages/Login/Login';
 import MotherLogin from './pages/MotherLogin/MotherLogin';
+import ResetPassword from './pages/ResetPassword';
 
 import MotherDashboard from './pages/MotherDashboard/MotherDashboard';
 import UserAccount from './pages/MotherDashboard/UserAccount';
@@ -47,11 +48,13 @@ function App() {
           <Routes>
 
           {/* PUBLIC ROUTES */}
-          <Route path="/" element={<Landing />} />
+          <Route path="/" element={<Login />} />
+          <Route path="/landing" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/staff-login" element={<Login />} />
           <Route path="/admin-login" element={<Login />} />
           <Route path="/mother-login" element={<MotherLogin />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           
 
           {/* DASHBOARD LAYOUT - ADMIN / STAFF */}

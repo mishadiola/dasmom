@@ -123,6 +123,35 @@ export default class AuthService {
       throw new Error('Password is required');
     }
 
+    // Creating a patient with signUp() changes the browser's active session to
+    // the new patient and can invalidate the staff access token. Use the
+    // server-side function for patient accounts so the staff session remains
+    // untouched for the following patient inserts.
+    if (normalizedRole === 'patient' || normalizedRole === 'mother') {
+      const { data: functionData, error: functionError } = await this._withTimeout(
+        this.supabase.functions.invoke('create-mother', {
+          body: {
+            email: normalizedEmail,
+            password,
+            motherName: metadata?.full_name || normalizedEmail,
+          }
+        }),
+        15000
+      );
+
+      if (functionError) throw functionError;
+      if (!functionData?.userId) throw new Error('Patient account function did not return a user ID');
+
+      await this.ensurePublicUserRecord({
+        userId: functionData.userId,
+        email: normalizedEmail,
+        role,
+        password,
+      });
+
+      return { id: functionData.userId };
+    }
+
     // Save current admin session BEFORE creating new auth account
     const currentSessionRes = await this._withTimeout(this.supabase.auth.getSession(), 5000);
     const adminSession = currentSessionRes?.data?.session;
@@ -165,15 +194,24 @@ export default class AuthService {
       console.error('⚠️ Failed to sign out patient:', signOutErr);
     }
 
-    // Restore admin/original session if one existed before (don't stay logged in as the new patient)
+    // Restore and verify the original session before the caller writes staff-owned records.
     if (adminSession) {
-      try {
-        await this._withTimeout(this.supabase.auth.setSession(adminSession), 5000);
-        console.log('✅ Restored original session after creating patient account');
-      } catch (sessionErr) {
-        console.error('⚠️ Failed to restore session:', sessionErr);
-        // If restore fails, at least we're signed out (safer than staying as patient)
+      let restored = false;
+      for (let attempt = 0; attempt < 2 && !restored; attempt++) {
+        try {
+          await this._withTimeout(this.supabase.auth.setSession(adminSession), 5000);
+          const { data: restoredSession } = await this._withTimeout(this.supabase.auth.getSession(), 5000);
+          restored = restoredSession?.session?.user?.id === adminSession.user?.id;
+        } catch (sessionErr) {
+          console.error('⚠️ Failed to restore admin session:', sessionErr);
+        }
       }
+
+      if (!restored) {
+        throw new Error('Could not restore the staff session after creating the patient account. Please sign in again.');
+      }
+
+      console.log('✅ Restored and verified original session after creating patient account');
     }
 
     return authUser;

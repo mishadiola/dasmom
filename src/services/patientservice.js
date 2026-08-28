@@ -10,6 +10,7 @@ const TIME_SLOTS_8TO4 = [
   '15:00', '15:30', '16:00'
 ];
 const authService = new AuthService();
+const APP_URL = 'https://dasmom.vercel.app/';
 
 const calculateVisitStatus = (visitDate) => {
   const today = new Date();
@@ -33,6 +34,15 @@ const normalizeVisitStatus = (visit) => {
 export default class PatientService {
   constructor() {
     this.supabase = supabase;
+  }
+
+  async sendMotherEmail(action, patientId, temporaryPassword = null) {
+    const { data, error } = await this.supabase.functions.invoke('create-mother', {
+      body: { action, patientId, temporaryPassword, appUrl: APP_URL }
+    });
+
+    if (error) throw error;
+    return data;
   }
 
   
@@ -1068,6 +1078,11 @@ export default class PatientService {
       }
     });
 
+    const { data: activeSession } = await this.supabase.auth.getSession();
+    if (activeSession?.session?.user?.id !== createdBy) {
+      throw new Error('Staff session was not restored after creating the patient account. Please sign in again and retry.');
+    }
+
     // Use the real UUID from the auth/public user record as the database ID.
     // The UI may still shorten this value to 4 digits for display only.
     const patientId = authUser.id;
@@ -1193,6 +1208,11 @@ export default class PatientService {
     // Skip prenatal visit scheduling for postpartum patients
     if (patientData.pregnancyStatus === 'Postpartum') {
       console.log('Skipping prenatal visit scheduling for postpartum patient');
+      try {
+        await this.sendMotherEmail('welcome', patientId, patientData.password || 'mother123!');
+      } catch (emailError) {
+        console.error('Warning: postpartum patient was created but welcome email could not be sent:', emailError);
+      }
       return await this.getPatientById(patientId);
     }
 
@@ -1279,6 +1299,12 @@ export default class PatientService {
     }
 
     await this.schedulePrenatalVaccinations(patientId, patientData.lmp, createdBy);
+
+    try {
+      await this.sendMotherEmail('welcome', patientId, patientData.password || 'mother123!');
+    } catch (emailError) {
+      console.error('Warning: patient was created but welcome email could not be sent:', emailError);
+    }
 
     return await this.getPatientById(patientId);
   }
@@ -2072,6 +2098,13 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       }
 
       await this.schedulePrenatalVaccinations(patientId, patientData.lmp, resolvedCreatedBy);
+
+      try {
+        await this.sendMotherEmail('new_pregnancy', patientId);
+      } catch (emailError) {
+        console.error('Warning: pregnancy was created but notification email could not be sent:', emailError);
+      }
+
       return await this.getPatientById(patientId);
     } catch (error) {
       console.error('Error creating new pregnancy for existing patient:', error);

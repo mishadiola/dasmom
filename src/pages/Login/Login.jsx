@@ -5,6 +5,7 @@ import '../../styles/pages/Login.css';
 import logo from '../../assets/images/dasmom_logo.png';
 import AuthService from '../../services/authservice.js';
 import { AuthContext } from '../../context/AuthContext';
+import supabase from '../../config/supabaseclient';
 
 const authService = new AuthService();
 const MAX_ATTEMPTS = 5;
@@ -163,11 +164,21 @@ export default function Login() {
     e.preventDefault();
     if (!forgotEmail.trim()) return;
 
-    setIsLoading(true);
-    setTimeout(() => {
+        setIsLoading(true);
+        supabase.functions.invoke('create-mother', {
+            body: {
+                action: 'password_reset',
+                email: forgotEmail.trim().toLowerCase(),
+                redirectTo: `${window.location.origin}/reset-password`
+            }
+        }).then(() => {
       setIsLoading(false);
       setForgotSent(true);
-    }, 1400);
+        }).catch((error) => {
+            console.error('Password reset email failed:', error);
+            setIsLoading(false);
+            setErrors(prev => ({ ...prev, form: 'Unable to send the reset email. Please try again.' }));
+        });
   };
 
   const closeForgot = () => {
