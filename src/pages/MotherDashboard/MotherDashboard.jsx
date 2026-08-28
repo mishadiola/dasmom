@@ -3,7 +3,7 @@ import {
     Calendar, Clock, Heart, Activity, 
     Baby, Star, ChevronRight, Bell,
     CheckCircle2, AlertCircle, Phone, MessageCircle,
-    Sparkles, ArrowRight, ChevronLeft, Info, TrendingUp, Menu, MapPin, Headphones
+    Sparkles, ArrowRight, ChevronLeft, Info, TrendingUp
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/MotherDashboard.css';
@@ -108,39 +108,19 @@ const MotherDashboard = () => {
                         });
                     }
 
-                    // health records: latest vitals
-                    const latestVisitWithVitals = (patient.visits || [])
-                        .filter(v => v.visit_date && (v.weight_kg || (v.bp_systolic && v.bp_diastolic) || v.heart_rate))
-                        .sort((a, b) => new Date(b.visit_date) - new Date(a.visit_date))[0];
-                    
-                    if (latestVisitWithVitals) {
-                        setHealthRecords([
-                            {
-                                label: 'WEIGHT',
-                                value: latestVisitWithVitals.weight_kg ? `${latestVisitWithVitals.weight_kg} kg` : 'N/A',
-                                status: 'Normal',
-                                icon: Activity
-                            },
-                            {
-                                label: 'BLOOD PRESSURE',
-                                value: (latestVisitWithVitals.bp_systolic && latestVisitWithVitals.bp_diastolic) ? `${latestVisitWithVitals.bp_systolic}/${latestVisitWithVitals.bp_diastolic}` : 'N/A',
-                                status: 'Normal',
-                                icon: Heart
-                            },
-                            {
-                                label: 'HEART RATE',
-                                value: latestVisitWithVitals.heart_rate ? `${latestVisitWithVitals.heart_rate} bpm` : 'N/A',
-                                status: 'Normal',
-                                icon: Heart
-                            }
-                        ]);
-                    } else {
-                        setHealthRecords([
-                            { label: 'WEIGHT', value: 'N/A', status: 'Normal', icon: Activity },
-                            { label: 'BLOOD PRESSURE', value: 'N/A', status: 'Normal', icon: Heart },
-                            { label: 'HEART RATE', value: 'N/A', status: 'Normal', icon: Heart }
-                        ]);
-                    }
+                    // health records: latest vitals from visits
+                    const records = (patient.visits || [])
+                        .filter(v => v.visit_date)
+                        .sort((a, b) => new Date(b.visit_date) - new Date(a.visit_date))
+                        .slice(0, 4)
+                        .map(v => ({
+                            label: v.bp_systolic && v.bp_diastolic ? 'Blood Pressure' : 'Weight',
+                            value: v.bp_systolic && v.bp_diastolic ? `${v.bp_systolic}/${v.bp_diastolic}` : (v.weight_kg ? `${v.weight_kg} kg` : 'N/A'),
+                            status: 'Normal',
+                            trend: v.weight_kg ? `Δ ${v.weight_kg}` : 'stable',
+                            icon: Heart
+                        }));
+                    setHealthRecords(records);
                 }
             } catch (err) {
                 console.error('Error loading mother dashboard data:', err);
@@ -178,55 +158,45 @@ const MotherDashboard = () => {
     return (
         <div className="mother-dashboard">
             {showWelcome && <WelcomeMotherModal onClose={handleCloseWelcome} />}
-            {/* ── Mobile App Header ── */}
-            <div className="mobile-app-header">
-                <div className="header-left">
-                    <button className="header-icon-btn"><Menu size={24} /></button>
-                    <div className="header-brand">
-                        <img src="/assets/dasmom_logo.png" alt="DASMOM Logo" className="brand-logo" />
-                        <span className="brand-text">DASMOM<span className="plus">+</span></span>
-                    </div>
+            <div className="page-header">
+                <div>
+                    <h1 className="page-title">
+                        Hello, Mommy! 🤍
+                    </h1>
+                    <p className="page-subtitle">
+                        You're {pregnancyData.weeks || '?'} weeks pregnant. {pregnancyData.daysUntilDue !== undefined && `Your baby is expected in ${pregnancyData.daysUntilDue} days.`}
+                    </p>
                 </div>
-                <div className="header-right">
-                    <button className="header-icon-btn"><Bell size={20} /></button>
-                    <div className="header-avatar">MM</div>
+                <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+                    <div className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px', pointerEvents: 'none' }}>
+                        <Calendar size={16} /> {today}
+                    </div>
+                    <div className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px', pointerEvents: 'none' }}>
+                        <Baby size={16} /> {pregnancyData.trimester}
+                    </div>
                 </div>
             </div>
 
-            {/* ── Unified Pregnancy Hero Card ── */}
-            <div className="mother-hero-card">
-                <div className="hero-content">
-                    <h1 className="hero-title">Hello, Mommy! 🩷</h1>
-                    <p className="hero-subtitle">
-                        You're <span className="highlight-text">{pregnancyData.weeks || '?'} weeks</span> pregnant.
-                        <br />
-                        Your baby is expected in <span className="highlight-text">{pregnancyData.daysUntilDue !== undefined ? pregnancyData.daysUntilDue : '?'} days</span>.
-                    </p>
-                    
-                    <div className="hero-badges">
-                        <div className="hero-badge date-badge">
-                            <Calendar size={16} />
-                            <span>{today}</span>
-                        </div>
-                        <div className="hero-badge trimester-badge">
-                            <Baby size={16} />
-                            <span>{pregnancyData.trimester || 'N/A'}</span>
-                        </div>
-                    </div>
-                </div>
-                <div className="hero-illustration">
-                    {/* Placeholder for mother illustration */}
-                </div>
-            </div>
+            {/* ── Pregnancy Progress Section ── */}
+            {pregnancyData.lmp && (
+                <PregnancyProgressCard 
+                    lmpDate={pregnancyData.lmp}
+                    edd={pregnancyData.edd}
+                    weeks={pregnancyData.weeks}
+                    trimester={pregnancyData.trimester}
+                    daysUntilDue={pregnancyData.daysUntilDue}
+                />
+            )}
 
             <div className="mother-dash-grid modern-grid">
                 {/* ── Left Column ── */}
                 <div className="mother-dash-left">
                     {/* Upcoming Appointments - Timeline Style */}
-                    {/* Next Appointment Card */}
-                    <div className="mother-card modern-card next-appt-card">
+                    <div className="mother-card modern-card appointments-card">
                         <div className="mother-card-header">
-                            <h2 className="mother-card-title">Next Appointment</h2>
+                            <h2 className="mother-card-title">
+                                <Calendar size={18} /> Upcoming Visits
+                            </h2>
                             <button 
                                 className="mother-card-link clickable"
                                 onClick={() => navigate('/mother-home/user-appointments')}
@@ -234,34 +204,36 @@ const MotherDashboard = () => {
                                 See all <ChevronRight size={14} />
                             </button>
                         </div>
-                        <div className="next-appt-content">
-                            {appointments.slice(0, 1).map((appt) => (
+                        <div className="appointments-timeline">
+                            {appointments.slice(0, 1).map((appt, index) => (
                                 <div 
                                     key={appt.id} 
-                                    className={`appt-list-item`}
+                                    className={`timeline-item ${String(appt.status || '').toLowerCase()}`}
                                     onClick={() => navigate('/mother-home/user-appointments')}
-                                    style={{ cursor: 'pointer', padding: 0, border: 'none', boxShadow: 'none' }}
                                 >
-                                    <div className="appt-date-box green">
-                                        <span className="m">{new Date(appt.date).toLocaleString('default', { month: 'short' }).toUpperCase()}</span>
-                                        <span className="d">{new Date(appt.date).getDate()}</span>
-                                    </div>
-                                    <div className="appt-main-info">
-                                        <div className="appt-title-row" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                                            <h3 className="type-text-green">{appt.type === 'Vaccination' ? 'Vaccination' : `${appt.type} Visit`}</h3>
-                                            <span className={`status-badge ${String(appt.status || 'scheduled').toLowerCase()}`}>
-                                                {appt.status || 'SCHEDULED'}
+                                    <div className="timeline-dot"></div>
+                                    <div className="timeline-content">
+                                        <div className="timeline-header">
+                                            <span className="timeline-type">{appt.type}</span>
+                                            <span className={`timeline-status status-${String(appt.status || '').toLowerCase()}`}>
+                                                {appt.status || 'Unknown'}
                                             </span>
                                         </div>
-                                        <div className="appt-meta-row">
-                                            <span><Clock size={12} /> {appt.time || 'TBD'}</span>
-                                            <span><MapPin size={12} /> {appt.location || 'Health Station'}</span>
-                                            <span style={{color: 'var(--color-text)'}}>With: <span style={{color: 'var(--color-rose)', fontWeight: 600}}>{appt.staff}</span></span>
+                                        <div className="timeline-details">
+                                            <div className="timeline-detail">
+                                                <Clock size={14} />
+                                                {appt.date} at {appt.time}
+                                            </div>
+                                            <div className="timeline-detail">
+                                                <Info size={14} />
+                                                {appt.location || 'Health Station'}
+                                            </div>
+                                        </div>
+                                        <div className="timeline-staff">
+                                            <span className="staff-label">With:</span> {appt.staff}
                                         </div>
                                     </div>
-                                    <div className="appt-actions">
-                                        <ChevronRight size={18} color="#b9818a" />
-                                    </div>
+                                    <ChevronRight size={16} className="timeline-arrow" />
                                 </div>
                             ))}
                             {appointments.length === 0 && (
@@ -292,32 +264,40 @@ const MotherDashboard = () => {
                         </div>
                     )}
 
-                    {/* Health Records - Horizontal Cards */}
-                    <div className="mother-card modern-card my-health-card">
+                    {/* Health Records - Expandable Cards */}
+                    <div className="mother-card modern-card health-card">
                         <div className="mother-card-header">
                             <h2 className="mother-card-title">
-                                <Heart size={18} color="#b9818a" /> My Health
+                                <Activity size={18} /> My Health
                             </h2>
                             <button 
-                                className="mother-card-link clickable"
+                                className="expand-toggle"
                                 onClick={() => navigate('/mother-home/user-vitals')}
                             >
-                                View Records <ChevronRight size={14} />
+                                View Records
+                                <ChevronRight size={14} className={`chevron`} />
                             </button>
                         </div>
-                        <div className="health-metrics-row">
-                            {healthRecords.map((record, index) => {
+                        <div className={`health-records-grid`}>
+                            {healthRecords.slice(0, 2).map((record, index) => {
                                 const Icon = record.icon;
                                 return (
-                                    <div key={index} className="health-metric-box">
-                                        <span className="metric-label">{record.label}</span>
-                                        <div className="metric-icon-wrapper">
-                                            <Icon size={18} color="#b9818a" />
+                                    <div key={index} className="health-record-card">
+                                        <div className="health-record-icon">
+                                            <Icon size={20} />
                                         </div>
-                                        <span className="metric-value">{record.value}</span>
-                                        <span className={`metric-status`}>
-                                            <CheckCircle2 size={12} color="#10b981" /> {record.status}
-                                        </span>
+                                        <div className="health-record-info">
+                                            <span className="health-record-label">{record.label}</span>
+                                            <span className="health-record-value">{record.value}</span>
+                                            <span className={`health-record-status ${String(record.status || '').toLowerCase()}`}>
+                                                <CheckCircle2 size={12} /> {record.status || 'Unknown'}
+                                            </span>
+                                            {record.trend !== 'stable' && (
+                                                <span className="health-record-trend">
+                                                    <TrendingUp size={12} /> {record.trend}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 );
                             })}
@@ -327,64 +307,68 @@ const MotherDashboard = () => {
 
                 {/* ── Right Column ── */}
                 <div className="mother-dash-right">
-                    {/* Health Tips - Clean Reference Style */}
+                    {/* Health Tips - Carousel Style */}
                     {healthTips.length > 0 && (
-                        <div className="mother-card modern-card tips-card">
+                        <div className="mother-card modern-card tips-card modern-tips">
                             <div className="mother-card-header">
                                 <h2 className="mother-card-title">
-                                    <Star size={18} color="#b9818a" /> Daily Health Tip
+                                    <Star size={18} /> Daily Health Tips
                                 </h2>
-                                <button className="mother-card-link clickable">
-                                    See all <ChevronRight size={14} />
+                            </div>
+                            <div className="tips-carousel">
+                                <button className="carousel-nav carousel-prev" onClick={prevTip}>
+                                    <ChevronLeft size={20} />
+                                </button>
+                                <div className="carousel-content">
+                                    <div className="tip-card-modern">
+                                        <div className="tip-icon-modern">
+                                            <div className={`tip-icon-circle ${healthTips[currentTipIndex].color}`}>
+                                                {(() => {
+                                                    const Icon = healthTips[currentTipIndex].icon;
+                                                    return <Icon size={24} />;
+                                                })()}
+                                            </div>
+                                        </div>
+                                        <div className="tip-content-modern">
+                                            <p className="tip-title-modern">{healthTips[currentTipIndex].title}</p>
+                                            <p className="tip-text-modern">{healthTips[currentTipIndex].text}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button className="carousel-nav carousel-next" onClick={nextTip}>
+                                    <ChevronRight size={20} />
                                 </button>
                             </div>
-                            
-                            <div className="daily-tip-container">
-                                <div className="daily-tip-card">
-                                    <div className="tip-icon-left">
-                                        {(() => {
-                                            const Icon = healthTips[currentTipIndex].icon;
-                                            return <Icon size={28} color="#f59e0b" />;
-                                        })()}
-                                    </div>
-                                    <div className="tip-text-content">
-                                        <h4 className="tip-title-ref">{healthTips[currentTipIndex].title}</h4>
-                                        <p className="tip-desc-ref">{healthTips[currentTipIndex].text}</p>
-                                    </div>
-                                    <div className="tip-illustration-right">
-                                        {/* Placeholder for tip illustration */}
-                                    </div>
-                                </div>
-                                <div className="carousel-indicators-ref">
-                                    {healthTips.map((_, index) => (
-                                        <div 
-                                            key={index} 
-                                            className={`indicator-dot ${index === currentTipIndex ? 'active' : ''}`}
-                                            onClick={() => setCurrentTipIndex(index)}
-                                        />
-                                    ))}
-                                </div>
+                            <div className="carousel-indicators">
+                                {healthTips.map((_, index) => (
+                                    <div 
+                                        key={index} 
+                                        className={`indicator ${index === currentTipIndex ? 'active' : ''}`}
+                                        onClick={() => setCurrentTipIndex(index)}
+                                    />
+                                ))}
                             </div>
                         </div>
                     )}
 
-                    {/* Quick Support - Soft Pink Reference Style */}
-                    <div className="mother-card quick-support-card">
-                        <div className="support-header-ref">
-                            <div className="support-icon-ref">
-                                <Headphones size={24} color="#fff" />
+                    {/* Quick Support - Emergency Action Card */}
+                    <div className="mother-card modern-card support-card emergency-card">
+                        <div className="support-header">
+                            <div className="support-icon-wrapper">
+                                <AlertCircle size={32} />
                             </div>
-                            <div className="support-title-block-ref">
-                                <h3 className="support-title-ref">Quick Support</h3>
-                                <p className="support-subtitle-ref">Need immediate help? We're here for you.</p>
+                            <div>
+                                <h2 className="support-title">Quick Support</h2>
+                                <p className="support-subtitle">Need immediate help? We're here for you.</p>
                             </div>
                         </div>
-                        <div className="support-actions-ref">
-                            <button className="support-btn-ref primary-ref">
+                        <p className="support-text">Facing an emergency or have urgent questions? Contact your healthcare provider directly.</p>
+                        <div className="support-actions">
+                            <button className="support-btn support-btn-primary">
                                 <Phone size={16} />
                                 Call Midwife
                             </button>
-                            <button className="support-btn-ref secondary-ref">
+                            <button className="support-btn support-btn-secondary">
                                 <MessageCircle size={16} />
                                 Message Health Center
                             </button>

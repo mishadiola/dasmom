@@ -758,86 +758,20 @@
     .mobile-only { display: block; }
     
     .mobile-compact-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 24px;
-        background-color: transparent;
-    }
-    
-    .mobile-header-left {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        align-items: flex-start;
-    }
-
-    .mobile-header-icon {
-        font-size: 28px;
-        background: #fff;
-        padding: 8px;
-        border-radius: 12px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        display: inline-block;
-        margin-bottom: 4px;
+        margin-bottom: 8px;
     }
     
     .mobile-page-title {
-        font-size: 24px;
+        font-size: 20px;
         font-weight: 800;
-        margin: 0;
+        margin: 0 0 4px 0;
         color: var(--color-text-dark);
-        letter-spacing: -0.5px;
     }
     
     .mobile-page-subtitle {
-        font-size: 14px;
+        font-size: 13px;
         color: var(--color-text-light);
         margin: 0;
-        max-width: 180px;
-        line-height: 1.4;
-    }
-
-    .mobile-header-right {
-        position: relative;
-    }
-    
-    .cal-illustration {
-        width: 110px;
-        height: 100px;
-        background-color: transparent; /* Fallback until asset is provided */
-        background-size: contain;
-        background-repeat: no-repeat;
-        background-position: center right;
-        /* Note: Make sure the svg exists or use a fallback styled div here */
-    }
-
-    .mobile-status-tabs {
-        display: flex;
-        gap: 0;
-        background: #fff;
-        border-radius: 30px;
-        padding: 4px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.02);
-        margin-bottom: 24px;
-    }
-    
-    .mobile-tab-btn {
-        flex: 1;
-        padding: 12px 16px;
-        border: none;
-        border-radius: 26px;
-        background: transparent;
-        color: var(--color-text-light);
-        font-weight: 600;
-        font-size: 14px;
-        transition: all 0.2s ease;
-    }
-    
-    .mobile-tab-btn.active {
-        background: var(--color-rose);
-        color: #fff;
-        box-shadow: 0 4px 12px rgba(185, 129, 138, 0.3);
     }
 
     /* Scrollable Tabs */
@@ -871,86 +805,34 @@
     .view-toggle-btn { flex: 1; text-align: center; padding: 6px 0; font-size: 12px; }
     .legend-pills { display: none; } /* Hide legend on mobile to save space */
 
-    .pv-calendar-section { border-radius: 16px; margin-bottom: 16px !important; background: transparent; box-shadow: none; border: none; padding: 0; }
-    .pv-grid-container { padding: 0; max-height: none; background: transparent; }
+    .pv-calendar-section { border-radius: 16px; margin-bottom: 16px !important; }
+    .pv-grid-container { padding: 8px; max-height: none; }
     
-    .section-head-bar { background: transparent; padding: 0; margin-bottom: 16px; }
-    .view-toggles { background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
-    
-    /* Week View Mobile Override */
-    .week-grid .week-row {
-        flex-direction: column;
-        gap: 12px;
-    }
-    .week-grid .day-cell {
-        background: #fff;
-        min-height: auto;
-        padding: 16px;
-        border-radius: 16px;
-        flex-direction: row;
-        align-items: flex-start;
-        gap: 16px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.02);
-    }
-    .week-grid .day-header {
-        flex-direction: column;
-        align-items: flex-start;
-        width: 50px;
-        font-size: 14px;
-        color: var(--color-text-dark);
-        border: none;
-    }
-    .week-grid .day-visits {
-        flex-direction: column;
-        align-items: flex-start;
-        flex: 1;
-        gap: 8px;
-    }
-    .week-grid .visit-item {
-        width: 100%;
-        height: auto;
-        border-radius: 8px;
-        padding: 8px 12px;
-        display: flex;
-        flex-direction: column;
-        background: #f8fafc;
-        border-left: 3px solid transparent !important;
-    }
-    .week-grid .visit-item.type-prenatal { border-left-color: #10b981 !important; }
-    .week-grid .visit-item.type-vaccination { border-left-color: #f59e0b !important; }
-    .week-grid .visit-item.type-postpartum { border-left-color: #3b82f6 !important; }
-    
-    .week-grid .visit-title, .week-grid .visit-status { display: block; }
-    .week-grid .visit-title { font-size: 13px; font-weight: 600; color: var(--color-text-dark); }
-    .week-grid .visit-status { font-size: 11px; color: var(--color-text-light); margin-top: 4px; }
-    
-    /* Month View Mobile Override */
-    .month-grid .week-row { gap: 4px; }
-    .month-grid .weekday-header { gap: 4px; }
-    .month-grid .weekday { padding: 4px; font-size: 10px; }
+    .week-row { gap: 4px; }
+    .weekday-header { gap: 4px; }
+    .weekday { padding: 4px; font-size: 10px; }
 
     /* Compact Month Cells */
-    .month-grid .day-cell {
+    .day-cell {
         min-height: 48px;
         padding: 4px;
         gap: 2px;
         border-radius: 6px;
-        background: #fff;
     }
-    .month-grid .day-header { font-size: 12px; justify-content: center; }
-    .month-grid .day-num { font-size: 12px; }
-    .month-grid .today-badge { display: none; }
-    .month-grid .day-today { border-width: 2px; }
+    .day-header { font-size: 12px; justify-content: center; }
+    .day-num { font-size: 12px; }
+    .today-badge { display: none; }
+    .day-today { border-width: 2px; }
     
-    /* Turn events into dots for month view */
-    .month-grid .day-visits {
+    /* Turn events into dots */
+    .day-visits {
         flex-direction: row;
         flex-wrap: wrap;
         justify-content: center;
         gap: 2px;
         padding: 2px 0;
     }
-    .month-grid .visit-item {
+    .visit-item {
         width: 6px;
         height: 6px;
         padding: 0;
@@ -958,150 +840,45 @@
         border-left: none !important;
         min-width: 0;
     }
-    .month-grid .visit-title, .month-grid .visit-status { display: none; }
+    .visit-title, .visit-status { display: none; }
     
-    .month-grid .visit-item.type-prenatal { background: #10b981; }
-    .month-grid .visit-item.type-vaccination { background: #f59e0b; }
-    .month-grid .visit-item.type-postpartum { background: #3b82f6; }
+    .visit-item.type-prenatal { background: #10b981; }
+    .visit-item.type-vaccination { background: #f59e0b; }
+    .visit-item.type-postpartum { background: #3b82f6; }
 
     /* Compact Cards */
-    .hide-on-mobile {
-        display: none !important;
+    .list-filters {
+        overflow-x: auto;
+        white-space: nowrap;
+        padding-bottom: 4px;
+        scrollbar-width: none;
     }
-    
-    .mobile-list-header {
-        margin-bottom: 16px;
-    }
-    
-    .mobile-list-header h3 {
-        font-size: 18px;
-        font-weight: 700;
-        color: var(--color-text-dark);
-        margin: 0;
-    }
-    
-    .show-all-btn {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        gap: 8px;
-        width: 100%;
-        padding: 16px;
-        border: 2px solid rgba(185, 129, 138, 0.2);
-        border-radius: 16px;
-        background: transparent;
-        color: var(--color-rose);
-        font-weight: 700;
-        font-size: 15px;
-        margin-top: 16px;
-        transition: all 0.2s;
-    }
-    .show-all-btn:active {
-        background: rgba(185, 129, 138, 0.05);
-    }
-    
-    .back-to-list-btn {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-weight: 600;
-        color: var(--color-rose);
-        padding: 8px 0 16px 0;
-        font-size: 15px;
-    }
-    
-    .appt-list {
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-    }
+    .list-filters::-webkit-scrollbar { display: none; }
+    .filter-btn { padding: 6px 14px; font-size: 12px; }
     
     .appt-list-item { 
-        padding: 16px; 
-        gap: 16px; 
-        border-radius: 20px;
-        background: #fff;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-        align-items: center;
-        display: flex;
-        flex-direction: row;
-        border: 1px solid rgba(0,0,0,0.02);
-    }
-    
-    .appt-date-box {
-        width: 64px;
-        height: 70px;
+        padding: 12px; 
+        gap: 12px; 
         border-radius: 12px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
+        align-items: flex-start;
     }
-    
-    .appt-date-box.green { background: rgba(16, 185, 129, 0.1); color: #10b981; }
-    .appt-date-box.yellow { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
-    .appt-date-box.pink { background: rgba(59, 130, 246, 0.1); color: #3b82f6; } /* Blue for postpartum on mobile */
-    
-    .appt-date-box .m { font-size: 13px; font-weight: 800; letter-spacing: 0.5px; }
-    .appt-date-box .d { font-size: 24px; font-weight: 800; line-height: 1; margin-top: 2px; }
-    
-    .appt-main-info {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
+    .appt-date-box {
+        width: 50px;
+        height: 50px;
+        border-radius: 10px;
     }
+    .appt-date-box .m { font-size: 10px; }
+    .appt-date-box .d { font-size: 18px; }
     
-    .appt-title-row {
-        margin: 0;
-    }
+    .appt-title-row { flex-direction: column; align-items: flex-start; gap: 4px; margin-bottom: 6px; }
+    .appt-title-row h3 { font-size: 15px; }
+    .status-badge { font-size: 10px; padding: 2px 8px; }
     
-    .appt-title-row h3 {
-        font-size: 15px;
-        font-weight: 700;
-        margin: 0;
-    }
+    .appt-meta-row { flex-direction: column; gap: 4px; }
+    .appt-meta-row span { font-size: 12px; }
     
-    .type-text-green { color: #10b981; }
-    .type-text-yellow { color: #f59e0b; }
-    .type-text-pink { color: #3b82f6; }
-    
-    .appt-meta-row {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-    }
-    
-    .appt-meta-row span {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 13px;
-        color: var(--color-text-light);
-    }
-    
-    .appt-status-row {
-        margin-top: 4px;
-    }
-    
-    .status-badge {
-        font-size: 12px;
-        font-weight: 600;
-        padding: 4px 10px;
-        border-radius: 20px;
-        display: inline-block;
-    }
-    
-    .status-badge.scheduled { background: rgba(16, 185, 129, 0.1); color: #10b981; }
-    .status-badge.attended, .status-badge.completed { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
-    .status-badge.missed { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
-    
-    .appt-actions {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
+    .appt-actions { width: 100%; justify-content: flex-end; margin-top: 8px; }
+    .btn-icon-outline { width: 32px; height: 32px; }
 }
 
 @media (min-width: 769px) {

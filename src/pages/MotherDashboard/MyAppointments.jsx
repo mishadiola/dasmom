@@ -264,37 +264,13 @@ const MyAppointments = () => {
             </div>
 
             <div className="mobile-compact-header mobile-only">
-                <div className="mobile-header-left">
-                    <span className="mobile-header-icon">📅</span>
-                    <div className="mobile-header-text">
-                        <h1 className="mobile-page-title">Appointments</h1>
-                        <p className="mobile-page-subtitle">Keep track of your upcoming visits</p>
-                    </div>
-                </div>
-                <div className="mobile-header-right">
-                    <div className="cal-illustration"></div>
-                </div>
-            </div>
-
-            {/* Mobile Status Tabs */}
-            <div className="mobile-status-tabs mobile-only">
-                <button 
-                    className={`mobile-tab-btn ${statusFilter === 'Upcoming' ? 'active' : ''}`}
-                    onClick={() => setStatusFilter('Upcoming')}
-                >
-                    Upcoming
-                </button>
-                <button 
-                    className={`mobile-tab-btn ${statusFilter === 'Attended' ? 'active' : ''}`}
-                    onClick={() => setStatusFilter('Attended')}
-                >
-                    Attended / Completed
-                </button>
+                <h1 className="mobile-page-title">📅 Appointments</h1>
+                <p className="mobile-page-subtitle">Keep track of your upcoming visits</p>
             </div>
 
             <div className="appt-content">
                 {/* Event Category Tabs */}
-                <div className="visit-type-tabs desktop-only">
+                <div className="visit-type-tabs">
                     <button
                         className={`visit-type-tab ${typeFilter === 'All' ? 'active' : ''}`}
                         onClick={() => setTypeFilter('All')}
@@ -321,56 +297,9 @@ const MyAppointments = () => {
                     </button>
                 </div>
 
-                <div className={`list-container mobile-only ${calendarView !== 'list' ? 'hide-on-mobile' : ''}`} style={{marginBottom: '24px'}}>
-                    <div className="mobile-list-header">
-                        <h3>{statusFilter} Appointments</h3>
-                    </div>
-                    <div className="appt-list">
-                        {filteredList.length > 0 ? (
-                            filteredList.map(a => (
-                            <div key={a.id} className="appt-list-item" onClick={() => setSelectedAppt(a)} style={{cursor: 'pointer'}}>
-                                <div className={`appt-date-box ${a.color}`}>
-                                    <span className="m">{new Date(a.date || a.visit_date || Date.now()).toLocaleString('default', { month: 'short' }).toUpperCase()}</span>
-                                    <span className="d">{(a.date || a.visit_date || '').split('-')[2] || ''}</span>
-                                </div>
-                                <div className="appt-main-info">
-                                    <div className="appt-title-row">
-                                        <h3 className={`type-text-${a.color}`}>{a.type === 'Vaccination' ? a.notes : `${a.type} Visit`}</h3>
-                                    </div>
-                                    <div className="appt-meta-row">
-                                        <span><Clock size={12} /> {a.time || 'TBD'}</span>
-                                        <span><MapPin size={12} /> {sanitizeUUID(a.location, 'Dasma I Health Station')}</span>
-                                    </div>
-                                    <div className="appt-status-row">
-                                        <span className={`status-badge ${a.status.toLowerCase()}`}>
-                                            {a.status || 'Unknown'}
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className="appt-actions">
-                                    <ChevronRight size={18} color="#b9818a" />
-                                </div>
-                            </div>
-                        ))
-                        ) : (
-                            <div className="empty-state">
-                                <CalendarDays size={32} style={{margin: '0 auto 12px', color: '#cbd5e1'}}/>
-                                <p style={{margin: 0, fontWeight: 500}}>No {statusFilter.toLowerCase()} appointments found.</p>
-                            </div>
-                        )}
-                    </div>
-                    <button className="show-all-btn" onClick={() => setCalendarView('month')}>
-                        <CalendarIcon size={16} /> Show calendar view <ChevronRight size={16} />
-                    </button>
-                </div>
-
-                <div className={`pv-calendar-section ${calendarView === 'list' ? 'desktop-only' : ''}`} style={{marginBottom: '32px'}}>
-                    {/* Add back button for mobile calendar view */}
-                    <div className="mobile-only back-to-list-btn" onClick={() => setCalendarView('list')}>
-                        <ArrowLeft size={16} /> Back to List
-                    </div>
+                <div className="pv-calendar-section" style={{marginBottom: '32px'}}>
                     <div className="section-head-bar">
-                        <div className="date-nav">
+                        <div className="date-nav" style={{ visibility: calendarView === 'list' ? 'hidden' : 'visible' }}>
                             <button className="icon-btn-sm" onClick={handlePrev} title="Previous">
                                 <ChevronLeft size={16} />
                             </button>
@@ -381,7 +310,7 @@ const MyAppointments = () => {
                         </div>
                         <div className="cal-head-right">
                             <div className="view-toggles">
-                                {['day', 'week', 'month'].map(v => (
+                                {['list', 'day', 'week', 'month'].map(v => (
                                     <button
                                         key={v}
                                         className={`view-toggle-btn ${calendarView === v ? 'active' : ''}`}
@@ -402,7 +331,8 @@ const MyAppointments = () => {
                         </div>
                     </div>
 
-                    <div className="pv-grid-container">
+                    {calendarView !== 'list' && (
+                        <div className="pv-grid-container">
                         {calendarView === 'day' ? (
                             <div className="day-view-container">
                                 {visibleDays.map(day => {
@@ -520,9 +450,11 @@ const MyAppointments = () => {
                             </div>
                         )}
                         </div>
-                    </div>
+                    )}
+                </div>
 
-                <div className="list-container desktop-only">
+
+                <div className="list-container">
                     <div className="list-filters">
                         <button 
                             className={`filter-btn ${statusFilter === 'Upcoming' ? 'active' : ''}`}
