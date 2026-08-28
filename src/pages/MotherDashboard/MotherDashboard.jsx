@@ -88,7 +88,7 @@ const MotherDashboard = () => {
                             date: v.visit_date,
                             time: new Date(v.visit_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
                             type: v.next_appt_type || 'Prenatal Checkup',
-                            staff: v.assigned_staff || 'N/A',
+                            staff: (v.assigned_staff && v.assigned_staff.length === 36 && v.assigned_staff.includes('-')) ? 'Healthcare Worker' : (v.assigned_staff || 'Healthcare Worker'),
                             status: v.status || 'Scheduled',
                             location: patient.station || ''
                         }));
@@ -161,10 +161,10 @@ const MotherDashboard = () => {
             <div className="page-header">
                 <div>
                     <h1 className="page-title">
-                        Hello, Mommy! 👋
+                        Hello, Mommy! 🤍
                     </h1>
                     <p className="page-subtitle">
-                        You are {pregnancyData.weeks || '?'} weeks pregnant. Welcome to your personal maternal health portal. {pregnancyData.daysUntilDue !== undefined && `Your baby is expected in ${pregnancyData.daysUntilDue} days.`}
+                        You're {pregnancyData.weeks || '?'} weeks pregnant. {pregnancyData.daysUntilDue !== undefined && `Your baby is expected in ${pregnancyData.daysUntilDue} days.`}
                     </p>
                 </div>
                 <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
@@ -205,7 +205,7 @@ const MotherDashboard = () => {
                             </button>
                         </div>
                         <div className="appointments-timeline">
-                            {appointments.map((appt, index) => (
+                            {appointments.slice(0, 1).map((appt, index) => (
                                 <div 
                                     key={appt.id} 
                                     className={`timeline-item ${String(appt.status || '').toLowerCase()}`}
@@ -226,7 +226,7 @@ const MotherDashboard = () => {
                                             </div>
                                             <div className="timeline-detail">
                                                 <Info size={14} />
-                                                {appt.location}
+                                                {appt.location || 'Health Station'}
                                             </div>
                                         </div>
                                         <div className="timeline-staff">
@@ -236,6 +236,9 @@ const MotherDashboard = () => {
                                     <ChevronRight size={16} className="timeline-arrow" />
                                 </div>
                             ))}
+                            {appointments.length === 0 && (
+                                <p style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>No upcoming appointments.</p>
+                            )}
                         </div>
                     </div>
 
@@ -265,18 +268,18 @@ const MotherDashboard = () => {
                     <div className="mother-card modern-card health-card">
                         <div className="mother-card-header">
                             <h2 className="mother-card-title">
-                                <Activity size={18} /> My Latest Health Records
+                                <Activity size={18} /> My Health
                             </h2>
                             <button 
                                 className="expand-toggle"
-                                onClick={() => setExpandedHealth(!expandedHealth)}
+                                onClick={() => navigate('/mother-home/user-vitals')}
                             >
-                                {expandedHealth ? 'Show Less' : 'Show More'}
-                                <ChevronRight size={14} className={`chevron ${expandedHealth ? 'expanded' : ''}`} />
+                                View Records
+                                <ChevronRight size={14} className={`chevron`} />
                             </button>
                         </div>
-                        <div className={`health-records-grid ${expandedHealth ? 'expanded' : ''}`}>
-                            {healthRecords.slice(0, expandedHealth ? healthRecords.length : 2).map((record, index) => {
+                        <div className={`health-records-grid`}>
+                            {healthRecords.slice(0, 2).map((record, index) => {
                                 const Icon = record.icon;
                                 return (
                                     <div key={index} className="health-record-card">

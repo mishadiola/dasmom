@@ -1102,82 +1102,131 @@
 
 @media (max-width: 600px) {
     .mother-dashboard {
-        padding: 0 16px 40px;
+        padding: 0 12px 20px;
     }
 
-    .mother-welcome-banner {
-        padding: 20px;
-        border-radius: 20px;
+    .page-header {
+        padding: 16px;
+        border-radius: 12px;
+        margin-bottom: 16px;
     }
 
-    .welcome-text h1 {
-        font-size: 24px;
-    }
-
-    .welcome-greeting {
-        font-size: 14px;
-    }
-
-    .welcome-sub {
-        font-size: 13px;
-    }
-
-    .date-badge, .modern-trimester {
-        font-size: 12px;
-        padding: 8px 14px;
+    .page-title {
+        font-size: 20px !important;
     }
 
     .mother-card {
-        padding: 20px;
-        border-radius: 16px;
+        padding: 16px;
+        border-radius: 12px;
+        margin-bottom: 16px;
     }
 
     .mother-card-title {
-        font-size: 16px;
+        font-size: 15px;
+    }
+
+    .mother-card-header {
+        margin-bottom: 12px;
     }
 
     .timeline-item {
-        padding: 14px;
-    }
-
-    .timeline-type {
-        font-size: 14px;
-    }
-
-    .health-record-card {
-        padding: 14px;
-    }
-
-    .health-record-value {
-        font-size: 18px;
-    }
-
-    .tip-card-modern {
-        padding: 16px;
-        flex-direction: column;
-    }
-
-    .tip-icon-circle {
-        width: 48px;
-        height: 48px;
-    }
-
-    .support-header {
-        flex-direction: column;
-        text-align: center;
+        padding: 12px;
+        border-radius: 12px;
         gap: 12px;
     }
 
+    .timeline-type {
+        font-size: 13px;
+    }
+
+    .timeline-detail {
+        font-size: 12px;
+    }
+
+    .timeline-staff {
+        font-size: 11px;
+    }
+
+    .health-record-card {
+        padding: 12px;
+        border-radius: 12px;
+    }
+
+    .health-record-value {
+        font-size: 16px;
+    }
+
+    .health-record-icon {
+        width: 36px;
+        height: 36px;
+    }
+
+    .health-record-icon svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    .tip-card-modern {
+        padding: 12px;
+        flex-direction: row; /* keep it row on mobile so it's compact */
+        align-items: center;
+        gap: 12px;
+    }
+
+    .tip-icon-circle {
+        width: 40px;
+        height: 40px;
+    }
+
+    .tip-icon-circle svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    .tip-title-modern {
+        font-size: 14px;
+        margin-bottom: 2px;
+    }
+
+    .tip-text-modern {
+        font-size: 12px;
+        line-height: 1.4;
+    }
+
+    .support-header {
+        flex-direction: row; /* keep row for compactness */
+        text-align: left;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+    
+    .support-icon-wrapper {
+        width: 40px;
+        height: 40px;
+    }
+
+    .support-icon-wrapper svg {
+        width: 20px;
+        height: 20px;
+    }
+
     .support-title {
-        font-size: 18px;
+        font-size: 16px;
+    }
+
+    .support-text {
+        font-size: 13px;
+        margin-bottom: 16px;
     }
 
     .support-btn {
         width: 100%;
+        padding: 10px;
+        font-size: 13px;
     }
 
     .carousel-nav {
-        width: 36px;
-        height: 36px;
+        width: 32px;
+        height: 32px;
     }
 }

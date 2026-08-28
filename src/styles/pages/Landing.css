@@ -1658,9 +1658,91 @@
   .ldg-nav__mobile-toggle {
     display: flex;
   }
-  .ldg-hero__title {
-    font-size: 2.6rem;
+  
+  /* Hero Mobile Adjustments */
+  .ldg-hero {
+    min-height: auto;
+    padding-top: 80px;
+    padding-bottom: 40px;
+    background-position: 70% center; /* Adjust focus to the mother if possible */
   }
+  .ldg-hero::after {
+    background: linear-gradient(135deg, rgba(185, 129, 138, 0.75) 0%, rgba(156, 102, 114, 0.8) 40%, rgba(122, 78, 88, 0.85) 100%);
+  }
+  .ldg-hero__container {
+    padding: 20px 20px 40px;
+    gap: 32px;
+  }
+  .ldg-hero__content {
+    margin-top: 0;
+  }
+  .ldg-hero__gov-badge {
+    margin: 0 auto 20px;
+    font-size: 0.8rem;
+    padding: 4px 12px;
+  }
+  .ldg-hero__title {
+    font-size: 2.4rem;
+    margin-bottom: 12px;
+  }
+  .ldg-hero__desc {
+    font-size: 1.05rem;
+    line-height: 1.5;
+    margin: 0 auto 24px;
+    max-width: 90%;
+  }
+  .ldg-hero__trust-list {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin: 0 auto 32px;
+    text-align: left;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .ldg-hero__trust-item {
+    font-size: 1rem;
+    gap: 10px;
+  }
+  .ldg-hero__trust-check {
+    width: 22px;
+    height: 22px;
+    font-size: 0.8rem;
+  }
+  .ldg-hero__cta-group {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    max-width: 300px;
+    margin: 0 auto;
+    gap: 12px;
+  }
+  .ldg-btn--lg {
+    padding: 14px 20px;
+    font-size: 1rem;
+    justify-content: center;
+  }
+  .ldg-hero__visual {
+    margin-top: 0;
+  }
+  .ldg-hero__illus-card {
+    padding: 20px 16px;
+  }
+  .ldg-hero__mini-stats {
+    gap: 12px;
+  }
+  .ldg-hero__mini-stat {
+    padding: 12px;
+    min-width: 0;
+    flex: 1 1 calc(33.333% - 12px);
+  }
+  .ldg-hero__mini-stat-val {
+    font-size: 1.4rem;
+  }
+  .ldg-hero__mini-stat-lbl {
+    font-size: 0.7rem;
+  }
+
   .ldg-services__grid {
     grid-template-columns: 1fr;
   }
@@ -1688,12 +1770,15 @@
   .ldg-hero__title {
     font-size: 2.2rem;
   }
-  .ldg-hero__trust-list {
-    grid-template-columns: 1fr;
+  .ldg-hero__desc {
+    font-size: 0.95rem;
+    max-width: 100%;
   }
-  .ldg-hero__cta-group {
+  .ldg-hero__mini-stats {
     flex-direction: column;
-    align-items: center;
+  }
+  .ldg-hero__mini-stat {
+    width: 100%;
   }
   .ldg-who__grid {
     grid-template-columns: 1fr;

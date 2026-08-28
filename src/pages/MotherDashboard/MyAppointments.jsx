@@ -37,10 +37,18 @@ const getPostpartumStatus = (delivery) => {
     return scheduledDate && scheduledDate < today ? 'Missed' : 'Scheduled';
 };
 
+const sanitizeUUID = (str, fallback) => {
+    if (!str) return fallback;
+    if (typeof str === 'string' && str.length === 36 && str.includes('-')) {
+        return fallback;
+    }
+    return str;
+};
+
 const MyAppointments = () => {
     const navigate = useNavigate();
     const [currentDate, setCurrentDate] = useState(new Date());
-    const [calendarView, setCalendarView] = useState('month'); // 'day', 'week', 'month'
+    const [calendarView, setCalendarView] = useState(window.innerWidth <= 768 ? 'list' : 'month'); // 'list', 'day', 'week', 'month'
     const [typeFilter, setTypeFilter] = useState('All'); // 'All', 'Prenatal', 'Vaccination', 'Postpartum'
     const [statusFilter, setStatusFilter] = useState('Upcoming'); // 'Upcoming', 'Attended', 'Missed'
     const [selectedAppt, setSelectedAppt] = useState(null);
@@ -69,7 +77,7 @@ const MyAppointments = () => {
                         time: v.visit_date ? new Date(v.visit_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '',
                         type: 'Prenatal',
                         status: v.status || 'Scheduled',
-                        location: patient.station || '',
+                        location: sanitizeUUID(patient.station, 'Health Station'),
                         notes: v.clinical_notes || '',
                         color: 'green'
                     }));
@@ -82,8 +90,8 @@ const MyAppointments = () => {
                         time: '',
                         type: 'Vaccination',
                         status: v.status || 'Scheduled',
-                        location: patient.station || '',
-                        notes: v.notes || v.vaccine_name || '',
+                        location: sanitizeUUID(patient.station, 'Health Station'),
+                        notes: sanitizeUUID(v.notes || v.vaccine_name, 'Vaccination'),
                         color: 'yellow'
                     }));
 
@@ -100,7 +108,7 @@ const MyAppointments = () => {
                             time: '',
                             type: 'Postpartum',
                             status,
-                            location: patient.station || '',
+                            location: sanitizeUUID(patient.station, 'Health Station'),
                             notes: status === 'Completed'
                                 ? 'Postpartum follow-up attended'
                                 : status === 'Missed'
@@ -243,7 +251,7 @@ const MyAppointments = () => {
 
     return (
         <div className="my-appointments-page">
-            <div className="page-header">
+            <div className="page-header desktop-only">
                 <div>
                     <h1 className="page-title">
                         <CalendarIcon size={22} className="header-icon" /> Appointments
@@ -253,6 +261,11 @@ const MyAppointments = () => {
                 <div className="header-actions">
 
                 </div>
+            </div>
+
+            <div className="mobile-compact-header mobile-only">
+                <h1 className="mobile-page-title">📅 Appointments</h1>
+                <p className="mobile-page-subtitle">Keep track of your upcoming visits</p>
             </div>
 
             <div className="appt-content">
@@ -286,7 +299,7 @@ const MyAppointments = () => {
 
                 <div className="pv-calendar-section" style={{marginBottom: '32px'}}>
                     <div className="section-head-bar">
-                        <div className="date-nav">
+                        <div className="date-nav" style={{ visibility: calendarView === 'list' ? 'hidden' : 'visible' }}>
                             <button className="icon-btn-sm" onClick={handlePrev} title="Previous">
                                 <ChevronLeft size={16} />
                             </button>
@@ -297,7 +310,7 @@ const MyAppointments = () => {
                         </div>
                         <div className="cal-head-right">
                             <div className="view-toggles">
-                                {['day', 'week', 'month'].map(v => (
+                                {['list', 'day', 'week', 'month'].map(v => (
                                     <button
                                         key={v}
                                         className={`view-toggle-btn ${calendarView === v ? 'active' : ''}`}
@@ -318,7 +331,8 @@ const MyAppointments = () => {
                         </div>
                     </div>
 
-                    <div className="pv-grid-container">
+                    {calendarView !== 'list' && (
+                        <div className="pv-grid-container">
                         {calendarView === 'day' ? (
                             <div className="day-view-container">
                                 {visibleDays.map(day => {
@@ -435,8 +449,10 @@ const MyAppointments = () => {
                                 )}
                             </div>
                         )}
-                    </div>
+                        </div>
+                    )}
                 </div>
+
 
                 <div className="list-container">
                     <div className="list-filters">
@@ -478,7 +494,7 @@ const MyAppointments = () => {
                                     </div>
                                     <div className="appt-meta-row">
                                         <span><Clock size={14} /> {a.time || 'TBD'}</span>
-                                        <span><MapPin size={14} /> {a.location || 'Your Station'}</span>
+                                        <span><MapPin size={14} /> {sanitizeUUID(a.location, 'Dasma I Health Station')}</span>
                                     </div>
                                 </div>
                                 <div className="appt-actions">
@@ -532,7 +548,7 @@ const MyAppointments = () => {
                                 </div>
                                 <div style={{display: 'flex', justifyContent: 'space-between'}}>
                                     <span style={{color: '#64748b', fontSize: '13px', fontWeight: 600}}>Location</span>
-                                    <span style={{fontWeight: 600}}>{selectedAppt.location || 'Your Station'}</span>
+                                    <span style={{fontWeight: 600}}>{sanitizeUUID(selectedAppt.location, 'Dasma I Health Station')}</span>
                                 </div>
                                 {selectedAppt.notes && (
                                     <div style={{marginTop: '8px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0'}}>

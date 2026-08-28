@@ -752,36 +752,135 @@
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
-    .my-appointments-page { padding: 12px; gap: 16px; }
-    .pv-calendar-section { border-radius: 12px; }
-    .pv-grid-container { padding: 8px; max-height: 400px; }
-    .day-cell {
-        min-height: 70px;
-        padding: 6px;
-        gap: 4px;
+    .my-appointments-page { padding: 16px 12px; gap: 16px; }
+    
+    .desktop-only { display: none !important; }
+    .mobile-only { display: block; }
+    
+    .mobile-compact-header {
+        margin-bottom: 8px;
     }
-    .day-header { font-size: 11px; }
-    .day-num { font-size: 11px; }
-    .today-badge { font-size: 8px; padding: 1px 3px; }
-    .visit-item {
-        padding: 2px 4px;
-        font-size: 9px;
-        border-radius: 4px;
+    
+    .mobile-page-title {
+        font-size: 20px;
+        font-weight: 800;
+        margin: 0 0 4px 0;
+        color: var(--color-text-dark);
     }
-    .visit-status { display: none; }
-    .legend-pills { gap: 6px; font-size: 10px; }
-    .section-head-bar { padding: 12px; flex-direction: column; align-items: flex-start; }
-    .visit-type-tabs { flex-wrap: wrap; gap: 4px; }
-    .visit-type-tab { padding: 6px 14px; font-size: 12px; }
+    
+    .mobile-page-subtitle {
+        font-size: 13px;
+        color: var(--color-text-light);
+        margin: 0;
+    }
+
+    /* Scrollable Tabs */
+    .visit-type-tabs { 
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        gap: 8px;
+        padding-bottom: 4px;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .visit-type-tabs::-webkit-scrollbar { display: none; }
+    .visit-type-tab { 
+        padding: 8px 16px; 
+        font-size: 13px; 
+        white-space: nowrap;
+        border-radius: 20px;
+        background: #f1f5f9;
+        border-bottom: none !important;
+    }
+    .visit-type-tab.active {
+        background: var(--color-rose);
+        color: white;
+    }
+
+    .section-head-bar { padding: 12px; flex-direction: column; align-items: flex-start; gap: 12px; }
+    .date-nav h2 { font-size: 14px; }
+    .cal-head-right { width: 100%; justify-content: space-between; }
+    .view-toggles { width: 100%; display: flex; }
+    .view-toggle-btn { flex: 1; text-align: center; padding: 6px 0; font-size: 12px; }
+    .legend-pills { display: none; } /* Hide legend on mobile to save space */
+
+    .pv-calendar-section { border-radius: 16px; margin-bottom: 16px !important; }
+    .pv-grid-container { padding: 8px; max-height: none; }
+    
     .week-row { gap: 4px; }
     .weekday-header { gap: 4px; }
+    .weekday { padding: 4px; font-size: 10px; }
+
+    /* Compact Month Cells */
+    .day-cell {
+        min-height: 48px;
+        padding: 4px;
+        gap: 2px;
+        border-radius: 6px;
+    }
+    .day-header { font-size: 12px; justify-content: center; }
+    .day-num { font-size: 12px; }
+    .today-badge { display: none; }
+    .day-today { border-width: 2px; }
+    
+    /* Turn events into dots */
+    .day-visits {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 2px;
+        padding: 2px 0;
+    }
+    .visit-item {
+        width: 6px;
+        height: 6px;
+        padding: 0;
+        border-radius: 50%;
+        border-left: none !important;
+        min-width: 0;
+    }
+    .visit-title, .visit-status { display: none; }
+    
+    .visit-item.type-prenatal { background: #10b981; }
+    .visit-item.type-vaccination { background: #f59e0b; }
+    .visit-item.type-postpartum { background: #3b82f6; }
+
+    /* Compact Cards */
+    .list-filters {
+        overflow-x: auto;
+        white-space: nowrap;
+        padding-bottom: 4px;
+        scrollbar-width: none;
+    }
+    .list-filters::-webkit-scrollbar { display: none; }
+    .filter-btn { padding: 6px 14px; font-size: 12px; }
+    
+    .appt-list-item { 
+        padding: 12px; 
+        gap: 12px; 
+        border-radius: 12px;
+        align-items: flex-start;
+    }
+    .appt-date-box {
+        width: 50px;
+        height: 50px;
+        border-radius: 10px;
+    }
+    .appt-date-box .m { font-size: 10px; }
+    .appt-date-box .d { font-size: 18px; }
+    
+    .appt-title-row { flex-direction: column; align-items: flex-start; gap: 4px; margin-bottom: 6px; }
+    .appt-title-row h3 { font-size: 15px; }
+    .status-badge { font-size: 10px; padding: 2px 8px; }
+    
+    .appt-meta-row { flex-direction: column; gap: 4px; }
+    .appt-meta-row span { font-size: 12px; }
+    
+    .appt-actions { width: 100%; justify-content: flex-end; margin-top: 8px; }
+    .btn-icon-outline { width: 32px; height: 32px; }
 }
 
-@media (max-width: 600px) {
-    .appt-header { flex-direction: column; align-items: flex-start; }
-    .appt-list-item { flex-direction: column; align-items: flex-start; }
-    .appt-actions { width: 100%; justify-content: flex-end; }
-    .header-actions { width: 100%; }
-    .view-toggle { width: 100%; }
-    .toggle-btn { flex: 1; justify-content: center; }
+@media (min-width: 769px) {
+    .mobile-only { display: none !important; }
 }

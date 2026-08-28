@@ -360,15 +360,22 @@ const DashboardLayout = () => {
                 {/* ── Top Header ── */}
                 <header className="topbar" style={{ justifyContent: 'space-between' }} role="banner">
                     
-                    {/* Mobile Hamburger Menu */}
+                    {/* Mobile Hamburger Menu / Logo */}
                     <div className="topbar-left">
-                        <button 
-                            className="mobile-menu-btn mobile-only" 
-                            onClick={() => setSidebarMobile(true)}
-                            aria-label="Open mobile menu"
-                        >
-                            <Menu size={24} />
-                        </button>
+                        {!isUserView ? (
+                            <button 
+                                className="mobile-menu-btn mobile-only" 
+                                onClick={() => setSidebarMobile(true)}
+                                aria-label="Open mobile menu"
+                            >
+                                <Menu size={24} />
+                            </button>
+                        ) : (
+                            <div className="mobile-logo mobile-only" style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '8px' }}>
+                                <img src={logo} alt="DasMom+" style={{ width: '28px', height: '28px' }} />
+                                <span style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '18px', letterSpacing: '-0.5px' }}>DASMOM<span style={{color: 'var(--color-rose)'}}>+</span></span>
+                            </div>
+                        )}
                     </div>
 
                     {/* Right side */}
@@ -479,6 +486,32 @@ const DashboardLayout = () => {
                 <main className="page-content" id="main-content" tabIndex={-1}>
                     <Outlet />
                 </main>
+
+                {/* ── Mobile Bottom Navigation (User View) ── */}
+                {isUserView && (
+                    <nav className="mobile-bottom-nav">
+                        <NavLink to="/mother-home" end className={({isActive}) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
+                            <LayoutDashboard size={20} />
+                            <span>Home</span>
+                        </NavLink>
+                        <NavLink to="/mother-home/user-appointments" className={({isActive}) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
+                            <CalendarCheck size={20} />
+                            <span>Visits</span>
+                        </NavLink>
+                        <NavLink to="/mother-home/user-vitals" className={({isActive}) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
+                            <Activity size={20} />
+                            <span>Records</span>
+                        </NavLink>
+                        <NavLink to="/mother-home/user-vaccinations" className={({isActive}) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
+                            <Syringe size={20} />
+                            <span>Vaccines</span>
+                        </NavLink>
+                        <NavLink to="/mother-home/user-tips" className={({isActive}) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
+                            <Menu size={20} />
+                            <span>More</span>
+                        </NavLink>
+                    </nav>
+                )}
             </div>
 
 
