@@ -45,75 +45,19 @@
     55% { transform: scale(1.15); }
 }
 
-/* ══════════════════════════════════════════
-   HEADER
-   ══════════════════════════════════════════ */
-.analytics-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
+
 
 /* ══════════════════════════════════════════
    FILTER TOOLBAR
    ══════════════════════════════════════════ */
 .analytics-filters-toolbar {
-    background: var(--color-surface);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid var(--color-border);
-    padding: 16px 24px;
-    border-radius: var(--radius-lg);
+    padding: 20px 24px;
     display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    gap: 20px;
-    box-shadow: 0 8px 32px rgba(185, 129, 138, 0.04);
-}
-
-/* ══════════════════════════════════════════
-   EXECUTIVE ANALYTICS TAB NAVIGATION
-   ══════════════════════════════════════════ */
-.analytics-tabs-container {
-    display: flex;
+    justify-content: flex-start;
     align-items: center;
-    gap: 8px;
-    background: #f0f2f5;
-    padding: 6px;
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--color-border);
-    overflow-x: auto;
 }
 
-.analytics-tab-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    border: none;
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--color-text-muted);
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    white-space: nowrap;
-}
-
-.analytics-tab-btn:hover {
-    color: var(--color-text);
-    background: rgba(255, 255, 255, 0.5);
-}
-
-.analytics-tab-btn.active {
-    background: #ffffff;
-    color: var(--color-rose, #b9818a);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-    font-weight: 700;
-}
-
-.filters-group-left {
+.filters-group-row {
     display: flex;
     flex-wrap: wrap;
     gap: 20px;
@@ -123,35 +67,35 @@
 .filter-item {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
 }
 
 .filter-item label {
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.8px;
+    letter-spacing: 0.5px;
     color: var(--color-text-muted);
-    padding-left: 2px;
 }
 
 .select-wrapper {
     position: relative;
     display: flex;
     align-items: center;
-    background: var(--color-white);
-    border: 1px solid rgba(185, 129, 138, 0.2);
+    background: #f8f9fa;
+    border: 1px solid rgba(0, 0, 0, 0.05);
     border-radius: var(--radius-md);
     padding: 0 12px;
-    min-height: 42px;
-    min-width: 170px;
+    min-height: 44px;
+    min-width: 180px;
     transition: var(--t-fast);
 }
 
 .select-wrapper:focus-within,
 .select-wrapper:hover {
     border-color: var(--color-rose);
-    box-shadow: 0 0 0 3px rgba(185, 129, 138, 0.1);
+    background: #ffffff;
+    box-shadow: 0 2px 8px rgba(185, 129, 138, 0.1);
 }
 
 .select-wrapper svg {
@@ -162,13 +106,16 @@
 .select-wrapper select {
     border: none;
     background: transparent;
-    font-size: 13.5px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--color-text);
-    padding: 8px 8px 8px 6px;
+    padding: 8px 8px 8px 10px;
     width: 100%;
     outline: none;
     cursor: pointer;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
 }
 
 .btn-export-analytics {
@@ -176,27 +123,77 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
-    min-height: 42px;
-    padding: 0 20px;
-    background: var(--gradient-btn);
+    min-height: 44px;
+    padding: 0 24px;
+    background: var(--color-rose);
     color: var(--color-white);
     border: none;
     border-radius: var(--radius-md);
-    font-size: 13.5px;
+    font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    box-shadow: var(--shadow-btn);
+    box-shadow: 0 4px 12px rgba(185, 129, 138, 0.2);
     transition: var(--t-fast);
 }
 
 .btn-export-analytics:hover {
     transform: translateY(-2px);
-    box-shadow: var(--shadow-btn-hv);
+    background: #a36b75;
+    box-shadow: 0 6px 16px rgba(185, 129, 138, 0.3);
 }
 
 .btn-export-analytics:active {
     transform: translateY(0);
 }
+
+/* ══════════════════════════════════════════
+   EXECUTIVE ANALYTICS TAB NAVIGATION
+   ══════════════════════════════════════════ */
+.analytics-tabs-container {
+    display: flex;
+    align-items: center;
+    gap: 32px;
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 0;
+    margin-bottom: 8px;
+    overflow-x: auto;
+}
+
+.analytics-tab-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 0 12px 0;
+    border: none;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    position: relative;
+}
+
+.analytics-tab-btn:hover {
+    color: var(--color-text);
+}
+
+.analytics-tab-btn.active {
+    color: var(--color-rose);
+}
+
+.analytics-tab-btn.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background-color: var(--color-rose);
+    border-radius: 3px 3px 0 0;
+}
+
 
 /* ══════════════════════════════════════════
    GLASS CARD AESTHETIC
@@ -216,12 +213,180 @@
 }
 
 /* ══════════════════════════════════════════
-   8 KPI CARDS GRID
+   OVERVIEW HERO SECTION
+   ══════════════════════════════════════════ */
+.health-score-hero {
+    display: grid;
+    grid-template-columns: 1fr 1.6fr;
+    gap: 20px;
+    margin-bottom: 8px;
+}
+
+.hero-left-score, .hero-right-details {
+    display: flex;
+    padding: 32px;
+    border-radius: var(--radius-lg);
+    background: var(--color-white);
+    border: 1px solid rgba(185, 129, 138, 0.12);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+    align-items: center;
+}
+
+.hero-left-score {
+    flex-direction: row;
+    gap: 32px;
+    justify-content: center;
+}
+
+.score-ring-container {
+    position: relative;
+    width: 140px;
+    height: 140px;
+}
+
+.score-ring-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.score-number {
+    font-size: 36px;
+    font-weight: 800;
+    color: var(--color-text);
+    line-height: 1;
+}
+
+.score-denominator {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+}
+
+.score-header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.score-header h2 {
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0;
+    color: var(--color-text);
+}
+
+.status-text {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.score-header p {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    line-height: 1.5;
+    margin: 0;
+}
+
+/* Clinical Insights */
+.hero-right-details {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 24px;
+}
+
+.clinical-insight-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.insight-icon {
+    width: 40px;
+    height: 40px;
+    background: rgba(185, 129, 138, 0.1);
+    color: var(--color-rose);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.clinical-insight-header h2 {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0;
+    color: var(--color-text);
+}
+
+.hero-insights-narrative {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    width: 100%;
+}
+
+.narrative-box {
+    padding: 16px;
+    border-radius: var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.warning-box {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+}
+
+.action-box {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+}
+
+.narrative-label {
+    font-size: 12px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    letter-spacing: 0.5px;
+}
+
+.narrative-text {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.5;
+    color: var(--color-text);
+}
+
+/* ══════════════════════════════════════════
+   5 KPI CARDS GRID
    ══════════════════════════════════════════ */
 .kpi-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 20px;
+}
+
+@media (max-width: 1400px) {
+    .kpi-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 992px) {
+    .kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .health-score-hero {
+        grid-template-columns: 1fr;
+    }
 }
 
 .kpi-card {
@@ -1188,9 +1353,7 @@
 
 /* 2. Priority-Tiered KPI Layout */
 .kpi-grid.priority-tiered {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
+    /* Uses base .kpi-grid columns */
 }
 
 .tier-critical {

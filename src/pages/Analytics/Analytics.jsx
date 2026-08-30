@@ -156,40 +156,47 @@ const Analytics = () => {
         fetchAllData();
     }, []);
 
-    // ── Baseline Static Seeding Data ──
-    // This defines default baseline profiles for the 7 stations, serving as the statistical anchor.
-    // When Supabase records exist, they are layered on top dynamically.
-    const baselineData = useMemo(() => {
-        return {
-            'Dasma 1': { patients: 68, highRisk: 8, teenage: 5, advancedAge: 12, deliveries: 22, completedVacc: 165, totalVacc: 190, compliancePP: 85, missedAppt: 4, normalDel: 15, assistedDel: 2, csDel: 5, compHemorr: 1, compHyper: 2, compInfect: 0, compOther: 1, recNormal: 18, recObs: 3, recComp: 1 },
-            'Dasma 2': { patients: 52, highRisk: 6, teenage: 4, advancedAge: 9, deliveries: 16, completedVacc: 124, totalVacc: 145, compliancePP: 82, missedAppt: 6, normalDel: 11, assistedDel: 1, csDel: 4, compHemorr: 0, compHyper: 1, compInfect: 1, compOther: 0, recNormal: 13, recObs: 2, recComp: 1 },
-            'Dasma 3': { patients: 85, highRisk: 14, teenage: 6, advancedAge: 18, deliveries: 29, completedVacc: 245, totalVacc: 265, compliancePP: 92, missedAppt: 3, normalDel: 20, assistedDel: 3, csDel: 6, compHemorr: 1, compHyper: 3, compInfect: 0, compOther: 2, recNormal: 25, recObs: 3, recComp: 1 },
-            'Dasma 4': { patients: 44, highRisk: 5, teenage: 3, advancedAge: 8, deliveries: 12, completedVacc: 102, totalVacc: 115, compliancePP: 88, missedAppt: 5, normalDel: 8, assistedDel: 1, csDel: 3, compHemorr: 0, compHyper: 1, compInfect: 0, compOther: 1, recNormal: 10, recObs: 1, recComp: 1 },
-            'Salawag': { patients: 96, highRisk: 16, teenage: 21, advancedAge: 11, deliveries: 32, completedVacc: 202, totalVacc: 250, compliancePP: 76, missedAppt: 12, normalDel: 22, assistedDel: 4, csDel: 6, compHemorr: 3, compHyper: 4, compInfect: 1, compOther: 2, recNormal: 24, recObs: 5, recComp: 3 },
-            'Armstrong': { patients: 48, highRisk: 7, teenage: 4, advancedAge: 7, deliveries: 15, completedVacc: 110, totalVacc: 126, compliancePP: 84, missedAppt: 7, normalDel: 10, assistedDel: 2, csDel: 3, compHemorr: 1, compHyper: 1, compInfect: 1, compOther: 1, recNormal: 12, recObs: 2, recComp: 1 },
-            'City Health Office 3': { patients: 74, highRisk: 11, teenage: 7, advancedAge: 15, deliveries: 24, completedVacc: 198, totalVacc: 220, compliancePP: 90, missedAppt: 4, normalDel: 16, assistedDel: 2, csDel: 6, compHemorr: 1, compHyper: 2, compInfect: 0, compOther: 1, recNormal: 20, recObs: 3, recComp: 1 }
-        };
-    }, []);
-
     // ── Dynamic Aggregator Logic ──
-    // Processes both Supabase DB data and Baseline profiles depending on active filters
+    // Processes Supabase DB data depending on active filters
     const dashboardMetrics = useMemo(() => {
         // 1. Compile Live Data from Supabase
         const liveAgg = {
-            'Dasma 1': { patients: 0, highRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 },
-            'Dasma 2': { patients: 0, highRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 },
-            'Dasma 3': { patients: 0, highRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 },
-            'Dasma 4': { patients: 0, highRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 },
-            'Salawag': { patients: 0, highRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 },
-            'Armstrong': { patients: 0, highRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 },
-            'City Health Office 3': { patients: 0, highRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 }
+            'Dasma 1': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 },
+            'Dasma 2': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 },
+            'Dasma 3': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 },
+            'Dasma 4': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 },
+            'Salawag': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 },
+            'Armstrong': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 },
+            'City Health Office 3': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 }
         };
+
+        const now = new Date();
+        const isWithinDateRange = (dateString) => {
+            if (!dateString) return true;
+            const d = new Date(dateString);
+            if (isNaN(d.getTime())) return true;
+            const monthsAgo = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth());
+            if (filters.dateRange === 'monthly') return monthsAgo === 0;
+            if (filters.dateRange === 'quarterly') return monthsAgo >= 0 && monthsAgo < 3;
+            if (filters.dateRange === 'semiannual') return monthsAgo >= 0 && monthsAgo < 6;
+            if (filters.dateRange === 'annual') return monthsAgo >= 0 && monthsAgo < 12;
+            return true;
+        };
+
+        // Determine latest visit for each patient to get accurate risk factors
+        const latestVisits = {};
+        dbData.visits.forEach(v => {
+            if (!v.patient_id) return;
+            const existing = latestVisits[v.patient_id];
+            if (!existing || new Date(v.visit_date) > new Date(existing.visit_date)) {
+                latestVisits[v.patient_id] = v;
+            }
+        });
 
         // Determine patient trimesters & risk from pregnancy info
         const patientDetails = {};
         dbData.pregnancies.forEach(p => {
             if (!p.patient_id) return;
-            // Calculate weeks from LMD
             let weeks = 0;
             if (p.lmd) {
                 const diffTime = new Date() - new Date(p.lmd);
@@ -197,17 +204,21 @@ const Analytics = () => {
             }
             const tri = weeks <= 12 ? '1' : weeks <= 26 ? '2' : '3';
             
-            // Map risk
+            const visit = latestVisits[p.patient_id] || {};
             let riskGroup = 'Low';
-            const riskStr = (p.calculated_risk || p.risk_level || 'Normal').toLowerCase();
+            const riskStr = (p.calculated_risk || p.risk_level || visit.calculated_risk || 'Normal').toLowerCase();
             if (riskStr.includes('critical') || riskStr.includes('high') || riskStr.includes('warning')) {
                 riskGroup = 'High';
+            } else if (riskStr.includes('moderate') || riskStr.includes('monitor')) {
+                riskGroup = 'Moderate';
             }
 
             patientDetails[p.patient_id] = {
                 trimester: tri,
                 risk: riskGroup,
-                status: p.pregn_postp
+                status: p.pregn_postp,
+                lmd: p.lmd,
+                risk_factors: visit.risk_factors || ''
             };
         });
 
@@ -216,7 +227,14 @@ const Analytics = () => {
             const station = normalizeStation(pat.barangay);
             const detail = patientDetails[pat.id] || { trimester: '1', risk: 'Low', status: 'Pregnant' };
 
-            // Calculate age
+            // Apply Trimester and Risk filters explicitly here
+            if (filters.trimester !== 'All' && filters.trimester !== detail.trimester) return;
+            if (filters.risk !== 'All' && filters.risk !== detail.risk) return;
+            
+            // Apply Date filter based on registration or lmd
+            const refDate = detail.lmd || pat.created_at;
+            if (!isWithinDateRange(refDate)) return;
+
             let age = 25;
             if (pat.date_of_birth) {
                 const birth = new Date(pat.date_of_birth);
@@ -226,37 +244,43 @@ const Analytics = () => {
             if (detail.status?.toLowerCase() === 'pregnant') {
                 liveAgg[station].patients++;
                 if (detail.risk === 'High') liveAgg[station].highRisk++;
+                else if (detail.risk === 'Moderate') liveAgg[station].moderateRisk++;
+                else liveAgg[station].lowRisk++;
+                
                 if (age < 20) liveAgg[station].teenage++;
                 if (age >= 35) liveAgg[station].advancedAge++;
+            }
+            
+            // Aggregate Health Conditions
+            if (detail.risk_factors) {
+                const factors = detail.risk_factors.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+                factors.forEach(f => {
+                    if (f.includes('hyper') || f.includes('bp')) liveAgg[station].compHyper++;
+                    if (f.includes('preeclampsia') || f.includes('pre-eclampsia')) liveAgg[station].recComp++; // Store in recComp for simplicity mapping
+                    if (f.includes('anemia')) liveAgg[station].compOther++;
+                    if (f.includes('diabet')) liveAgg[station].compInfect++; 
+                });
             }
         });
 
         // Loop visits for missed appts
         dbData.visits.forEach(v => {
-            // Find patient barangay
             const pat = dbData.patients.find(p => p.id === v.patient_id);
             const station = normalizeStation(pat?.barangay);
-            
+            if (!isWithinDateRange(v.visit_date)) return;
             const isMissed = v.status === 'Missed' || (v.visit_date && new Date(v.visit_date) < new Date() && v.status === 'Scheduled');
-            if (isMissed) {
-                liveAgg[station].missedAppt++;
-            }
+            if (isMissed) liveAgg[station].missedAppt++;
         });
 
         // Loop deliveries
         dbData.deliveries.forEach(d => {
             const pat = dbData.patients.find(p => p.id === d.mother_id);
             const station = normalizeStation(pat?.barangay);
+            if (!isWithinDateRange(d.delivery_date)) return;
 
             liveAgg[station].deliveries++;
 
-            // Safely convert to string — DB may return arrays or non-strings
-            const toStr = (val) => {
-                if (!val) return '';
-                if (Array.isArray(val)) return val.join(' ').toLowerCase();
-                return String(val).toLowerCase();
-            };
-
+            const toStr = (val) => val ? String(val).toLowerCase() : '';
             const dtype = toStr(d.delivery_type);
             if (dtype.includes('cs') || dtype.includes('cesarean')) liveAgg[station].csDel++;
             else if (dtype.includes('assist')) liveAgg[station].assistedDel++;
@@ -264,67 +288,32 @@ const Analytics = () => {
 
             const comps = toStr(d.complications);
             if (comps.includes('hemorrhage') || comps.includes('bleed')) liveAgg[station].compHemorr++;
-            else if (comps.includes('hyper') || comps.includes('bp')) liveAgg[station].compHyper++;
-            else if (comps.includes('infect') || comps.includes('fever')) liveAgg[station].compInfect++;
-            else if (comps !== '' && comps !== 'none') liveAgg[station].compOther++;
-
-            // Postpartum recovery logic based on complications
-            if (comps !== '' && comps !== 'none') {
-                liveAgg[station].recComp++;
-            } else if (d.risk_level === 'High Risk' || d.risk_level === 'Critical') {
-                liveAgg[station].recObs++;
-            } else {
-                liveAgg[station].recNormal++;
-            }
         });
-
 
         // Loop vaccinations
         dbData.vaccinations.forEach(v => {
-            // Check newborn or patient
             const patId = v.patient_id || v.newborn_id;
             const pat = dbData.patients.find(p => p.id === patId);
             const station = normalizeStation(pat?.barangay);
+            if (!isWithinDateRange(v.vaccinated_date)) return;
 
             liveAgg[station].totalVacc++;
-            if (v.status === 'Completed') {
-                liveAgg[station].completedVacc++;
-            }
+            if (v.status === 'Completed') liveAgg[station].completedVacc++;
         });
 
-        // 2. Merge baseline with live database values
         const mergedStations = {};
         STATIONS.forEach(st => {
             if (st === 'All Stations') return;
-            const base = baselineData[st];
             const live = liveAgg[st];
-
             mergedStations[st] = {
                 name: st,
-                patients: base.patients + live.patients,
-                highRisk: base.highRisk + live.highRisk,
-                teenage: base.teenage + live.teenage,
-                advancedAge: base.advancedAge + live.advancedAge,
-                deliveries: base.deliveries + live.deliveries,
-                completedVacc: base.completedVacc + live.completedVacc,
-                totalVacc: base.totalVacc + live.totalVacc,
-                compliancePP: base.compliancePP, // default seed
-                missedAppt: base.missedAppt + live.missedAppt,
-                normalDel: base.normalDel + live.normalDel,
-                assistedDel: base.assistedDel + live.assistedDel,
-                csDel: base.csDel + live.csDel,
-                compHemorr: base.compHemorr + live.compHemorr,
-                compHyper: base.compHyper + live.compHyper,
-                compInfect: base.compInfect + live.compInfect,
-                compOther: base.compOther + live.compOther,
-                recNormal: base.recNormal + live.recNormal,
-                recObs: base.recObs + live.recObs,
-                recComp: base.recComp + live.recComp
+                ...live,
+                compliancePP: live.patients > 0 ? 80 : 0 // Basic dynamic compliance fallback
             };
         });
 
         return mergedStations;
-    }, [dbData, baselineData]);
+    }, [dbData, filters]);
 
     // ── Filter Calculations ──
     const activeData = useMemo(() => {
@@ -339,6 +328,8 @@ const Analytics = () => {
         const totals = {
             patients: 0,
             highRisk: 0,
+            moderateRisk: 0,
+            lowRisk: 0,
             teenage: 0,
             advancedAge: 0,
             deliveries: 0,
@@ -360,6 +351,8 @@ const Analytics = () => {
         selectedStations.forEach(s => {
             totals.patients += s.patients;
             totals.highRisk += s.highRisk;
+            totals.moderateRisk += s.moderateRisk;
+            totals.lowRisk += s.lowRisk;
             totals.teenage += s.teenage;
             totals.advancedAge += s.advancedAge;
             totals.deliveries += s.deliveries;
@@ -379,33 +372,24 @@ const Analytics = () => {
         });
 
         // Compute rates
-        const vaccRate = totals.totalVacc > 0 ? Math.round((totals.completedVacc / totals.totalVacc) * 100) : 88;
+        const vaccRate = totals.totalVacc > 0 ? Math.round((totals.completedVacc / totals.totalVacc) * 100) : 0;
         const ppRate = filters.station === 'All Stations' ? 84 : dashboardMetrics[filters.station]?.compliancePP || 84;
         
         // Missed Appt Rate
-        const totalVisitsCount = totals.patients * 4; // Estimate 4 scheduled appointments per active patient
-        const missedRate = totalVisitsCount > 0 ? Math.round((totals.missedAppt / totalVisitsCount) * 100) : 6;
+        const totalVisitsCount = totals.patients * 4;
+        const missedRate = totalVisitsCount > 0 ? Math.round((totals.missedAppt / totalVisitsCount) * 100) : 0;
 
-        // Trimester multiplier adjustment
-        let trimMultiplier = 1;
-        if (filters.trimester === '1') trimMultiplier = 0.28;
-        else if (filters.trimester === '2') trimMultiplier = 0.38;
-        else if (filters.trimester === '3') trimMultiplier = 0.34;
-
-        // Risk adjustment
-        let riskMultiplier = 1;
-        if (filters.risk === 'Low') riskMultiplier = 0.8;
-        else if (filters.risk === 'High') riskMultiplier = 0.2;
-
-        const filtered = {
-            totalPregnant: Math.round(totals.patients * trimMultiplier * riskMultiplier),
-            highRisk: Math.round(totals.highRisk * trimMultiplier * (filters.risk === 'Low' ? 0 : 1)),
-            teenage: Math.round(totals.teenage * trimMultiplier * riskMultiplier),
-            advancedAge: Math.round(totals.advancedAge * trimMultiplier * riskMultiplier),
-            deliveries: Math.round(totals.deliveries * (filters.risk === 'High' ? 0.3 : filters.risk === 'Low' ? 0.7 : 1)),
-            vaccRate: Math.max(70, Math.min(100, Math.round(vaccRate * (filters.risk === 'High' ? 0.95 : 1)))),
-            ppRate: Math.max(70, Math.min(100, Math.round(ppRate * (filters.risk === 'High' ? 0.9 : 1)))),
-            missedRate: Math.max(2, Math.min(30, Math.round(missedRate * (filters.risk === 'High' ? 1.5 : 1)))),
+        return {
+            totalPregnant: totals.patients,
+            highRisk: totals.highRisk,
+            moderateRisk: totals.moderateRisk,
+            lowRisk: totals.lowRisk,
+            teenage: totals.teenage,
+            advancedAge: totals.advancedAge,
+            deliveries: totals.deliveries,
+            vaccRate: vaccRate,
+            ppRate: ppRate,
+            missedRate: missedRate,
             
             // Raw values for breakdowns
             normalDel: totals.normalDel,
@@ -413,15 +397,13 @@ const Analytics = () => {
             csDel: totals.csDel,
             compHemorr: totals.compHemorr,
             compHyper: totals.compHyper,
-            compInfect: totals.compInfect,
-            compOther: totals.compOther,
+            compInfect: totals.compInfect, // Mapped for Diabetes in aggregation
+            compOther: totals.compOther, // Mapped for Anemia in aggregation
             recNormal: totals.recNormal,
             recObs: totals.recObs,
-            recComp: totals.recComp,
+            recComp: totals.recComp, // Mapped for Pre-eclampsia in aggregation
             missedCount: totals.missedAppt
         };
-
-        return filtered;
     }, [filters, dashboardMetrics]);
 
     // ── Time Series Trend Data Generative Engine ──
@@ -528,21 +510,15 @@ const Analytics = () => {
 
     // ── Top High Risk Conditions Breakdown ──
     const conditionStats = useMemo(() => {
-        const selected = filters.station === 'All Stations' ? Object.values(dashboardMetrics) : [dashboardMetrics[filters.station]];
-        const counts = { Hypertension: 0, Preeclampsia: 0, Anemia: 0, Diabetes: 0, Underweight: 0, Obesity: 0 };
-        
-        selected.forEach(s => {
-            if (!s) return;
-            counts.Hypertension += s.compHyper;
-            counts.Preeclampsia += s.recComp;
-            counts.Anemia += Math.round(s.highRisk * 0.45); // Approximate ratio based on prenatal visits
-            counts.Diabetes += Math.round(s.highRisk * 0.2);
-            counts.Underweight += Math.round(s.patients * 0.08);
-            counts.Obesity += Math.round(s.patients * 0.12);
-        });
-
-        return counts;
-    }, [filters, dashboardMetrics]);
+        return {
+            Hypertension: activeData.compHyper,
+            Preeclampsia: activeData.recComp,
+            Anemia: activeData.compOther,
+            Diabetes: activeData.compInfect,
+            Underweight: 0, // Fallback (would require parsing BMI from prenatal records)
+            Obesity: 0      // Fallback
+        };
+    }, [activeData]);
 
     // ── Automated Executive Healthcare Insights Engine ──
     const intelligenceInsights = useMemo(() => {
@@ -886,16 +862,25 @@ const Analytics = () => {
         <div className="analytics-page">
             
             {/* ── Page Header ── */}
-            <header className="analytics-header">
+            <header className="page-header">
                 <div>
-                    <h1 className="page-title">Analytics</h1>
+                    <h1 className="page-title">
+                        <BarChart3 size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose-dark)' }} /> 
+                        Analytics
+                    </h1>
                     <p className="page-subtitle">View overall maternal health trends and performance across CHO III.</p>
+                </div>
+                <div className="header-actions">
+                    <button className="btn-export-analytics" onClick={handleExportReport} aria-label="Export report to Excel">
+                        <Download size={16} />
+                        <span>Export Analytics</span>
+                    </button>
                 </div>
             </header>
 
             {/* ── Filter Toolbar ── */}
-            <section className="analytics-filters-toolbar">
-                <div className="filters-group-left">
+            <section className="analytics-filters-toolbar glass-card">
+                <div className="filters-group-row">
                     <div className="filter-item">
                         <label htmlFor="station-select">Station</label>
                         <div className="select-wrapper">
@@ -952,11 +937,6 @@ const Analytics = () => {
                         </div>
                     </div>
                 </div>
-
-                <button className="btn-export-analytics" onClick={handleExportReport} aria-label="Export report to Excel">
-                    <Download size={16} />
-                    <span>Export Analytics</span>
-                </button>
             </section>
 
             {/* ── Executive Analytics Tab Bar ── */}
@@ -965,29 +945,25 @@ const Analytics = () => {
                     className={`analytics-tab-btn ${activeTab === 'overview' ? 'active' : ''}`}
                     onClick={() => setActiveTab('overview')}
                 >
-                    <Activity size={16} />
-                    <span>Overview</span>
+                    Overview
                 </button>
                 <button 
                     className={`analytics-tab-btn ${activeTab === 'maternal' ? 'active' : ''}`}
                     onClick={() => setActiveTab('maternal')}
                 >
-                    <HeartPulse size={16} />
-                    <span>Maternal Health</span>
+                    Maternal Health
                 </button>
                 <button 
                     className={`analytics-tab-btn ${activeTab === 'vaccination' ? 'active' : ''}`}
                     onClick={() => setActiveTab('vaccination')}
                 >
-                    <Syringe size={16} />
-                    <span>Vaccination</span>
+                    Vaccination
                 </button>
                 <button 
                     className={`analytics-tab-btn ${activeTab === 'delivery' ? 'active' : ''}`}
                     onClick={() => setActiveTab('delivery')}
                 >
-                    <Baby size={16} />
-                    <span>Delivery &amp; Postpartum</span>
+                    Delivery &amp; Postpartum
                 </button>
             </nav>
 
@@ -1001,71 +977,46 @@ const Analytics = () => {
                         initial={{ opacity: 0, y: 15 }} 
                         animate={{ opacity: 1, y: 0 }} 
                         transition={{ duration: 0.4 }} 
-                        className="health-score-hero glass-card"
+                        className="health-score-hero"
                     >
-                        <div className="hero-grid">
-                            <div className="hero-left-score">
-                                <div className="score-ring-container">
-                                    <svg className="score-ring-svg" viewBox="0 0 120 120">
-                                        <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(185, 129, 138, 0.15)" strokeWidth="8" />
-                                        <circle cx="60" cy="60" r="50" fill="none" stroke="url(#scoreGrad)" strokeWidth="10" strokeDasharray="314.15" strokeDashoffset={314.15 - (314.15 * healthScore) / 100} strokeLinecap="round" style={{ transform: 'rotate(-90deg)', transformOrigin: '60px 60px', transition: 'stroke-dashoffset 1s ease' }} />
-                                        <defs>
-                                            <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                                <stop offset="0%" stopColor="#ac97b4" />
-                                                <stop offset="50%" stopColor="#ffe3a4" />
-                                                <stop offset="100%" stopColor="#b9818a" />
-                                            </linearGradient>
-                                        </defs>
-                                    </svg>
-                                    <div className="score-ring-center">
-                                        <span className="score-number">{healthScore}</span>
-                                        <span className="score-denominator">/ 100</span>
-                                    </div>
-                                </div>
-                                <div className="score-status-wrapper">
-                                    <span className="score-label">Maternal Health Status</span>
-                                    <span className={`status-badge ${healthStatus.class}`}>{healthStatus.label}</span>
+                        <div className="hero-left-score glass-card">
+                            <div className="score-ring-container">
+                                <svg className="score-ring-svg" viewBox="0 0 120 120">
+                                    <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(185, 129, 138, 0.15)" strokeWidth="12" />
+                                    <circle cx="60" cy="60" r="50" fill="none" stroke="url(#scoreGrad)" strokeWidth="12" strokeDasharray="314.15" strokeDashoffset={314.15 - (314.15 * healthScore) / 100} strokeLinecap="round" style={{ transform: 'rotate(-90deg)', transformOrigin: '60px 60px', transition: 'stroke-dashoffset 1s ease' }} />
+                                    <defs>
+                                        <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" stopColor="#ac97b4" />
+                                            <stop offset="50%" stopColor="#b9818a" />
+                                            <stop offset="100%" stopColor="#b9818a" />
+                                        </linearGradient>
+                                    </defs>
+                                </svg>
+                                <div className="score-ring-center">
+                                    <span className="score-number">{healthScore}</span>
+                                    <span className="score-denominator">/100</span>
                                 </div>
                             </div>
-                            
-                            <div className="hero-right-details">
-                                <div className="hero-quick-stats">
-                                    <div className="hero-stat-pill">
-                                        <span className="hero-stat-label">Total Pregnant</span>
-                                        <span className="hero-stat-val">{activeData.totalPregnant}</span>
-                                        <span className="hero-stat-sub">Registered Patients</span>
-                                    </div>
-                                    <div className="hero-stat-pill">
-                                        <span className="hero-stat-label">High-Risk Cases</span>
-                                        <span className="hero-stat-val color-red font-bold">{activeData.highRisk}</span>
-                                        <span className="hero-stat-sub">Needs Attention</span>
-                                    </div>
-                                    <div className="hero-stat-pill">
-                                        <span className="hero-stat-label">Vaccination Compliance</span>
-                                        <span className="hero-stat-val font-semibold">{activeData.vaccRate}%</span>
-                                        <span className="hero-stat-sub">Immunized mothers/newborns</span>
-                                    </div>
-                                    <div className="hero-stat-pill">
-                                        <span className="hero-stat-label">Postpartum Follow-up</span>
-                                        <span className="hero-stat-val font-semibold">{activeData.ppRate}%</span>
-                                        <span className="hero-stat-sub">Within 42-day period</span>
-                                    </div>
-                                    <div className="hero-stat-pill">
-                                        <span className="hero-stat-label">Missed Appointment Rate</span>
-                                        <span className="hero-stat-val color-red font-semibold">{activeData.missedRate}%</span>
-                                        <span className="hero-stat-sub">Appointment defaults</span>
-                                    </div>
+                            <div className="score-header">
+                                <h2>Overall Maternal Health</h2>
+                                <span className={`status-text ${healthStatus.class}`}>{healthStatus.label}</span>
+                                <p>Overall performance across CHO III<br/>Based on key maternal health indicators</p>
+                            </div>
+                        </div>
+                        
+                        <div className="hero-right-details glass-card">
+                            <div className="clinical-insight-header">
+                                <div className="insight-icon"><BrainCircuit size={20} /></div>
+                                <h2>Clinical Insight</h2>
+                            </div>
+                            <div className="hero-insights-narrative">
+                                <div className="narrative-box warning-box">
+                                    <span className="narrative-label text-critical"><AlertTriangle size={14}/> MAIN CONCERN</span>
+                                    <span className="narrative-text">{heroInsights.concern}</span>
                                 </div>
-                                
-                                <div className="hero-insights-narrative">
-                                    <div className="narrative-row">
-                                        <span className="narrative-label text-critical">MAIN CONCERN:</span>
-                                        <span className="narrative-text">{heroInsights.concern}</span>
-                                    </div>
-                                    <div className="narrative-row">
-                                        <span className="narrative-label text-success">SUGGESTED ACTION:</span>
-                                        <span className="narrative-text">{heroInsights.action}</span>
-                                    </div>
+                                <div className="narrative-box action-box">
+                                    <span className="narrative-label text-success"><CheckCircle2 size={14}/> SUGGESTED ACTION</span>
+                                    <span className="narrative-text">{heroInsights.action}</span>
                                 </div>
                             </div>
                         </div>
@@ -1247,10 +1198,17 @@ const Analytics = () => {
                             <h2 className="panel-title">Risk Distribution</h2>
                             <p className="panel-subtitle">Categorization of active pregnancies</p>
                             <div className="doughnut-chart-container enlarged-donut-wrapper">
-                                {(() => {
-                                    const hrPct = activeData.totalPregnant > 0 ? Math.round((activeData.highRisk / activeData.totalPregnant) * 100) : 14;
-                                    const modPct = Math.min(100 - hrPct, 18);
+                                {activeData.totalPregnant === 0 ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#88987b', textAlign: 'center', padding: '20px' }}>
+                                        <PieChart size={32} style={{ marginBottom: '12px', opacity: 0.5 }} />
+                                        <p style={{ margin: 0, fontWeight: 500 }}>No active pregnancies</p>
+                                        <p style={{ margin: 0, fontSize: '12px', opacity: 0.7 }}>Try adjusting your filters</p>
+                                    </div>
+                                ) : (() => {
+                                    const hrPct = Math.round((activeData.highRisk / activeData.totalPregnant) * 100);
+                                    const modPct = Math.round((activeData.moderateRisk / activeData.totalPregnant) * 100);
                                     const lowPct = 100 - hrPct - modPct;
+
                                     return (
                                         <>
                                             <svg className="svg-doughnut risk-donut-enlarged" viewBox="0 0 200 200" width="100%" height="200">
@@ -1300,16 +1258,30 @@ const Analytics = () => {
                             <h2 className="panel-title">Patients Needing Immediate Attention</h2>
                             <p className="panel-subtitle">Situational health desk alerts</p>
                             <div className="critical-alerts-list operational-alerts" style={{ marginTop: 12 }}>
-                                <div className="alert-card priority-high alert-operational-card">
-                                    <div className="alert-card-head"><span className="alert-priority-tag font-bold text-critical">CRITICAL ALERT</span><AlertTriangle size={14} /></div>
-                                    <p className="alert-card-text"><strong>{activeData.highRisk} High-risk patients</strong> require immediate medical follow-up.</p>
-                                    <button className="alert-btn-action" onClick={() => navigate('/patients')}>View Patients</button>
-                                </div>
-                                <div className="alert-card priority-moderate alert-operational-card">
-                                    <div className="alert-card-head"><span className="alert-priority-tag font-bold text-warning">PRE-ECLAMPSIA MONITOR</span><Activity size={14} /></div>
-                                    <p className="alert-card-text">Pre-eclampsia warnings triggered for high-risk cases. Coordinate home BP checks today.</p>
-                                    <button className="alert-btn-action" onClick={() => navigate('/cases')}>View Cases</button>
-                                </div>
+                                {activeData.highRisk === 0 && conditionStats.Preeclampsia === 0 ? (
+                                    <div className="alert-card priority-success alert-operational-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '32px 16px', border: '1px dashed #c3cfb7' }}>
+                                        <CheckCircle2 size={32} color="#8a9e71" style={{ marginBottom: 12 }} />
+                                        <p style={{ color: '#5b6951', fontWeight: 600 }}>No immediate alerts</p>
+                                        <p style={{ color: '#7c8c71', fontSize: '12px' }}>All tracked maternal risk metrics are within normal ranges for the selected filters.</p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        {activeData.highRisk > 0 && (
+                                            <div className="alert-card priority-high alert-operational-card">
+                                                <div className="alert-card-head"><span className="alert-priority-tag font-bold text-critical">CRITICAL ALERT</span><AlertTriangle size={14} /></div>
+                                                <p className="alert-card-text"><strong>{activeData.highRisk} High-risk {activeData.highRisk === 1 ? 'patient' : 'patients'}</strong> require immediate medical follow-up.</p>
+                                                <button className="alert-btn-action" onClick={() => navigate('/patients')}>View Patients</button>
+                                            </div>
+                                        )}
+                                        {conditionStats.Preeclampsia > 0 && (
+                                            <div className="alert-card priority-moderate alert-operational-card">
+                                                <div className="alert-card-head"><span className="alert-priority-tag font-bold text-warning">PRE-ECLAMPSIA MONITOR</span><Activity size={14} /></div>
+                                                <p className="alert-card-text">Pre-eclampsia warnings triggered for <strong>{conditionStats.Preeclampsia} {conditionStats.Preeclampsia === 1 ? 'patient' : 'patients'}</strong>. Coordinate home BP checks today.</p>
+                                                <button className="alert-btn-action" onClick={() => navigate('/cases')}>View Cases</button>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
                             </div>
                         </div>
                     </section>

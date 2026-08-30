@@ -4,7 +4,7 @@ import {
     Search, Filter, Plus, X, MapPin, Users, AlertTriangle,
     Baby, Syringe, Pill, TrendingUp, TrendingDown, Download,
     Eye, ChevronDown, ChevronUp, CheckCircle2, AlertCircle,
-    FileText, Activity, Heart
+    FileText, Activity, Heart, BarChart3, Clock, Building2, Stethoscope
 } from 'lucide-react';
 import '../../styles/pages/StationReports.css';
 import PatientService from '../../services/patientservice';
@@ -77,20 +77,19 @@ const StationReports = () => {
         return matchSearch && matchRisk && matchVacc;
     });
 
-    const getRiskClass = (r) => {
-        if (r === 'Critical') return 'st-row--critical';
-        if (r === 'Monitor') return 'st-row--monitor';
-        return 'st-row--normal';
+    const getCoverageClass = (v) => v >= 90 ? 'green' : v >= 80 ? 'amber' : 'red';
+
+    const getStatusLabel = (r) => {
+        if (r === 'Critical') return 'Critical';
+        if (r === 'Monitor') return 'Needs Attention';
+        return 'Healthy';
     };
 
-    const getRiskBadge = (r) => {
-        if (r === 'Critical') return 'badge-critical';
-        if (r === 'Monitor') return 'badge-monitor';
-        return 'badge-normal';
+    const getStatusClass = (r) => {
+        if (r === 'Critical') return 'st-status--critical';
+        if (r === 'Monitor') return 'st-status--attention';
+        return 'st-status--healthy';
     };
-
-    const coverageColor = (v) => v >= 90 ? '#80a06c' : v >= 80 ? '#b08d70' : '#926674';
-    const coverageBg = (v) => v >= 90 ? 'rgba(160,194,130,0.12)' : v >= 80 ? 'rgba(237,189,154,0.12)' : 'rgba(182,129,145,0.12)';
 
     const [showExportMenu, setShowExportMenu] = useState(false);
 
@@ -104,13 +103,20 @@ const StationReports = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [showExportMenu]);
 
+    // Calculate derived summary values
+    const totalStations = stations.length;
+    const totalPatients = stations.reduce((sum, s) => sum + s.totalPatients, 0);
+    const totalHighRisk = stations.reduce((sum, s) => sum + s.highRisk, 0);
+    const totalDeliveries = stations.reduce((sum, s) => sum + s.recentDeliveries, 0);
+    const totalNewborns = stations.reduce((sum, s) => sum + s.newborns, 0);
+
     return (
         <div className="st-page">
 
             {/* ── Page Header ── */}
             <div className="page-header">
                 <div>
-                    <h1 className="page-title"><MapPin size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Station Reports</h1>
+                    <h1 className="page-title"><BarChart3 size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose-dark)' }} /> Station Reports</h1>
                     <p className="page-subtitle">View health data and performance for each station under CHO III, including patient coverage, risk distribution, and vaccination rates.</p>
                 </div>
                 <div className="header-actions">
@@ -124,14 +130,14 @@ const StationReports = () => {
                         {showExportMenu && (
                             <div className="export-dropdown" style={{
                                 position: 'absolute', top: '100%', right: 0, marginTop: '8px',
-                                background: '#fff', border: '1px solid #eaeaea', borderRadius: '8px',
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '8px',
-                                display: 'flex', flexDirection: 'column', gap: '4px', zIndex: 100, minWidth: '150px'
+                                background: '#fff', border: '1px solid rgba(185,129,138,0.15)', borderRadius: '12px',
+                                boxShadow: '0 8px 24px rgba(45,34,52,0.1)', padding: '6px',
+                                display: 'flex', flexDirection: 'column', gap: '2px', zIndex: 100, minWidth: '160px'
                             }}>
-                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
+                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '10px 14px', width: '100%', display: 'flex', alignItems: 'center', borderRadius: '8px' }}>
                                     <Download size={14} style={{ marginRight: '8px' }} /> Excel (.xlsx)
                                 </button>
-                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
+                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '10px 14px', width: '100%', display: 'flex', alignItems: 'center', borderRadius: '8px' }}>
                                     <Download size={14} style={{ marginRight: '8px' }} /> PDF (.pdf)
                                 </button>
                             </div>
@@ -141,214 +147,255 @@ const StationReports = () => {
                 </div>
             </div>
 
-            {/* ── Summary Cards ── */}
-            <div className="st-stats-grid">
-                {summaryStats.map(s => {
-                    const Icon = s.icon;
-                    const handleCardClick = () => {
-                        if (s.filter) {
-                            navigate(`${s.path}?filter=${s.filter}`);
-                        } else {
-                            navigate(s.path);
-                        }
-                    };
-                    const handleKeyDown = (e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            handleCardClick();
-                        }
-                    };
-                    return (
-                        <div 
-                            key={s.label} 
-                            className={`stat-card stat-card--${s.color} stat-card--clickable`}
-                            onClick={handleCardClick}
-                            onKeyDown={handleKeyDown}
-                            role="button"
-                            tabIndex={0}
-                            aria-label={`${s.label}: ${s.value}. Click to view details`}
-                        >
-                            <div className="stat-top">
-                                <div className={`stat-icon stat-icon--${s.color}`}>
-                                    <Icon size={20} />
-                                </div>
-                            </div>
-                            <div className="stat-value">{s.value}</div>
-                            <div className="stat-label">{s.label}</div>
+            {/* ── Summary Statistics ── */}
+            {!loading && (
+                <div className="st-summary-card">
+                    <div className="st-summary-item" onClick={() => navigate('/dashboard/stations')} role="button" tabIndex={0}>
+                        <div className="st-summary-icon st-summary-icon--lilac">
+                            <Building2 size={20} />
                         </div>
-                    );
-                })}
-            </div>
+                        <div className="st-summary-text">
+                            <span className="st-summary-value">{totalStations}</span>
+                            <span className="st-summary-label">Stations</span>
+                        </div>
+                    </div>
+                    <div className="st-summary-item" onClick={() => navigate('/dashboard/patients')} role="button" tabIndex={0}>
+                        <div className="st-summary-icon st-summary-icon--sage">
+                            <Users size={20} />
+                        </div>
+                        <div className="st-summary-text">
+                            <span className="st-summary-value">{totalPatients.toLocaleString()}</span>
+                            <span className="st-summary-label">Registered Patients</span>
+                        </div>
+                    </div>
+                    <div className="st-summary-item" onClick={() => navigate('/dashboard/high-risk')} role="button" tabIndex={0}>
+                        <div className="st-summary-icon st-summary-icon--rose">
+                            <AlertTriangle size={20} />
+                        </div>
+                        <div className="st-summary-text">
+                            <span className="st-summary-value">{totalHighRisk}</span>
+                            <span className="st-summary-label">High-Risk Cases</span>
+                        </div>
+                    </div>
+                    <div className="st-summary-item" onClick={() => navigate('/dashboard/deliveries')} role="button" tabIndex={0}>
+                        <div className="st-summary-icon st-summary-icon--amber">
+                            <Heart size={20} />
+                        </div>
+                        <div className="st-summary-text">
+                            <span className="st-summary-value">{totalDeliveries}</span>
+                            <span className="st-summary-label">Deliveries</span>
+                        </div>
+                    </div>
+                    <div className="st-summary-item" onClick={() => navigate('/dashboard/newborns')} role="button" tabIndex={0}>
+                        <div className="st-summary-icon st-summary-icon--pink">
+                            <Baby size={20} />
+                        </div>
+                        <div className="st-summary-text">
+                            <span className="st-summary-value">{totalNewborns}</span>
+                            <span className="st-summary-label">Newborns</span>
+                        </div>
+                    </div>
+                </div>
+            )}
 
-            {/* ── Chartsection ── */}
+            {/* ── Charts Section ── */}
             {showCharts && <ChartsSection stations={stations} />}
 
-            {/* ── Search & Filters ── */}
-            <div className="st-controls">
-                <div className="st-search-wrap">
-                    <Search size={16} className="st-search-icon" />
-                    <input
-                        type="text"
-                        className="st-search-input"
-                        placeholder="Search station name..."
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                    />
-                </div>
-                <div className="st-filters-row">
-                    <span className="filters-label"><Filter size={13} /> Filters:</span>
+            {/* ── Filter Bar ── */}
+            <div className="st-filter-bar">
+                <div className="st-filter-group">
+                    <label>Risk Level</label>
                     <select value={filters.risk} onChange={e => handleFilter('risk', e.target.value)}>
                         <option value="All">All Risk Levels</option>
                         <option value="Normal">Normal</option>
                         <option value="Monitor">Monitor</option>
                         <option value="Critical">Critical</option>
                     </select>
+                </div>
+                <div className="st-filter-group">
+                    <label>Coverage Level</label>
                     <select value={filters.vacc} onChange={e => handleFilter('vacc', e.target.value)}>
                         <option value="All">All Coverage Levels</option>
                         <option value="High">High Coverage (≥90%)</option>
                         <option value="Low">Low Coverage (&lt;90%)</option>
                     </select>
                 </div>
-            </div>
-
-            {/* ── Station Table ── */}
-            {loading ? (
-                <div className="st-card">
-                    <div className="st-empty">
-                        <p>Loading station data...</p>
+                <div className="st-filter-legend">
+                    <div className="st-legend-item">
+                        <span className="st-legend-dot st-legend-dot--green"></span>
+                        <span className="st-legend-value">≥90%</span> Target Met
+                    </div>
+                    <div className="st-legend-item">
+                        <span className="st-legend-dot st-legend-dot--amber"></span>
+                        <span className="st-legend-value">80–89%</span> Low
+                    </div>
+                    <div className="st-legend-item">
+                        <span className="st-legend-dot st-legend-dot--red"></span>
+                        <span className="st-legend-value">&lt;80%</span> Critical
                     </div>
                 </div>
-            ) : (
-            <div className="st-card">
-                <div className="st-card-head">
-                    <h2><MapPin size={17} /> Station Overview</h2>
-                    <Legend 
-                        categories={[
-                            {
-                                title: "Status",
-                                items: [
-                                    { label: "Normal", className: "chip-normal" },
-                                    { label: "Monitor", className: "chip-monitor" },
-                                    { label: "Critical", className: "chip-critical" }
-                                ]
-                            }
-                        ]}
-                    />
-                    <span className="st-count">{filtered.length} stations</span>
-                </div>
+            </div>
 
-                <div className="table-responsive">
-                    <table className="st-table">
-                        <thead>
-                            <tr>
-                                <th>Station</th>
-                                <th>Total Patients</th>
-                                <th>High-Risk</th>
-                                <th>Deliveries</th>
-                                <th>Vacc. Coverage</th>
-                                <th>Newborns</th>
-                                <th>Supp. Coverage</th>
-                                <th>Trimester Mix</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filtered.map(b => (
-                                <React.Fragment key={b.id}>
-                                    <tr className={`st-row ${getRiskClass(b.riskStatus)}`}>
-                                        <td>
-                                            <button className="expand-btn" onClick={() => setExpandedRow(expandedRow === b.id ? null : b.id)}>
-                                                {expandedRow === b.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                                            </button>
-                                            <div className="st-name-cell">
-                                                <div className="st-station-icon"><MapPin size={13} /></div>
-                                                <div>
-                                                    <span className="st-station-name">{b.name}</span>
-                                                    {b.alerts.length > 0 && (
-                                                        <span className="st-alert-count">{b.alerts.length} alert{b.alerts.length > 1 ? 's' : ''}</span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <span className="st-num">{b.totalPatients}</span>
-                                        </td>
-                                        <td>
-                                            <span className={`hr-num ${b.highRisk >= 10 ? 'hr-high' : b.highRisk >= 6 ? 'hr-mid' : 'hr-low'}`}>{b.highRisk}</span>
-                                        </td>
-                                        <td className="st-num">{b.recentDeliveries}</td>
-                                        <td>
-                                            <MiniBar value={b.vaccCoverage} color={b.vaccCoverage >= 90 ? '#6db8a0' : b.vaccCoverage >= 80 ? '#e8b84b' : '#e05c73'} />
-                                        </td>
-                                        <td className="st-num">{b.newborns}</td>
-                                        <td>
-                                            <MiniBar value={b.suppCoverage} color={b.suppCoverage >= 90 ? '#6db8a0' : b.suppCoverage >= 80 ? '#e8b84b' : '#e05c73'} />
-                                        </td>
-                                        <td style={{ minWidth: '100px' }}>
-                                            <TriBar b={b} />
-                                        </td>
-                                        <td>
-                                            <span className={`risk-badge ${getRiskBadge(b.riskStatus)}`}>{b.riskStatus}</span>
-                                        </td>
-                                        <td>
-                                            <div className="row-actions">
-                                                <button className="action-btn view-btn" title="View Detail" onClick={() => setSelectedStation(b)}><Eye size={13} /></button>
-                                                <button className="action-btn export-btn" title="Export Report"><Download size={13} /></button>
-                                            </div>
+            {/* ── Station Overview Table ── */}
+            {loading ? (
+                <div className="st-loading-card">
+                    <div className="st-loading-spinner"></div>
+                    <span className="st-loading-text">Loading station data...</span>
+                </div>
+            ) : (
+                <div className="st-overview-card">
+                    <div className="st-overview-header">
+                        <div className="st-overview-title-group">
+                            <h2 className="st-overview-title">
+                                <MapPin size={18} /> Station Overview
+                            </h2>
+                            <p className="st-overview-subtitle">Performance summary across {totalStations} CHO III stations</p>
+                        </div>
+                        <div className="st-overview-meta">
+                            <Legend
+                                categories={[
+                                    {
+                                        title: "Status",
+                                        items: [
+                                            { label: "Healthy", className: "chip-normal" },
+                                            { label: "Needs Attention", className: "chip-monitor" },
+                                            { label: "Critical", className: "chip-critical" }
+                                        ]
+                                    }
+                                ]}
+                            />
+                            <span className="st-station-count">{filtered.length} station{filtered.length !== 1 ? 's' : ''}</span>
+                        </div>
+                    </div>
+
+                    <div className="st-table-wrap">
+                        <table className="st-table">
+                            <thead>
+                                <tr>
+                                    <th>Station</th>
+                                    <th>Total Patients</th>
+                                    <th>High-Risk</th>
+                                    <th>Deliveries</th>
+                                    <th>Vaccination Coverage</th>
+                                    <th>Newborns</th>
+                                    <th>Supplement Coverage</th>
+                                    <th>Trimester Mix</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filtered.map(b => {
+                                    const total = b.trimester.first + b.trimester.second + b.trimester.third;
+                                    const p1 = total > 0 ? Math.round((b.trimester.first / total) * 100) : 0;
+                                    const p2 = total > 0 ? Math.round((b.trimester.second / total) * 100) : 0;
+                                    const p3 = total > 0 ? (100 - p1 - p2) : 0;
+
+                                    return (
+                                        <React.Fragment key={b.id}>
+                                            <tr>
+                                                <td>
+                                                    <div className="st-name-cell">
+                                                        <div className="st-station-icon"><MapPin size={14} /></div>
+                                                        <span className="st-station-name">{b.name}</span>
+                                                    </div>
+                                                </td>
+                                                <td><span className="st-num">{b.totalPatients.toLocaleString()}</span></td>
+                                                <td><span className="st-num st-num--risk">{b.highRisk}</span></td>
+                                                <td><span className="st-num">{b.recentDeliveries}</span></td>
+                                                <td>
+                                                    <div className="st-coverage-cell">
+                                                        <span className="st-coverage-val">{b.vaccCoverage}%</span>
+                                                        <span className={`st-coverage-dot st-coverage-dot--${getCoverageClass(b.vaccCoverage)}`}></span>
+                                                    </div>
+                                                </td>
+                                                <td><span className="st-num">{b.newborns}</span></td>
+                                                <td>
+                                                    <div className="st-coverage-cell">
+                                                        <span className="st-coverage-val">{b.suppCoverage}%</span>
+                                                        <span className={`st-coverage-dot st-coverage-dot--${getCoverageClass(b.suppCoverage)}`}></span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div className="st-trimester-pills">
+                                                        <span className="st-tri-pill st-tri-pill--1st">1st {p1}%</span>
+                                                        <span className="st-tri-pill st-tri-pill--2nd">2nd {p2}%</span>
+                                                        <span className="st-tri-pill st-tri-pill--3rd">3rd {p3}%</span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span className={`st-status-pill ${getStatusClass(b.riskStatus)}`}>
+                                                        {getStatusLabel(b.riskStatus)}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <button
+                                                        className="st-action-btn"
+                                                        title="View Detail"
+                                                        onClick={() => setSelectedStation(b)}
+                                                    >
+                                                        <Eye size={15} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+
+                                            {/* Expanded inline view */}
+                                            {expandedRow === b.id && (
+                                                <tr className="st-expanded-row">
+                                                    <td colSpan="10">
+                                                        <div className="expand-detail">
+                                                            <div className="expand-col">
+                                                                <h4>📅 Trimesters</h4>
+                                                                <p><strong>1st Trimester:</strong> {b.trimester.first}</p>
+                                                                <p><strong>2nd Trimester:</strong> {b.trimester.second}</p>
+                                                                <p><strong>3rd Trimester:</strong> {b.trimester.third}</p>
+                                                            </div>
+                                                            <div className="expand-col">
+                                                                <h4>🏥 Deliveries</h4>
+                                                                <p><strong>NSD:</strong> {b.deliveryTypes.nsd}</p>
+                                                                <p><strong>CS:</strong> {b.deliveryTypes.cs}</p>
+                                                                <p><strong>Complications:</strong> {b.complications}</p>
+                                                            </div>
+                                                            <div className="expand-col">
+                                                                <h4>👶 Newborns</h4>
+                                                                <p><strong>Total:</strong> {b.newborns}</p>
+                                                                <p><strong>Low BW:</strong> {b.lbwBabies}</p>
+                                                                <p><strong>NICU:</strong> {b.nicuBabies}</p>
+                                                            </div>
+                                                            <div className="expand-col">
+                                                                <h4>⚠ Alerts</h4>
+                                                                {b.alerts.length > 0 ? b.alerts.map((a, i) => <p key={i} className="expand-alert">{a}</p>) : <p>No alerts.</p>}
+                                                                <div className="expand-actions">
+                                                                    <button className="btn btn-outline" onClick={() => setSelectedStation(b)}>Full Report →</button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </React.Fragment>
+                                    );
+                                })}
+
+                                {filtered.length === 0 && (
+                                    <tr>
+                                        <td colSpan="10" className="st-empty">
+                                            <MapPin size={30} />
+                                            <p>No stations match your filters.</p>
                                         </td>
                                     </tr>
-
-                                    {/* Expanded inline view */}
-                                    {expandedRow === b.id && (
-                                        <tr className="st-expanded-row">
-                                            <td colSpan="10">
-                                                <div className="expand-detail">
-                                                    <div className="expand-col">
-                                                        <h4>📅 Trimesters</h4>
-                                                        <p><strong>1st Trimester:</strong> {b.trimester.first}</p>
-                                                        <p><strong>2nd Trimester:</strong> {b.trimester.second}</p>
-                                                        <p><strong>3rd Trimester:</strong> {b.trimester.third}</p>
-                                                    </div>
-                                                    <div className="expand-col">
-                                                        <h4>🏥 Deliveries</h4>
-                                                        <p><strong>NSD:</strong> {b.deliveryTypes.nsd}</p>
-                                                        <p><strong>CS:</strong> {b.deliveryTypes.cs}</p>
-                                                        <p><strong>Complications:</strong> {b.complications}</p>
-                                                    </div>
-                                                    <div className="expand-col">
-                                                        <h4>👶 Newborns</h4>
-                                                        <p><strong>Total:</strong> {b.newborns}</p>
-                                                        <p><strong>Low BW:</strong> {b.lbwBabies}</p>
-                                                        <p><strong>NICU:</strong> {b.nicuBabies}</p>
-                                                    </div>
-                                                    <div className="expand-col">
-                                                        <h4>⚠ Alerts</h4>
-                                                        {b.alerts.length > 0 ? b.alerts.map((a, i) => <p key={i} className="expand-alert">{a}</p>) : <p>No alerts.</p>}
-                                                        <div className="expand-actions">
-                                                            <button className="btn btn-outline" onClick={() => setSelectedStation(b)}>Full Report →</button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )}
-                                </React.Fragment>
-                            ))}
-
-                            {filtered.length === 0 && (
-                                <tr>
-                                    <td colSpan="10" className="st-empty">
-                                        <MapPin size={30} />
-                                        <p>No stations match your filters.</p>
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
             )}
+
+            {/* ── Footer Timestamp ── */}
+            <div className="st-footer-timestamp">
+                <Clock size={13} />
+                Data last updated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} {new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+            </div>
 
             {/* ── Detail Modal ── */}
             {selectedStation && <DetailModal station={selectedStation} onClose={() => setSelectedStation(null)} navigate={navigate} />}
@@ -358,30 +405,150 @@ const StationReports = () => {
 
 export default StationReports;
 
-/* simple inline bar chart component */
-const MiniBar = ({ value, max = 100, color = '#a0c282' }) => {
-    const pct = Math.min(100, Math.round((value / max) * 100));
-    return (
-        <div className="mini-bar-wrap">
-            <div className="mini-bar-track">
-                <div className="mini-bar-fill" style={{ width: `${pct}%`, background: color }} />
-            </div>
-            <span className="mini-bar-label">{typeof value === 'number' && value <= 100 ? `${value}%` : value}</span>
-        </div>
-    );
-};
+/* ════════════════════════════
+   CHARTS SECTION
+════════════════════════════ */
+const ChartsSection = ({ stations }) => {
+    const coverageClass = (v) => v >= 90 ? 'green' : v >= 80 ? 'amber' : 'red';
+    const maxPatients = stations.length > 0 ? Math.max(...stations.map(b => b.totalPatients)) : 1;
+    const maxHighRisk = stations.length > 0 ? Math.max(...stations.map(b => b.highRisk)) : 1;
+    const totalHighRisk = stations.reduce((sum, s) => sum + s.highRisk, 0);
 
-/* simple inline horizontal stacked bar */
-const TriBar = ({ b }) => {
-    const total = b.trimester.first + b.trimester.second + b.trimester.third;
-    const p1 = Math.round((b.trimester.first / total) * 100);
-    const p2 = Math.round((b.trimester.second / total) * 100);
-    const p3 = 100 - p1 - p2;
+    // Sort stations by vaccination coverage descending for coverage charts
+    const sortedByVacc = [...stations].sort((a, b) => b.vaccCoverage - a.vaccCoverage);
+    const sortedBySupp = [...stations].sort((a, b) => b.suppCoverage - a.suppCoverage);
+
     return (
-        <div className="tri-bar">
-            <div className="tri-seg tri-1" style={{ width: `${p1}%` }} title={`1st: ${b.trimester.first}`} />
-            <div className="tri-seg tri-2" style={{ width: `${p2}%` }} title={`2nd: ${b.trimester.second}`} />
-            <div className="tri-seg tri-3" style={{ width: `${p3}%` }} title={`3rd: ${b.trimester.third}`} />
+        <div className="st-charts-grid">
+            {/* Chart 1: Vaccination Coverage by Station */}
+            <div className="st-chart-card">
+                <div className="st-chart-header">
+                    <div className="st-chart-icon st-chart-icon--vacc">
+                        <Syringe size={18} />
+                    </div>
+                    <div className="st-chart-title-group">
+                        <h3 className="st-chart-title">Vaccination Coverage by Station</h3>
+                        <p className="st-chart-subtitle">Percentage of mothers with complete vaccination</p>
+                    </div>
+                </div>
+                <div className="st-chart-body">
+                    <div className="st-hbar-chart">
+                        {sortedByVacc.map(b => (
+                            <div key={b.id} className="st-hbar-row">
+                                <span className="st-hbar-label">{b.name.split('–')[0].trim()}</span>
+                                <div className="st-hbar-track">
+                                    <div
+                                        className={`st-hbar-fill st-hbar-fill--${coverageClass(b.vaccCoverage)}`}
+                                        style={{ width: `${b.vaccCoverage}%` }}
+                                    />
+                                </div>
+                                <span className="st-hbar-val">{b.vaccCoverage}%</span>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="st-hbar-indicator">90% Target</div>
+                </div>
+            </div>
+
+            {/* Chart 2: High-Risk Cases */}
+            <div className="st-chart-card st-chart-card--risk">
+                <div className="st-chart-header">
+                    <div className="st-chart-icon st-chart-icon--risk">
+                        <AlertTriangle size={18} />
+                    </div>
+                    <div className="st-chart-title-group">
+                        <h3 className="st-chart-title">HIGH-RISK CASES</h3>
+                        <p className="st-chart-subtitle">Total high-risk cases across all stations</p>
+                    </div>
+                </div>
+                <div className="st-chart-body">
+                    <div className="st-risk-hero">
+                        <div className="st-risk-number">{totalHighRisk}</div>
+                        <div className="st-risk-label">High-Risk Cases</div>
+                        <div className="st-risk-sub">Across {stations.length} stations</div>
+                    </div>
+                    <div className="st-risk-dist-title">Distribution by Station</div>
+                    <div className="st-vbar-chart" style={{ minHeight: '80px' }}>
+                        {stations.map(b => (
+                            <div key={b.id} className="st-vbar-col">
+                                <div className="st-vbar-bar-wrap" style={{ minHeight: '60px' }}>
+                                    <div
+                                        className="st-vbar-bar st-vbar-bar--rose"
+                                        style={{ height: `${maxHighRisk > 0 ? Math.round((b.highRisk / maxHighRisk) * 100) : 0}%` }}
+                                        title={`${b.name}: ${b.highRisk}`}
+                                    />
+                                </div>
+                                <span className="st-vbar-val">{b.highRisk}</span>
+                                <span className="st-vbar-label">{b.name.split('–')[0].trim()}</span>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="st-risk-warning">
+                        <AlertCircle size={14} />
+                        <span>High-risk mothers need priority monitoring and follow-up care.</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Chart 3: Registered Patients by Station */}
+            <div className="st-chart-card">
+                <div className="st-chart-header">
+                    <div className="st-chart-icon st-chart-icon--patients">
+                        <Users size={18} />
+                    </div>
+                    <div className="st-chart-title-group">
+                        <h3 className="st-chart-title">Registered Patients by Station</h3>
+                        <p className="st-chart-subtitle">Total number of registered patients</p>
+                    </div>
+                </div>
+                <div className="st-chart-body">
+                    <div className="st-vbar-chart">
+                        {stations.map(b => (
+                            <div key={b.id} className="st-vbar-col">
+                                <div className="st-vbar-bar-wrap">
+                                    <div
+                                        className="st-vbar-bar st-vbar-bar--purple"
+                                        style={{ height: `${maxPatients > 0 ? Math.round((b.totalPatients / maxPatients) * 100) : 0}%` }}
+                                        title={`${b.name}: ${b.totalPatients}`}
+                                    />
+                                </div>
+                                <span className="st-vbar-val">{b.totalPatients.toLocaleString()}</span>
+                                <span className="st-vbar-label">{b.name.split('–')[0].trim()}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Chart 4: Supplement Coverage by Station */}
+            <div className="st-chart-card">
+                <div className="st-chart-header">
+                    <div className="st-chart-icon st-chart-icon--supp">
+                        <Pill size={18} />
+                    </div>
+                    <div className="st-chart-title-group">
+                        <h3 className="st-chart-title">Supplement Coverage by Station</h3>
+                        <p className="st-chart-subtitle">Percentage of mothers who received complete supplements</p>
+                    </div>
+                </div>
+                <div className="st-chart-body">
+                    <div className="st-hbar-chart">
+                        {sortedBySupp.map(b => (
+                            <div key={b.id} className="st-hbar-row">
+                                <span className="st-hbar-label">{b.name.split('–')[0].trim()}</span>
+                                <div className="st-hbar-track">
+                                    <div
+                                        className={`st-hbar-fill st-hbar-fill--${coverageClass(b.suppCoverage)}`}
+                                        style={{ width: `${b.suppCoverage}%` }}
+                                    />
+                                </div>
+                                <span className="st-hbar-val">{b.suppCoverage}%</span>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="st-hbar-indicator">90% Target</div>
+                </div>
+            </div>
         </div>
     );
 };
@@ -411,7 +578,7 @@ const DetailModal = ({ station, onClose, navigate }) => {
         { id: 'alerts',     label: `Alerts (${station.alerts.length})`, icon: AlertTriangle },
     ];
 
-    const coverageColor = (v) => v >= 90 ? '#a0c282' : v >= 80 ? '#edbd9a' : '#b68191';
+    const coverageColor = (v) => v >= 90 ? '#7bae5e' : v >= 80 ? '#d4a03c' : '#c7586a';
 
     return (
         <div className="modal-backdrop" onClick={onClose}>
@@ -543,9 +710,9 @@ const DetailModal = ({ station, onClose, navigate }) => {
                                 <h4>Newborn Condition Distribution</h4>
                                 <div className="nb-status-bars">
                                     {[
-                                        { label: 'Healthy', count: station.newborns - station.lbwBabies - station.nicuBabies, total: station.newborns, color: '#a0c282' },
-                                        { label: 'Low Birth Weight', count: station.lbwBabies, total: station.newborns, color: '#edbd9a' },
-                                        { label: 'NICU', count: station.nicuBabies, total: station.newborns, color: '#b68191' },
+                                        { label: 'Healthy', count: station.newborns - station.lbwBabies - station.nicuBabies, total: station.newborns, color: '#7bae5e' },
+                                        { label: 'Low Birth Weight', count: station.lbwBabies, total: station.newborns, color: '#d4a03c' },
+                                        { label: 'NICU', count: station.nicuBabies, total: station.newborns, color: '#c7586a' },
                                     ].map(item => (
                                         <div key={item.label} className="nb-status-bar-row">
                                             <label>{item.label} ({item.count})</label>
@@ -597,128 +764,20 @@ const DetailModal = ({ station, onClose, navigate }) => {
                         {showExportMenu && (
                             <div className="export-dropdown" style={{
                                 position: 'absolute', bottom: '100%', right: 0, marginBottom: '8px',
-                                background: '#fff', border: '1px solid #eaeaea', borderRadius: '8px',
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '8px',
-                                display: 'flex', flexDirection: 'column', gap: '4px', zIndex: 100, minWidth: '150px'
+                                background: '#fff', border: '1px solid rgba(185,129,138,0.15)', borderRadius: '12px',
+                                boxShadow: '0 8px 24px rgba(45,34,52,0.1)', padding: '6px',
+                                display: 'flex', flexDirection: 'column', gap: '2px', zIndex: 100, minWidth: '160px'
                             }}>
-                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
+                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '10px 14px', width: '100%', display: 'flex', alignItems: 'center', borderRadius: '8px' }}>
                                     <Download size={14} style={{ marginRight: '8px' }} /> Excel (.xlsx)
                                 </button>
-                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
+                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '10px 14px', width: '100%', display: 'flex', alignItems: 'center', borderRadius: '8px' }}>
                                     <Download size={14} style={{ marginRight: '8px' }} /> PDF (.pdf)
                                 </button>
                             </div>
                         )}
                     </div>
                     <button className="btn btn-primary"><FileText size={14} /> Generate Full Report</button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-/* ════════════════════════════
-   CHARTS SECTION
-════════════════════════════ */
-const ChartsSection = ({ stations }) => {
-    const coverageColor = (v) => v >= 90 ? '#a0c282' : v >= 80 ? '#edbd9a' : '#b68191';
-    const maxPatients = Math.max(...stations.map(b => b.totalPatients));
-    const maxHighRisk = Math.max(...stations.map(b => b.highRisk));
-
-    return (
-        <div className="charts-grid">
-            {/* Chart 1: Vaccination Coverage by Station */}
-            <div className="chart-card">
-                <h3 className="chart-title"><Syringe size={15} /> Vaccination Coverage by Station</h3>
-                <div className="bar-chart-v">
-                    {stations.map(b => (
-                        <div key={b.id} className="bar-chart-col">
-                            <div className="bar-chart-bar-wrap">
-                                <div
-                                    className="bar-chart-bar"
-                                    style={{
-                                        height: `${b.vaccCoverage}%`,
-                                        background: coverageColor(b.vaccCoverage)
-                                    }}
-                                    title={`${b.name}: ${b.vaccCoverage}%`}
-                                />
-                            </div>
-                            <span className="bar-chart-val">{b.vaccCoverage}%</span>
-                            <span className="bar-chart-label">{b.name.split('–')[0].trim()}</span>
-                        </div>
-                    ))}
-                </div>
-                <div className="chart-legend">
-                    <span className="cleg cleg--green">≥90% Target met</span>
-                    <span className="cleg cleg--yellow">80–89% Low</span>
-                    <span className="cleg cleg--red">&lt;80% Critical</span>
-                </div>
-            </div>
-
-            {/* Chart 2: High-Risk Cases by Station */}
-            <div className="chart-card">
-                <h3 className="chart-title"><AlertTriangle size={15} /> High-Risk Cases by Station</h3>
-                <div className="horiz-bar-chart">
-                    {stations.map(b => (
-                        <div key={b.id} className="horiz-bar-row">
-                            <span className="horiz-label">{b.name.split('–')[0].trim()}</span>
-                            <div className="horiz-track">
-                                <div
-                                    className="horiz-fill"
-                                    style={{
-                                        width: `${Math.round((b.highRisk / maxHighRisk) * 100)}%`,
-                                        background: b.highRisk >= 10 ? '#b68191' : b.highRisk >= 6 ? '#edbd9a' : '#a0c282'
-                                    }}
-                                />
-                            </div>
-                            <span className="horiz-val">{b.highRisk}</span>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {/* Chart 3: Total Patients by Station */}
-            <div className="chart-card">
-                <h3 className="chart-title"><Users size={15} /> Total Patients by Station</h3>
-                <div className="horiz-bar-chart">
-                    {stations.map(b => (
-                        <div key={b.id} className="horiz-bar-row">
-                            <span className="horiz-label">{b.name.split('–')[0].trim()}</span>
-                            <div className="horiz-track">
-                                <div
-                                    className="horiz-fill"
-                                    style={{
-                                        width: `${Math.round((b.totalPatients / maxPatients) * 100)}%`,
-                                        background: '#ac97b4'
-                                    }}
-                                />
-                            </div>
-                            <span className="horiz-val">{b.totalPatients}</span>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {/* Chart 4: Supplement Coverage */}
-            <div className="chart-card">
-                <h3 className="chart-title"><Pill size={15} /> Supplement Coverage by Station</h3>
-                <div className="bar-chart-v">
-                    {stations.map(b => (
-                        <div key={b.id} className="bar-chart-col">
-                            <div className="bar-chart-bar-wrap">
-                                <div
-                                    className="bar-chart-bar"
-                                    style={{
-                                        height: `${b.suppCoverage}%`,
-                                        background: coverageColor(b.suppCoverage)
-                                    }}
-                                    title={`${b.name}: ${b.suppCoverage}%`}
-                                />
-                            </div>
-                            <span className="bar-chart-val">{b.suppCoverage}%</span>
-                            <span className="bar-chart-label">{b.name.split('–')[0].trim()}</span>
-                        </div>
-                    ))}
                 </div>
             </div>
         </div>
