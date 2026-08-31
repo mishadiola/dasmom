@@ -1,45 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Baby, Heart, ShieldCheck, ChevronRight, Calendar, 
     MapPin, User, Stethoscope, Activity, X 
 } from 'lucide-react';
 import '../../styles/pages/PregnancyDeliveryInfo.css';
-
-// ─── DUMMY DATA ──────────────────────────────────────────────────────────
-const DUMMY_DELIVERIES = [
-    {
-        id: 1,
-        delivery_date: '2025-03-18T08:30:00',
-        outcome: 'Live Birth',
-        delivery_type: 'Normal Spontaneous Delivery',
-        health_station: 'Dasma I Health Station',
-        healthcare_provider: 'Healthcare Worker',
-        baby_gender: 'Baby Girl',
-        birth_weight: '3.1 kg',
-        status: 'Healthy',
-        complications: 'None',
-        notes: 'Mother and baby are in stable condition.'
-    },
-    {
-        id: 2,
-        delivery_date: '2023-11-07T14:15:00',
-        outcome: 'Live Birth',
-        delivery_type: 'Normal Spontaneous Delivery',
-        health_station: 'Dasma II Health Station',
-        healthcare_provider: 'Healthcare Worker',
-        baby_gender: 'Baby Boy',
-        birth_weight: '3.0 kg',
-        status: 'Healthy',
-        complications: 'None',
-        notes: 'Routine delivery. No complications.'
-    }
-];
+import AuthService from '../../services/authservice';
+import { loadMotherPatient } from '../../services/motherOfflineService';
 
 const PregnancyDeliveryInfo = () => {
     const [selectedDelivery, setSelectedDelivery] = useState(null);
+    const [pastPregnancies, setPastPregnancies] = useState([]);
 
-    // Using dummy data as requested
-    const pastPregnancies = DUMMY_DELIVERIES;
+    useEffect(() => {
+        const loadDeliveries = async () => {
+            const authUser = await new AuthService().getAuthUser();
+            const patient = await loadMotherPatient(authUser);
+            setPastPregnancies(patient?.deliveries || []);
+        };
+        loadDeliveries().catch((error) => console.error('Failed to load delivery records:', error));
+    }, []);
 
     const formatDateBadge = (dateString) => {
         const date = new Date(dateString);

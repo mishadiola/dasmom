@@ -1,15 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     User, Lock, Bell, HelpCircle, LogOut, 
     Shield, ChevronRight, Clock, Mail, Phone, ExternalLink, ArrowLeft
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useModal } from '../../context/ModalContext';
+import AuthService from '../../services/authservice';
+import { loadMotherPatient } from '../../services/motherOfflineService';
+import { requestNotificationPermission } from '../../services/notificationservice';
 import '../../styles/pages/UserSettings.css';
 
 const UserSettings = () => {
     const navigate = useNavigate();
     const { alert: customAlert } = useModal();
+    const [userProfile, setUserProfile] = useState(null);
+
+    useEffect(() => {
+        const loadProfile = async () => {
+            try {
+                const auth = new AuthService();
+                const authUser = await auth.getAuthUser();
+                if (!authUser?.id) return;
+                const patient = await loadMotherPatient(authUser);
+                setUserProfile({
+                    name: `${patient?.first_name || ''} ${patient?.last_name || ''}`.trim() || authUser.fullName || 'Mother',
+                    dob: patient?.date_of_birth || '',
+                    station: patient?.station || 'Health Station',
+                    address: patient?.house_no ? `${patient.house_no}, ${patient.municipality || ''}`.trim() : 'N/A',
+                    lastLogin: new Date().toLocaleString('en-PH')
+                });
+            } catch (err) {
+                console.error('Failed to load user settings profile:', err);
+            }
+        };
+        loadProfile();
+    }, []);
 
     // Notification states
     const [notifs, setNotifs] = useState({
@@ -24,17 +49,30 @@ const UserSettings = () => {
         confirm: ''
     });
 
-    const userData = {
-        name: "Mish Diola",
-        dob: "June 12, 1997",
-        age: 28,
-        station: "Poblacion Uno",
-        address: "123 Mabini St., Poblacion Uno, Dasmariñas City",
-        lastLogin: "March 07, 2026 at 2:45 PM"
+    const userData = userProfile || {
+        name: 'Mother',
+        dob: '',
+        age: '',
+        station: 'Health Station',
+        address: 'N/A',
+        lastLogin: new Date().toLocaleString('en-PH')
     };
 
     const handleLogout = () => {
-        navigate('/');
+        navigate('/mother-login');
+    };
+
+    const handleNotificationToggle = async (key) => {
+        const nextState = !notifs[key];
+        setNotifs({ ...notifs, [key]: nextState });
+
+        if (nextState) {
+            const result = await requestNotificationPermission();
+            if (!result.granted) {
+                setNotifs({ ...notifs, [key]: false });
+                await customAlert({ title: 'Permission needed', text: 'Notifications were not enabled. You can allow them later in Settings to receive reminders.', iconType: 'warning' });
+            }
+        }
     };
 
     const handlePasswordChange = async (e) => {
@@ -157,7 +195,7 @@ const UserSettings = () => {
                                 <input 
                                     type="checkbox" 
                                     checked={notifs.appointments}
-                                    onChange={() => setNotifs({...notifs, appointments: !notifs.appointments})}
+                                    onChange={() => handleNotificationToggle('appointments')}
                                 />
                                 <span className="slider round"></span>
                             </label>
@@ -171,7 +209,7 @@ const UserSettings = () => {
                                 <input 
                                     type="checkbox" 
                                     checked={notifs.vaccinations}
-                                    onChange={() => setNotifs({...notifs, vaccinations: !notifs.vaccinations})}
+                                    onChange={() => handleNotificationToggle('vaccinations')}
                                 />
                                 <span className="slider round"></span>
                             </label>

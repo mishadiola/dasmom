@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import AuthService from '../../services/authservice';
-import PatientService from '../../services/patientservice';
+import { loadMotherPatient } from '../../services/motherOfflineService';
 import '../../styles/pages/UserAccount.css';
 import { formatMotherId } from '../../utils/displayIds';
 
@@ -43,7 +43,6 @@ const UserAccount = () => {
     const [userData, setUserData] = useState(null);
     const [newborns, setNewborns] = useState([]);
     const authService = new AuthService();
-    const patientService = new PatientService();
 
     useEffect(() => {
         const loadUserData = async () => {
@@ -56,7 +55,7 @@ const UserAccount = () => {
                     return;
                 }
 
-                const patient = await patientService.getPatientById(authUser.id);
+                const patient = await loadMotherPatient(authUser);
                 if (!patient) {
                     setError('Patient data not found');
                     return;

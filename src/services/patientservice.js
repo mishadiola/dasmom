@@ -1876,6 +1876,22 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       .eq('mother_id', patientId)
       .order('created_at', { ascending: false });
 
+    const newbornIds = (newbornsData || []).map(newborn => newborn.id).filter(Boolean);
+    let newbornVaccinationsData = [];
+    if (newbornIds.length > 0) {
+      const { data: newbornVaccinations } = await this.supabase
+        .from('vaccinations')
+        .select(`
+          *,
+          vaccine_inventory (
+            vaccine_name
+          )
+        `)
+        .in('newborn_id', newbornIds)
+        .order('created_at', { ascending: false });
+      newbornVaccinationsData = newbornVaccinations || [];
+    }
+
     const preg = pregnancyData?.[0] || {};
     const rawEmergencyContact = patientData.emergency_contact || {};
     const emergencyContact = {
@@ -1914,6 +1930,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         status: normalizeVisitStatus(visit)
       })),
       vaccines: (vaccinesData || []).map(v => ({
+        id: v.id,
         vaccine_name: v.vaccine_inventory?.vaccine_name || 'Unknown',
         dose_number: v.dose_number,
         vaccinated_date: v.vaccinated_date,
@@ -1935,7 +1952,18 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         birth_date: n.created_at ? new Date(n.created_at).toISOString().split('T')[0] : null,
         birth_weight: n.birth_weight,
         birth_length: n.birth_length,
-        condition: n.condition_at_birth
+        condition: n.condition_at_birth,
+        vaccines: newbornVaccinationsData
+          .filter(vaccine => vaccine.newborn_id === n.id)
+          .map(vaccine => ({
+            id: vaccine.id,
+            vaccine_name: vaccine.vaccine_inventory?.vaccine_name || 'Unknown',
+            dose_number: vaccine.dose_number,
+            vaccinated_date: vaccine.vaccinated_date,
+            scheduled_vaccination: vaccine.scheduled_vaccination,
+            status: vaccine.status,
+            notes: vaccine.notes
+          }))
       })),
       deliveries: (deliveriesData || []).map(d => ({
         id: d.id,
@@ -2980,7 +3008,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           birthDate: newborn.deliveries.delivery_date,
           pendingVaccines: pendingVaccs.map(v => `${v.vaccine_inventory?.vaccine_name || 'Unknown'} (Dose ${v.dose_number}) - ${v.scheduled_vaccination}`).join(', ')
         };
-      }).filter(item => item.pendingVaccines); // only show if has pending
+      }).filter(item => item.pendingVaccines); 
 
       return result.sort((a, b) => new Date(b.birthDate) - new Date(a.birthDate));
     } catch (error) {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import AuthService from '../../services/authservice';
-import PatientService from '../../services/patientservice';
+import { loadMotherPatient } from '../../services/motherOfflineService';
 import { 
     Activity, Heart, Thermometer, Weight, TrendingUp, 
     Download, ArrowLeft, Filter, AlertCircle, 
@@ -22,11 +22,10 @@ const MyVitals = () => {
     useEffect(() => {
         const loadVitals = async () => {
             const auth = new AuthService();
-            const patientService = new PatientService();
             try {
                 const authUser = await auth.getAuthUser();
                 if (!authUser?.id) return;
-                const patient = await patientService.getPatientById(authUser.id);
+                const patient = await loadMotherPatient(authUser);
                 // Only include visits that have actual vital records (not pending/incomplete)
                 const visits = (patient?.visits || [])
                     .filter(v => v.visit_date && (v.weight_kg || (v.bp_systolic && v.bp_diastolic) || v.pulse_bpm || v.temp_c))

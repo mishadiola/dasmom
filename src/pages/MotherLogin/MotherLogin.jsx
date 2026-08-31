@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { 
     Mail, Lock, Eye, EyeOff, Loader2, 
     Calendar, Activity, Heart, Baby, ArrowLeft
@@ -10,6 +10,9 @@ import AuthService from '../../services/authservice';
 import { AuthContext } from '../../context/AuthContext';
 import { useModal } from '../../context/ModalContext';
 import supabase from '../../config/supabaseclient';
+import InstallAppModal from '../../components/InstallAppModal';
+import { shouldPromptInstall, persistMotherOfflineData } from '../../services/notificationservice';
+import PatientService from '../../services/patientservice';
 
 const MotherLogin = () => {
     const navigate = useNavigate();
@@ -21,6 +24,44 @@ const MotherLogin = () => {
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [showInstallModal, setShowInstallModal] = useState(false);
+    const [deferredPrompt, setDeferredPrompt] = useState(null);
+    useEffect(() => {
+        const installDismissed = localStorage.getItem('dasmom-install-dismissed');
+        if (installDismissed === 'true') return;
+
+        const handleBeforeInstallPrompt = (event) => {
+            event.preventDefault();
+            setDeferredPrompt(event);
+            setShowInstallModal(shouldPromptInstall());
+        };
+
+        const canInstall = shouldPromptInstall();
+        if (canInstall) {
+            setShowInstallModal(true);
+        }
+
+        window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+        return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    }, []);
+
+    const handleInstallApp = async () => {
+        if (!deferredPrompt) {
+            setShowInstallModal(false);
+            localStorage.setItem('dasmom-install-dismissed', 'true');
+            return;
+        }
+
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        setShowInstallModal(false);
+        localStorage.setItem('dasmom-install-dismissed', 'true');
+    };
+
+    const handleInstallClose = () => {
+        setShowInstallModal(false);
+        localStorage.setItem('dasmom-install-dismissed', 'true');
+    };
 
     const handleForgotPassword = async (event) => {
         event.preventDefault();
@@ -57,6 +98,10 @@ const MotherLogin = () => {
             return;
         }
 
+        const patientService = new PatientService();
+        const patient = await patientService.getPatientById(user.id);
+        await persistMotherOfflineData(patient, user);
+
         setUser(user);
         const route = authService.getRedirectRoute(user.role);
         navigate(route);
@@ -76,6 +121,13 @@ const MotherLogin = () => {
     ];
 
     return (
+        <>
+        <InstallAppModal
+            isOpen={showInstallModal}
+            onInstall={handleInstallApp}
+            onClose={handleInstallClose}
+            isDesktop={window.innerWidth > 1024 && !('beforeinstallprompt' in window)}
+        />
         <div className="ml-container">
             <div className="ml-background"></div>
             
@@ -189,6 +241,7 @@ const MotherLogin = () => {
                 </div>
             </main>
         </div>
+        </>
     );
 };
 

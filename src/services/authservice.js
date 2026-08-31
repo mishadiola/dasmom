@@ -1,6 +1,7 @@
 
 import supabase from '../config/supabaseclient';
 import { getRoleConfig } from '../config/roleConfig';
+import { clearMotherOfflineData } from './notificationservice';
 
 export default class AuthService {
   constructor() {
@@ -152,7 +153,6 @@ export default class AuthService {
       return { id: functionData.userId };
     }
 
-    // Save current admin session BEFORE creating new auth account
     const currentSessionRes = await this._withTimeout(this.supabase.auth.getSession(), 5000);
     const adminSession = currentSessionRes?.data?.session;
 
@@ -411,6 +411,7 @@ export default class AuthService {
 
   async logout() {
     await this.supabase.auth.signOut();
+    await clearMotherOfflineData();
     this.clearUser();
     console.log('User logged out');
   }

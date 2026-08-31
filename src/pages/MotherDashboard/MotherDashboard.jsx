@@ -10,7 +10,9 @@ import '../../styles/pages/MotherDashboard.css';
 import PregnancyProgressCard from '../../components/MotherDashboard/PregnancyProgressCard';
 import WelcomeMotherModal from '../../components/MotherDashboard/WelcomeMotherModal';
 import AuthService from '../../services/authservice';
-import PatientService from '../../services/patientservice';
+import { loadMotherPatient } from '../../services/motherOfflineService';
+import { scheduleMotherReminders } from '../../services/notificationservice';
+import { buildMotherScheduleItems } from '../../utils/motherSchedule';
 import pregnancySilhouette from '../../assets/images/pregnancy-silhouette.png';
 
 const MotherDashboard = () => {
@@ -32,7 +34,6 @@ const MotherDashboard = () => {
 
     useEffect(() => {
         const auth = new AuthService();
-        const patientService = new PatientService();
 
         const load = async () => {
             setLoading(true);
@@ -48,8 +49,11 @@ const MotherDashboard = () => {
                     }
                 }
 
-                const patient = await patientService.getPatientById(authUser.id);
+                const patient = await loadMotherPatient(authUser);
+
                 if (patient) {
+                    await scheduleMotherReminders(patient, authUser);
+
                     if (patient.lmp) {
                     // Calculate weeks pregnant from LMP
                     const lmpDate = new Date(patient.lmp);
@@ -78,22 +82,20 @@ const MotherDashboard = () => {
                     });
                     }
                     
-                    // map visits to appointment-like objects for display (next 3 upcoming)
-                    const now = new Date();
-                    const appts = (patient.visits || [])
-                        .filter(v => v.visit_date && new Date(v.visit_date) >= now)
-                        .sort((a, b) => new Date(a.visit_date) - new Date(b.visit_date))
+                    const upcomingSchedule = buildMotherScheduleItems(patient)
+                        .filter(item => !item.date || new Date(item.date) >= new Date())
+                        .sort((a, b) => new Date(a.date) - new Date(b.date))
                         .slice(0, 3)
-                        .map(v => ({
-                            id: v.id,
-                            date: v.visit_date,
-                            time: new Date(v.visit_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-                            type: v.next_appt_type || 'Prenatal Checkup',
-                            staff: (v.assigned_staff && v.assigned_staff.length === 36 && v.assigned_staff.includes('-')) ? 'Healthcare Worker' : (v.assigned_staff || 'Healthcare Worker'),
-                            status: v.status || 'Scheduled',
-                            location: patient.station || ''
+                        .map(item => ({
+                            id: item.id,
+                            date: item.date,
+                            time: item.time || (new Date(item.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })),
+                            type: item.type,
+                            staff: 'Assigned by health staff',
+                            status: item.status || 'Scheduled',
+                            location: item.location || patient.station || ''
                         }));
-                    setAppointments(appts);
+                    setAppointments(upcomingSchedule);
 
                     const latestDelivery = (patient.deliveries || [])[0];
                     if (latestDelivery?.postpartum_visit_date || latestDelivery?.postpartum_attended_date) {

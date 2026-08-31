@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import AuthService from '../../services/authservice';
-import PatientService from '../../services/patientservice';
+import { loadMotherPatient } from '../../services/motherOfflineService';
 import { 
     Syringe, Search, Filter, Calendar, 
     CheckCircle2, Clock, AlertCircle, 
@@ -22,11 +22,10 @@ const UserVaccinations = () => {
     useEffect(() => {
         const load = async () => {
             const auth = new AuthService();
-            const ps = new PatientService();
             try {
                 const authUser = await auth.getAuthUser();
                 if (!authUser?.id) return;
-                const patient = await ps.getPatientById(authUser.id);
+                const patient = await loadMotherPatient(authUser);
                 
                 // Combine mother's vaccines and children's vaccines
                 let allVaccines = [];

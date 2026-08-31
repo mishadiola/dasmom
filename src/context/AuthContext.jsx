@@ -1,6 +1,7 @@
 import { createContext, useState, useEffect } from 'react';
 import AuthService from '../services/authservice';
 import supabase from '../config/supabaseclient';
+import { loadMotherOfflineData } from '../services/notificationservice';
 
 export const AuthContext = createContext({
   user: null,
@@ -27,15 +28,17 @@ export const AuthProvider = ({ children }) => {
         
         if (sessionError || !session?.user) {
           // No valid session - don't auto-restore user
+          const offlineSnapshot = await loadMotherOfflineData();
           if (isMounted) {
-            setUser(null);
-            console.log('AuthContext: No active session, user not loaded');
+            setUser(offlineSnapshot?.user || null);
+            console.log('AuthContext: Restored mother from native offline snapshot');
           }
         } else {
           // Valid session exists - load full user data
           const current = await authService.getAuthUser();
           if (isMounted) {
-            setUser(current);
+            const offlineSnapshot = current ? null : await loadMotherOfflineData();
+            setUser(current || offlineSnapshot?.user || null);
             console.log('AuthContext: User loaded from active session', current);
           }
         }

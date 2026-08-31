@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import AuthService from '../../services/authservice';
-import PatientService from '../../services/patientservice';
+import { loadMotherPatient } from '../../services/motherOfflineService';
 import { 
     Calendar as CalendarIcon, List, ChevronLeft, ChevronRight, 
     Clock, ArrowLeft, Download, Printer, X,
@@ -9,6 +9,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/MyAppointments.css';
 import appointmentSilhouette from '../../assets/images/appointments-silhouette.png';
+import { buildMotherScheduleItems } from '../../utils/motherSchedule';
 
 const toLocalDateStr = (d) => {
     const offset = d.getTimezoneOffset() * 60000;
@@ -59,68 +60,28 @@ const MyAppointments = () => {
     useEffect(() => {
         const loadAppointments = async () => {
             const auth = new AuthService();
-            const patientService = new PatientService();
             try {
                 const authUser = await auth.getAuthUser();
                 if (!authUser?.id) return;
 
-                const patient = await patientService.getPatientById(authUser.id);
+                const patient = await loadMotherPatient(authUser);
                 if (!patient) {
                     setAppointmentsData([]);
                     return;
                 }
 
-                const visitAppts = (patient.visits || [])
-                    .filter(v => v.visit_date)
-                    .map(v => ({
-                        id: v.id,
-                        date: v.visit_date,
-                        time: v.visit_date ? new Date(v.visit_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '',
-                        type: 'Prenatal',
-                        status: v.status || 'Scheduled',
-                        location: sanitizeUUID(patient.station, 'Health Station'),
-                        notes: v.clinical_notes || '',
-                        color: 'green'
-                    }));
-
-                const vacAppts = (patient.vaccines || [])
-                    .filter(v => v.scheduled_vaccination || v.vaccinated_date)
-                    .map((v, idx) => ({
-                        id: v.id || `vac-${idx}`,
-                        date: v.scheduled_vaccination || v.vaccinated_date,
-                        time: '',
-                        type: 'Vaccination',
-                        status: v.status || 'Scheduled',
-                        location: sanitizeUUID(patient.station, 'Health Station'),
-                        notes: sanitizeUUID(v.notes || v.vaccine_name, 'Vaccination'),
-                        color: 'yellow'
-                    }));
-
-                const postpartumAppts = (patient.deliveries || [])
-                    .filter(d => d.postpartum_visit_date || d.postpartum_attended_date)
-                    .map((d, idx) => {
-                        const status = getPostpartumStatus(d);
-                        const date = d.postpartum_attended_date || d.postpartum_visit_date;
-                        return {
-                            id: d.id || `postpartum-${idx}`,
-                            date,
-                            scheduledDate: d.postpartum_visit_date,
-                            attendedDate: d.postpartum_attended_date,
-                            time: '',
-                            type: 'Postpartum',
-                            status,
-                            location: sanitizeUUID(patient.station, 'Health Station'),
-                            notes: status === 'Completed'
-                                ? 'Postpartum follow-up attended'
-                                : status === 'Missed'
-                                    ? 'Postpartum follow-up was not attended'
-                                    : 'Postpartum follow-up scheduled',
-                            assessment: d.postpartum_remarks,
-                            color: 'pink'
-                        };
-                    });
-
-                const combined = [...visitAppts, ...vacAppts, ...postpartumAppts];
+                const combined = buildMotherScheduleItems(patient).map((item) => ({
+                    id: item.id,
+                    date: item.date,
+                    time: item.time || '',
+                    type: item.type,
+                    status: item.status || 'Scheduled',
+                    location: sanitizeUUID(item.location || patient.station, 'Health Station'),
+                    notes: item.notes || item.label || '',
+                    color: item.type === 'Prenatal' ? 'green' : item.type === 'Vaccination' ? 'yellow' : 'pink',
+                    scheduledDate: item.date,
+                    assessment: item.notes || ''
+                }));
                 setAppointmentsData(combined);
             } catch (err) {
                 console.error('Failed to load appointments:', err);
