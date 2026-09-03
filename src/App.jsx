@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
 import { AuthProvider } from './context/AuthContext';
 import { ModalProvider } from './context/ModalContext';
@@ -40,11 +40,26 @@ import Inventory from './pages/Inventory/Inventory';
 
 import './App.css';
 
+function AnalyticsTracker() {
+  const location = useLocation();
+
+  React.useEffect(() => {
+    if (typeof window.gtag === 'function') {
+      window.gtag('event', 'page_view', {
+        page_path: `${location.pathname}${location.search}${location.hash}`,
+      });
+    }
+  }, [location]);
+
+  return null;
+}
+
 function App() {
   return (
     <AuthProvider>
       <ModalProvider>
         <BrowserRouter>
+          <AnalyticsTracker />
           <Routes>
 
           {/* PUBLIC ROUTES */}
