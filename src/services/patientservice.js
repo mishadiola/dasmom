@@ -291,11 +291,14 @@ export default class PatientService {
         .order('delivery_date', { ascending: false });
       if (err4) throw err4;
 
-      // Build a map of patients who have delivered (postpartum)
-      const deliveredPatients = new Set();
+      // Keep the latest delivery date so postpartum status is limited to 42 days.
+      const deliveredPatients = new Map();
       (deliveries || []).forEach(d => {
-        if (d.mother_id) {
-          deliveredPatients.add(d.mother_id);
+        if (d.mother_id && d.delivery_date) {
+          const existing = deliveredPatients.get(d.mother_id);
+          if (!existing || new Date(d.delivery_date) > new Date(existing)) {
+            deliveredPatients.set(d.mother_id, d.delivery_date);
+          }
         }
       });
 
@@ -337,8 +340,13 @@ export default class PatientService {
         const daysOverdue = isEddPassed ? Math.ceil((today - edd) / (1000 * 60 * 60 * 24)) : 0;
         const isMissedDelivery = isEddPassed && daysOverdue > 7 && pregnancyStatus === 'pregnant';
         
-        // Check if patient has delivered (postpartum)
-        const hasDelivered = deliveredPatients.has(p.id);
+        // Postpartum follow-up is the 42 days after the latest delivery.
+        const deliveryDate = deliveredPatients.get(p.id) ? new Date(deliveredPatients.get(p.id)) : null;
+        const postpartumDays = deliveryDate && !Number.isNaN(deliveryDate.getTime())
+          ? Math.floor((today - deliveryDate) / (1000 * 60 * 60 * 24))
+          : null;
+        const hasDelivered = postpartumDays !== null && postpartumDays >= 0;
+        const isPostpartum = hasDelivered && postpartumDays <= 42;
         
         const archiveState = this.getArchiveStateFromPatient(p);
 
@@ -346,8 +354,10 @@ export default class PatientService {
         let archiveStatus = 'active';
         if (archiveState === 'archived') {
           archiveStatus = 'archived';
-        } else if (hasDelivered) {
+        } else if (isPostpartum) {
           archiveStatus = 'postpartum';
+        } else if (hasDelivered) {
+          archiveStatus = 'archived';
         } else if (isMissedDelivery) {
           archiveStatus = 'missed_delivery';
         } else if (pregnancyStatus !== 'pregnant') {
@@ -375,6 +385,7 @@ export default class PatientService {
           archiveStatus,
           pregnancyStatus,
           pregnancyOutcome: pgi?.miscarriage_info?.outcome || (pregnancyStatus === 'postpartum' ? 'Live Birth' : null),
+          postpartumDays: isPostpartum ? postpartumDays : null,
           daysOverdue: isMissedDelivery ? daysOverdue : 0
         };
       };
@@ -1606,8 +1617,10 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           first_name,
           last_name,
           station_ass,
+          municipality,
           date_of_birth,
-          created_at
+          created_at,
+          stations:station_ass(station_name)
         )
       `)
       .order('visit_date', { ascending: false });

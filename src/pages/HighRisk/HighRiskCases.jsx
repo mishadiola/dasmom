@@ -192,7 +192,7 @@ const HighRiskCases = () => {
             name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unnamed Patient',
             first_name: p.first_name,
             last_name: p.last_name,
-            station: p.barangay || p.municipality || 'Unassigned',
+            station: p.station || p.barangay || p.municipality || 'Unassigned',
             age: ageNum,
             riskLevel: isHighRisk ? 'High Risk' : (p.riskLevel || 'High Risk'),
             condition: conditionDisplay,

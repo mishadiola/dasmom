@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import supabase from '../../config/supabaseclient';
 import '../../styles/pages/Analytics.css';
 import * as XLSX from 'xlsx';
+import StaffPerformanceReport from '../../components/StaffPerformanceReport';
 
 /* ════════════════════════════════════════════════════════════════
    ERROR BOUNDARY — catches render crashes and shows fallback UI
@@ -95,6 +96,14 @@ const normalizeStation = (barangay) => {
     return STATIONS[index + 1]; // Skip 'All Stations'
 };
 
+const formatPercentChange = (current, previous) => {
+    if (!previous) return current ? '+100.0%' : '+0.0%';
+    const change = ((current - previous) / previous) * 100;
+    return `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`;
+};
+
+const isWithin = (date, start, end) => date >= start && date < end;
+
 const Analytics = () => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'maternal' | 'vaccination' | 'delivery'
@@ -132,9 +141,9 @@ const Analytics = () => {
                     { data: deliveries },
                     { data: vaccinations }
                 ] = await Promise.all([
-                    supabase.from('patient_basic_info').select('id, first_name, last_name, barangay, date_of_birth, created_at'),
+                    supabase.from('patient_basic_info').select('id, first_name, last_name, barangay, station_ass, stations:station_ass(station_name), date_of_birth, created_at'),
                     supabase.from('pregnancy_info').select('patient_id, pregn_postp, lmd, edd, risk_level, gravida, para, created_at'),
-                    supabase.from('prenatal_visits').select('id, patient_id, visit_date, status, risk_factors, next_appt_date'),
+                    supabase.from('prenatal_visits').select('id, patient_id, visit_date, status, calculated_risk, risk_factors, next_appt_date, next_appt_type'),
                     supabase.from('deliveries').select('id, mother_id, delivery_date, delivery_type, complications, risk_level'),
                     supabase.from('vaccinations').select('id, patient_id, newborn_id, status, dose_number, scheduled_vaccination, vaccinated_date')
                 ]);
@@ -217,6 +226,7 @@ const Analytics = () => {
                 trimester: tri,
                 risk: riskGroup,
                 status: p.pregn_postp,
+                created_at: p.created_at,
                 lmd: p.lmd,
                 risk_factors: visit.risk_factors || ''
             };
@@ -224,7 +234,7 @@ const Analytics = () => {
 
         // Loop patients
         dbData.patients.forEach(pat => {
-            const station = normalizeStation(pat.barangay);
+            const station = normalizeStation(pat.stations?.station_name || pat.barangay);
             const detail = patientDetails[pat.id] || { trimester: '1', risk: 'Low', status: 'Pregnant' };
 
             // Apply Trimester and Risk filters explicitly here
@@ -232,7 +242,7 @@ const Analytics = () => {
             if (filters.risk !== 'All' && filters.risk !== detail.risk) return;
             
             // Apply Date filter based on registration or lmd
-            const refDate = detail.lmd || pat.created_at;
+            const refDate = detail.created_at || pat.created_at;
             if (!isWithinDateRange(refDate)) return;
 
             let age = 25;
@@ -266,7 +276,7 @@ const Analytics = () => {
         // Loop visits for missed appts
         dbData.visits.forEach(v => {
             const pat = dbData.patients.find(p => p.id === v.patient_id);
-            const station = normalizeStation(pat?.barangay);
+            const station = normalizeStation(pat?.stations?.station_name || pat?.barangay);
             if (!isWithinDateRange(v.visit_date)) return;
             const isMissed = v.status === 'Missed' || (v.visit_date && new Date(v.visit_date) < new Date() && v.status === 'Scheduled');
             if (isMissed) liveAgg[station].missedAppt++;
@@ -275,7 +285,7 @@ const Analytics = () => {
         // Loop deliveries
         dbData.deliveries.forEach(d => {
             const pat = dbData.patients.find(p => p.id === d.mother_id);
-            const station = normalizeStation(pat?.barangay);
+            const station = normalizeStation(pat?.stations?.station_name || pat?.barangay);
             if (!isWithinDateRange(d.delivery_date)) return;
 
             liveAgg[station].deliveries++;
@@ -290,11 +300,36 @@ const Analytics = () => {
             if (comps.includes('hemorrhage') || comps.includes('bleed')) liveAgg[station].compHemorr++;
         });
 
+        // Calculate postpartum follow-up compliance from delivery to 42 days after delivery.
+        const postpartumByStation = {};
+        dbData.deliveries.forEach(delivery => {
+            const deliveryDate = new Date(delivery.delivery_date);
+            if (Number.isNaN(deliveryDate.getTime()) || deliveryDate > now || !isWithinDateRange(delivery.delivery_date)) return;
+            const mother = dbData.patients.find(patient => patient.id === delivery.mother_id);
+            const station = normalizeStation(mother?.stations?.station_name || mother?.barangay);
+            if (!postpartumByStation[station]) postpartumByStation[station] = { eligible: 0, completed: 0 };
+            postpartumByStation[station].eligible++;
+            const endDate = new Date(deliveryDate);
+            endDate.setDate(endDate.getDate() + 42);
+            const completed = dbData.visits.some(visit => {
+                if (visit.patient_id !== delivery.mother_id || visit.status !== 'Attended') return false;
+                const visitDate = new Date(visit.visit_date);
+                return !Number.isNaN(visitDate.getTime()) && visitDate >= deliveryDate && visitDate <= endDate;
+            });
+            if (completed) postpartumByStation[station].completed++;
+        });
+        Object.entries(postpartumByStation).forEach(([station, values]) => {
+            if (liveAgg[station]) {
+                liveAgg[station].ppEligible = values.eligible;
+                liveAgg[station].ppCompleted = values.completed;
+            }
+        });
+
         // Loop vaccinations
         dbData.vaccinations.forEach(v => {
             const patId = v.patient_id || v.newborn_id;
             const pat = dbData.patients.find(p => p.id === patId);
-            const station = normalizeStation(pat?.barangay);
+            const station = normalizeStation(pat?.stations?.station_name || pat?.barangay);
             if (!isWithinDateRange(v.vaccinated_date)) return;
 
             liveAgg[station].totalVacc++;
@@ -308,7 +343,9 @@ const Analytics = () => {
             mergedStations[st] = {
                 name: st,
                 ...live,
-                compliancePP: live.patients > 0 ? 80 : 0 // Basic dynamic compliance fallback
+                ppEligible: live.ppEligible || 0,
+                ppCompleted: live.ppCompleted || 0,
+                compliancePP: live.ppEligible > 0 ? Math.round((live.ppCompleted / live.ppEligible) * 100) : 0
             };
         });
 
@@ -345,7 +382,9 @@ const Analytics = () => {
             compOther: 0,
             recNormal: 0,
             recObs: 0,
-            recComp: 0
+            recComp: 0,
+            ppEligible: 0,
+            ppCompleted: 0
         };
 
         selectedStations.forEach(s => {
@@ -369,14 +408,20 @@ const Analytics = () => {
             totals.recNormal += s.recNormal;
             totals.recObs += s.recObs;
             totals.recComp += s.recComp;
+            totals.ppEligible += s.ppEligible;
+            totals.ppCompleted += s.ppCompleted;
         });
 
         // Compute rates
         const vaccRate = totals.totalVacc > 0 ? Math.round((totals.completedVacc / totals.totalVacc) * 100) : 0;
-        const ppRate = filters.station === 'All Stations' ? 84 : dashboardMetrics[filters.station]?.compliancePP || 84;
+        const ppRate = totals.ppEligible > 0 ? Math.round((totals.ppCompleted / totals.ppEligible) * 100) : 0;
         
         // Missed Appt Rate
-        const totalVisitsCount = totals.patients * 4;
+        const selectedPatientIds = new Set(selectedStations.flatMap(station => dbData.patients
+            .filter(patient => normalizeStation(patient.stations?.station_name || patient.barangay) === station.name)
+            .map(patient => patient.id)));
+        const scopedVisits = dbData.visits.filter(visit => selectedPatientIds.has(visit.patient_id) && isWithinDateRange(visit.visit_date));
+        const totalVisitsCount = scopedVisits.filter(visit => visit.status !== 'Cancelled').length;
         const missedRate = totalVisitsCount > 0 ? Math.round((totals.missedAppt / totalVisitsCount) * 100) : 0;
 
         return {
@@ -403,80 +448,91 @@ const Analytics = () => {
             recObs: totals.recObs,
             recComp: totals.recComp, // Mapped for Pre-eclampsia in aggregation
             missedCount: totals.missedAppt
+            ,ppEligible: totals.ppEligible
+            ,ppCompleted: totals.ppCompleted
         };
     }, [filters, dashboardMetrics]);
 
     // ── Time Series Trend Data Generative Engine ──
     const trendData = useMemo(() => {
-        const timeframe = filters.dateRange;
-        let labels = [];
-        let totalVal = [];
-        let highRiskVal = [];
-        let deliveriesVal = [];
-        let vaccMother = [];
-        let vaccNewborn = [];
-
-        // Seed data values depending on current filters and timeframe chosen
-        const isStation = filters.station !== 'All Stations';
-        const mult = isStation ? 0.22 : 1.0;
-
-        if (timeframe === 'monthly') {
-            labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-            totalVal = [180, 195, 210, 230, 245, 260].map(v => Math.round(v * mult));
-            highRiskVal = [28, 31, 35, 40, 44, 47].map(v => Math.round(v * mult));
-            deliveriesVal = [12, 14, 15, 13, 16, 17].map(v => Math.round(v * mult));
-            vaccMother = [82, 84, 85, 87, 88, 89];
-            vaccNewborn = [78, 80, 82, 83, 85, 86];
-        } else if (timeframe === 'quarterly') {
-            labels = ['Q3 2025', 'Q4 2025', 'Q1 2026', 'Q2 2026'];
-            totalVal = [210, 235, 248, 260].map(v => Math.round(v * mult));
-            highRiskVal = [32, 38, 42, 47].map(v => Math.round(v * mult));
-            deliveriesVal = [38, 44, 46, 52].map(v => Math.round(v * mult));
-            vaccMother = [81, 84, 86, 89];
-            vaccNewborn = [76, 79, 83, 86];
-        } else if (timeframe === 'semiannual') {
-            labels = ['H2 2025', 'H1 2026'];
-            totalVal = [230, 260].map(v => Math.round(v * mult));
-            highRiskVal = [35, 47].map(v => Math.round(v * mult));
-            deliveriesVal = [75, 86].map(v => Math.round(v * mult));
-            vaccMother = [83, 89];
-            vaccNewborn = [79, 86];
-        } else { // Annual
-            labels = ['2024', '2025', '2026'];
-            totalVal = [170, 220, 260].map(v => Math.round(v * mult));
-            highRiskVal = [25, 36, 47].map(v => Math.round(v * mult));
-            deliveriesVal = [110, 145, 172].map(v => Math.round(v * mult));
-            vaccMother = [78, 84, 89];
-            vaccNewborn = [72, 80, 86];
-        }
-
-        // Apply dynamic updates from database if records match
-        // E.g. add live patients created in the last 6 months to the line chart
         const now = new Date();
-        dbData.patients.forEach(pat => {
-            if (filters.station !== 'All Stations' && normalizeStation(pat.barangay) !== filters.station) return;
-            const createdDate = new Date(pat.created_at || now);
-            const monthsAgo = (now.getFullYear() - createdDate.getFullYear()) * 12 + (now.getMonth() - createdDate.getMonth());
-            
-            if (timeframe === 'monthly' && monthsAgo >= 0 && monthsAgo < 6) {
-                const idx = 5 - monthsAgo;
-                totalVal[idx] = (totalVal[idx] || 0) + 1;
+        const weeks = Array.from({ length: 8 }, (_, index) => {
+            const start = new Date(now);
+            start.setHours(0, 0, 0, 0);
+            start.setDate(start.getDate() - start.getDay() - (7 - index) * 7);
+            const end = new Date(start);
+            end.setDate(end.getDate() + 7);
+            return { start, end, label: `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` };
+        });
+        const selectedPatientIds = new Set(dbData.patients
+            .filter(patient => filters.station === 'All Stations' || normalizeStation(patient.stations?.station_name || patient.barangay) === filters.station)
+            .map(patient => patient.id));
+        const latestRiskByPatient = {};
+        dbData.visits.forEach(visit => {
+            if (!visit.patient_id || !visit.calculated_risk) return;
+            const current = latestRiskByPatient[visit.patient_id];
+            if (!current || new Date(visit.visit_date) > new Date(current.visit_date)) latestRiskByPatient[visit.patient_id] = visit;
+        });
+        const bucket = (dateValue) => weeks.findIndex(week => {
+            const date = new Date(dateValue);
+            return !Number.isNaN(date.getTime()) && isWithin(date, week.start, week.end);
+        });
+        const totalVal = weeks.map(() => 0);
+        const highRiskVal = weeks.map(() => 0);
+        const deliveriesVal = weeks.map(() => 0);
+        const vaccMother = weeks.map(() => ({ completed: 0, total: 0 }));
+        const vaccNewborn = weeks.map(() => ({ completed: 0, total: 0 }));
+        const postpartum = weeks.map(() => ({ eligible: 0, completed: 0 }));
+        const visitsByWeek = weeks.map(() => ({ missed: 0, total: 0 }));
+
+        dbData.pregnancies.forEach(pregnancy => {
+            if (!selectedPatientIds.has(pregnancy.patient_id) || String(pregnancy.pregn_postp || '').toLowerCase() !== 'pregnant') return;
+            const index = bucket(pregnancy.created_at);
+            if (index >= 0) {
+                totalVal[index]++;
+                const pregnancyRisk = String(pregnancy.risk_level || '').toLowerCase();
+                const visitRisk = String(latestRiskByPatient[pregnancy.patient_id]?.calculated_risk || '').toLowerCase();
+                if (pregnancyRisk.includes('high') || visitRisk.includes('high')) highRiskVal[index]++;
             }
         });
-
-        dbData.deliveries.forEach(d => {
-            const pat = dbData.patients.find(p => p.id === d.mother_id);
-            if (filters.station !== 'All Stations' && normalizeStation(pat?.barangay) !== filters.station) return;
-            const delDate = new Date(d.delivery_date || now);
-            const monthsAgo = (now.getFullYear() - delDate.getFullYear()) * 12 + (now.getMonth() - delDate.getMonth());
-            
-            if (timeframe === 'monthly' && monthsAgo >= 0 && monthsAgo < 6) {
-                const idx = 5 - monthsAgo;
-                deliveriesVal[idx] = (deliveriesVal[idx] || 0) + 1;
+        dbData.deliveries.forEach(delivery => {
+            if (!selectedPatientIds.has(delivery.mother_id)) return;
+            const index = bucket(delivery.delivery_date);
+            if (index >= 0) deliveriesVal[index]++;
+            if (index >= 0 && new Date(delivery.delivery_date) <= now) {
+                postpartum[index].eligible++;
+                const deliveryDate = new Date(delivery.delivery_date);
+                const endDate = new Date(deliveryDate);
+                endDate.setDate(endDate.getDate() + 42);
+                if (dbData.visits.some(visit => visit.patient_id === delivery.mother_id && visit.status === 'Attended' && new Date(visit.visit_date) >= deliveryDate && new Date(visit.visit_date) <= endDate)) postpartum[index].completed++;
             }
         });
-
-        return { labels, totalVal, highRiskVal, deliveriesVal, vaccMother, vaccNewborn };
+        dbData.visits.forEach(visit => {
+            if (!selectedPatientIds.has(visit.patient_id)) return;
+            const index = bucket(visit.visit_date);
+            if (index < 0 || visit.status === 'Cancelled') return;
+            visitsByWeek[index].total++;
+            if (visit.status === 'Missed' || (visit.status === 'Scheduled' && new Date(visit.visit_date) < now)) visitsByWeek[index].missed++;
+        });
+        dbData.vaccinations.forEach(vaccination => {
+            const patientId = vaccination.patient_id || vaccination.newborn_id;
+            if (vaccination.patient_id && !selectedPatientIds.has(patientId)) return;
+            const index = bucket(vaccination.vaccinated_date || vaccination.scheduled_vaccination);
+            if (index < 0) return;
+            const series = vaccination.newborn_id ? vaccNewborn[index] : vaccMother[index];
+            series.total++;
+            if (vaccination.status === 'Completed') series.completed++;
+        });
+        return {
+            labels: weeks.map(week => week.label),
+            totalVal,
+            highRiskVal,
+            deliveriesVal,
+            vaccMother: vaccMother.map(series => series.total ? Math.round((series.completed / series.total) * 100) : 0),
+            vaccNewborn: vaccNewborn.map(series => series.total ? Math.round((series.completed / series.total) * 100) : 0),
+            postpartumRate: postpartum.map(series => series.eligible ? Math.round((series.completed / series.eligible) * 100) : 0),
+            missedRate: visitsByWeek.map(series => series.total ? Math.round((series.missed / series.total) * 100) : 0)
+        };
     }, [filters, dbData]);
 
     // ── Station Comparison Logic ──
@@ -537,12 +593,15 @@ const Analytics = () => {
         const topComplStation = sortedCompl[0];
 
         // High Risk Trend insight
-        const riskPercentChange = 12; // historical baseline comparison
+        const riskPercentChange = formatPercentChange(
+            trendData.highRiskVal.at(-1) || 0,
+            trendData.highRiskVal.at(-2) || 0
+        );
         insights.push({
             id: 'ins-1',
             priority: 'critical',
             relatedMetric: 'Maternal High-Risk Distribution',
-            title: `High-risk pregnancies increased by ${riskPercentChange}% compared to last period.`,
+            title: `High-risk pregnancies changed by ${riskPercentChange} compared to last week.`,
             recommendation: 'Deploy mobile ultrasound vans and increase home visitation schedules for warning-level mothers.'
         });
 
@@ -576,19 +635,19 @@ const Analytics = () => {
         });
 
         // Missed Postpartum visits
-        const totalMissedPP = Math.round(activeData.deliveries * 0.08); // typical missed rate
+        const totalMissedPP = activeData.missedCount;
         if (totalMissedPP > 0) {
             insights.push({
                 id: 'ins-5',
                 priority: 'critical',
                 relatedMetric: 'Postpartum Follow-up Care',
-                title: `${totalMissedPP} postpartum patients missed their critical 48-hour follow-up visits.`,
+                title: `${totalMissedPP} prenatal visits were missed in the selected period.`,
                 recommendation: 'Instruct assigned midwives to conduct immediate phone callbacks or physical outreach checks today.'
             });
         }
 
         return insights;
-    }, [activeData, dashboardMetrics]);
+    }, [activeData, dashboardMetrics, trendData]);
 
     // ── Export Sheet Handler ──
     const handleExportReport = () => {
@@ -596,14 +655,14 @@ const Analytics = () => {
 
         // Sheet 1: Executive KPI Overview
         const kpiOverview = [
-            { 'Intelligence Metric': 'Total Managed Patients', 'Value / Rate': activeData.totalPregnant, 'Trend Period': 'Up (+4.2%)' },
-            { 'Intelligence Metric': 'High-Risk Cases', 'Value / Rate': activeData.highRisk, 'Trend Period': 'Up (+12.0%)' },
-            { 'Intelligence Metric': 'Teenage Pregnancies', 'Value / Rate': activeData.teenage, 'Trend Period': 'Down (-3.1%)' },
-            { 'Intelligence Metric': 'Advanced Maternal Age Cases', 'Value / Rate': activeData.advancedAge, 'Trend Period': 'Stable (+1.5%)' },
-            { 'Intelligence Metric': 'Deliveries Count (This Period)', 'Value / Rate': activeData.deliveries, 'Trend Period': 'Up (+5.0%)' },
-            { 'Intelligence Metric': 'Vaccination Completion Rate', 'Value / Rate': `${activeData.vaccRate}%`, 'Trend Period': 'Up (+2.1%)' },
-            { 'Intelligence Metric': 'Postpartum Follow-up Compliance', 'Value / Rate': `${activeData.ppRate}%`, 'Trend Period': 'Down (-1.2%)' },
-            { 'Intelligence Metric': 'Missed Appointment Rate', 'Value / Rate': `${activeData.missedRate}%`, 'Trend Period': 'Down (-0.8%)' }
+            { 'Intelligence Metric': 'Total Managed Patients', 'Value / Rate': activeData.totalPregnant, 'Trend Period': trendsCalculated.totChange },
+            { 'Intelligence Metric': 'High-Risk Cases', 'Value / Rate': activeData.highRisk, 'Trend Period': trendsCalculated.hrChange },
+            { 'Intelligence Metric': 'Teenage Pregnancies', 'Value / Rate': activeData.teenage, 'Trend Period': 'Live count' },
+            { 'Intelligence Metric': 'Advanced Maternal Age Cases', 'Value / Rate': activeData.advancedAge, 'Trend Period': 'Live count' },
+            { 'Intelligence Metric': 'Deliveries Count (This Period)', 'Value / Rate': activeData.deliveries, 'Trend Period': trendsCalculated.delChange },
+            { 'Intelligence Metric': 'Vaccination Completion Rate', 'Value / Rate': `${activeData.vaccRate}%`, 'Trend Period': vaccTrendsCalculated.vmChange },
+            { 'Intelligence Metric': 'Postpartum Follow-up Compliance', 'Value / Rate': `${activeData.ppRate}%`, 'Trend Period': trendsCalculated.ppChange },
+            { 'Intelligence Metric': 'Missed Appointment Rate', 'Value / Rate': `${activeData.missedRate}%`, 'Trend Period': trendsCalculated.missedChange }
         ];
         const wsKpi = XLSX.utils.json_to_sheet(kpiOverview);
         XLSX.utils.book_append_sheet(wb, wsKpi, 'Executive Summary');
@@ -742,29 +801,28 @@ const Analytics = () => {
         const hr = trendData.highRiskVal;
         const del = trendData.deliveriesVal;
         const length = vals.length;
-        if (length < 2) return { totChange: '+0%', hrChange: '+0%', delChange: '+0%' };
+        if (length < 2) return { totChange: '+0.0%', hrChange: '+0.0%', delChange: '+0.0%', ppChange: '+0.0%', missedChange: '+0.0%' };
         
         const totDiff = vals[length - 1] - vals[length - 2];
-        const totPct = vals[length - 2] > 0 ? Math.round((totDiff / vals[length - 2]) * 100) : 0;
-        const totSign = totPct >= 0 ? '+' : '';
+        const totPct = vals[length - 2] > 0 ? (totDiff / vals[length - 2]) * 100 : (vals[length - 1] ? 100 : 0);
 
         const hrDiff = hr[length - 1] - hr[length - 2];
-        const hrPct = hr[length - 2] > 0 ? Math.round((hrDiff / hr[length - 2]) * 100) : 0;
-        const hrSign = hrPct >= 0 ? '+' : '';
+        const hrPct = hr[length - 2] > 0 ? (hrDiff / hr[length - 2]) * 100 : (hr[length - 1] ? 100 : 0);
 
         const delDiff = del[length - 1] - del[length - 2];
-        const delPct = del[length - 2] > 0 ? Math.round((delDiff / del[length - 2]) * 100) : 0;
-        const delSign = delPct >= 0 ? '+' : '';
+        const delPct = del[length - 2] > 0 ? (delDiff / del[length - 2]) * 100 : (del[length - 1] ? 100 : 0);
 
         return {
-            totChange: `${totSign}${totPct}%`,
+            totChange: formatPercentChange(vals[length - 1], vals[length - 2]),
             totIsUp: totPct >= 0,
-            hrChange: `${hrSign}${hrPct}%`,
+            hrChange: formatPercentChange(hr[length - 1], hr[length - 2]),
             hrIsUp: hrPct >= 0,
-            delChange: `${delSign}${delPct}%`,
-            delIsUp: delPct >= 0
+            delChange: formatPercentChange(del[length - 1], del[length - 2]),
+            delIsUp: delPct >= 0,
+            ppChange: formatPercentChange(trendData.postpartumRate[length - 1], trendData.postpartumRate[length - 2]),
+            missedChange: formatPercentChange(trendData.missedRate[length - 1], trendData.missedRate[length - 2])
         };
-    }, [trendData]);
+    }, [trendData, activeData.missedRate]);
 
     const vaccTrendsCalculated = useMemo(() => {
         const vm = trendData.vaccMother;
@@ -773,10 +831,10 @@ const Analytics = () => {
         if (length < 2) return { vmChange: '+0%', vnbChange: '+0%' };
         
         const vmDiff = vm[length - 1] - vm[length - 2];
-        const vmPct = vmDiff >= 0 ? `+${vmDiff}%` : `${vmDiff}%`;
+        const vmPct = formatPercentChange(vm[length - 1], vm[length - 2]);
 
         const vnbDiff = vnb[length - 1] - vnb[length - 2];
-        const vnbPct = vnbDiff >= 0 ? `+${vnbDiff}%` : `${vnbDiff}%`;
+        const vnbPct = formatPercentChange(vnb[length - 1], vnb[length - 2]);
 
         return {
             vmChange: vmPct,
@@ -939,6 +997,8 @@ const Analytics = () => {
                 </div>
             </section>
 
+            <StaffPerformanceReport />
+
             {/* ── Executive Analytics Tab Bar ── */}
             <nav className="analytics-tabs-container" aria-label="Executive Analytics tabs">
                 <button 
@@ -1027,7 +1087,7 @@ const Analytics = () => {
                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="kpi-card glass-card tier-general">
                             <div className="kpi-card-header">
                                 <div className="kpi-icon-circle"><HeartPulse size={20} /></div>
-                                <span className="trend-badge trend-up"><TrendingUp size={12} /> 4.2%</span>
+                                <span className={`trend-badge ${trendsCalculated.totIsUp ? 'trend-up' : 'trend-down'}`}>{trendsCalculated.totIsUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />} {trendsCalculated.totChange}</span>
                                 <span className="kpi-priority-badge badge-general">GENERAL</span>
                             </div>
                             <div className="kpi-card-body">
@@ -1040,7 +1100,7 @@ const Analytics = () => {
                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="kpi-card glass-card tier-critical">
                             <div className="kpi-card-header">
                                 <div className="kpi-icon-circle"><AlertTriangle size={20} /></div>
-                                <span className="trend-badge trend-up"><TrendingUp size={12} /> 12.0%</span>
+                                <span className={`trend-badge ${trendsCalculated.hrIsUp ? 'trend-up' : 'trend-down'}`}>{trendsCalculated.hrIsUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />} {trendsCalculated.hrChange}</span>
                                 <span className="kpi-priority-badge badge-critical">CRITICAL</span>
                             </div>
                             <div className="kpi-card-body">
@@ -1053,7 +1113,7 @@ const Analytics = () => {
                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="kpi-card glass-card tier-success">
                             <div className="kpi-card-header">
                                 <div className="kpi-icon-circle"><Syringe size={20} /></div>
-                                <span className="trend-badge trend-up"><TrendingUp size={12} /> 2.1%</span>
+                                <span className={`trend-badge ${vaccTrendsCalculated.vmIsUp ? 'trend-up' : 'trend-down'}`}>{vaccTrendsCalculated.vmIsUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />} {vaccTrendsCalculated.vmChange}</span>
                                 <span className="kpi-priority-badge badge-success">SUCCESS</span>
                             </div>
                             <div className="kpi-card-body">
@@ -1066,7 +1126,7 @@ const Analytics = () => {
                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="kpi-card glass-card tier-success">
                             <div className="kpi-card-header">
                                 <div className="kpi-icon-circle"><ClipboardCheck size={20} /></div>
-                                <span className="trend-badge trend-down"><TrendingDown size={12} /> 1.2%</span>
+                                <span className={`trend-badge ${trendsCalculated.ppChange.startsWith('-') ? 'trend-down' : 'trend-up'}`}><TrendingDown size={12} /> {trendsCalculated.ppChange}</span>
                                 <span className="kpi-priority-badge badge-success">SUCCESS</span>
                             </div>
                             <div className="kpi-card-body">
@@ -1079,7 +1139,7 @@ const Analytics = () => {
                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="kpi-card glass-card tier-critical">
                             <div className="kpi-card-header">
                                 <div className="kpi-icon-circle"><XCircle size={20} /></div>
-                                <span className="trend-badge trend-down"><TrendingDown size={12} /> 0.8%</span>
+                                <span className={`trend-badge ${trendsCalculated.missedChange.startsWith('-') ? 'trend-up' : 'trend-down'}`}><TrendingDown size={12} /> {trendsCalculated.missedChange}</span>
                                 <span className="kpi-priority-badge badge-critical">CRITICAL</span>
                             </div>
                             <div className="kpi-card-body">

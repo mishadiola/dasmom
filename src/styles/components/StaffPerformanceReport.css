@@ -1,0 +1,50 @@
+.staff-performance-report {
+  margin: 22px 0;
+  padding: 22px;
+  background: #fff;
+  border: 1px solid rgba(185, 129, 138, 0.14);
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(45, 34, 52, 0.04);
+}
+
+.staff-performance-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.staff-performance-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #a07830;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.staff-performance-header h2 { margin: 5px 0 3px; color: var(--color-text); font-size: 18px; }
+.staff-performance-header p { margin: 0; color: var(--color-text-muted); font-size: 12px; }
+.staff-performance-filters { display: flex; gap: 10px; flex-wrap: wrap; }
+.staff-performance-filters label { display: flex; align-items: center; gap: 6px; color: var(--color-text-muted); font-size: 11px; font-weight: 700; }
+.staff-performance-filters select { min-width: 140px; padding: 9px 28px 9px 10px; border: 1px solid #ece7ed; border-radius: 8px; background: #fff; color: var(--color-text); font: inherit; }
+.staff-performance-table-wrap { overflow-x: auto; }
+.staff-performance-table { width: 100%; border-collapse: collapse; min-width: 720px; }
+.staff-performance-table th, .staff-performance-table td { padding: 12px 10px; border-bottom: 1px solid #f0edf1; text-align: left; white-space: nowrap; }
+.staff-performance-table th { color: var(--color-text-light); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+.staff-performance-table th svg { vertical-align: -2px; margin-right: 3px; }
+.staff-performance-table td { color: var(--color-text); font-size: 12px; }
+.staff-performance-table tbody tr:hover { background: #fcf9fb; }
+.staff-rank-top { color: #b9818a; }
+.staff-performance-empty, .staff-performance-error { padding: 20px 4px; color: var(--color-text-muted); font-size: 13px; }
+.staff-performance-error { color: #b04558; }
+
+@media (max-width: 760px) {
+  .staff-performance-header { flex-direction: column; }
+  .staff-performance-filters { width: 100%; }
+  .staff-performance-filters label { flex: 1 1 180px; }
+  .staff-performance-filters select { flex: 1; min-width: 0; }
+}
