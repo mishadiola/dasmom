@@ -9,6 +9,7 @@ import {
 import '../../styles/pages/StationReports.css';
 import PatientService from '../../services/patientservice';
 import Legend from '../../components/Legend/Legend';
+import supabase from '../../config/supabaseclient';
 
 /* ════════════════════════════
    MAIN COMPONENT
@@ -33,7 +34,39 @@ const StationReports = () => {
     const patientService = new PatientService();
 
     useEffect(() => {
+        let pollingTimer = null;
+
+        const startPollingFallback = () => {
+            if (pollingTimer) return;
+            pollingTimer = setInterval(fetchStationData, 30000);
+        };
+
+        const stopPollingFallback = () => {
+            if (!pollingTimer) return;
+            clearInterval(pollingTimer);
+            pollingTimer = null;
+        };
+
         fetchStationData();
+
+        const channel = supabase
+            .channel('station-reports-live-data')
+            .on('postgres_changes', { event: '*', schema: 'public' }, payload => {
+                const tables = ['stations', 'patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'deliveries', 'newborns', 'vaccinations', 'supplements'];
+                if (tables.includes(payload.table)) fetchStationData();
+            })
+            .subscribe(status => {
+                if (status === 'SUBSCRIBED') {
+                    stopPollingFallback();
+                } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
+                    startPollingFallback();
+                }
+            });
+
+        return () => {
+            stopPollingFallback();
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     const fetchStationData = async () => {

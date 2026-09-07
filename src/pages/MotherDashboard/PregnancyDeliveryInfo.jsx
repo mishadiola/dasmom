@@ -1,45 +1,65 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
     Baby, Heart, ShieldCheck, ChevronRight, Calendar, 
     MapPin, User, Stethoscope, Activity, X 
 } from 'lucide-react';
 import '../../styles/pages/PregnancyDeliveryInfo.css';
-
-// ─── DUMMY DATA ──────────────────────────────────────────────────────────
-const DUMMY_DELIVERIES = [
-    {
-        id: 1,
-        delivery_date: '2025-03-18T08:30:00',
-        outcome: 'Live Birth',
-        delivery_type: 'Normal Spontaneous Delivery',
-        health_station: 'Dasma I Health Station',
-        healthcare_provider: 'Healthcare Worker',
-        baby_gender: 'Baby Girl',
-        birth_weight: '3.1 kg',
-        status: 'Healthy',
-        complications: 'None',
-        notes: 'Mother and baby are in stable condition.'
-    },
-    {
-        id: 2,
-        delivery_date: '2023-11-07T14:15:00',
-        outcome: 'Live Birth',
-        delivery_type: 'Normal Spontaneous Delivery',
-        health_station: 'Dasma II Health Station',
-        healthcare_provider: 'Healthcare Worker',
-        baby_gender: 'Baby Boy',
-        birth_weight: '3.0 kg',
-        status: 'Healthy',
-        complications: 'None',
-        notes: 'Routine delivery. No complications.'
-    }
-];
+import AuthService from '../../services/authservice';
+import PatientService from '../../services/patientservice';
 
 const PregnancyDeliveryInfo = () => {
     const [selectedDelivery, setSelectedDelivery] = useState(null);
+    const [pastPregnancies, setPastPregnancies] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    // Using dummy data as requested
-    const pastPregnancies = DUMMY_DELIVERIES;
+    useEffect(() => {
+        const loadRecords = async () => {
+            try {
+                const user = await new AuthService().getAuthUser();
+                if (!user?.id) return;
+                const patient = await new PatientService().getPatientById(user.id);
+                const newborns = patient?.newborns || [];
+                const babiesByDelivery = newborns.reduce((map, baby) => {
+                    if (!map[baby.delivery_id]) map[baby.delivery_id] = [];
+                    map[baby.delivery_id].push(baby);
+                    return map;
+                }, {});
+                const deliveries = (patient?.deliveries || []).map(delivery => ({
+                    ...delivery,
+                    outcome: 'Live Birth',
+                    health_station: patient.station,
+                    healthcare_provider: 'Healthcare Team',
+                    baby: babiesByDelivery[delivery.id]?.[0] || null,
+                    baby_gender: babiesByDelivery[delivery.id]?.map(b => b.gender).join(', ') || 'Not recorded',
+                    birth_weight: babiesByDelivery[delivery.id]?.[0]?.birth_weight ? `${babiesByDelivery[delivery.id][0].birth_weight} kg` : 'Not recorded',
+                    status: babiesByDelivery[delivery.id]?.some(b => b.risk_level && b.risk_level !== 'Normal') ? 'Needs attention' : 'Recorded',
+                    notes: delivery.postpartum_remarks || ''
+                }));
+                const outcomes = (patient?.pregnancyHistory || [])
+                    .filter(pregnancy => pregnancy.miscarriage_info?.outcome || String(pregnancy.pregn_postp || '').toLowerCase() !== 'pregnant')
+                    .filter(pregnancy => !deliveries.some(delivery => delivery.delivery_date === pregnancy.created_at));
+                const unsuccessful = outcomes.map(pregnancy => ({
+                    id: `pregnancy-${pregnancy.id}`,
+                    delivery_date: pregnancy.created_at,
+                    outcome: pregnancy.miscarriage_info?.outcome || pregnancy.pregn_postp || 'Pregnancy outcome recorded',
+                    delivery_type: 'Not applicable',
+                    health_station: patient.station,
+                    healthcare_provider: 'Healthcare Team',
+                    baby_gender: 'Not applicable',
+                    birth_weight: 'Not applicable',
+                    status: 'Recorded',
+                    complications: pregnancy.miscarriage_info?.reason || 'Not recorded',
+                    notes: pregnancy.miscarriage_info?.notes || ''
+                }));
+                setPastPregnancies([...deliveries, ...unsuccessful].sort((a, b) => new Date(b.delivery_date) - new Date(a.delivery_date)));
+            } catch (error) {
+                console.error('Failed to load pregnancy and delivery records:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadRecords();
+    }, []);
 
     const formatDateBadge = (dateString) => {
         const date = new Date(dateString);
@@ -80,7 +100,7 @@ const PregnancyDeliveryInfo = () => {
                 </div>
 
                 <div className="pdi-cards-list">
-                    {pastPregnancies.length > 0 ? (
+                    {loading ? <p>Loading records...</p> : pastPregnancies.length > 0 ? (
                         pastPregnancies.map((delivery) => {
                             const dateBadge = formatDateBadge(delivery.delivery_date);
                             

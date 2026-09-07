@@ -1841,6 +1841,12 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       .order('created_at', { ascending: false })
       .limit(1);
 
+    const { data: pregnancyHistoryData } = await this.supabase
+      .from('pregnancy_info')
+      .select('*')
+      .eq('patient_id', patientId)
+      .order('created_at', { ascending: false });
+
     // Fetch prenatal visits
     const { data: visitsData } = await this.supabase
       .from('prenatal_visits')
@@ -1943,6 +1949,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       })),
       newborns: (newbornsData || []).map(n => ({
         id: n.id,
+        delivery_id: n.delivery_id,
         baby_name: n.baby_name,
         gender: n.gender,
         birth_date: n.created_at ? new Date(n.created_at).toISOString().split('T')[0] : null,
@@ -1952,6 +1959,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       })),
       deliveries: (deliveriesData || []).map(d => ({
         id: d.id,
+        mother_id: d.mother_id,
         delivery_date: d.delivery_date,
         delivery_type: d.delivery_type,
         delivery_mode: d.delivery_mode,
@@ -1962,6 +1970,16 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         postpartum_visit_date: d.postpartum_visit_date,
         postpartum_attended_date: d.postpartum_attended_date,
         postpartum_remarks: d.postpartum_remarks
+      })),
+      pregnancyHistory: (pregnancyHistoryData || []).map(p => ({
+        id: p.id,
+        pregn_postp: p.pregn_postp,
+        lmd: p.lmd,
+        edd: p.edd,
+        gravida: p.gravida,
+        para: p.para,
+        miscarriage_info: p.miscarriage_info,
+        created_at: p.created_at
       })),
       pregnancyStatus: preg.pregn_postp || 'Unknown'
     };

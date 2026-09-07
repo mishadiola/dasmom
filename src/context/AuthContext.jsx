@@ -16,8 +16,10 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     let isMounted = true;
+    let initRequest = 0;
 
     const initAuth = async () => {
+      const requestId = ++initRequest;
       try {
         // Clear any stale cached user
         authService.clearUser();
@@ -27,21 +29,21 @@ export const AuthProvider = ({ children }) => {
         
         if (sessionError || !session?.user) {
           // No valid session - don't auto-restore user
-          if (isMounted) {
+          if (isMounted && requestId === initRequest) {
             setUser(null);
             console.log('AuthContext: No active session, user not loaded');
           }
         } else {
           // Valid session exists - load full user data
           const current = await authService.getAuthUser();
-          if (isMounted) {
+          if (isMounted && requestId === initRequest) {
             setUser(current);
             console.log('AuthContext: User loaded from active session', current);
           }
         }
       } catch (err) {
         console.error('AuthContext: Error during auth init', err);
-        if (isMounted) {
+        if (isMounted && requestId === initRequest) {
           setUser(null);
         }
       } finally {
@@ -55,6 +57,7 @@ export const AuthProvider = ({ children }) => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
+        initRequest += 1;
         setUser(null);
         setIsAuthLoading(false);
         return;
@@ -64,6 +67,7 @@ export const AuthProvider = ({ children }) => {
         if (session?.user) {
           initAuth();
         } else {
+          initRequest += 1;
           setUser(null);
           setIsAuthLoading(false);
         }

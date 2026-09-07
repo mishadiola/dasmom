@@ -236,17 +236,7 @@ export default class AuthService {
       throw authError;
     }
 
-    let authUser;
-    try {
-      const userRes = await this._withTimeout(this.supabase.auth.getUser(), 8000);
-      authUser = userRes?.data?.user;
-    } catch (err) {
-      console.error('Failed to get auth user:', err);
-      if (err instanceof TypeError || String(err).toLowerCase().includes('failed to fetch')) {
-        throw new Error('Network/CORS error while retrieving auth user. Check Supabase CORS and keys. Original: ' + err.message);
-      }
-      throw err;
-    }
+    const authUser = authData?.user;
     if (!authUser) throw new Error('Session not established');
 
     const { data: userData, error: userError } = await this._withTimeout(
