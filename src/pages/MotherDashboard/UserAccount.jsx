@@ -157,10 +157,6 @@ const UserAccount = () => {
                     <p className="page-subtitle">View your account information</p>
                 </div>
                 <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
-
-                    <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#e05c73', borderColor: 'rgba(224,92,115,0.3)' }} onClick={handleLogout}>
-                        <LogOut size={16} /> Logout
-                    </button>
                 </div>
             </div>
 
@@ -313,6 +309,12 @@ const UserAccount = () => {
                         <p>For security concerns or data requests, please contact the Station Health Office (CHO).</p>
                     </div>
                 </section>
+
+                <div className="ua-logout-container">
+                    <button className="ua-logout-btn" onClick={handleLogout}>
+                        <LogOut size={16} /> Logout
+                    </button>
+                </div>
             </div>
         </div>
     );

@@ -53,14 +53,14 @@
 
 .mother-welcome-text-section .page-title {
     font-size: 38px;
-    margin-bottom: 28px; /* Noticeably more spacing below title */
+    margin-bottom: 12px;
     font-weight: 800;
 }
 
 .mother-welcome-text-section .page-subtitle {
     font-size: 17px;
     line-height: 1.5;
-    margin-bottom: 56px; /* Noticeably more spacing below subtitle */
+    margin-bottom: 24px;
     opacity: 0.95;
     white-space: nowrap;
     font-weight: 500;
@@ -109,45 +109,91 @@
     opacity: 0.95;
 }
 
+/* ══════════════════════════════════════════
+   TABLET RESPONSIVE (max-width: 768px)
+══════════════════════════════════════════ */
 @media (max-width: 768px) {
+    /* ── Hero Card: COMPACT, content-driven height only ── */
     .mother-welcome-header-with-img {
-        min-height: 340px;
-        padding: 24px !important;
+        min-height: 0 !important;
+        height: auto !important;
+        padding: 18px 16px 18px 16px !important;
         align-items: flex-start;
+        overflow: hidden;
+        position: relative;
     }
 
+    /* ── Content takes left 60%, silhouette covers right 40% ── */
     .mother-welcome-header-content-wrapper {
-        max-width: 100%;
+        max-width: 62%;
+        width: 62%;
+        position: relative;
+        z-index: 1;
     }
-    
+
     .desktop-break {
         display: none;
     }
-    
+
+    /* ── Hero Typography: scaled for tablet/mobile ── */
     .mother-welcome-text-section .page-title {
-        font-size: 28px;
+        font-size: 22px;
+        font-weight: 800;
+        margin-bottom: 10px;
+        line-height: 1.2;
     }
-    
+
     .mother-welcome-text-section .page-subtitle {
         white-space: normal;
-        margin-bottom: 20px;
+        font-size: 13px;
+        line-height: 1.45;
+        margin-bottom: 16px;
     }
 
+    /* ── Silhouette: ABSOLUTE, decorative only, does NOT dictate height ── */
     .pregnancy-silhouette-bg {
-        height: 110%;
-        width: 70%;
-        max-width: 70%;
-        right: -10%;
-        top: -8%;
-        bottom: auto;
-        object-position: right top;
+        position: absolute;
+        right: -4%;
+        bottom: -8%;
+        top: auto;
+        width: 44%;
+        max-width: 44%;
+        height: auto;
+        max-height: 220px;
+        object-fit: contain;
+        object-position: right bottom;
         opacity: 0.25;
+        pointer-events: none;
+        z-index: 0;
     }
 
+    /* ── Badges: side-by-side, compact ── */
     .welcome-badges-row {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 10px;
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .welcome-badge {
+        padding: 7px 11px;
+        font-size: 11px;
+        border-radius: 10px;
+        gap: 5px;
+        white-space: nowrap;
+    }
+
+    .welcome-badge svg {
+        width: 13px;
+        height: 13px;
+        flex-shrink: 0;
+    }
+
+    /* ── Grid stacking on tablet ── */
+    .mother-dash-row-2col,
+    .mother-dash-bottom-2col {
+        grid-template-columns: 1fr;
     }
 }
 
@@ -1279,7 +1325,7 @@
     .mother-dash-grid {
         grid-template-columns: 1fr;
     }
-    
+
     .modern-grid {
         grid-template-columns: 1fr;
     }
@@ -1350,133 +1396,437 @@
     }
 }
 
+/* ══════════════════════════════════════════
+   MOBILE RESPONSIVE (max-width: 600px)
+══════════════════════════════════════════ */
 @media (max-width: 600px) {
     .mother-dashboard {
-        padding: 0 12px 20px;
+        padding: 0 0 80px; /* Add bottom padding so bottom nav does not overlap */
+        overflow-x: hidden;
+        gap: 6px; /* Tighter gap */
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 100%;
     }
 
-    .page-header {
-        padding: 16px;
-        border-radius: 12px;
-        margin-bottom: 16px;
+    .dashboard-content-layout {
+        gap: 6px; /* Tighter layout gap */
+        width: 100%;
     }
 
-    .page-title {
-        font-size: 20px !important;
+    /* ── Hero: COMPACT ── */
+    .mother-welcome-header-with-img {
+        min-height: 0 !important;
+        height: auto !important;
+        padding: 16px 14px !important;
+        border-radius: 16px;
+        margin-bottom: 0;
+        position: relative;
+        overflow: hidden;
+        align-items: flex-start;
+        display: flex;
+        box-sizing: border-box;
     }
 
+    .mother-welcome-header-content-wrapper {
+        max-width: 100%;
+        width: 100%;
+        position: relative;
+        z-index: 1;
+        flex-shrink: 0;
+        /* padding-right: 25%; removed to fix text wrapping */
+    }
+
+    .mother-welcome-text-section {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .mother-welcome-text-section .page-title {
+        font-size: 16px !important;
+        font-weight: 800;
+        margin-bottom: 8px;
+        line-height: 1.2;
+        white-space: nowrap;
+    }
+
+    .mother-welcome-text-section .page-subtitle {
+        font-size: 11px;
+        line-height: 1.35;
+        margin-bottom: 14px;
+        font-weight: 500;
+    }
+
+    .welcome-badges-row {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        gap: 6px;
+        align-items: center;
+        width: 100%;
+        overflow-x: visible;
+    }
+
+    .welcome-badge {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 6px 8px;
+        font-size: 9px;
+        border-radius: 8px;
+        flex-shrink: 1;
+        white-space: nowrap;
+    }
+
+    .welcome-badge svg {
+        width: 12px;
+        height: 12px;
+        flex-shrink: 0;
+    }
+
+    /* ── Silhouette: absolute decorative ── */
+    .pregnancy-silhouette-bg {
+        position: absolute !important;
+        right: -10px !important;
+        bottom: -10px !important;
+        top: auto !important;
+        left: auto !important;
+        width: 100px !important;
+        max-width: 35% !important;
+        height: auto !important;
+        max-height: 140px !important;
+        object-fit: contain !important;
+        object-position: right bottom !important;
+        opacity: 0.15 !important;
+        pointer-events: none !important;
+        z-index: 0 !important;
+    }
+
+    /* ── Cards: tight + compact ── */
     .mother-card {
-        padding: 16px;
+        padding: 10px;
         border-radius: 12px;
-        margin-bottom: 16px;
-    }
-
-    .mother-card-title {
-        font-size: 15px;
+        margin-bottom: 0;
+        width: 100%;
+        box-sizing: border-box;
     }
 
     .mother-card-header {
-        margin-bottom: 12px;
+        margin-bottom: 6px;
     }
 
-    .timeline-item {
-        padding: 12px;
-        border-radius: 12px;
-        gap: 12px;
-    }
-
-    .timeline-type {
-        font-size: 13px;
-    }
-
-    .timeline-detail {
+    .mother-card-title {
         font-size: 12px;
     }
 
-    .timeline-staff {
+    .mother-card-link {
+        font-size: 10px;
+    }
+
+    /* ── Grid: stack vertically ── */
+    .mother-dash-row-2col,
+    .mother-dash-bottom-2col,
+    .gestation-details-row {
+        grid-template-columns: 1fr;
+        width: 100%;
+        gap: 6px;
+    }
+
+    /* ── Next Appointment ── */
+    /* Target reference: horizontal, compact card */
+    .appointments-card {
+        padding: 10px;
+    }
+    .appointments-timeline {
+        gap: 0; /* Only 1 item usually, but if more, no gap needed */
+    }
+    .timeline-item {
+        padding: 6px;
+        border-radius: 8px;
+        gap: 8px;
+        flex-direction: row;
+        align-items: center;
+        background: #f8f9fb;
+    }
+    .timeline-date-block {
+        min-width: 40px;
+        padding: 4px;
+        border-radius: 6px;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background: white;
+        border: 1px solid rgba(185, 129, 138, 0.15);
+    }
+    .timeline-date-block .month { font-size: 9px; }
+    .timeline-date-block .day { font-size: 14px; font-weight: 800; margin: 1px 0; }
+    .timeline-date-block .weekday { font-size: 8px; }
+    
+    .timeline-content {
+        flex: 1;
+        min-width: 0;
+    }
+    .timeline-header { margin-bottom: 2px; }
+    
+    .timeline-type { 
+        font-size: 9px; 
+        font-weight: 700; 
+        background: rgba(185, 129, 138, 0.1); 
+        color: var(--color-rose); 
+        padding: 3px 6px; 
+        border-radius: 4px; 
+        display: inline-block; 
+        text-transform: uppercase; 
+        letter-spacing: 0.5px;
+    }
+    .timeline-status { font-size: 8px; padding: 2px 6px; }
+    .timeline-details { gap: 2px; margin-bottom: 2px; flex-direction: row; flex-wrap: wrap; }
+    .timeline-detail { font-size: 9px; gap: 3px; }
+    .timeline-detail svg { width: 10px; height: 10px; }
+    .timeline-staff { font-size: 9px; }
+
+    /* ── EDD Card compact vertically centered layout ── */
+    .edd-content-box {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-height: auto;
+        padding: 8px 0;
+        text-align: center;
+    }
+    .edd-icon-wrapper {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        margin: 0 auto;
+    }
+    .edd-icon-wrapper svg { width: 16px; height: 16px; }
+    .edd-details-wrapper { display: flex; flex-direction: column; align-items: center; width: 100%; }
+    .edd-title-small { font-size: 10px; margin-bottom: 2px; text-align: center; }
+    .edd-display { font-size: 16px; font-weight: 800; margin: 0; line-height: 1.1; text-align: center; }
+    .edd-subtitle { font-size: 9px; padding: 2px 6px; margin-top: 4px; text-align: center; }
+
+    /* ── Health Records: horizontal stacking ── */
+    .health-records-row {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        overflow-x: hidden;
+        gap: 6px;
+        padding-bottom: 0;
+    }
+    .health-record-card-horizontal {
+        flex-direction: column;
+        align-items: center; /* Center the text to save space */
+        min-width: 0;
+        flex: 1;
+        padding: 8px 4px;
+        border-radius: 8px;
+        gap: 4px;
+    }
+    .hrc-icon-bg {
+        width: 24px;
+        height: 24px;
+        border-radius: 6px;
+        margin-bottom: 2px;
+    }
+    .hrc-icon-bg svg { width: 12px; height: 12px; }
+    .hrc-info { align-items: center; gap: 1px; }
+    .hrc-label { font-size: 8px; }
+    .hrc-value { font-size: 11px; font-weight: 800; line-height: 1; }
+    .hrc-status { font-size: 8px; }
+    .hrc-status svg { width: 8px; height: 8px; }
+
+    /* ── Pregnancy Progress Card compact ── */
+    .pregnancy-card-main { padding: 10px; }
+    .gestation-details-row { gap: 6px; margin-bottom: 6px; }
+    .milestone-item { padding: 8px; border-radius: 8px; display: flex; align-items: center; gap: 8px; }
+    .gest-icon { width: 24px; height: 24px; border-radius: 6px; font-size: 12px; flex-shrink: 0; }
+    .gest-content { flex: 1; min-width: 0; }
+    .gest-label { display: none; } /* Hide "This week:" to save space */
+    .gest-val { font-size: 11px; margin-bottom: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gest-desc { font-size: 9px; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    
+    .pregnancy-progress-container { margin-top: 4px; }
+    .progress-header { margin-bottom: 4px; }
+    .progress-title { font-size: 11px; }
+    .progress-stats { font-size: 10px; }
+    .custom-progress-bar { height: 12px; min-width: 0; }
+    .progress-fill { padding-right: 6px; }
+    .progress-percentage { font-size: 9px; }
+    .trimester-indicator { margin-top: 4px; }
+    .tri-dot { font-size: 8px; }
+    .countdown-banner { padding: 6px; font-size: 10px; gap: 4px; border-radius: 0 0 12px 12px; }
+    .countdown-banner svg { width: 12px; height: 12px; }
+
+    /* ── Tips Carousel compact ── */
+    .tips-carousel { gap: 4px; }
+    .tip-card-modern { padding: 6px; border-radius: 8px; gap: 6px; }
+    .tip-icon-circle { width: 24px; height: 24px; }
+    .tip-icon-circle svg { width: 12px; height: 12px; }
+    .tip-title-modern { font-size: 10px; margin-bottom: 1px; }
+    .tip-text-modern { font-size: 9px; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .carousel-nav { width: 20px; height: 20px; }
+    .carousel-nav svg { width: 12px; height: 12px; }
+    .carousel-indicators { margin-top: 6px; gap: 4px; }
+    .indicator { width: 4px; height: 4px; }
+
+    /* ── Support Card compact ── */
+    .support-card { padding: 10px; }
+    .support-header { gap: 8px; margin-bottom: 6px; }
+    .support-icon-wrapper { width: 24px; height: 24px; }
+    .support-icon-wrapper svg { width: 12px; height: 12px; }
+    .support-title { font-size: 12px; margin-bottom: 0; }
+    .support-subtitle { font-size: 9px; }
+    .support-text { font-size: 9px; margin-bottom: 8px; line-height: 1.2; }
+    .support-actions { flex-direction: row; gap: 6px; }
+    .support-btn { padding: 6px 4px; font-size: 9px; border-radius: 6px; flex: 1; gap: 4px; }
+    .support-btn svg { width: 10px; height: 10px; }
+}
+
+/* ══════════════════════════════════════════
+   EXTRA SMALL MOBILE (max-width: 380px)
+══════════════════════════════════════════ */
+@media (max-width: 380px) {
+    .mother-dashboard {
+        padding: 0 0 24px;
+    }
+
+    .mother-welcome-header-with-img {
+        padding: 14px 12px 14px 12px !important;
+    }
+
+    .mother-welcome-header-content-wrapper {
+        max-width: 58%;
+        width: 58%;
+    }
+
+    .mother-welcome-text-section .page-title {
+        font-size: 18px !important;
+    }
+
+    .mother-welcome-text-section .page-subtitle {
         font-size: 11px;
     }
 
-    .health-record-card {
-        padding: 12px;
-        border-radius: 12px;
+    .welcome-badge {
+        padding: 5px 7px;
+        font-size: 9.5px;
+        gap: 3px;
     }
 
-    .health-record-value {
-        font-size: 16px;
+    .welcome-badge svg {
+        width: 10px;
+        height: 10px;
+    }
+}
+
+
+/* --- URGENT FIX: PREGNANCY HEADER SPACING --- */
+.mother-welcome-text-section .page-title {
+    margin-bottom: 10px !important;
+}
+.mother-welcome-text-section .page-subtitle {
+    margin-bottom: 24px !important;
+}
+.mother-welcome-text-section .welcome-badges-row {
+    margin-top: 8px !important; /* Total gap between desc and buttons ~ 32px or 24px */
+}
+
+@media (max-width: 768px) {
+    .mother-welcome-text-section .page-title {
+        margin-bottom: 8px !important;
+    }
+    .mother-welcome-text-section .page-subtitle {
+        margin-bottom: 20px !important;
+    }
+}
+
+@media (max-width: 600px) {
+    .mother-welcome-text-section .page-title {
+        margin-bottom: 8px !important;
+    }
+    .mother-welcome-text-section .page-subtitle {
+        margin-bottom: 22px !important;
+    }
+    .mother-welcome-text-section .welcome-badges-row {
+        margin-top: 0 !important; 
+    }
+}
+
+/* --- URGENT FIX: PREVENT TEXT WRAPPING --- */
+@media (max-width: 600px) {
+    .mother-welcome-header-content-wrapper {
+        width: 100% !important;
+        max-width: 100% !important;
+        padding-right: 5% !important; /* Only a tiny bit of padding so it doesn't hit the absolute edge */
+    }
+}
+
+/* --- URGENT FIX: PREVENT HORIZONTAL OVERFLOW & COMPACT CARDS --- */
+@media (max-width: 600px) {
+    /* 1. Ensure all containers strictly bound to 100% width and wrap contents */
+    .mother-dash-row-2col,
+    .mother-dash-bottom-2col,
+    .gestation-details-row {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
     }
 
-    .health-record-icon {
-        width: 36px;
-        height: 36px;
+    .mother-card {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
     }
 
-    .health-record-icon svg {
-        width: 16px;
-        height: 16px;
+    /* 2. Fix timeline inner items */
+    .appointments-timeline {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
     }
 
-    .tip-card-modern {
-        padding: 12px;
-        flex-direction: row; /* keep it row on mobile so it's compact */
-        align-items: center;
-        gap: 12px;
+    .timeline-item {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        flex-wrap: nowrap !important; /* Keep icon/date and content side-by-side */
     }
 
-    .tip-icon-circle {
-        width: 40px;
-        height: 40px;
-    }
-
-    .tip-icon-circle svg {
-        width: 20px;
-        height: 20px;
-    }
-
-    .tip-title-modern {
-        font-size: 14px;
-        margin-bottom: 2px;
-    }
-
-    .tip-text-modern {
-        font-size: 12px;
-        line-height: 1.4;
-    }
-
-    .support-header {
-        flex-direction: row; /* keep row for compactness */
-        text-align: left;
-        gap: 12px;
-        margin-bottom: 12px;
+    .timeline-content {
+        min-width: 0 !important; /* Extremely important for flex items to shrink below their content size */
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
     }
     
-    .support-icon-wrapper {
-        width: 40px;
-        height: 40px;
+    .timeline-details {
+        flex-wrap: wrap !important;
+        min-width: 0 !important;
     }
 
-    .support-icon-wrapper svg {
-        width: 20px;
-        height: 20px;
+    /* 3. Expected Due Date alignment */
+    .edd-content-box {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        text-align: center !important;
     }
 
-    .support-title {
-        font-size: 16px;
-    }
-
-    .support-text {
-        font-size: 13px;
-        margin-bottom: 16px;
-    }
-
-    .support-btn {
-        width: 100%;
-        padding: 10px;
-        font-size: 13px;
-    }
-
-    .carousel-nav {
-        width: 32px;
-        height: 32px;
+    .edd-details-wrapper {
+        width: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
     }
 }

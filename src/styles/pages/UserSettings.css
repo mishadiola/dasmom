@@ -343,3 +343,122 @@ input:checked + .slider:before {
         font-size: 24px;
     }
 }
+
+/* ── FAQ Modal & Accordion ── */
+.faq-modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.faq-modal-content {
+    background: white;
+    width: 100%;
+    max-width: 600px;
+    max-height: 85vh;
+    border-radius: var(--radius-xl);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+    animation: slideUpFade 0.3s ease-out;
+}
+
+.faq-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 24px;
+    border-bottom: 1px solid #f0f2f5;
+}
+
+.faq-modal-header h2 {
+    font-size: 20px;
+    color: var(--color-text-dark);
+    margin: 0;
+}
+
+.faq-close-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-text-light);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.faq-close-btn:hover {
+    background: #f1f5f9;
+    color: var(--color-rose);
+}
+
+.faq-modal-body {
+    padding: 16px 24px 32px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.faq-accordion-item {
+    border: 1px solid #f0f2f5;
+    border-radius: var(--radius-md);
+    background: #fdfdfd;
+    transition: all 0.2s;
+    overflow: hidden;
+}
+
+.faq-accordion-item.expanded {
+    background: white;
+    border-color: rgba(185, 129, 138, 0.3);
+    box-shadow: 0 2px 10px rgba(185, 129, 138, 0.05);
+}
+
+.faq-accordion-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--color-text-dark);
+    font-family: var(--font, 'Inter', sans-serif);
+}
+
+.faq-accordion-header svg {
+    color: var(--color-text-light);
+    flex-shrink: 0;
+}
+
+.faq-accordion-item.expanded .faq-accordion-header {
+    color: var(--color-rose);
+}
+
+.faq-accordion-item.expanded .faq-accordion-header svg {
+    color: var(--color-rose);
+}
+
+.faq-accordion-content {
+    padding: 0 16px 16px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--color-text-light);
+}
+
+.faq-accordion-content p {
+    margin: 0;
+}

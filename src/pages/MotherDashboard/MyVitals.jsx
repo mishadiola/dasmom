@@ -316,10 +316,34 @@ const MyVitals = () => {
                                         {filteredVitals.map((v) => (
                                             <tr key={v.id} className="v-table-row">
                                                 <td><strong>{new Date(v.date).toLocaleDateString('en-PH')}</strong></td>
-                                                <td>{v.weight ? `${v.weight} kg` : '--'}</td>
-                                                <td>{v.bp || '--'}</td>
-                                                <td>{v.pulse ? `${v.pulse} bpm` : '--'}</td>
-                                                <td>{v.temp ? `${v.temp}°C` : '--'}</td>
+                                                <td>
+                                                    <div className="mobile-vital-left">
+                                                        <span className="mobile-vital-icon v-icon-green"><Weight size={14}/></span>
+                                                        <span className="mobile-vital-label">Weight</span>
+                                                    </div>
+                                                    <span className="vital-val">{v.weight ? `${v.weight} kg` : '--'}</span>
+                                                </td>
+                                                <td>
+                                                    <div className="mobile-vital-left">
+                                                        <span className="mobile-vital-icon v-icon-yellow"><Activity size={14}/></span>
+                                                        <span className="mobile-vital-label">Blood Pressure</span>
+                                                    </div>
+                                                    <span className="vital-val">{v.bp || '--'}</span>
+                                                </td>
+                                                <td>
+                                                    <div className="mobile-vital-left">
+                                                        <span className="mobile-vital-icon v-icon-pink"><Heart size={14}/></span>
+                                                        <span className="mobile-vital-label">Pulse</span>
+                                                    </div>
+                                                    <span className="vital-val">{v.pulse ? `${v.pulse} bpm` : '--'}</span>
+                                                </td>
+                                                <td>
+                                                    <div className="mobile-vital-left">
+                                                        <span className="mobile-vital-icon v-icon-blue"><Thermometer size={14}/></span>
+                                                        <span className="mobile-vital-label">Temperature</span>
+                                                    </div>
+                                                    <span className="vital-val">{v.temp ? `${v.temp}°C` : '--'}</span>
+                                                </td>
                                                 <td>{v.trimester}</td>
                                                 <td>
                                                     <span className={`v-note-tag ${(v.notes || '').includes('high') || (v.notes || '').includes('alert') ? 'v-note-tag--warn' : ''}`}>

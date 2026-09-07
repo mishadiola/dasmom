@@ -723,6 +723,13 @@
    RESPONSIVE
 ══════════════════════════════════════════ */
 @media (max-width: 768px) {
+    .topbar {
+        padding: 0 24px;
+    }
+    .topbar-right {
+        gap: 20px;
+    }
+
 
     .app-shell.sidebar-expanded .sidebar,
     .app-shell.sidebar-collapsed .sidebar {
@@ -753,7 +760,8 @@
     }
 
     .page-content {
-        padding: 16px 16px 80px 16px; /* Add bottom padding to avoid overlapping with bottom nav */
+        padding: 16px 16px 90px 16px; /* Bottom padding clears mobile bottom nav (~60px) */
+        overflow-x: hidden;
     }
 
     .mobile-bottom-nav {

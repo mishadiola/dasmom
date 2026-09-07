@@ -3,7 +3,7 @@ import {
     Calendar, Clock, Heart, Activity, 
     Baby, Star, ChevronRight, Bell,
     CheckCircle2, AlertCircle, Phone, MessageCircle,
-    Sparkles, ArrowRight, ChevronLeft, Info, TrendingUp
+    Sparkles, ArrowRight, ChevronLeft, Info, TrendingUp, Droplet, Thermometer
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/MotherDashboard.css';
@@ -20,8 +20,8 @@ const MotherDashboard = () => {
     const [showSupportModal, setShowSupportModal] = useState(false);
     const [showWelcome, setShowWelcome] = useState(false);
     
-    const today = new Date().toLocaleDateString('en-PH', {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    const today = new Date().toLocaleDateString('en-US', {
+        weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
     });
 
     const [pregnancyData, setPregnancyData] = useState({ lmp: null, weeks: null, trimester: null });
@@ -109,18 +109,27 @@ const MotherDashboard = () => {
                         });
                     }
 
-                    // health records: latest vitals from visits
-                    const records = (patient.visits || [])
+                    // health records: extract Weight, BP, and Temp from latest visit
+                    let weightVal = 'N/A';
+                    let bpVal = 'N/A';
+                    let tempVal = 'N/A';
+                    
+                    const latestVisit = (patient.visits || [])
                         .filter(v => v.visit_date)
-                        .sort((a, b) => new Date(b.visit_date) - new Date(a.visit_date))
-                        .slice(0, 4)
-                        .map(v => ({
-                            label: v.bp_systolic && v.bp_diastolic ? 'Blood Pressure' : 'Weight',
-                            value: v.bp_systolic && v.bp_diastolic ? `${v.bp_systolic}/${v.bp_diastolic}` : (v.weight_kg ? `${v.weight_kg} kg` : 'N/A'),
-                            status: 'Normal',
-                            trend: v.weight_kg ? `Δ ${v.weight_kg}` : 'stable',
-                            icon: Heart
-                        }));
+                        .sort((a, b) => new Date(b.visit_date) - new Date(a.visit_date))[0];
+
+                    if (latestVisit) {
+                        weightVal = latestVisit.weight_kg ? `${latestVisit.weight_kg} kg` : 'N/A';
+                        bpVal = latestVisit.bp_systolic && latestVisit.bp_diastolic ? `${latestVisit.bp_systolic}/${latestVisit.bp_diastolic}` : 'N/A';
+                        tempVal = latestVisit.temperature ? `${latestVisit.temperature} °C` : 'N/A';
+                    }
+
+                    const records = [
+                        { label: 'WEIGHT', value: weightVal, status: 'Normal', icon: Heart },
+                        { label: 'BP', value: bpVal, status: 'Normal', icon: Droplet },
+                        { label: 'TEMP', value: tempVal, status: 'Normal', icon: Thermometer }
+                    ];
+                    
                     setHealthRecords(records);
                 }
             } catch (err) {
@@ -242,20 +251,23 @@ const MotherDashboard = () => {
                     </div>
 
                     <div className="mother-card modern-card edd-card">
-                        <div className="mother-card-header">
-                            <h2 className="mother-card-title" style={{ color: '#fff' }}>Expected Due date</h2>
-                        </div>
                         <div className="edd-content-box">
-                            {pregnancyData.edd ? (
-                                <h2 className="edd-display">
-                                    {new Date(pregnancyData.edd).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                                </h2>
-                            ) : (
-                                <h2 className="edd-display" style={{ opacity: 0.5 }}>N/A</h2>
-                            )}
-                            {pregnancyData.weeks && (
-                                <p className="edd-subtitle">Week {pregnancyData.weeks} {pregnancyData.daysUntilDue !== undefined ? `• ${pregnancyData.daysUntilDue} days remaining` : ''}</p>
-                            )}
+                            <div className="edd-icon-wrapper bg-white-soft">
+                                <Calendar size={24} color="white" />
+                            </div>
+                            <div className="edd-details-wrapper">
+                                <h2 className="mother-card-title edd-title-small">Expected Due Date</h2>
+                                {pregnancyData.edd ? (
+                                    <h2 className="edd-display">
+                                        {new Date(pregnancyData.edd).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                                    </h2>
+                                ) : (
+                                    <h2 className="edd-display" style={{ opacity: 0.5 }}>N/A</h2>
+                                )}
+                                {pregnancyData.weeks && (
+                                    <p className="edd-subtitle">Week {pregnancyData.weeks} {pregnancyData.daysUntilDue !== undefined ? `• ${pregnancyData.daysUntilDue} days remaining` : ''}</p>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -57,16 +57,6 @@ const PregnancyProgressCard = ({ lmpDate, weeks: propWeeks, trimester: propTrime
                             <p className="gest-desc milestone-desc">{milestone.description}</p>
                         </div>
                     </div>
-                    
-                    <div className="gest-item remaining-item">
-                        <div className="gest-icon bg-blue-soft">
-                            <Timer size={18} />
-                        </div>
-                        <div className="gest-content">
-                            <span className="gest-label">Remaining:</span>
-                            <p className="gest-val">{timeRem.totalDays ? `${timeRem.weeks} weeks to go!` : 'N/A'}</p>
-                        </div>
-                    </div>
                 </div>
 
                 <div className="pregnancy-progress-container">

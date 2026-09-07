@@ -6,6 +6,7 @@ import {
 import '../../styles/pages/PregnancyDeliveryInfo.css';
 import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
+import deliverySilhouette from '../../assets/images/pregnancy-silhouette.png';
 
 const PregnancyDeliveryInfo = () => {
     const [selectedDelivery, setSelectedDelivery] = useState(null);
@@ -75,68 +76,85 @@ const PregnancyDeliveryInfo = () => {
             {/* ══════════════════════════════════════════════════
                 PAGE HEADER
             ══════════════════════════════════════════════════ */}
-            <div className="pdi-hero-card">
-                <div className="pdi-hero-content">
-                    <h1>Delivery Information</h1>
-                    <p>View your previous pregnancy and delivery records</p>
-                </div>
-                <div className="pdi-hero-graphic">
-                    <Heart size={48} className="pdi-hero-icon" />
+            <div className="page-header hero-header-with-img pdi-custom-hero">
+                <img 
+                    src={deliverySilhouette} 
+                    alt="Delivery Silhouette" 
+                    className="hero-silhouette-bg" 
+                />
+                <div className="hero-content-wrapper">
+                    <div className="hero-text-section">
+                        <h1 className="page-title">
+                            <Baby size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> Delivery Information
+                        </h1>
+                        <p className="page-subtitle">View your previous pregnancy and delivery records</p>
+                    </div>
                 </div>
             </div>
 
             {/* ══════════════════════════════════════════════════
                 DELIVERY HISTORY SECTION
             ══════════════════════════════════════════════════ */}
-            <section className="pdi-section">
+            <section className="pdi-section content-card pdi-main-card">
                 <div className="pdi-section-header">
                     <h2>My Delivery History</h2>
                     <p>Your previous delivery records recorded by your healthcare team.</p>
                 </div>
 
                 <div className="pdi-history-summary">
-                    <span className="pdi-summary-count">{pastPregnancies.length} Previous Deliveries</span>
-                    <span className="pdi-summary-subtitle">Recorded by your healthcare team</span>
+                    <div className="pdi-summary-box">
+                        <span className="pdi-summary-label">Previous Deliveries</span>
+                        <span className="pdi-summary-value">{pastPregnancies.length}</span>
+                    </div>
+                    <div className="pdi-summary-info">
+                        <span className="pdi-summary-recorded">Recorded by your healthcare team</span>
+                        <span className="pdi-summary-view">View-only record</span>
+                    </div>
                 </div>
 
                 <div className="pdi-cards-list">
                     {loading ? <p>Loading records...</p> : pastPregnancies.length > 0 ? (
                         pastPregnancies.map((delivery) => {
-                            const dateBadge = formatDateBadge(delivery.delivery_date);
-                            
                             return (
                                 <div 
                                     key={delivery.id} 
                                     className="pdi-delivery-card"
                                     onClick={() => setSelectedDelivery(delivery)}
                                 >
-                                    <div className="pdi-card-date-badge">
-                                        <span className="pdi-badge-month">{dateBadge.month}</span>
-                                        <span className="pdi-badge-day">{dateBadge.day}</span>
-                                        <span className="pdi-badge-year">{dateBadge.year}</span>
-                                    </div>
-                                    
                                     <div className="pdi-card-main">
                                         <div className="pdi-card-header-row">
-                                            <h3>{delivery.outcome}</h3>
-                                            <span className="pdi-status-badge">{delivery.status}</span>
+                                            <div className="pdi-card-title-group">
+                                                <span className="pdi-detail-label">Delivery Date</span>
+                                                <h3>{delivery.delivery_date ? new Date(delivery.delivery_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Unknown Date'}</h3>
+                                            </div>
+                                            <span className="pdi-status-badge">{delivery.outcome}</span>
                                         </div>
-                                        <p className="pdi-delivery-type">{delivery.delivery_type}</p>
                                         
-                                        <div className="pdi-card-details">
-                                            <div className="pdi-detail-item">
-                                                <MapPin size={14} />
-                                                <span>{delivery.health_station}</span>
+                                        <div className="pdi-card-details-grid">
+                                            <div className="pdi-detail-box">
+                                                <span className="pdi-detail-label">Delivery Type</span>
+                                                <span className="pdi-detail-value">{delivery.delivery_type}</span>
                                             </div>
-                                            <div className="pdi-detail-item">
-                                                <Baby size={14} />
-                                                <span>{delivery.baby_gender}</span>
+                                            <div className="pdi-detail-box">
+                                                <span className="pdi-detail-label">Place of Delivery</span>
+                                                <span className="pdi-detail-value">{delivery.health_station}</span>
+                                            </div>
+                                            <div className="pdi-detail-box">
+                                                <span className="pdi-detail-label">Attended By</span>
+                                                <span className="pdi-detail-value">{delivery.healthcare_provider}</span>
                                             </div>
                                         </div>
-                                    </div>
-                                    
-                                    <div className="pdi-card-arrow">
-                                        <ChevronRight size={20} />
+
+                                        {delivery.notes && (
+                                            <div className="pdi-card-notes">
+                                                <span className="pdi-detail-label">Notes</span>
+                                                <p>{delivery.notes}</p>
+                                            </div>
+                                        )}
+
+                                        <div className="pdi-card-footer">
+                                            <span className="pdi-view-link">View Details <ChevronRight size={14} /></span>
+                                        </div>
                                     </div>
                                 </div>
                             );

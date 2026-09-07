@@ -252,14 +252,14 @@ const MyAppointments = () => {
 
     return (
         <div className="my-appointments-page">
-            <div className="page-header hero-header-with-img">
+            <div className="appt-hero-header">
                 <img 
                     src={appointmentSilhouette} 
                     alt="Appointments Silhouette" 
-                    className="hero-silhouette-bg" 
+                    className="appt-hero-silhouette" 
                 />
-                <div className="hero-content-wrapper">
-                    <div className="hero-text-section">
+                <div className="appt-hero-content">
+                    <div className="appt-hero-text">
                         <h1 className="page-title">
                             <CalendarIcon size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> Appointments
                         </h1>
