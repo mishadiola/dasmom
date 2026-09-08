@@ -86,7 +86,7 @@ const PregnancyProgressCard = ({ lmpDate, weeks: propWeeks, trimester: propTrime
                     <div className="trimester-indicator">
                         <span className={`tri-dot ${gestAge.weeks <= 12 ? 'active' : ''}`}>1st</span>
                         <span className={`tri-dot ${gestAge.weeks > 12 && gestAge.weeks <= 26 ? 'active' : ''}`}>2nd</span>
-                        <span className={`tri-dot ${gestAge.weeks > 26 ? 'active' : ''}`}>3rd Trimester</span>
+                        <span className={`tri-dot ${gestAge.weeks > 26 ? 'active' : ''}`}>3rd</span>
                     </div>
                 </div>
             </div>

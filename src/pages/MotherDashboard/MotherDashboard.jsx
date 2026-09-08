@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
     Calendar, Clock, Heart, Activity, 
     Baby, Star, ChevronRight, Bell,
-    CheckCircle2, AlertCircle, Phone, MessageCircle,
+    CheckCircle2, AlertCircle, Phone, MessageCircle, Mail,
     Sparkles, ArrowRight, ChevronLeft, Info, TrendingUp, Droplet, Thermometer
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -12,6 +12,7 @@ import WelcomeMotherModal from '../../components/MotherDashboard/WelcomeMotherMo
 import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
 import pregnancySilhouette from '../../assets/images/pregnancy-silhouette.png';
+import { calculateEDD, calculateTimeRemaining, calculateGestationalAge, getTrimester } from '../../utils/pregnancyUtils';
 
 const MotherDashboard = () => {
     const navigate = useNavigate();
@@ -51,31 +52,19 @@ const MotherDashboard = () => {
                 const patient = await patientService.getPatientById(authUser.id);
                 if (patient) {
                     if (patient.lmp) {
-                    // Calculate weeks pregnant from LMP
-                    const lmpDate = new Date(patient.lmp);
-                    const today = new Date();
-                    const diffTime = today - lmpDate;
-                    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                    const weeksPregnant = Math.floor(diffDays / 7);
-                    
-                    // Calculate expected due date (LMP + 280 days = 40 weeks)
-                    const eddDate = new Date(lmpDate);
-                    eddDate.setDate(eddDate.getDate() + 280);
-                    const daysUntilDue = Math.floor((eddDate - today) / (1000 * 60 * 60 * 24));
-                    
-                    // Calculate trimester
-                    let trimester = 'N/A';
-                    if (weeksPregnant < 13) trimester = '1st Trimester';
-                    else if (weeksPregnant < 28) trimester = '2nd Trimester';
-                    else if (weeksPregnant <= 40) trimester = '3rd Trimester';
-                    
-                    setPregnancyData({ 
-                        lmp: patient.lmp, 
-                        edd: eddDate.toISOString().split('T')[0], 
-                        weeks: weeksPregnant,
-                        daysUntilDue: Math.max(0, daysUntilDue),
-                        trimester: trimester 
-                    });
+                        const lmpDateStr = patient.lmp;
+                        const eddDate = calculateEDD(lmpDateStr);
+                        const gestAge = calculateGestationalAge(lmpDateStr);
+                        const timeRem = calculateTimeRemaining(eddDate);
+                        const trimesterStr = getTrimester(gestAge.weeks);
+                        
+                        setPregnancyData({ 
+                            lmp: patient.lmp, 
+                            edd: eddDate.toISOString().split('T')[0], 
+                            weeks: gestAge.weeks,
+                            daysUntilDue: timeRem.totalDays,
+                            trimester: trimesterStr 
+                        });
                     }
                     
                     // map visits to appointment-like objects for display (next 3 upcoming)
@@ -214,7 +203,7 @@ const MotherDashboard = () => {
                             {appointments.slice(0, 1).map((appt) => (
                                 <div 
                                     key={appt.id} 
-                                    className={`timeline-item ${String(appt.status || '').toLowerCase()}`}
+                                    className={`mother-timeline-item ${String(appt.status || '').toLowerCase()}`}
                                     onClick={() => navigate('/mother-home/user-appointments')}
                                 >
                                     <div className="timeline-date-block">
@@ -241,7 +230,6 @@ const MotherDashboard = () => {
                                             <span className="staff-label">With:</span> <span className="staff-name">{appt.staff}</span>
                                         </div>
                                     </div>
-                                    <ChevronRight size={16} className="timeline-arrow" />
                                 </div>
                             ))}
                             {appointments.length === 0 && (
@@ -376,16 +364,16 @@ const MotherDashboard = () => {
                                 <p className="support-subtitle">Need immediate help? We're here for you.</p>
                             </div>
                         </div>
-                        <p className="support-text">Facing an emergency or have urgent questions? Contact your healthcare provider directly.</p>
+                        <p className="support-text">Facing an emergency or have urgent questions? Contact City Health Office 3 directly.</p>
                         <div className="support-actions">
-                            <button className="support-btn support-btn-primary">
+                            <a href="tel:09452694260" className="support-btn support-btn-primary" style={{ textDecoration: 'none' }}>
                                 <Phone size={16} />
-                                Call Midwife
-                            </button>
-                            <button className="support-btn support-btn-secondary">
-                                <MessageCircle size={16} />
-                                Message Health Center
-                            </button>
+                                Call CHO III
+                            </a>
+                            <a href="mailto:cho3.salawag@gmail.com" className="support-btn support-btn-secondary" style={{ textDecoration: 'none' }}>
+                                <Mail size={16} />
+                                Email CHO III
+                            </a>
                         </div>
                     </div>
                 </div>
