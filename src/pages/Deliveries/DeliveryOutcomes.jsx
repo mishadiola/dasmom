@@ -74,6 +74,7 @@ const DeliveryOutcomes = () => {
     const [stations, setStations] = useState(['All Stations']);
     const [staffList, setStaffList] = useState([]);
     const [careSchedules, setCareSchedules] = useState([]);
+    const [careSchedulesPage, setCareSchedulesPage] = useState(1);
 
     const loadData = async () => {
         setLoading(true);
@@ -336,6 +337,10 @@ const DeliveryOutcomes = () => {
             state: { existingPatientId: patientId }
         });
     };
+
+    const careSchedulesPerPage = 10;
+    const careSchedulesTotalPages = Math.ceil(careSchedules.length / careSchedulesPerPage);
+    const displayedCareSchedules = careSchedules.slice((careSchedulesPage - 1) * careSchedulesPerPage, careSchedulesPage * careSchedulesPerPage);
 
     return (
         <div className="do-page">
@@ -631,6 +636,7 @@ const DeliveryOutcomes = () => {
                             <table className="do-table">
                                 <thead>
                                     <tr>
+                                        <th className="row-number-header" style={{ width: '50px' }}>#</th>
                                         <th>Patient</th>
                                         <th>Schedule Type</th>
                                         <th>Date</th>
@@ -639,8 +645,11 @@ const DeliveryOutcomes = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {careSchedules.length > 0 ? careSchedules.map(schedule => (
+                                    {displayedCareSchedules.length > 0 ? displayedCareSchedules.map((schedule, index) => (
                                         <tr key={schedule.id}>
+                                            <td className="row-number-cell" style={{ width: '50px' }}>
+                                                {(careSchedulesPage - 1) * careSchedulesPerPage + index + 1}
+                                            </td>
                                             <td>
                                                 <div className="do-patient">
                                                     <div className="do-avatar">{schedule.patientName?.split(' ').slice(0, 2).map(name => name[0]).join('')}</div>
@@ -656,11 +665,32 @@ const DeliveryOutcomes = () => {
                                             <td>{schedule.details}</td>
                                         </tr>
                                     )) : (
-                                        <tr><td colSpan="5" className="do-empty">No care schedules found.</td></tr>
+                                        <tr><td colSpan="6" className="do-empty">No care schedules found.</td></tr>
                                     )}
                                 </tbody>
                             </table>
                         </div>
+                        {careSchedulesTotalPages > 1 && (
+                            <div className="pagination-container" style={{ padding: '12px 20px', borderTop: '1px solid #eef0f4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '12px', color: '#64748b' }}>
+                                    Showing {(careSchedulesPage - 1) * careSchedulesPerPage + 1} to {Math.min(careSchedulesPage * careSchedulesPerPage, careSchedules.length)} of {careSchedules.length}
+                                </span>
+                                <div className="pagination-controls" style={{ display: 'flex', gap: '8px' }}>
+                                    <button 
+                                        className="btn btn-outline" 
+                                        style={{ padding: '4px 12px', fontSize: '12px', minHeight: 'unset' }}
+                                        onClick={() => setCareSchedulesPage(p => Math.max(1, p - 1))}
+                                        disabled={careSchedulesPage === 1}
+                                    >Previous</button>
+                                    <button 
+                                        className="btn btn-outline"
+                                        style={{ padding: '4px 12px', fontSize: '12px', minHeight: 'unset' }}
+                                        onClick={() => setCareSchedulesPage(p => Math.min(careSchedulesTotalPages, p + 1))}
+                                        disabled={careSchedulesPage === careSchedulesTotalPages}
+                                    >Next</button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
                 {/* ── Right Column: Panels ── */}
