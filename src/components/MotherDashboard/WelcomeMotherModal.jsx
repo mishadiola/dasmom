@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Heart, Calendar, Syringe, X, ChevronRight, ArrowRight, Activity, ArrowLeft } from 'lucide-react';
 import '../../styles/components/WelcomeMotherModal.css';
+import { useLanguage } from '../../context/LanguageContext';
 
 const WelcomeMotherModal = ({ onClose }) => {
     const [step, setStep] = useState(1);
     const [selectedFeature, setSelectedFeature] = useState(null);
+    const { t } = useLanguage();
 
     // Fade in effect on mount
     const [isVisible, setIsVisible] = useState(false);
@@ -47,52 +49,52 @@ const WelcomeMotherModal = ({ onClose }) => {
                             <div className="welcome-icon-wrapper" style={{ backgroundColor: '#fdf2f4' }}>
                                 <Heart size={48} className="welcome-main-icon" style={{ color: '#b9818a' }} />
                             </div>
-                            <h2 className="welcome-title">Hello, Mommy! Welcome to DASMOM+</h2>
-                            <p className="welcome-subtitle">We care for you just as much as you care for your baby.</p>
+                            <h2 className="welcome-title">{t('welcome_title')}</h2>
+                            <p className="welcome-subtitle">{t('welcome_subtitle')}</p>
                             <p className="welcome-text">
-                                Your health and well-being matter too. DASMOM+ is here to support you through pregnancy, delivery, and postpartum care.
+                                {t('welcome_text')}
                             </p>
                             <button className="welcome-btn-primary" onClick={nextStep} style={{marginTop: '32px'}}>
-                                Let's Get Started <ArrowRight size={18} />
+                                {t('welcome_get_started')} <ArrowRight size={18} />
                             </button>
                         </div>
                     )}
 
                     {step === 2 && (
                         <div className="welcome-step fade-in">
-                            <h2 className="welcome-title" style={{textAlign: 'left', marginBottom: '8px'}}>Everything You Need, In One Place</h2>
-                            <p className="welcome-text" style={{textAlign: 'left', marginBottom: '24px'}}>Keeping track of your care is easier when everything is right here.</p>
+                            <h2 className="welcome-title" style={{textAlign: 'left', marginBottom: '8px'}}>{t('welcome_step2_title')}</h2>
+                            <p className="welcome-text" style={{textAlign: 'left', marginBottom: '24px'}}>{t('welcome_step2_text')}</p>
                             
                             <div className="welcome-feature-cards">
                                 <div className="welcome-feature-card card-appointments">
                                     <div className="welcome-feature-icon"><Calendar size={24} /></div>
                                     <div className="welcome-feature-info">
-                                        <h3>Appointments</h3>
-                                        <p>Know what's coming up next.<br/>Keep track of your prenatal, vaccination, and postpartum visits.</p>
+                                        <h3>{t('welcome_appointments')}</h3>
+                                        <p>{t('welcome_appointments_desc')}</p>
                                     </div>
                                 </div>
                                 <div className="welcome-feature-card card-records">
                                     <div className="welcome-feature-icon"><Activity size={24} /></div>
                                     <div className="welcome-feature-info">
-                                        <h3>Health Records</h3>
-                                        <p>Keep your health journey close.<br/>View your important maternal health records and visit history anytime.</p>
+                                        <h3>{t('welcome_records')}</h3>
+                                        <p>{t('welcome_records_desc')}</p>
                                     </div>
                                 </div>
                                 <div className="welcome-feature-card card-vaccines">
                                     <div className="welcome-feature-icon"><Syringe size={24} /></div>
                                     <div className="welcome-feature-info">
-                                        <h3>Vaccinations</h3>
-                                        <p>Stay protected and up to date.<br/>See your recommended vaccinations and keep track of your care.</p>
+                                        <h3>{t('welcome_vaccines')}</h3>
+                                        <p>{t('welcome_vaccines_desc')}</p>
                                     </div>
                                 </div>
                             </div>
 
                             <div className="welcome-actions-row">
                                 <button className="welcome-btn-secondary" onClick={prevStep}>
-                                    <ArrowLeft size={16} /> Back
+                                    <ArrowLeft size={16} /> {t('welcome_back')}
                                 </button>
                                 <button className="welcome-btn-primary" onClick={nextStep} style={{margin: 0}}>
-                                    Next <ArrowRight size={16} />
+                                    {t('welcome_next')} <ArrowRight size={16} />
                                 </button>
                             </div>
                         </div>
@@ -100,22 +102,22 @@ const WelcomeMotherModal = ({ onClose }) => {
 
                     {step === 3 && (
                         <div className="welcome-step fade-in">
-                            <h2 className="welcome-title">Your Journey Matters, Mommy.</h2>
+                            <h2 className="welcome-title">{t('welcome_step3_title')}</h2>
                             <p className="welcome-subtitle" style={{marginBottom: '24px', fontWeight: 500}}>
-                                From your first visit to postpartum care, DASMOM+ is here to support you every step of the way.
+                                {t('welcome_step3_subtitle')}
                             </p>
                             <div className="welcome-reassurance-box">
-                                <p>You care so much for your little one.<br/>Don't forget to care for yourself, too.</p>
+                                <p>{t('welcome_step3_box')}</p>
                             </div>
                             <p className="welcome-text" style={{marginTop: '24px'}}>
-                                We're here to help you stay connected with your health, your care team, and the services you need.
+                                {t('welcome_step3_text')}
                             </p>
                             <div className="welcome-actions-row" style={{marginTop: 'auto', paddingTop: '24px'}}>
                                 <button className="welcome-btn-secondary" onClick={prevStep}>
-                                    <ArrowLeft size={16} /> Back
+                                    <ArrowLeft size={16} /> {t('welcome_back')}
                                 </button>
                                 <button className="welcome-btn-primary" onClick={handleClose} style={{margin: 0}}>
-                                    Go to My Dashboard <ArrowRight size={16} />
+                                    {t('welcome_go_dashboard')} <ArrowRight size={16} />
                                 </button>
                             </div>
                         </div>
@@ -131,7 +133,7 @@ const WelcomeMotherModal = ({ onClose }) => {
                             </React.Fragment>
                         ))}
                     </div>
-                    <div className="welcome-step-label">Step {step} of 3</div>
+                    <div className="welcome-step-label">{t('welcome_step_label').replace('{step}', step)}</div>
                 </div>
             </div>
         </div>

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import '../../styles/pages/PregnancyTips.css';
 import tipsSilhouette from '../../assets/images/tips-silhouette.png';
+import { useLanguage } from '../../context/LanguageContext';
 
 // ─── Full Tips Data ────────────────────────────────────────────────────
 export const TIPS_DATA = [
@@ -542,6 +543,7 @@ const setLS = (key, val) => localStorage.setItem(key, JSON.stringify(val));
 // ─── Component ────────────────────────────────────────────────────────
 const PregnancyTips = () => {
     const navigate = useNavigate();
+    const { t } = useLanguage();
     const [searchTerm, setSearchTerm] = useState('');
     const [activeCategory, setActiveCategory] = useState('All');
     const [bookmarks, setBookmarks] = useState(() => getLS(LS_BOOKMARKS));
@@ -590,9 +592,9 @@ const PregnancyTips = () => {
                 <div className="hero-content-wrapper">
                     <div className="hero-text-section">
                         <h1 className="page-title">
-                            <BookOpen size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> Pregnancy Tips
+                            <BookOpen size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('tips_title', 'Pregnancy Tips')}
                         </h1>
-                        <p className="page-subtitle">Expert guidance and care for every stage of your journey</p>
+                        <p className="page-subtitle">{t('tips_subtitle', 'Evidence-based articles and guides from trusted health sources for every stage of your pregnancy')}</p>
                     </div>
                 </div>
             </div>
@@ -604,12 +606,12 @@ const PregnancyTips = () => {
                 <div className="pt-tod-deco pt-tod-deco--2" />
                 <div className="pt-tod-content">
                     <div className="pt-tod-label">
-                        <Star size={14} /> Tip of the Day
+                        <Star size={14} /> {t('tips_tod', 'Tip of the Day')}
                     </div>
                     <h2>{tipOfTheDay.title}</h2>
                     <p>{tipOfTheDay.description}</p>
                     <span className="pt-tod-cta">
-                        Read Full Article <ChevronRight size={16} />
+                        {t('tips_read_full', 'Read Full Article')} <ChevronRight size={16} />
                     </span>
                 </div>
                 <div className={`pt-tod-icon-wrap ${tipOfTheDay.colorClass}`}>
@@ -625,7 +627,7 @@ const PregnancyTips = () => {
                     <input
                         type="text"
                         className="pt-search-input"
-                        placeholder="Maghanap: 'bakuna', 'nutrisyon', 'panganganak'…"
+                        placeholder={t('tips_search_ph', "Search: 'vaccine', 'nutrition', 'delivery'…")}
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                     />
@@ -638,10 +640,10 @@ const PregnancyTips = () => {
                 <button
                     className={`pt-bookmark-toggle ${showBookmarksOnly ? 'active' : ''}`}
                     onClick={() => setShowBookmarksOnly(v => !v)}
-                    title="Show saved tips only"
+                    title={t('tips_show_saved', 'Show saved articles')}
                 >
                     <Bookmark size={16} />
-                    Saved
+                    {t('tips_saved', 'Saved')}
                 </button>
             </div>
 
@@ -663,14 +665,14 @@ const PregnancyTips = () => {
 
             {/* ── Results Label ── */}
             <div className="pt-results-meta">
-                <span>{filteredTips.length} article{filteredTips.length !== 1 ? 's' : ''} found</span>
+                <span>{filteredTips.length} {t('tips_results_meta', 'tips available')}</span>
                 {isActiveFiler && (
                     <button className="pt-clear-all" onClick={() => {
                         setSearchTerm('');
                         setActiveCategory('All');
                         setShowBookmarksOnly(false);
                     }}>
-                        Clear filters
+                        {t('tips_clear_filters', 'Clear filters')}
                     </button>
                 )}
             </div>
@@ -703,7 +705,7 @@ const PregnancyTips = () => {
                                     </div>
                                     {isRead && (
                                         <span className="pt-card-read-badge">
-                                            <CheckCircle2 size={11} /> Read
+                                            <CheckCircle2 size={11} /> {t('tips_read', 'Read')}
                                         </span>
                                     )}
                                 </div>
@@ -712,7 +714,7 @@ const PregnancyTips = () => {
                                 <button
                                     className={`pt-card-bookmark ${isBookmarked ? 'bookmarked' : ''}`}
                                     onClick={e => toggleBookmark(e, tip.id)}
-                                    title={isBookmarked ? 'Remove bookmark' : 'Save for later'}
+                                    title={isBookmarked ? t('tips_remove_bookmark', 'Remove bookmark') : t('tips_save_bookmark', 'Save bookmark')}
                                 >
                                     {isBookmarked ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
                                 </button>
@@ -729,7 +731,7 @@ const PregnancyTips = () => {
                                         <BookOpen size={13} /> {tip.readTime}
                                     </span>
                                     <span className="pt-action-link">
-                                        Read <ChevronRight size={13} />
+                                        {t('tips_read', 'Read')} <ChevronRight size={13} />
                                     </span>
                                 </div>
                             </div>
@@ -738,8 +740,8 @@ const PregnancyTips = () => {
                 ) : (
                     <div className="pt-no-results">
                         <BookOpen size={52} />
-                        <p>No tips found.</p>
-                        <span>Try different keywords or clear your filters.</span>
+                        <p>{t('tips_no_results', 'No tips found.')}</p>
+                        <span>{t('tips_no_results_desc', 'Try different keywords or clear your filters.')}</span>
                     </div>
                 )}
             </div>

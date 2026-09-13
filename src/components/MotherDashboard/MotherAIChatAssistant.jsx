@@ -3,16 +3,18 @@ import { MessageSquare, Send, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { askAI } from '../../services/aichatservice';
 import '../../styles/components/MotherAIChatAssistant.css';
-
-const SUGGESTIONS = [
-    'When is my next appointment?',
-    'What vaccines are due?',
-    'What supplements should I take?',
-    'Pregnancy nutrition tips',
-    'Warning signs during pregnancy'
-];
+import { useLanguage } from '../../context/LanguageContext';
 
 const MotherAIChatAssistant = () => {
+    const { t } = useLanguage();
+    const SUGGESTIONS = [
+        t('chat_sug1'),
+        t('chat_sug2'),
+        t('chat_sug3'),
+        t('chat_sug4'),
+        t('chat_sug5')
+    ];
+
     const [isOpen, setIsOpen] = useState(false);
     const [inputText, setInputText] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -20,7 +22,7 @@ const MotherAIChatAssistant = () => {
         {
             id: 'welcome',
             sender: 'ai',
-            text: "👋 Hello, Mommy! I'm your DASMOM+ AI Assistant. I'm here to answer your pregnancy and maternal health questions.",
+            text: t('chat_welcome'),
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             isWelcome: true
         }
@@ -55,7 +57,7 @@ const MotherAIChatAssistant = () => {
             const aiMessage = {
                 id: `ai-${Date.now()}`,
                 sender: 'ai',
-                text: response || "I'm having trouble processing your request. Please try again.",
+                text: response || t('chat_error'),
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             };
             setMessages(prev => [...prev, aiMessage]);
@@ -64,7 +66,7 @@ const MotherAIChatAssistant = () => {
             const errorMessage = {
                 id: `ai-${Date.now()}`,
                 sender: 'ai',
-                text: "Sorry, I encountered an error. Please try again later.",
+                text: t('chat_error_retry'),
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             };
             setMessages(prev => [...prev, errorMessage]);
@@ -94,8 +96,8 @@ const MotherAIChatAssistant = () => {
                     {/* Header */}
                     <div className="ai-chat-header">
                         <div className="ai-chat-header-info">
-                            <h3>DASMOM+ AI Assistant</h3>
-                            <p>Ask questions about pregnancy & health</p>
+                            <h3>{t('chat_title')}</h3>
+                            <p>{t('chat_subtitle')}</p>
                         </div>
                         <button 
                             className="ai-chat-close-btn"
@@ -123,7 +125,7 @@ const MotherAIChatAssistant = () => {
                                     )}
                                     {msg.isWelcome && (
                                         <div className="ai-suggestions-wrap">
-                                            <div className="ai-suggestions-title">Suggested questions:</div>
+                                            <div className="ai-suggestions-title">{t('chat_suggestions_title')}</div>
                                             <div className="ai-suggestions-list">
                                                 {SUGGESTIONS.map((sug, index) => (
                                                     <button
@@ -147,14 +149,14 @@ const MotherAIChatAssistant = () => {
                     {/* Input Footer */}
                     <div className="ai-chat-footer">
                         <form onSubmit={handleSend} className="ai-input-form">
-                            <input
-                                type="text"
-                                className="ai-chat-input"
-                                value={inputText}
-                                onChange={e => setInputText(e.target.value)}
-                                placeholder="Type your message..."
-                                disabled={isLoading}
-                            />
+                                <input
+                                    type="text"
+                                    className="ai-chat-input"
+                                    value={inputText}
+                                    onChange={e => setInputText(e.target.value)}
+                                    placeholder={t('chat_placeholder')}
+                                    disabled={isLoading}
+                                />
                             <button 
                                 type="submit" 
                                 className="ai-send-btn"

@@ -540,6 +540,27 @@
         grid-template-columns: 1fr;
         gap: 12px;
     }
+
+    .pdi-history-summary {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .pdi-summary-box {
+        border-right: none;
+        border-bottom: 1px solid rgba(185, 129, 138, 0.15);
+        padding-right: 0;
+        padding-bottom: 12px;
+        width: 100%;
+    }
+
+    .pdi-empty-state {
+        padding: 32px 16px;
+        margin: 0 auto;
+        width: 100%;
+        box-sizing: border-box;
+    }
     
     .pdi-modal-overlay {
         padding: 16px;

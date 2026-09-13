@@ -6,6 +6,7 @@ import {
     Star, Share2, ShieldCheck, ExternalLink
 } from 'lucide-react';
 import { TIPS_DATA, CATEGORY_IMAGES, CATEGORY_COLOR_CLASSES } from './PregnancyTips';
+import { useLanguage } from '../../context/LanguageContext';
 import '../../styles/pages/TipDetailPage.css';
 
 const LS_BOOKMARKS = 'pt_bookmarks';
@@ -20,6 +21,7 @@ const setLS = (key, val) => localStorage.setItem(key, JSON.stringify(val));
 const TipDetailPage = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { t } = useLanguage();
 
     const tip = TIPS_DATA.find(t => t.id === id);
 
@@ -41,9 +43,9 @@ const TipDetailPage = () => {
         return (
             <div className="tdp-not-found">
                 <BookOpen size={64} />
-                <h2>Article not found</h2>
+                <h2>{t('tips_not_found')}</h2>
                 <button onClick={() => navigate('/mother-home/user-tips')}>
-                    <ArrowLeft size={16} /> Back to Tips
+                    <ArrowLeft size={16} /> {t('tips_back')}
                 </button>
             </div>
         );
@@ -70,7 +72,7 @@ const TipDetailPage = () => {
             {/* ── Breadcrumb ── */}
             <nav className="tdp-breadcrumb">
                 <button className="tdp-back" onClick={() => navigate('/mother-home/user-tips')}>
-                    <ArrowLeft size={16} /> Back to Pregnancy Tips
+                    <ArrowLeft size={16} /> {t('tips_back')}
                 </button>
                 <span className="tdp-breadcrumb-sep">/</span>
                 <span className="tdp-breadcrumb-current">{tip.title}</span>
@@ -92,7 +94,7 @@ const TipDetailPage = () => {
                         onClick={toggleBookmark}
                     >
                         {isBookmarked ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
-                        {isBookmarked ? 'Saved' : 'Save'}
+                        {isBookmarked ? t('tips_saved') : t('tips_save')}
                     </button>
                 </div>
             </div>
@@ -113,16 +115,16 @@ const TipDetailPage = () => {
                             <Star size={20} />
                         </div>
                         <div className="tdp-callout-body">
-                            <strong>Health Reminder</strong>
-                            <p>Always consult your midwife or doctor before making significant changes to your diet, exercise routine, or supplement intake. Every pregnancy is unique.</p>
+                            <strong>{t('tips_health_reminder')}</strong>
+                            <p>{t('tips_health_reminder_desc')}</p>
                         </div>
                     </div>
 
                     {/* Sources Section */}
                     {tip.sources && tip.sources.length > 0 && (
                         <div className="tdp-sources-section">
-                            <h3><BookOpen size={18} /> Sources & Credentialing</h3>
-                            <p className="tdp-sources-intro">The information in this article is supported by these credible organizations and guidelines:</p>
+                            <h3><BookOpen size={18} /> {t('tips_sources')}</h3>
+                            <p className="tdp-sources-intro">{t('tips_sources_desc')}</p>
                             <div className="tdp-sources-list">
                                 {tip.sources.map((source, i) => (
                                     <a key={i} href={source.url} target="_blank" rel="noopener noreferrer" className="tdp-source-card">
@@ -140,14 +142,14 @@ const TipDetailPage = () => {
                     {/* Completion Indicator */}
                     <div className="tdp-completed-bar">
                         <CheckCircle2 size={20} />
-                        <span>You've completed reading this article! Great job taking care of yourself. 💪</span>
+                        <span>{t('tips_completed_read')}</span>
                     </div>
                 </article>
 
                 {/* ── Sidebar ── */}
                 <aside className="tdp-sidebar">
                     <div className="tdp-sidebar-card">
-                        <h3><Heart size={16} /> Quick Summary</h3>
+                        <h3><Heart size={16} /> {t('tips_quick_summary')}</h3>
                         <ul className="tdp-sidebar-list">
                             {tip.fullContent.map((s, i) => (
                                 <li key={i}>
@@ -159,16 +161,16 @@ const TipDetailPage = () => {
                     </div>
 
                     <div className="tdp-sidebar-card tdp-sidebar-actions">
-                        <h3>Actions</h3>
+                        <h3>{t('tips_actions')}</h3>
                         <button
                             className={`tdp-sidebar-btn ${isBookmarked ? 'bookmarked' : ''}`}
                             onClick={toggleBookmark}
                         >
                             {isBookmarked ? <BookmarkCheck size={15} /> : <Bookmark size={15} />}
-                            {isBookmarked ? 'Saved to Bookmarks' : 'Save for Later'}
+                            {isBookmarked ? t('tips_saved_bookmarks') : t('tips_save_later')}
                         </button>
                         <button className="tdp-sidebar-btn">
-                            <Share2 size={15} /> Share Article
+                            <Share2 size={15} /> {t('tips_share_article')}
                         </button>
                     </div>
                 </aside>
@@ -176,7 +178,7 @@ const TipDetailPage = () => {
 
             {/* ── Related Articles ── */}
             <section className="tdp-related">
-                <h2 className="tdp-related-title">You May Also Like</h2>
+                <h2 className="tdp-related-title">{t('tips_also_like')}</h2>
                 <div className="tdp-related-grid">
                     {related.map(rel => (
                         <div
@@ -199,7 +201,7 @@ const TipDetailPage = () => {
                                 <h4>{rel.title}</h4>
                                 <p>{rel.description}</p>
                                 <span className="tdp-related-cta">
-                                    Read <ChevronRight size={12} />
+                                    {t('tips_read')} <ChevronRight size={12} />
                                 </span>
                             </div>
                         </div>

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 
 import { AuthProvider } from './context/AuthContext';
 import { ModalProvider } from './context/ModalContext';
+import { LanguageProvider } from './context/LanguageContext';
 import ProtectedRoute from './routes/ProtectedRoute';
 
 import Landing from './pages/Landing/Landing';
@@ -57,6 +58,7 @@ function AnalyticsTracker() {
 function App() {
   return (
     <AuthProvider>
+      <LanguageProvider>
       <ModalProvider>
         <BrowserRouter>
           <AnalyticsTracker />
@@ -117,7 +119,8 @@ function App() {
 
         </Routes>
         </BrowserRouter>
-      </ModalProvider>
+        </ModalProvider>
+      </LanguageProvider>
     </AuthProvider>
   );
 }

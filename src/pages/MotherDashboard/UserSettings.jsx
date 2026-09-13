@@ -6,48 +6,28 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useModal } from '../../context/ModalContext';
+import { useLanguage } from '../../context/LanguageContext';
 import '../../styles/pages/UserSettings.css';
 
-const FAQ_DATA = [
-    {
-        q: "What is DASMOM+?",
-        a: "DASMOM+ is a maternal healthcare platform that helps mothers and healthcare staff manage and view maternal health records, appointments, vaccinations, and other pregnancy-related information."
-    },
-    {
-        q: "How do I view my health records?",
-        a: "Go to Records from the bottom navigation. You can view your available vital records and delivery information recorded by your healthcare team."
-    },
-    {
-        q: "Can I edit my health records?",
-        a: "No. Health records are managed by authorized healthcare staff to help keep the information accurate and secure. Contact your health station if you notice incorrect information."
-    },
-    {
-        q: "How do I check my appointments?",
-        a: "Go to Visits to view your upcoming appointments, completed visits, and available appointment details."
-    },
-    {
-        q: "How do I view my vaccination schedule?",
-        a: "Go to Vaccines to view your recorded vaccination information, scheduled vaccines, and vaccination status."
-    },
-    {
-        q: "Is my information secure?",
-        a: "Your information is protected and accessible only to authorized healthcare personnel through the DASMOM+ system."
-    },
-    {
-        q: "What should I do if my information is incorrect?",
-        a: "Contact your assigned health station or City Health Office so authorized staff can review and correct your records."
-    },
-    {
-        q: "Where can I learn more about using DASMOM+?",
-        a: "Please refer to the DASMOM+ User Manual for detailed instructions on how to use the system."
-    }
-];
+
 
 const UserSettings = () => {
     const navigate = useNavigate();
     const { alert: customAlert } = useModal();
+    const { t } = useLanguage();
     const [showFaqModal, setShowFaqModal] = useState(false);
     const [expandedFaq, setExpandedFaq] = useState(null);
+
+    const FAQ_DATA = [
+        { q: t('faq_q1'), a: t('faq_a1') },
+        { q: t('faq_q2'), a: t('faq_a2') },
+        { q: t('faq_q3'), a: t('faq_a3') },
+        { q: t('faq_q4'), a: t('faq_a4') },
+        { q: t('faq_q5'), a: t('faq_a5') },
+        { q: t('faq_q6'), a: t('faq_a6') },
+        { q: t('faq_q7'), a: t('faq_a7') },
+        { q: t('faq_q8'), a: t('faq_a8') }
+    ];
 
     // Prevent body scroll when modal is open
     useEffect(() => {
@@ -91,9 +71,9 @@ const UserSettings = () => {
             <div className="page-header">
                 <div>
                     <h1 className="page-title">
-                        <Lock size={22} className="header-icon" /> Settings
+                        <Lock size={22} className="header-icon" /> {t('settings_title', 'Account Settings')}
                     </h1>
-                    <p className="page-subtitle">Manage your personal information and security</p>
+                    <p className="page-subtitle">{t('settings_subtitle', 'Manage your account security and preferences')}</p>
                 </div>
                 <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
 
@@ -106,50 +86,50 @@ const UserSettings = () => {
                 <section className="settings-card">
                     <div className="card-header">
                         <Lock className="card-icon" size={20} />
-                        <h2>Security</h2>
+                        <h2>{t('settings_security', 'Security')}</h2>
                     </div>
                     
                     <form className="password-form" onSubmit={handlePasswordChange}>
-                        <h3>Change Password</h3>
+                        <h3>{t('settings_change_password', 'Change Password')}</h3>
                         <div className="input-group">
-                            <label>Current Password</label>
+                            <label>{t('settings_current_password', 'Current Password')}</label>
                             <input 
                                 type="password" 
-                                placeholder="Enter current password"
+                                placeholder={t('settings_current_password_ph', 'Enter current password')}
                                 value={passwords.current}
                                 onChange={(e) => setPasswords({...passwords, current: e.target.value})}
                             />
                         </div>
                         <div className="input-row">
                             <div className="input-group">
-                                <label>New Password</label>
+                                <label>{t('settings_new_password', 'New Password')}</label>
                                 <input 
                                     type="password" 
-                                    placeholder="Min. 8 characters"
+                                    placeholder={t('settings_new_password_ph', 'Enter new password')}
                                     value={passwords.new}
                                     onChange={(e) => setPasswords({...passwords, new: e.target.value})}
                                 />
                             </div>
                             <div className="input-group">
-                                <label>Confirm New Password</label>
+                                <label>{t('settings_confirm_password', 'Confirm New Password')}</label>
                                 <input 
                                     type="password" 
-                                    placeholder="Repeat new password"
+                                    placeholder={t('settings_confirm_password_ph', 'Confirm new password')}
                                     value={passwords.confirm}
                                     onChange={(e) => setPasswords({...passwords, confirm: e.target.value})}
                                 />
                             </div>
                         </div>
-                        <button type="submit" className="btn-update-password">Update Password</button>
+                        <button type="submit" className="btn-update-password">{t('settings_update_password', 'Update Password')}</button>
                     </form>
 
                     <div className="login-history">
-                        <h3>Login History</h3>
+                        <h3>{t('settings_login_history', 'Login History')}</h3>
                         <div className="history-item">
                             <Clock size={16} />
                             <div>
-                                <p>Last login: <strong>{userData.lastLogin}</strong></p>
-                                <span>Chrome on Windows 11</span>
+                                <p>{t('settings_last_login', 'Last login:')} <strong>{userData.lastLogin}</strong></p>
+                                <span>{t('settings_browser', 'Browser / Web Browser')}</span>
                             </div>
                         </div>
                     </div>
@@ -160,13 +140,13 @@ const UserSettings = () => {
                 <section className="settings-card">
                     <div className="card-header">
                         <HelpCircle className="card-icon" size={20} />
-                        <h2>Support & Help</h2>
+                        <h2>{t('settings_support', 'Support & Contact')}</h2>
                     </div>
                     <div className="support-links">
                         <a href="#" className="support-item">
                             <div className="support-icon-wrap"><Mail size={18} /></div>
                             <div className="support-text">
-                                <h3>Contact City Health Office</h3>
+                                <h3>{t('settings_contact_cho', 'Contact CHO')}</h3>
                                 <p>Email: support@cityhealth.gov.ph</p>
                             </div>
                             <ExternalLink size={16} />
@@ -174,7 +154,7 @@ const UserSettings = () => {
                         <a href="#" className="support-item">
                             <div className="support-icon-wrap"><Phone size={18} /></div>
                             <div className="support-text">
-                                <h3>Health Station Hotline</h3>
+                                <h3>{t('settings_hotline', 'Emergency Hotline')}</h3>
                                 <p>Call: (046) 123-4567 — Dasmariñas City</p>
                             </div>
                             <ExternalLink size={16} />
@@ -182,8 +162,8 @@ const UserSettings = () => {
                         <a href="#" className="support-item" onClick={(e) => { e.preventDefault(); setShowFaqModal(true); }}>
                             <div className="support-icon-wrap"><Shield size={18} /></div>
                             <div className="support-text">
-                                <h3>Frequently Asked Questions</h3>
-                                <p>Find quick answers to common maternal care questions.</p>
+                                <h3>{t('settings_faq', 'Frequently Asked Questions')}</h3>
+                                <p>{t('settings_faq_desc', 'Find answers to common questions')}</p>
                             </div>
                             <ChevronRight size={16} />
                         </a>
@@ -193,12 +173,12 @@ const UserSettings = () => {
                 {/* ── Section E: Logout ── */}
                 <button className="settings-logout-btn" onClick={handleLogout}>
                     <LogOut size={18} />
-                    <span>Log Out of My Account</span>
+                    <span>{t('settings_logout', 'Log Out')}</span>
                 </button>
             </div>
 
             <footer className="settings-footer">
-                <p>&copy; 2025 DasMom — City Health Office 3. All rights reserved.</p>
+                <p>{t('settings_footer', 'DASMOM+ User Settings')}</p>
             </footer>
 
             {/* FAQ Modal */}
@@ -206,7 +186,7 @@ const UserSettings = () => {
                 <div className="faq-modal-overlay" onClick={() => setShowFaqModal(false)}>
                     <div className="faq-modal-content" onClick={e => e.stopPropagation()}>
                         <div className="faq-modal-header">
-                            <h2>Frequently Asked Questions</h2>
+                            <h2>{t('settings_faq', 'Frequently Asked Questions')}</h2>
                             <button className="faq-close-btn" onClick={() => setShowFaqModal(false)}>
                                 <X size={24} />
                             </button>

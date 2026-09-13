@@ -4,8 +4,10 @@ import {
     CheckCircle2, Clock, AlertTriangle, Info
 } from 'lucide-react';
 import '../../styles/components/VaccineDetailModal.css';
+import { useLanguage } from '../../context/LanguageContext';
 
 const VaccineDetailModal = ({ vaccine, onClose }) => {
+    const { t } = useLanguage();
     if (!vaccine) return null;
 
     const getStatusIcon = (status) => {
@@ -17,8 +19,14 @@ const VaccineDetailModal = ({ vaccine, onClose }) => {
         }
     };
 
-    const displayName = vaccine.notes || vaccine.vaccine_name || vaccine.name || 'Vaccine';
+    const displayName = vaccine.notes || vaccine.vaccine_name || vaccine.name || t('vax_modal_vaccine');
     const status = vaccine.status || 'Unknown';
+    
+    const displayStatus = {
+        'Completed': t('vax_modal_status_completed'),
+        'Upcoming': t('vax_modal_status_upcoming'),
+        'Missed': t('vax_modal_status_missed')
+    }[status] || status;
 
     return (
         <div className="vdm-modal-overlay" onClick={onClose}>
@@ -30,7 +38,7 @@ const VaccineDetailModal = ({ vaccine, onClose }) => {
                         </div>
                         <div className="vdm-title-area">
                             <h2>{displayName}</h2>
-                            <span className="vdm-category">{vaccine.category || vaccine.vaccine_category || 'Vaccine'}</span>
+                            <span className="vdm-category">{vaccine.category || vaccine.vaccine_category || t('vax_modal_vaccine')}</span>
                         </div>
                     </div>
                     <button className="vdm-close-btn" onClick={onClose}>
@@ -42,36 +50,36 @@ const VaccineDetailModal = ({ vaccine, onClose }) => {
                     <div className="vdm-status-shelf">
                         <div className={`vdm-status-indicator status-${String(status).toLowerCase()}`}>
                             {getStatusIcon(status)}
-                            <span>{status}</span>
+                            <span>{displayStatus}</span>
                         </div>
                         <div className="vdm-quick-meta">
                             <div className="vdm-meta-item">
-                                <span className="label">Schedule</span>
-                                <span className="value">{vaccine.schedule || 'As advised'}</span>
+                                <span className="label">{t('vax_modal_schedule')}</span>
+                                <span className="value">{vaccine.schedule || t('vax_modal_as_advised')}</span>
                             </div>
                         </div>
                     </div>
 
                     {/* Vaccination Schedule/Dates */}
                     <div className="vdm-section">
-                        <h3><Calendar size={18} /> Vaccination Details</h3>
+                        <h3><Calendar size={18} /> {t('vax_modal_details')}</h3>
                         <div className="vdm-details-grid">
                             {vaccine.scheduled_vaccination && vaccine.status !== 'Completed' && (
                                 <div className="vdm-detail-item">
-                                    <span className="label">Scheduled Date</span>
+                                    <span className="label">{t('vax_modal_scheduled_date')}</span>
                                     <span className="value">{new Date(vaccine.scheduled_vaccination).toLocaleDateString('en-PH')}</span>
                                 </div>
                             )}
                             {vaccine.vaccinated_date && (
                                 <div className="vdm-detail-item">
-                                    <span className="label">Vaccinated Date</span>
+                                    <span className="label">{t('vax_modal_vaccinated_date')}</span>
                                     <span className="value">{new Date(vaccine.vaccinated_date).toLocaleDateString('en-PH')}</span>
                                 </div>
                             )}
                             {vaccine.dose_number && (
                                 <div className="vdm-detail-item">
-                                    <span className="label">Dose Number</span>
-                                    <span className="value">Dose {vaccine.dose_number}</span>
+                                    <span className="label">{t('vax_modal_dose_number')}</span>
+                                    <span className="value">{t('vax_modal_dose')} {vaccine.dose_number}</span>
                                 </div>
                             )}
                         </div>
@@ -80,14 +88,14 @@ const VaccineDetailModal = ({ vaccine, onClose }) => {
                     {/* Additional Info */}
                     {vaccine.remarks && (
                         <div className="vdm-section">
-                            <h3><Info size={18} /> Notes</h3>
+                            <h3><Info size={18} /> {t('vax_modal_notes')}</h3>
                             <p>{vaccine.remarks}</p>
                         </div>
                     )}
                 </div>
 
                 <div className="vdm-footer">
-                    <button className="vdm-btn-primary" onClick={onClose}>Close</button>
+                    <button className="vdm-btn-primary" onClick={onClose}>{t('vax_modal_close')}</button>
                 </div>
             </div>
         </div>

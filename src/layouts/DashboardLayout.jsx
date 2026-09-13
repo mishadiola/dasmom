@@ -4,7 +4,7 @@ import {
     LayoutDashboard, Users, Baby, AlertTriangle, CalendarCheck,
     HeartPulse, Syringe, Truck, Activity, BarChart3, Settings,
     Bell, LogOut, Menu, X, ChevronLeft, ChevronRight, Search, Shield,
-    MapPin, FileText, Stethoscope, RefreshCw, ClipboardList, Package
+    MapPin, FileText, Stethoscope, RefreshCw, ClipboardList, Package, Languages
 } from 'lucide-react';
 import '../styles/layouts/DashboardLayout.css';
 import logo from '../assets/images/dasmom_logo.png';
@@ -12,6 +12,7 @@ import { AuthContext } from '../context/AuthContext';
 import PatientService from '../services/patientservice';
 import supabase from '../config/supabaseclient';
 import { useModal } from '../context/ModalContext';
+import { useLanguage } from '../context/LanguageContext';
 import MotherAIChatAssistant from '../components/MotherDashboard/MotherAIChatAssistant';
 
 const NAV_ITEMS = [
@@ -70,6 +71,7 @@ const DashboardLayout = () => {
     const location = useLocation();
     const { user, logout: authLogout } = useContext(AuthContext);
     const { confirm } = useModal();
+    const { language, toggleLanguage, t } = useLanguage();
     const patientService = new PatientService();
 
     // Determine if we are in User View based on path
@@ -227,10 +229,10 @@ const DashboardLayout = () => {
     const handleLogout = async () => {
         setUserMenuOpen(false);
         const confirmed = await confirm({
-            title: 'Confirm Logout',
-            text: 'Are you sure you want to log out of DasMom+? You will need to login again to access the system.',
-            confirmText: 'Yes, Logout',
-            cancelText: 'Stay Logged In',
+            title: isUserView ? t('confirm_logout_title') : 'Confirm Logout',
+            text: isUserView ? t('confirm_logout_text') : 'Are you sure you want to log out of DasMom+? You will need to login again to access the system.',
+            confirmText: isUserView ? t('confirm_logout_yes') : 'Yes, Logout',
+            cancelText: isUserView ? t('confirm_logout_no') : 'Stay Logged In',
             iconType: 'logout'
         });
         
@@ -243,19 +245,19 @@ const DashboardLayout = () => {
     // Filter nav items based on view
     const filteredNavItems = isUserView ? [
         {
-            section: 'My Dashboard',
+            section: t('nav_section_dashboard'),
             items: [
-                { label: 'Home', icon: LayoutDashboard, path: '/mother-home' },
-                { label: 'My Vitals', icon: Activity, path: '/mother-home/user-vitals' },
-                { label: 'Appointments', icon: CalendarCheck, path: '/mother-home/user-appointments' },
+                { label: t('nav_home'), icon: LayoutDashboard, path: '/mother-home' },
+                { label: t('nav_my_vitals'), icon: Activity, path: '/mother-home/user-vitals' },
+                { label: t('nav_appointments'), icon: CalendarCheck, path: '/mother-home/user-appointments' },
             ]
         },
         {
-            section: 'Health Info',
+            section: t('nav_section_health'),
             items: [
-                { label: 'Pregnancy Tips', icon: HeartPulse, path: '/mother-home/user-tips' },
-                { label: 'Vaccination Info', icon: Syringe, path: '/mother-home/user-vaccinations' },
-                { label: 'Pregnancy & Delivery Info', icon: ClipboardList, path: '/mother-home/user-delivery-info' },
+                { label: t('nav_pregnancy_tips'), icon: HeartPulse, path: '/mother-home/user-tips' },
+                { label: t('nav_vaccination_info'), icon: Syringe, path: '/mother-home/user-vaccinations' },
+                { label: t('nav_delivery_info'), icon: ClipboardList, path: '/mother-home/user-delivery-info' },
             ]
         }
     ] : NAV_ITEMS;
@@ -347,7 +349,7 @@ const DashboardLayout = () => {
                 <div className="sidebar-footer">
                     <button className="sidebar-logout" onClick={handleLogout} aria-label="Logout">
                         <LogOut size={17} aria-hidden="true" />
-                        {(sidebarOpen || sidebarMobile) && <span>Logout</span>}
+                        {(sidebarOpen || sidebarMobile) && <span>{isUserView ? t('nav_logout') : 'Logout'}</span>}
                     </button>
                 </div>
             </aside>
@@ -381,6 +383,20 @@ const DashboardLayout = () => {
 
                     {/* Right side */}
                     <div className="topbar-right">
+                        {/* Language Toggle - Mother side only */}
+                        {isUserView && (
+                            <button
+                                className="lang-toggle-btn"
+                                onClick={toggleLanguage}
+                                aria-label={language === 'en' ? 'Switch to Filipino' : 'Switch to English'}
+                                title={language === 'en' ? 'Switch to Filipino' : 'Switch to English'}
+                            >
+                                <Languages size={15} />
+                                <span className="lang-label-full">{t('lang_switch_label')}</span>
+                                <span className="lang-label-short">{t('lang_switch_label_short')}</span>
+                            </button>
+                        )}
+
                         {/* Notifications */}
                         <div className="topbar-notif-wrap">
                             <button
@@ -463,18 +479,18 @@ const DashboardLayout = () => {
                                             navigate(isUserView ? '/mother-home/user-account' : '/dashboard/settings?tab=profile');
                                             setUserMenuOpen(false);
                                         }}>
-                                            <Users size={15} /> View Account
+                                            <Users size={15} /> {isUserView ? t('menu_view_account') : 'View Account'}
                                         </button>
                                         <button className="user-menu-item" onClick={() => {
                                             navigate(isUserView ? '/mother-home/user-settings' : '/dashboard/settings');
                                             setUserMenuOpen(false);
                                         }}>
-                                            <Settings size={15} /> Settings
+                                            <Settings size={15} /> {isUserView ? t('menu_settings') : 'Settings'}
                                         </button>
                                     </div>
                                     <div className="user-menu-footer">
                                         <button className="user-menu-logout" onClick={handleLogout}>
-                                            <LogOut size={15} /> Logout
+                                            <LogOut size={15} /> {isUserView ? t('menu_logout') : 'Logout'}
                                         </button>
                                     </div>
                                 </div>
@@ -493,23 +509,23 @@ const DashboardLayout = () => {
                     <nav className="mobile-bottom-nav">
                         <NavLink to="/mother-home" end className={({isActive}) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
                             <LayoutDashboard size={20} />
-                            <span>Home</span>
+                            <span>{t('bottom_home')}</span>
                         </NavLink>
                         <NavLink to="/mother-home/user-appointments" className={({isActive}) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
                             <CalendarCheck size={20} />
-                            <span>Visits</span>
+                            <span>{t('bottom_visits')}</span>
                         </NavLink>
                         <NavLink to="/mother-home/user-vitals" className={({isActive}) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
                             <Activity size={20} />
-                            <span>Records</span>
+                            <span>{t('bottom_records')}</span>
                         </NavLink>
                         <NavLink to="/mother-home/user-vaccinations" className={({isActive}) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
                             <Syringe size={20} />
-                            <span>Vaccines</span>
+                            <span>{t('bottom_vaccines')}</span>
                         </NavLink>
                         <button className={`bottom-nav-item ${mobileMoreOpen ? 'active' : ''}`} onClick={() => setMobileMoreOpen(!mobileMoreOpen)}>
                             <Menu size={20} />
-                            <span>More</span>
+                            <span>{t('bottom_more')}</span>
                         </button>
                     </nav>
                 )}
@@ -519,7 +535,7 @@ const DashboardLayout = () => {
                     <div className="mobile-more-overlay" onClick={() => setMobileMoreOpen(false)}>
                         <div className="mobile-more-menu" onClick={e => e.stopPropagation()}>
                             <div className="mobile-more-header">
-                                <h3>More Options</h3>
+                                <h3>{t('more_options')}</h3>
                                 <button className="mobile-more-close" onClick={() => setMobileMoreOpen(false)}>
                                     <X size={20} />
                                 </button>
@@ -527,19 +543,19 @@ const DashboardLayout = () => {
                             <div className="mobile-more-content">
                                 <NavLink to="/mother-home/user-delivery-info" className="mobile-more-link" onClick={() => setMobileMoreOpen(false)}>
                                     <div className="mobile-more-icon-wrap"><HeartPulse size={18} /></div>
-                                    <span>Pregnancy Information</span>
+                                    <span>{t('more_pregnancy_info')}</span>
                                 </NavLink>
                                 <NavLink to="/mother-home/user-tips" className="mobile-more-link" onClick={() => setMobileMoreOpen(false)}>
                                     <div className="mobile-more-icon-wrap"><FileText size={18} /></div>
-                                    <span>Daily Health Tips</span>
+                                    <span>{t('more_daily_tips')}</span>
                                 </NavLink>
                                 <NavLink to="/mother-home/user-account" className="mobile-more-link" onClick={() => setMobileMoreOpen(false)}>
                                     <div className="mobile-more-icon-wrap"><Users size={18} /></div>
-                                    <span>My Profile</span>
+                                    <span>{t('more_my_profile')}</span>
                                 </NavLink>
                                 <NavLink to="/mother-home/user-settings" className="mobile-more-link" onClick={() => setMobileMoreOpen(false)}>
                                     <div className="mobile-more-icon-wrap"><Settings size={18} /></div>
-                                    <span>Settings</span>
+                                    <span>{t('more_settings')}</span>
                                 </NavLink>
                             </div>
                         </div>

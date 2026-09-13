@@ -9,6 +9,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/MyVitals.css';
 import vitalsSilhouette from '../../assets/images/vitals-silhouette.png';
+import { useLanguage } from '../../context/LanguageContext';
 
 const MyVitals = () => {
     const navigate = useNavigate();
@@ -16,6 +17,7 @@ const MyVitals = () => {
     const [vitalsData, setVitalsData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('Current Health');
+    const { t } = useLanguage();
 
     const TABS = ['Current Health', 'Vitals History'];
 
@@ -71,12 +73,12 @@ const MyVitals = () => {
                 <div className="chart-header">
                     <div className="chart-label">
                         <Icon size={16} color={color} />
-                        <span>{label} Trend</span>
+                        <span>{t('vitals_trend').replace('{label}', label)}</span>
                         {unit && <span className="chart-unit">{unit}</span>}
                     </div>
                 </div>
                 <div className="empty-chart-content">
-                    <p>Not enough records yet</p>
+                    <p>{t('vitals_not_enough')}</p>
                 </div>
             </div>
         );
@@ -118,7 +120,7 @@ const MyVitals = () => {
                 <div className="chart-header">
                     <div className="chart-label">
                         <Icon size={16} color={color} />
-                        <span>{label} Trend</span>
+                        <span>{t('vitals_trend').replace('{label}', label)}</span>
                         {unit && <span className="chart-unit">{unit}</span>}
                     </div>
                 </div>
@@ -148,8 +150,8 @@ const MyVitals = () => {
                     </svg>
                     {dataKey2 && (
                         <div className="chart-legend">
-                            <span style={{color: color}}><span className="legend-dot">●</span> Systolic</span>
-                            <span style={{color: color2}}><span className="legend-dot">●</span> Diastolic</span>
+                            <span style={{color: color}}><span className="legend-dot">●</span> {t('vitals_systolic')}</span>
+                            <span style={{color: color2}}><span className="legend-dot">●</span> {t('vitals_diastolic')}</span>
                         </div>
                     )}
                 </div>
@@ -168,13 +170,13 @@ const MyVitals = () => {
                 <div className="vitals-hero-content-wrapper">
                     <div className="vitals-hero-text-section">
                         <h1 className="page-title">
-                            <Activity size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> Vital Records
+                            <Activity size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('vitals_title')}
                         </h1>
-                        <p className="page-subtitle">View your pregnancy health records and vital signs history</p>
+                        <p className="page-subtitle">{t('vitals_subtitle')}</p>
                         
                         <div className="vitals-hero-badges-row">
                             <button className="vitals-badge-btn" onClick={handleDownloadPDF}>
-                                <Download size={16} /> Download PDF
+                                <Download size={16} /> {t('vitals_download')}
                             </button>
                         </div>
                     </div>
@@ -188,7 +190,7 @@ const MyVitals = () => {
                         className={`vitals-tab ${activeTab === tab ? 'active' : ''}`}
                         onClick={() => setActiveTab(tab)}
                     >
-                        {tab}
+                        {tab === 'Current Health' ? t('vitals_tab_current') : t('vitals_tab_history')}
                     </button>
                 ))}
             </div>
@@ -198,54 +200,54 @@ const MyVitals = () => {
                     <>
                         {/* ── Top Summary Cards ── */}
                         <div className="vitals-section-card">
-                            <h2 className="section-title">Current Health</h2>
+                            <h2 className="section-title">{t('vitals_current_health')}</h2>
                             <div className="vitals-summary-grid">
                                 <div className="v-summary-card v-summary-card--green">
                                     <div className="v-card-top">
                                         <div className="v-icon-wrap"><Weight size={20} /></div>
-                                        <span className="v-status">Normal</span>
+                                        <span className="v-status">{t('vitals_normal')}</span>
                                     </div>
                                     <div className="v-value-wrap">
                                         <span className="v-value">{CURRENT_VITALS.weight || '--'}</span>
                                         <span className="v-unit">kg</span>
                                     </div>
-                                    <p className="v-label">Current Weight</p>
+                                    <p className="v-label">{t('vitals_current_weight')}</p>
                                 </div>
 
                                 <div className="v-summary-card v-summary-card--yellow">
                                     <div className="v-card-top">
                                         <div className="v-icon-wrap"><Activity size={20} /></div>
-                                        <span className="v-status">Monitor</span>
+                                        <span className="v-status">{t('vitals_monitor')}</span>
                                     </div>
                                     <div className="v-value-wrap">
                                         <span className="v-value">{CURRENT_VITALS.bp || '--'}</span>
                                         <span className="v-unit">mmHg</span>
                                     </div>
-                                    <p className="v-label">Blood Pressure</p>
+                                    <p className="v-label">{t('vitals_blood_pressure')}</p>
                                 </div>
 
                                 <div className="v-summary-card v-summary-card--pink">
                                     <div className="v-card-top">
                                         <div className="v-icon-wrap"><Heart size={20} /></div>
-                                        <span className="v-status">Normal</span>
+                                        <span className="v-status">{t('vitals_normal')}</span>
                                     </div>
                                     <div className="v-value-wrap">
                                         <span className="v-value">{CURRENT_VITALS.pulse || '--'}</span>
                                         <span className="v-unit">BPM</span>
                                     </div>
-                                    <p className="v-label">Heart Rate</p>
+                                    <p className="v-label">{t('vitals_heart_rate')}</p>
                                 </div>
 
                                 <div className="v-summary-card v-summary-card--green">
                                     <div className="v-card-top">
                                         <div className="v-icon-wrap"><Thermometer size={20} /></div>
-                                        <span className="v-status">Normal</span>
+                                        <span className="v-status">{t('vitals_normal')}</span>
                                     </div>
                                     <div className="v-value-wrap">
                                         <span className="v-value">{CURRENT_VITALS.temp || '--'}</span>
                                         <span className="v-unit">°C</span>
                                     </div>
-                                    <p className="v-label">Temperature</p>
+                                    <p className="v-label">{t('vitals_temperature')}</p>
                                 </div>
                             </div>
                         </div>
@@ -256,20 +258,20 @@ const MyVitals = () => {
                     <>
                         {/* ── Health Alerts (Conditional) ── */}
                         <div className="vitals-observations-card">
-                            <h2 className="section-title">Health Observations</h2>
+                            <h2 className="section-title">{t('vitals_observations')}</h2>
                             <div className="vitals-alerts">
                                 <div className="v-alert-banner v-alert-banner--warning">
                                     <AlertCircle size={20} />
                                     <div className="v-alert-text">
-                                        <h4>Recent High BP Observation</h4>
-                                        <p>Your blood pressure was slightly elevated (130/85) on Feb 26. Please continue to monitor and avoid salty foods.</p>
+                                        <h4>{t('vitals_high_bp_title')}</h4>
+                                        <p>{t('vitals_high_bp_text')}</p>
                                     </div>
                                 </div>
                                 <div className="v-alert-banner v-alert-banner--success">
                                     <CheckCircle2 size={20} />
                                     <div className="v-alert-text">
-                                        <h4>Steady Weight Gain</h4>
-                                        <p>Good job! Your weight gain is within the normal range for your current trimester.</p>
+                                        <h4>{t('vitals_steady_weight_title')}</h4>
+                                        <p>{t('vitals_steady_weight_text')}</p>
                                     </div>
                                 </div>
                             </div>
@@ -281,7 +283,7 @@ const MyVitals = () => {
                 {activeTab === 'Vitals History' && (
                     <div className="vitals-history">
                         <div className="history-header">
-                            <h2 className="section-title">Vitals History</h2>
+                            <h2 className="section-title">{t('vitals_history')}</h2>
                             <div className="history-filters">
                                 <div className="filter-item">
                                     <Filter size={14} />
@@ -289,10 +291,10 @@ const MyVitals = () => {
                                         value={filterTrimester} 
                                         onChange={(e) => setFilterTrimester(e.target.value)}
                                     >
-                                        <option value="All">All Trimesters</option>
-                                        <option value="1st">1st Trimester</option>
-                                        <option value="2nd">2nd Trimester</option>
-                                        <option value="3rd">3rd Trimester</option>
+                                        <option value="All">{t('vitals_all_trimesters')}</option>
+                                        <option value="1st">{t('vitals_1st_trimester')}</option>
+                                        <option value="2nd">{t('vitals_2nd_trimester')}</option>
+                                        <option value="3rd">{t('vitals_3rd_trimester')}</option>
                                     </select>
                                 </div>
                             </div>
@@ -303,13 +305,13 @@ const MyVitals = () => {
                                 <table className="v-table">
                                     <thead>
                                         <tr>
-                                            <th>Date</th>
-                                            <th>Weight</th>
-                                            <th>BP</th>
-                                            <th>Pulse</th>
-                                            <th>Temp</th>
-                                            <th>Trimester</th>
-                                            <th>Status/Notes</th>
+                                            <th>{t('vitals_date')}</th>
+                                            <th>{t('vitals_weight')}</th>
+                                            <th>{t('vitals_bp_col')}</th>
+                                            <th>{t('vitals_pulse')}</th>
+                                            <th>{t('vitals_temp_col')}</th>
+                                            <th>{t('vitals_trimester')}</th>
+                                            <th>{t('vitals_status_notes')}</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -319,35 +321,35 @@ const MyVitals = () => {
                                                 <td>
                                                     <div className="mobile-vital-left">
                                                         <span className="mobile-vital-icon v-icon-green"><Weight size={14}/></span>
-                                                        <span className="mobile-vital-label">Weight</span>
+                                                        <span className="mobile-vital-label">{t('vitals_weight')}</span>
                                                     </div>
                                                     <span className="vital-val">{v.weight ? `${v.weight} kg` : '--'}</span>
                                                 </td>
                                                 <td>
                                                     <div className="mobile-vital-left">
                                                         <span className="mobile-vital-icon v-icon-yellow"><Activity size={14}/></span>
-                                                        <span className="mobile-vital-label">Blood Pressure</span>
+                                                        <span className="mobile-vital-label">{t('vitals_blood_pressure')}</span>
                                                     </div>
                                                     <span className="vital-val">{v.bp || '--'}</span>
                                                 </td>
                                                 <td>
                                                     <div className="mobile-vital-left">
                                                         <span className="mobile-vital-icon v-icon-pink"><Heart size={14}/></span>
-                                                        <span className="mobile-vital-label">Pulse</span>
+                                                        <span className="mobile-vital-label">{t('vitals_pulse')}</span>
                                                     </div>
                                                     <span className="vital-val">{v.pulse ? `${v.pulse} bpm` : '--'}</span>
                                                 </td>
                                                 <td>
                                                     <div className="mobile-vital-left">
                                                         <span className="mobile-vital-icon v-icon-blue"><Thermometer size={14}/></span>
-                                                        <span className="mobile-vital-label">Temperature</span>
+                                                        <span className="mobile-vital-label">{t('vitals_temperature')}</span>
                                                     </div>
                                                     <span className="vital-val">{v.temp ? `${v.temp}°C` : '--'}</span>
                                                 </td>
                                                 <td>{v.trimester}</td>
                                                 <td>
                                                     <span className={`v-note-tag ${(v.notes || '').includes('high') || (v.notes || '').includes('alert') ? 'v-note-tag--warn' : ''}`}>
-                                                        {v.notes || 'Routine'}
+                                                        {v.notes || t('vitals_routine')}
                                                     </span>
                                                 </td>
                                             </tr>
@@ -357,14 +359,14 @@ const MyVitals = () => {
                             ) : (
                                 <div className="empty-vitals-message">
                                     <AlertCircle size={32} />
-                                    <p>No vital records available yet. Your vitals will be recorded during prenatal visits.</p>
+                                    <p>{t('vitals_no_records')}</p>
                                 </div>
                             )}
                         </div>
 
                         <footer className="vitals-footer">
                             <AlertCircle size={14} />
-                            <p>All vital records are view-only. These are recorded during your prenatal visits. Contact your health station for any corrections.</p>
+                            <p>{t('vitals_footer')}</p>
                         </footer>
                     </div>
                 )}

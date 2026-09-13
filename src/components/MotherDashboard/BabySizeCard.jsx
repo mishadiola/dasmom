@@ -5,6 +5,7 @@ import avocadoImg from '../../assets/images/baby-size/avocado.png';
 import watermelonImg from '../../assets/images/baby-size/watermelon.png';
 import raspberryImg from '../../assets/images/baby-size/raspberry.png';
 import BabySizeModal from './BabySizeModal';
+import { useLanguage } from '../../context/LanguageContext';
 
 export const sizeMapping = {
     8: { name: 'Raspberry', length: '1.6 cm', weight: '1 g', fact: 'Your baby is now the size of a raspberry!', image: raspberryImg, emoji: '🍓', color: 'card-pastel-pink' },
@@ -20,6 +21,7 @@ export const sizeMapping = {
 
 const BabySizeCard = ({ currentWeek = 28 }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const { t } = useLanguage();
 
     // Find the closest mapping for the current week
     const weeks = Object.keys(sizeMapping).map(Number).sort((a, b) => b - a);
@@ -30,8 +32,8 @@ const BabySizeCard = ({ currentWeek = 28 }) => {
         <>
             <div className={`baby-size-card ${data.color}`} onClick={() => setIsModalOpen(true)}>
                 <div className="baby-size-header">
-                    <h2 className="baby-size-title">Baby Size This Week</h2>
-                    <span className="baby-size-week-badge">{currentWeek} Weeks</span>
+                    <h2 className="baby-size-title">{t('baby_size_title')}</h2>
+                    <span className="baby-size-week-badge">{t('baby_size_weeks').replace('{weeks}', currentWeek)}</span>
                 </div>
 
                 <div className="baby-size-image-container">
@@ -54,7 +56,7 @@ const BabySizeCard = ({ currentWeek = 28 }) => {
                 </p>
 
                 <div className="baby-size-footer">
-                    Learn more about development <ChevronRight size={14} />
+                    {t('baby_size_learn_more')} <ChevronRight size={14} />
                 </div>
             </div>
 

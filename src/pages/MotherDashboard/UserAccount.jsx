@@ -9,6 +9,7 @@ import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
 import '../../styles/pages/UserAccount.css';
 import { formatMotherId } from '../../utils/displayIds';
+import { useLanguage } from '../../context/LanguageContext';
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 const getInitials = (name = '') =>
@@ -42,6 +43,7 @@ const UserAccount = () => {
     const [error, setError] = useState(null);
     const [userData, setUserData] = useState(null);
     const [newborns, setNewborns] = useState([]);
+    const { t } = useLanguage();
     const authService = new AuthService();
     const patientService = new PatientService();
 
@@ -52,13 +54,13 @@ const UserAccount = () => {
             try {
                 const authUser = await authService.getAuthUser();
                 if (!authUser?.id) {
-                    setError('Not authenticated');
+                    setError(t('acct_not_authenticated'));
                     return;
                 }
 
                 const patient = await patientService.getPatientById(authUser.id);
                 if (!patient) {
-                    setError('Patient data not found');
+                    setError(t('acct_not_found'));
                     return;
                 }
 
@@ -90,7 +92,7 @@ const UserAccount = () => {
                 }
             } catch (err) {
                 console.error('Failed to load user data:', err);
-                setError('Failed to load your account information. Please try again.');
+                setError(t('acct_load_failed'));
             } finally {
                 setLoading(false);
             }
@@ -110,16 +112,16 @@ const UserAccount = () => {
                 <div className="page-header">
                     <div>
                         <h1 className="page-title">
-                            <User size={22} className="header-icon" /> Account
+                            <User size={22} className="header-icon" /> {t('acct_title')}
                         </h1>
-                        <p className="page-subtitle">Loading your account information...</p>
+                        <p className="page-subtitle">{t('acct_loading')}</p>
                     </div>
                     <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
 
                     </div>
                 </div>
                 <div style={{ padding: '40px', textAlign: 'center' }}>
-                    <p>Loading...</p>
+                    <p>{t('acct_loading_text')}</p>
                 </div>
             </div>
         );
@@ -131,9 +133,9 @@ const UserAccount = () => {
                 <div className="page-header">
                     <div>
                         <h1 className="page-title">
-                            <User size={22} className="header-icon" /> Account
+                            <User size={22} className="header-icon" /> {t('acct_title')}
                         </h1>
-                        <p className="page-subtitle">Your account information</p>
+                        <p className="page-subtitle">{t('acct_subtitle')}</p>
                     </div>
                     <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
 
@@ -141,7 +143,7 @@ const UserAccount = () => {
                 </div>
                 <div style={{ padding: '40px', textAlign: 'center' }}>
                     <AlertCircle size={40} style={{ color: '#e74c3c', marginBottom: '10px' }} />
-                    <p>{error || 'Unable to load account information'}</p>
+                    <p>{error || t('acct_error')}</p>
                 </div>
             </div>
         );
@@ -152,9 +154,9 @@ const UserAccount = () => {
             <div className="page-header">
                 <div>
                     <h1 className="page-title">
-                        <User size={22} className="header-icon" /> Account
+                        <User size={22} className="header-icon" /> {t('acct_title')}
                     </h1>
-                    <p className="page-subtitle">View your account information</p>
+                    <p className="page-subtitle">{t('acct_subtitle')}</p>
                 </div>
                 <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
                 </div>
@@ -171,7 +173,7 @@ const UserAccount = () => {
                         </div>
                         <div>
                             <h2>{userData.name}</h2>
-                            <p className="ua-subtext">Patient ID: <code>{formatMotherId(userData.id)}</code></p>
+                            <p className="ua-subtext">{t('acct_patient_id')} <code>{formatMotherId(userData.id)}</code></p>
                         </div>
                     </div>
 
@@ -180,7 +182,7 @@ const UserAccount = () => {
                         <div className="ua-info-card">
                             <div className="ua-info-icon"><User size={18} /></div>
                             <div className="ua-info-content">
-                                <label>Full Name</label>
+                                <label>{t('acct_full_name')}</label>
                                 <p>{userData.name}</p>
                             </div>
                         </div>
@@ -188,16 +190,16 @@ const UserAccount = () => {
                         <div className="ua-info-card">
                             <div className="ua-info-icon"><Calendar size={18} /></div>
                             <div className="ua-info-content">
-                                <label>Date of Birth</label>
+                                <label>{t('acct_dob')}</label>
                                 <p>{formatDate(userData.dateOfBirth)}</p>
-                                <span className="ua-meta">{userData.age && `${userData.age} years old`}</span>
+                                <span className="ua-meta">{userData.age && t('acct_years_old').replace('{age}', userData.age)}</span>
                             </div>
                         </div>
 
                         <div className="ua-info-card">
                             <div className="ua-info-icon"><Heart size={18} /></div>
                             <div className="ua-info-content">
-                                <label>Blood Type</label>
+                                <label>{t('acct_blood_type')}</label>
                                 <p>{userData.bloodType}</p>
                             </div>
                         </div>
@@ -205,7 +207,7 @@ const UserAccount = () => {
                         <div className="ua-info-card">
                             <div className="ua-info-icon"><UserCheck size={18} /></div>
                             <div className="ua-info-content">
-                                <label>Civil Status</label>
+                                <label>{t('acct_civil_status')}</label>
                                 <p>{userData.civilStatus}</p>
                             </div>
                         </div>
@@ -214,7 +216,7 @@ const UserAccount = () => {
                         <div className="ua-info-card">
                             <div className="ua-info-icon"><Phone size={18} /></div>
                             <div className="ua-info-content">
-                                <label>Contact Number</label>
+                                <label>{t('acct_contact')}</label>
                                 <p>{formatPhone(userData.phone)}</p>
                             </div>
                         </div>
@@ -222,7 +224,7 @@ const UserAccount = () => {
                         <div className="ua-info-card">
                             <div className="ua-info-icon"><Mail size={18} /></div>
                             <div className="ua-info-content">
-                                <label>Email</label>
+                                <label>{t('acct_email')}</label>
                                 <p>{userData.email}</p>
                             </div>
                         </div>
@@ -231,7 +233,7 @@ const UserAccount = () => {
                         <div className="ua-info-card ua-info-card--full">
                             <div className="ua-info-icon"><MapPin size={18} /></div>
                             <div className="ua-info-content">
-                                <label>Address</label>
+                                <label>{t('acct_address')}</label>
                                 <p>{userData.address}</p>
                             </div>
                         </div>
@@ -239,7 +241,7 @@ const UserAccount = () => {
                         <div className="ua-info-card">
                             <div className="ua-info-icon"><ShieldCheck size={18} /></div>
                             <div className="ua-info-content">
-                                <label>Health Station</label>
+                                <label>{t('acct_health_station')}</label>
                                 <p>{userData.station}</p>
                             </div>
                         </div>
@@ -247,7 +249,7 @@ const UserAccount = () => {
                         <div className="ua-info-card">
                             <div className="ua-info-icon"><ShieldCheck size={18} /></div>
                             <div className="ua-info-content">
-                                <label>PhilHealth Number</label>
+                                <label>{t('acct_philhealth')}</label>
                                 <p>{userData.philHealthNumber}</p>
                             </div>
                         </div>
@@ -255,7 +257,7 @@ const UserAccount = () => {
 
                     <div className="ua-info-notice">
                         <AlertCircle size={16} />
-                        <p>Your account information is read-only. For changes, please contact your health station.</p>
+                        <p>{t('acct_info_notice')}</p>
                     </div>
                 </section>
 
@@ -263,8 +265,8 @@ const UserAccount = () => {
                 {newborns.length > 0 && (
                     <section className="ua-section ua-section--children">
                         <div className="ua-section-title">
-                            <h3>My Children's Records</h3>
-                            <p className="ua-section-subtitle">{newborns.length} {newborns.length === 1 ? 'child' : 'children'}</p>
+                            <h3>{t('acct_children_title')}</h3>
+                            <p className="ua-section-subtitle">{newborns.length} {newborns.length === 1 ? t('acct_child') : t('acct_children')}</p>
                         </div>
 
                         <div className="ua-children-grid">
@@ -281,15 +283,15 @@ const UserAccount = () => {
                                     </div>
                                     <div className="ua-child-details">
                                         <div className="ua-child-detail">
-                                            <span className="label">Birth Weight</span>
+                                            <span className="label">{t('acct_birth_weight')}</span>
                                             <span className="value">{child.birth_weight ? `${child.birth_weight} kg` : 'N/A'}</span>
                                         </div>
                                         <div className="ua-child-detail">
-                                            <span className="label">Birth Length</span>
+                                            <span className="label">{t('acct_birth_length')}</span>
                                             <span className="value">{child.birth_length ? `${child.birth_length} cm` : 'N/A'}</span>
                                         </div>
                                         <div className="ua-child-detail">
-                                            <span className="label">Condition</span>
+                                            <span className="label">{t('acct_condition')}</span>
                                             <span className="value">{child.condition_at_birth || 'N/A'}</span>
                                         </div>
                                     </div>
@@ -302,17 +304,17 @@ const UserAccount = () => {
                 {/* ── Security Section ── */}
                 <section className="ua-section ua-section--security">
                     <div className="ua-section-title">
-                        <h3><Lock size={18} /> Privacy & Security</h3>
+                        <h3><Lock size={18} /> {t('acct_privacy')}</h3>
                     </div>
                     <div className="ua-security-info">
-                        <p>Your data is protected and encrypted. It is only accessible by authorized healthcare personnel at your health station.</p>
-                        <p>For security concerns or data requests, please contact the Station Health Office (CHO).</p>
+                        <p>{t('acct_privacy_text1')}</p>
+                        <p>{t('acct_privacy_text2')}</p>
                     </div>
                 </section>
 
                 <div className="ua-logout-container">
                     <button className="ua-logout-btn" onClick={handleLogout}>
-                        <LogOut size={16} /> Logout
+                        <LogOut size={16} /> {t('acct_logout')}
                     </button>
                 </div>
             </div>

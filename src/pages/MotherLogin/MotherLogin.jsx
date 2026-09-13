@@ -10,11 +10,13 @@ import AuthService from '../../services/authservice';
 import { AuthContext } from '../../context/AuthContext';
 import { useModal } from '../../context/ModalContext';
 import supabase from '../../config/supabaseclient';
+import { useLanguage } from '../../context/LanguageContext';
 
 const MotherLogin = () => {
     const navigate = useNavigate();
     const { alert: customAlert } = useModal();
     const { setUser } = useContext(AuthContext);
+    const { t } = useLanguage();
     const authService = new AuthService();
 
     const [email, setEmail] = useState('');
@@ -24,7 +26,7 @@ const MotherLogin = () => {
 
     const handleForgotPassword = async (event) => {
         event.preventDefault();
-        const resetEmail = window.prompt('Enter the email address registered with DASMOM:');
+        const resetEmail = window.prompt(t('login_reset_prompt'));
         if (!resetEmail?.trim()) return;
 
         setIsLoading(true);
@@ -36,10 +38,10 @@ const MotherLogin = () => {
                     redirectTo: `${window.location.origin}/reset-password`
                 }
             });
-            await customAlert({ title: 'Check your email', text: 'If that account exists, a password reset link has been sent.', iconType: 'success' });
+            await customAlert({ title: t('login_reset_title'), text: t('login_reset_text'), iconType: 'success' });
         } catch (error) {
             console.error('Password reset email failed:', error);
-            await customAlert({ title: 'Reset failed', text: 'Unable to send the reset email. Please try again.', iconType: 'danger' });
+            await customAlert({ title: t('login_reset_fail_title'), text: t('login_reset_fail_text'), iconType: 'danger' });
         } finally {
             setIsLoading(false);
         }
@@ -53,7 +55,7 @@ const MotherLogin = () => {
         const user = await authService.login(email, password);
 
         if (!authService.accessCheck(user, 'mother')) {
-            await customAlert({ title: 'Access Denied', text: 'You do not have access as a mother.', iconType: 'danger' });
+            await customAlert({ title: t('login_access_denied_title'), text: t('login_access_denied_text'), iconType: 'danger' });
             return;
         }
 
@@ -62,17 +64,17 @@ const MotherLogin = () => {
         navigate(route);
 
     } catch (err) {
-        await customAlert({ title: 'Login Error', text: err.message, iconType: 'danger' });
+        await customAlert({ title: t('login_error_title'), text: err.message, iconType: 'danger' });
     } finally {
         setIsLoading(false);
     }
 };
 
     const highlights = [
-        { icon: Activity, text: 'Track your pregnancy progress' },
-        { icon: Calendar, text: 'View upcoming appointments' },
-        { icon: Heart, text: 'Learn prenatal care tips' },
-        { icon: Baby, text: 'Access newborn information' }
+        { icon: Activity, text: t('login_feature1') },
+        { icon: Calendar, text: t('login_feature2') },
+        { icon: Heart, text: t('login_feature3') },
+        { icon: Baby, text: t('login_feature4') }
     ];
 
     return (
@@ -82,7 +84,7 @@ const MotherLogin = () => {
             {/* Back Button */}
             <button className="ml-back-btn" onClick={() => navigate('/landing')}>
                 <ArrowLeft size={18} />
-                <span>Go Back to Landing Page</span>
+                <span>{t('login_back')}</span>
             </button>
 
             <main className="ml-main">
@@ -93,19 +95,19 @@ const MotherLogin = () => {
                             <div className="ml-logo-wrapper">
                                 <img src={logo} alt="DasMom+ Logo" className="ml-logo" />
                             </div>
-                            <h1 className="ml-title">Log in</h1>
-                            <p className="ml-subtitle">Access your maternal health dashboard</p>
+                            <h1 className="ml-title">{t('login_title')}</h1>
+                            <p className="ml-subtitle">{t('login_subtitle')}</p>
                         </div>
 
                         <form className="ml-form" onSubmit={handleSubmit}>
                             <div className="ml-form-group">
-                                <label className="ml-label">Email Address</label>
+                                <label className="ml-label">{t('login_email_label')}</label>
                                 <div className="ml-input-wrapper">
                                     <Mail size={18} className="ml-input-icon" />
                                     <input 
                                         type="email" 
                                         className="ml-input" 
-                                        placeholder="Enter your email"
+                                        placeholder={t('login_email_placeholder')}
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
                                         required
@@ -114,13 +116,13 @@ const MotherLogin = () => {
                             </div>
 
                             <div className="ml-form-group">
-                                <label className="ml-label">Password</label>
+                                <label className="ml-label">{t('login_password_label')}</label>
                                 <div className="ml-input-wrapper">
                                     <Lock size={18} className="ml-input-icon" />
                                     <input 
                                         type={showPassword ? "text" : "password"} 
                                         className="ml-input" 
-                                        placeholder="Enter your password"
+                                        placeholder={t('login_password_placeholder')}
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                         required
@@ -139,16 +141,16 @@ const MotherLogin = () => {
                             <button type="submit" className="ml-submit-btn" disabled={isLoading}>
                                 {isLoading ? (
                                     <span className="ml-btn-loading">
-                                        <Loader2 className="ml-spinner" /> Logging in...
+                                        <Loader2 className="ml-spinner" /> {t('login_logging_in')}
                                     </span>
                                 ) : (
-                                    <span>Login to Dashboard</span>
+                                    <span>{t('login_submit')}</span>
                                 )}
                             </button>
 
                             <div className="ml-form-footer">
                                 <a href="#forgot-password" className="ml-forgot-link" onClick={handleForgotPassword}>
-                                    Forgot your password?
+                                    {t('login_forgot')}
                                 </a>
                             </div>
                         </form>
@@ -159,11 +161,11 @@ const MotherLogin = () => {
                         <div className="ml-welcome-section">
                             <div className="ml-welcome-badge">
                                 <Heart size={16} />
-                                <span>Welcome, Mommy!</span>
+                                <span>{t('login_welcome_badge')}</span>
                             </div>
-                            <h2 className="ml-welcome-title">Congratulations!</h2>
+                            <h2 className="ml-welcome-title">{t('login_welcome_title')}</h2>
                             <p className="ml-welcome-text">
-                                DASMOM+ helps you ensure the safety of yourself and your baby. Track your pregnancy, view appointments, and access health information all in one place.
+                                {t('login_welcome_text')}
                             </p>
 
                             <div className="ml-features-list">
@@ -181,8 +183,8 @@ const MotherLogin = () => {
                             </div>
 
                             <div className="ml-footer-info">
-                                <p className="ml-footer-location">City Health Office 3, Dasmariñas, Cavite</p>
-                                <p className="ml-footer-copy"> 2026 DASMOM+. All rights reserved.</p>
+                                <p className="ml-footer-location">{t('login_footer_location')}</p>
+                                <p className="ml-footer-copy">{t('login_footer_copy')}</p>
                             </div>
                         </div>
                     </div>

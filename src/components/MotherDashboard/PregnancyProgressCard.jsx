@@ -9,8 +9,10 @@ import {
     getTrimester,
     getWeeklyMilestone
 } from '../../utils/pregnancyUtils';
+import { useLanguage } from '../../context/LanguageContext';
 
 const PregnancyProgressCard = ({ lmpDate, weeks: propWeeks, trimester: propTrimester, edd: propEdd }) => {
+    const { t } = useLanguage();
     const hasLmp = lmpDate && !Number.isNaN(new Date(lmpDate).getTime());
 
     let edd = null;
@@ -52,7 +54,7 @@ const PregnancyProgressCard = ({ lmpDate, weeks: propWeeks, trimester: propTrime
                             <Sparkles size={18} />
                         </div>
                         <div className="gest-content">
-                            <span className="gest-label">This Week:</span>
+                            <span className="gest-label">{t('progress_this_week')}</span>
                             <p className="gest-val milestone-title">{milestone.title}</p>
                             <p className="gest-desc milestone-desc">{milestone.description}</p>
                         </div>
@@ -61,8 +63,8 @@ const PregnancyProgressCard = ({ lmpDate, weeks: propWeeks, trimester: propTrime
 
                 <div className="pregnancy-progress-container">
                     <div className="progress-header">
-                        <span className="progress-title">Pregnancy Progress</span>
-                        <span className="progress-stats">{gestAge.weeks} / 40 weeks</span>
+                        <span className="progress-title">{t('progress_title')}</span>
+                        <span className="progress-stats">{t('progress_weeks').replace('{weeks}', gestAge.weeks)}</span>
                     </div>
                     <div className="custom-progress-bar">
                         <div 
@@ -84,16 +86,16 @@ const PregnancyProgressCard = ({ lmpDate, weeks: propWeeks, trimester: propTrime
                         </div>
                     </div>
                     <div className="trimester-indicator">
-                        <span className={`tri-dot ${gestAge.weeks <= 12 ? 'active' : ''}`}>1st</span>
-                        <span className={`tri-dot ${gestAge.weeks > 12 && gestAge.weeks <= 26 ? 'active' : ''}`}>2nd</span>
-                        <span className={`tri-dot ${gestAge.weeks > 26 ? 'active' : ''}`}>3rd</span>
+                        <span className={`tri-dot ${gestAge.weeks <= 12 ? 'active' : ''}`}>{t('progress_1st')}</span>
+                        <span className={`tri-dot ${gestAge.weeks > 12 && gestAge.weeks <= 26 ? 'active' : ''}`}>{t('progress_2nd')}</span>
+                        <span className={`tri-dot ${gestAge.weeks > 26 ? 'active' : ''}`}>{t('progress_3rd')}</span>
                     </div>
                 </div>
             </div>
 
             <div className="countdown-banner">
                 <Timer size={16} />
-                <span>{timeRem.totalDays ? `${timeRem.totalDays} Days Until You Meet Your Baby` : 'Date not available'}</span>
+                <span>{timeRem.totalDays ? t('progress_countdown').replace('{days}', timeRem.totalDays) : t('progress_no_date')}</span>
             </div>
         </div>
     );

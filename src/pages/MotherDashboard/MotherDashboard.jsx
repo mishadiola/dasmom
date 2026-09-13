@@ -13,9 +13,11 @@ import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
 import pregnancySilhouette from '../../assets/images/pregnancy-silhouette.png';
 import { calculateEDD, calculateTimeRemaining, calculateGestationalAge, getTrimester } from '../../utils/pregnancyUtils';
+import { useLanguage } from '../../context/LanguageContext';
 
 const MotherDashboard = () => {
     const navigate = useNavigate();
+    const { t } = useLanguage();
     const [expandedHealth, setExpandedHealth] = useState(false);
     const [currentTipIndex, setCurrentTipIndex] = useState(0);
     const [showSupportModal, setShowSupportModal] = useState(false);
@@ -166,10 +168,10 @@ const MotherDashboard = () => {
                 <div className="mother-welcome-header-content-wrapper">
                     <div className="mother-welcome-text-section">
                         <h1 className="page-title">
-                            Hello, Mommy! 🤍
+                            {t('dash_hello')}
                         </h1>
                         <p className="page-subtitle">
-                            You're {pregnancyData.weeks || '?'} weeks pregnant. {pregnancyData.daysUntilDue !== undefined && `Your baby is expected in ${pregnancyData.daysUntilDue} days.`}
+                            {t('dash_weeks_pregnant').replace('{weeks}', pregnancyData.weeks || '?')} {pregnancyData.daysUntilDue !== undefined && t('dash_baby_expected').replace('{days}', pregnancyData.daysUntilDue)}
                         </p>
                         
                         <div className="welcome-badges-row">
@@ -190,13 +192,13 @@ const MotherDashboard = () => {
                     <div className="mother-card modern-card appointments-card">
                         <div className="mother-card-header">
                             <h2 className="mother-card-title">
-                                Next Appointment
+                                {t('dash_next_appointment')}
                             </h2>
                             <button 
                                 className="mother-card-link clickable"
                                 onClick={() => navigate('/mother-home/user-appointments')}
                             >
-                                See all <ChevronRight size={14} />
+                                {t('dash_see_all')} <ChevronRight size={14} />
                             </button>
                         </div>
                         <div className="appointments-timeline">
@@ -227,13 +229,13 @@ const MotherDashboard = () => {
                                             </div>
                                         </div>
                                         <div className="timeline-staff">
-                                            <span className="staff-label">With:</span> <span className="staff-name">{appt.staff}</span>
+                                            <span className="staff-label">{t('dash_with')}</span> <span className="staff-name">{appt.staff}</span>
                                         </div>
                                     </div>
                                 </div>
                             ))}
                             {appointments.length === 0 && (
-                                <p style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>No upcoming appointments.</p>
+                                <p style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{t('dash_no_upcoming')}</p>
                             )}
                         </div>
                     </div>
@@ -244,7 +246,7 @@ const MotherDashboard = () => {
                                 <Calendar size={24} color="white" />
                             </div>
                             <div className="edd-details-wrapper">
-                                <h2 className="mother-card-title edd-title-small">Expected Due Date</h2>
+                                <h2 className="mother-card-title edd-title-small">{t('dash_expected_due')}</h2>
                                 {pregnancyData.edd ? (
                                     <h2 className="edd-display">
                                         {new Date(pregnancyData.edd).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
@@ -253,7 +255,7 @@ const MotherDashboard = () => {
                                     <h2 className="edd-display" style={{ opacity: 0.5 }}>N/A</h2>
                                 )}
                                 {pregnancyData.weeks && (
-                                    <p className="edd-subtitle">Week {pregnancyData.weeks} {pregnancyData.daysUntilDue !== undefined ? `• ${pregnancyData.daysUntilDue} days remaining` : ''}</p>
+                                    <p className="edd-subtitle">{t('dash_week').replace('{weeks}', pregnancyData.weeks)} {pregnancyData.daysUntilDue !== undefined ? `• ${t('dash_days_remaining').replace('{days}', pregnancyData.daysUntilDue)}` : ''}</p>
                                 )}
                             </div>
                         </div>
@@ -264,13 +266,13 @@ const MotherDashboard = () => {
                 <div className="mother-card modern-card health-records-full">
                     <div className="mother-card-header">
                         <h2 className="mother-card-title">
-                            <Activity size={18} /> My Latest Health Records
+                            <Activity size={18} /> {t('dash_health_records')}
                         </h2>
                         <button 
                             className="mother-card-link clickable"
                             onClick={() => navigate('/mother-home/user-vitals')}
                         >
-                            Show More <ChevronRight size={14} />
+                            {t('dash_show_more')} <ChevronRight size={14} />
                         </button>
                     </div>
                     <div className="health-records-row">
@@ -291,7 +293,7 @@ const MotherDashboard = () => {
                                 </div>
                             );
                         }) : (
-                            <div className="hrc-empty">No health records available yet.</div>
+                            <div className="hrc-empty">{t('dash_no_records')}</div>
                         )}
                     </div>
                 </div>
@@ -314,7 +316,7 @@ const MotherDashboard = () => {
                         <div className="mother-card modern-card tips-card modern-tips">
                             <div className="mother-card-header">
                                 <h2 className="mother-card-title">
-                                    <Star size={18} /> Daily Health Tips
+                                    <Star size={18} /> {t('dash_daily_tips')}
                                 </h2>
                             </div>
                             <div className="tips-carousel">
@@ -360,19 +362,19 @@ const MotherDashboard = () => {
                                 <AlertCircle size={32} />
                             </div>
                             <div>
-                                <h2 className="support-title">Quick Support</h2>
-                                <p className="support-subtitle">Need immediate help? We're here for you.</p>
+                                <h2 className="support-title">{t('dash_quick_support')}</h2>
+                                <p className="support-subtitle">{t('dash_support_subtitle')}</p>
                             </div>
                         </div>
-                        <p className="support-text">Facing an emergency or have urgent questions? Contact City Health Office 3 directly.</p>
+                        <p className="support-text">{t('dash_support_text')}</p>
                         <div className="support-actions">
                             <a href="tel:09452694260" className="support-btn support-btn-primary" style={{ textDecoration: 'none' }}>
                                 <Phone size={16} />
-                                Call CHO III
+                                {t('dash_call_cho')}
                             </a>
                             <a href="mailto:cho3.salawag@gmail.com" className="support-btn support-btn-secondary" style={{ textDecoration: 'none' }}>
                                 <Mail size={16} />
-                                Email CHO III
+                                {t('dash_email_cho')}
                             </a>
                         </div>
                     </div>

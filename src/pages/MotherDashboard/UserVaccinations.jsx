@@ -11,6 +11,7 @@ import '../../styles/pages/UserVaccinations.css';
 import VaccineDetailModal from '../../components/MotherDashboard/VaccineDetailModal';
 import { useNavigate } from 'react-router-dom';
 import vaccinationsSilhouette from '../../assets/images/vaccinations-silhouette.png';
+import { useLanguage } from '../../context/LanguageContext';
 
 const UserVaccinations = () => {
     const navigate = useNavigate();
@@ -18,6 +19,7 @@ const UserVaccinations = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filter, setFilter] = useState('All');
     const [selectedVaccine, setSelectedVaccine] = useState(null);
+    const { t } = useLanguage();
 
     useEffect(() => {
         const load = async () => {
@@ -93,15 +95,15 @@ const UserVaccinations = () => {
                 <div className="hero-content-wrapper">
                     <div className="hero-text-section">
                         <h1 className="page-title">
-                            <Syringe size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> Vaccinations
+                            <Syringe size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('vac_title')}
                         </h1>
-                        <p className="page-subtitle">Keep track of your and your baby's vaccinations to ensure safety and healthy development</p>
+                        <p className="page-subtitle">{t('vac_subtitle')}</p>
                         <div className="hero-badges-row">
-                            <button className="vitals-badge-btn" title="Print Schedule">
-                                <Printer size={16} /> Print
+                            <button className="vitals-badge-btn" title={t('vac_print')}>
+                                <Printer size={16} /> {t('vac_print')}
                             </button>
-                            <button className="vitals-badge-btn" title="Download PDF">
-                                <Download size={16} /> Download
+                            <button className="vitals-badge-btn" title={t('vac_download')}>
+                                <Download size={16} /> {t('vac_download')}
                             </button>
                         </div>
                     </div>
@@ -111,8 +113,8 @@ const UserVaccinations = () => {
             <div className="uv-progress-section">
                 <div className="uv-progress-card">
                     <div className="uv-progress-info">
-                        <span>Overall Progress</span>
-                        <strong>{completedCount} of {totalCount} vaccinations completed</strong>
+                        <span>{t('vac_progress')}</span>
+                        <strong>{t('vac_progress_count').replace('{completed}', completedCount).replace('{total}', totalCount)}</strong>
                     </div>
                     <div className="uv-progress-bar-wrap">
                         <div 
@@ -128,7 +130,7 @@ const UserVaccinations = () => {
                     <Search size={18} className="search-icon" />
                     <input 
                         type="text" 
-                        placeholder="Search by vaccine name..." 
+                        placeholder={t('vac_search')} 
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
@@ -141,7 +143,7 @@ const UserVaccinations = () => {
                             onClick={() => setFilter(f)}
                         >
                             {f === 'Maternal' ? <HeartPulse size={14} /> : f === 'Newborn' ? <Baby size={14} /> : null}
-                            {f}
+                            {f === 'All' ? t('vac_all') : f === 'Maternal' ? t('vac_maternal') : t('vac_newborn')}
                         </button>
                     ))}
                 </div>
@@ -165,37 +167,42 @@ const UserVaccinations = () => {
                             >
                                 <div className="uv-card-header">
                                     <span className={`uv-category-tag ${String(category).toLowerCase()}`}>
-                                        {vaccine.personType === 'self' ? 'My Vaccine' : `${vaccine.personName}'s Vaccine`}
+                                        {vaccine.personType === 'self' ? t('vac_my_vaccine') : t('vac_baby_vaccine').replace('{name}', vaccine.personName)}
                                     </span>
                                     <span className={`uv-status-badge status-${String(status).toLowerCase()}`}>
-                                        {getStatusIcon(status)} {status}
+                                        {getStatusIcon(status)} 
+                                        {{
+                                            'Completed': t('vax_modal_status_completed'),
+                                            'Upcoming': t('vax_modal_status_upcoming'),
+                                            'Missed': t('vax_modal_status_missed')
+                                        }[status] || status}
                                     </span>
                                 </div>
                                 <h3 className="uv-vaccine-name">{displayName}</h3>
                                 {vaccine.personType === 'child' && (
-                                    <p className="uv-vaccine-person">For: <strong>{vaccine.personName}</strong></p>
+                                    <p className="uv-vaccine-person">{t('vac_for')} <strong>{vaccine.personName}</strong></p>
                                 )}
                                 <p className="uv-vaccine-desc">{desc}</p>
                                 <div className="uv-vaccine-schedule">
                                     <div className="uv-schedule-item">
-                                        <span className="label">Recommended:</span>
-                                        <span className="value">{vaccine.schedule || 'As advised'}</span>
+                                        <span className="label">{t('vac_recommended')}</span>
+                                        <span className="value">{vaccine.schedule || t('vac_as_advised')}</span>
                                     </div>
                                     {vaccine.vaccinated_date && (
                                         <div className="uv-schedule-item">
-                                            <span className="label">Vaccinated:</span>
+                                            <span className="label">{t('vac_vaccinated')}</span>
                                             <span className="value">{new Date(vaccine.vaccinated_date).toLocaleDateString('en-PH')}</span>
                                         </div>
                                     )}
                                     {vaccine.scheduled_vaccination && vaccine.status !== 'Completed' && (
                                         <div className="uv-schedule-item">
-                                            <span className="label">Scheduled:</span>
+                                            <span className="label">{t('vac_scheduled')}</span>
                                             <span className="value">{new Date(vaccine.scheduled_vaccination).toLocaleDateString('en-PH')}</span>
                                         </div>
                                     )}
                                 </div>
                                 <div className="uv-card-footer">
-                                    <span>Click for details</span>
+                                    <span>{t('vac_click_details')}</span>
                                     <ChevronRight size={14} />
                                 </div>
                             </div>
@@ -204,7 +211,7 @@ const UserVaccinations = () => {
                 ) : (
                     <div className="uv-no-results">
                         <Info size={40} />
-                        <p>No vaccines found matching your search or filter.</p>
+                        <p>{t('vac_no_results')}</p>
                     </div>
                 )}
             </div>
