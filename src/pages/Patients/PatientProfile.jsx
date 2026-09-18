@@ -628,6 +628,13 @@ const PatientProfile = () => {
                                         </div>
                                     </div>
                                     <div className="mc-field-row">
+                                        <Mail size={16} className="text-muted" />
+                                        <div>
+                                            <label>Email Address</label>
+                                            <span>{p.gmail || 'Not Provided'}</span>
+                                        </div>
+                                    </div>
+                                    <div className="mc-field-row">
                                         <MapPin size={16} className="text-muted" />
                                         <div>
                                             <label>Residential Address</label>

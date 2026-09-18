@@ -8,6 +8,10 @@
     font-family: var(--font), sans-serif;
 }
 
+body.faq-open .ai-chat-container {
+    display: none !important;
+}
+
 /* Floating Trigger Button */
 .ai-chat-trigger {
     width: 60px;
@@ -197,6 +201,30 @@
 .ai-markdown p {
     margin-top: 0;
     margin-bottom: 12px;
+}
+
+/* ── Typing Indicator ── */
+.ai-typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 4px;
+}
+
+.ai-typing-dot {
+    width: 6px;
+    height: 6px;
+    background-color: var(--color-text-muted, #94a3b8);
+    border-radius: 50%;
+    animation: typingBounce 1.4s infinite ease-in-out both;
+}
+
+.ai-typing-dot:nth-child(1) { animation-delay: -0.32s; }
+.ai-typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes typingBounce {
+    0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
+    40% { transform: scale(1); opacity: 1; }
 }
 
 .ai-markdown p:last-child {

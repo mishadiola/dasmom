@@ -4,7 +4,7 @@ import { AuthContext } from '../../context/AuthContext';
 import {
     ArrowLeft, Save, X, FileText, User, Activity,
     Calendar, HeartPulse, UploadCloud, AlertTriangle,
-    CheckCircle2, XCircle, Loader2, Search
+    CheckCircle2, XCircle, Loader2, Search, Info
 } from 'lucide-react';
 import '../../styles/pages/AddPatient.css';
 import PatientService from "../../services/patientservice";
@@ -92,6 +92,7 @@ const AddPatient = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [selectedExistingPatient, setSelectedExistingPatient] = useState(null);
+    const [emailSuggestions, setEmailSuggestions] = useState([]);
 
     const hydrateExistingPatient = async (patient) => {
         if (!patient) return;
@@ -115,6 +116,7 @@ const AddPatient = () => {
             suffix: patient.suffix || prev.suffix,
             dob: patient.date_of_birth || patient.dob || prev.dob,
             age: patient.age || prev.age,
+            bloodType: patient.bloodtype || prev.bloodType,
             civilStatus: patient.civilStatus || patient.civil_status || prev.civilStatus,
             contactNumber: patient.phone || patient.contact_no || prev.contactNumber,
             address: patient.address || patient.house_no || prev.address,
@@ -166,7 +168,7 @@ const AddPatient = () => {
 
     const [formData, setFormData] = useState({
         firstName: '', middleName: '', lastName: '', suffix: '',
-        dob: '', age: '', civilStatus: '', contactNumber: '', email: '',
+        dob: '', age: '', bloodType: '', civilStatus: '', contactNumber: '', email: '',
         alternateContact: '', address: '', station: '', municipality: 'Dasmariñas',
         province: 'Cavite', philhealth: '', validId: '',
         pregnancyStatus: 'Pregnant', gravida: '', para: '',
@@ -184,6 +186,22 @@ const AddPatient = () => {
         babyGender: 'Female', babyWeight: '', babyLength: '', headCircumference: '',
         apgar1: '', apgar5: '', babyCondition: 'Healthy',
     });
+
+    useEffect(() => {
+        // Automatic scroll to top when changing registration sections
+        const scrollableMain = document.querySelector('.main-content');
+        if (scrollableMain) {
+            scrollableMain.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        
+        const formContent = document.querySelector('.ap-content');
+        if (formContent) {
+            formContent.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, [activeTab]);
+
     useEffect(() => {
         if (toast) {
             const timer = setTimeout(() => {
@@ -453,11 +471,6 @@ const AddPatient = () => {
 
         // Validate email field
         if (name === 'email') {
-            // Auto-complete to @gmail.com when @ is typed
-            if (finalValue.endsWith('@') && finalValue.length > (formData.email || '').length) {
-                finalValue = finalValue + 'gmail.com';
-            }
-
             // Allow only valid email characters: letters, numbers, dot, underscore, hyphen, @
             // Disallow: comma, single quote, double quote, and other special characters
             const emailPattern = /^[a-zA-Z0-9._@-]*$/;
@@ -470,8 +483,37 @@ const AddPatient = () => {
                 }));
                 // Don't update formData if invalid
                 return;
+            }
+
+            // Show suggestions after @ is typed
+            if (finalValue.includes('@')) {
+                const parts = finalValue.split('@');
+                const localPart = parts[0];
+                const domainPart = parts.slice(1).join('@'); // In case of multiple @, though regex blocks it
+                const providers = ['gmail.com', 'yahoo.com', 'outlook.com'];
+                
+                if (!domainPart || !providers.includes(domainPart)) {
+                    const filtered = providers.filter(p => p.startsWith(domainPart));
+                    if (filtered.length > 0 && localPart.length > 0) {
+                        setEmailSuggestions(filtered.map(p => `${localPart}@${p}`));
+                    } else {
+                        setEmailSuggestions([]);
+                    }
+                } else {
+                    setEmailSuggestions([]);
+                }
             } else {
-                // Clear error if valid or empty
+                setEmailSuggestions([]);
+            }
+
+            // Validate full email structure for warning
+            const fullEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (finalValue && !fullEmailPattern.test(finalValue)) {
+                setNameValidationErrors(prev => ({
+                    ...prev,
+                    [name]: 'Please enter a valid email address (e.g., name@gmail.com).'
+                }));
+            } else {
                 setNameValidationErrors(prev => {
                     const updated = { ...prev };
                     delete updated[name];
@@ -627,6 +669,12 @@ const AddPatient = () => {
         
         if (Object.keys(nameErrors).length > 0) {
             setNameValidationErrors(nameErrors);
+            setToast({ type: 'error', message: 'Please fix the validation errors before saving.' });
+            return;
+        }
+        
+        if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+            setNameValidationErrors(prev => ({ ...prev, email: 'Please enter a valid email address (e.g., name@gmail.com).' }));
             setToast({ type: 'error', message: 'Please fix the validation errors before saving.' });
             return;
         }
@@ -807,8 +855,103 @@ const AddPatient = () => {
         }
     };
 
+    const activeTabs = TABS.filter(tab => {
+        if (formData.pregnancyStatus === 'Postpartum' && tab.id === 'prenatal') {
+            return false;
+        }
+        return true;
+    });
+    const currentTabIndex = activeTabs.findIndex(t => t.id === activeTab);
+    const isFirstTab = currentTabIndex === 0;
+    const isLastTab = currentTabIndex === activeTabs.length - 1;
+
+    const handleNext = () => {
+        const isExistingPatientMode = registrationMode === 'existing' || !!selectedExistingPatient;
+        const missing = [];
+        const isEmptyValue = (value) => value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
+        
+        const checkFields = (fields) => fields.forEach(f => {
+            const value = formData[f];
+            if (isEmptyValue(value)) {
+                missing.push(f);
+                return;
+            }
+            if ((f === 'contactNumber' || f === 'emPhone') && typeof value === 'string') {
+                if (value.length !== 11 || !value.startsWith('09')) {
+                    missing.push(f + '-invalid');
+                }
+            }
+        });
+
+        if (activeTab === 'personal') {
+            const requiredPersonal = [
+                'contactNumber',
+                'address',
+                'station',
+                ...(isExistingPatientMode ? [] : ['firstName', 'lastName', 'dob', 'email'])
+            ];
+            checkFields(requiredPersonal);
+
+            if (!isExistingPatientMode) {
+                if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+                    missing.push('email-invalid');
+                    setNameValidationErrors(prev => ({ ...prev, email: 'Please enter a valid email address (e.g., name@gmail.com).' }));
+                }
+                const namePattern = /^[A-Za-z\s'-]*$/;
+                if (formData.firstName && !namePattern.test(formData.firstName)) missing.push('firstName-invalid');
+                if (formData.middleName && !namePattern.test(formData.middleName)) missing.push('middleName-invalid');
+                if (formData.lastName && !namePattern.test(formData.lastName)) missing.push('lastName-invalid');
+            }
+        } else if (activeTab === 'pregnancy') {
+            const requiredPregnancy = ['gravida', 'para', 'lmp'];
+            checkFields(requiredPregnancy);
+            
+            if (formData.pregnancyStatus === 'Pregnant' && formData.edd) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const eddDate = new Date(formData.edd);
+                if (eddDate < today) {
+                    missing.push('edd-invalid');
+                    setToast({ type: 'error', message: `Cannot register patient with past due date.` });
+                }
+            }
+        } else if (activeTab === 'medical') {
+            // No strict required fields in medical
+        } else if (activeTab === 'prenatal') {
+            const requiredVitals = ['weight', 'height', 'bp'];
+            const requiredEmergency = isExistingPatientMode
+                ? []
+                : (sameAsPatientAddress
+                    ? ['emName', 'emRel', 'emPhone']
+                    : ['emName', 'emRel', 'emPhone', 'emAddress']);
+            checkFields(requiredVitals);
+            checkFields(requiredEmergency);
+        }
+
+        if (missing.length > 0) {
+            setMissingFields(prev => [...new Set([...prev, ...missing])]);
+            setToast({ type: 'error', message: 'Please complete all required fields in this section.' });
+            
+            setTimeout(() => {
+                const firstMissing = missing[0].replace('-invalid', '');
+                const fieldEl = document.querySelector(`[name="${firstMissing}"]`);
+                if (fieldEl) {
+                    fieldEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    fieldEl.focus({ preventScroll: true });
+                }
+            }, 100);
+            return;
+        }
+
+        if (!isLastTab) {
+            setActiveTab(activeTabs[currentTabIndex + 1].id);
+            window.scrollTo(0, 0);
+        }
+    };
+
     return (
         <div className="add-patient-page">
+
             {toast && (
                 <div className={`toast toast--${toast.type}`}>
                     <span>{toast.type === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />} {toast.message}</span>
@@ -857,13 +1000,7 @@ const AddPatient = () => {
 
             <div className="ap-container">
                 <aside className="ap-sidebar">
-                    {TABS.filter(tab => {
-                        // Hide prenatal tab for postpartum patients
-                        if (formData.pregnancyStatus === 'Postpartum' && tab.id === 'prenatal') {
-                            return false;
-                        }
-                        return true;
-                    }).map(tab => (
+                    {activeTabs.map(tab => (
                         <button
                             key={tab.id}
                             className={`ap-tab ${activeTab === tab.id ? 'active' : ''}`}
@@ -878,6 +1015,31 @@ const AddPatient = () => {
 
                 <form onSubmit={handleSave} className="ap-form">
                     <div className="ap-content">
+                        {activeTab !== 'personal' && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    window.scrollTo(0, 0);
+                                    setActiveTab(activeTabs[currentTabIndex - 1].id);
+                                }}
+                                className="btn btn-outline"
+                                style={{
+                                    marginBottom: '16px',
+                                    padding: '6px 12px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    fontSize: '13px',
+                                    borderRadius: '8px',
+                                    background: '#ffffff',
+                                    color: 'var(--color-primary, #6B5B95)',
+                                    borderColor: '#eef0f4'
+                                }}
+                            >
+                                <ArrowLeft size={14} /> Back
+                            </button>
+                        )}
+                        
                         {/* PERSONAL TAB */}
                         {activeTab === 'personal' && (
                             <div className="ap-section animate-fade">
@@ -1057,7 +1219,48 @@ const AddPatient = () => {
                                         onChange={handleChange} 
                                         required
                                         className={missingFields.includes('email') || nameValidationErrors.email ? 'error-field' : ''} 
+                                        onBlur={(e) => {
+                                            setTimeout(() => setEmailSuggestions([]), 200);
+                                        }}
                                     />
+                                    {emailSuggestions.length > 0 && (
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: '100%',
+                                            left: 0,
+                                            right: 0,
+                                            backgroundColor: '#fff',
+                                            border: '1px solid var(--color-border)',
+                                            borderRadius: '8px',
+                                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                                            zIndex: 10,
+                                            marginTop: '4px',
+                                            overflow: 'hidden'
+                                        }}>
+                                            {emailSuggestions.map(s => (
+                                                <div 
+                                                    key={s} 
+                                                    style={{
+                                                        padding: '8px 12px',
+                                                        cursor: 'pointer',
+                                                        fontSize: '13px',
+                                                        borderBottom: '1px solid #f0f0f0',
+                                                        color: 'var(--color-text)'
+                                                    }}
+                                                    onClick={() => {
+                                                        handleChange({
+                                                            target: { name: 'email', value: s, type: 'email' }
+                                                        });
+                                                        setEmailSuggestions([]);
+                                                    }}
+                                                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f8f9fb'}
+                                                    onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}
+                                                >
+                                                    {s}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                     {nameValidationErrors.email && (
                                         <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
                                             {nameValidationErrors.email}
@@ -1161,7 +1364,21 @@ const AddPatient = () => {
                                     />
                                 </div>
                                 <div className="form-group duo">
-                                    <label>Gravida (Total) <span className="req">*</span></label>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        Gravida (Total) <span className="req">*</span>
+                                        <div className="tooltip-container">
+                                            <Info 
+                                                size={14} 
+                                                style={{ color: 'var(--color-primary, #6B5B95)', cursor: 'pointer', opacity: 0.8 }} 
+                                                tabIndex={0}
+                                                aria-label="Gravida information"
+                                                className="info-icon-tooltip"
+                                            />
+                                            <div className="tooltip-content gravida-tooltip">
+                                                <strong>Gravida</strong> — Total number of times the mother has been pregnant, including the current pregnancy.
+                                            </div>
+                                        </div>
+                                    </label>
                                     <input 
                                         type="number" 
                                         name="gravida" 
@@ -1170,7 +1387,21 @@ const AddPatient = () => {
                                         min="1"
                                         className={missingFields.includes('gravida') ? 'error-field' : ''}
                                     />
-                                    <label>Para (Births) <span className="req">*</span></label>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        Para (Births) <span className="req">*</span>
+                                        <div className="tooltip-container">
+                                            <Info 
+                                                size={14} 
+                                                style={{ color: 'var(--color-primary, #6B5B95)', cursor: 'pointer', opacity: 0.8 }} 
+                                                tabIndex={0}
+                                                aria-label="Para information"
+                                                className="info-icon-tooltip"
+                                            />
+                                            <div className="tooltip-content para-tooltip">
+                                                <strong>Para</strong> — Number of pregnancies that reached the stage of delivery.
+                                            </div>
+                                        </div>
+                                    </label>
                                     <input 
                                         type="number" 
                                         name="para" 
@@ -1366,6 +1597,7 @@ const AddPatient = () => {
                     {activeTab === 'medical' && (
                         <div className="ap-section animate-fade">
                             <h2 className="section-title">Medical Risk Assessment</h2>
+
                             <p className="section-desc">Select all existing medical conditions. The system will auto-compute the risk level based on CHO guidelines.</p>
                             <h3 className="section-subtitle">Pre-existing Conditions</h3>
                             <div className="checkbox-grid">
@@ -1718,6 +1950,21 @@ const AddPatient = () => {
                                         </div>
                                     )}
                                 </div>
+                                <div className="form-group">
+                                    <label>Blood Type</label>
+                                    <select name="bloodType" value={formData.bloodType} onChange={handleChange}>
+                                        <option value="">Select Blood Type</option>
+                                        <option value="A+">A+</option>
+                                        <option value="A-">A−</option>
+                                        <option value="B+">B+</option>
+                                        <option value="B-">B−</option>
+                                        <option value="AB+">AB+</option>
+                                        <option value="AB-">AB−</option>
+                                        <option value="O+">O+</option>
+                                        <option value="O-">O−</option>
+                                        <option value="Unknown">Unknown / Not yet determined</option>
+                                    </select>
+                                </div>
                             </div>
                             <div className="form-grid-3">
                                 <div className="form-group">
@@ -1885,13 +2132,26 @@ const AddPatient = () => {
                     
                     {/* Form Action Buttons - Bottom Placement */}
                     <div className="ap-form-actions">
-                        <button className="btn btn-outline" onClick={() => navigate(-1)} disabled={isSaving} type="button">
-                            <X size={15} /> Cancel
-                        </button>
-                        <button className="btn btn-primary" onClick={handleSave} disabled={isSaving || !currentStaff.id} type="button">
-                            {isSaving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-                            {isSaving ? 'Saving...' : 'Save & Auto-Schedule Visits'}
-                        </button>
+                        {isFirstTab ? (
+                            <button className="btn btn-outline" onClick={() => navigate(-1)} disabled={isSaving} type="button">
+                                <X size={15} /> Cancel
+                            </button>
+                        ) : (
+                            <button className="btn btn-outline" onClick={() => setActiveTab(activeTabs[currentTabIndex - 1].id)} disabled={isSaving} type="button">
+                                <ArrowLeft size={15} /> Back
+                            </button>
+                        )}
+                        
+                        {isLastTab ? (
+                            <button className="btn btn-primary" onClick={handleSave} disabled={isSaving || !currentStaff.id} type="button">
+                                {isSaving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                                {isSaving ? 'Saving...' : 'Save & Auto-Schedule Visits'}
+                            </button>
+                        ) : (
+                            <button className="btn btn-primary" onClick={handleNext} disabled={isSaving} type="button">
+                                Next
+                            </button>
+                        )}
                     </div>
                     </div>
                 </form>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Send, X } from 'lucide-react';
+import { MessageSquare, Send, X, ArrowUp } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { askAI } from '../../services/aichatservice';
 import '../../styles/components/MotherAIChatAssistant.css';
@@ -30,26 +30,43 @@ const MotherAIChatAssistant = () => {
 
     const chatBodyRef = useRef(null);
 
-    // Scroll to bottom on new messages or when opened
+    const [showBackToTop, setShowBackToTop] = useState(false);
+
+    // Scroll to bottom on new messages or when opened, if not manually scrolled far up
     useEffect(() => {
-        if (chatBodyRef.current) {
+        if (chatBodyRef.current && (messages.length > 0 || isLoading)) {
+            // Only auto-scroll if it's a new user message or AI response, 
+            // but for simplicity and current behavior, just scroll to bottom.
             chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
         }
-    }, [messages, isOpen]);
+    }, [messages, isOpen, isLoading]);
 
-    const handleSend = async (e) => {
-        if (e) e.preventDefault();
-        if (!inputText.trim() || isLoading) return;
+    const handleScroll = (e) => {
+        const { scrollTop } = e.target;
+        if (scrollTop > 200) {
+            setShowBackToTop(true);
+        } else {
+            setShowBackToTop(false);
+        }
+    };
+
+    const scrollToTop = () => {
+        if (chatBodyRef.current) {
+            chatBodyRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    };
+
+    const sendMessage = async (text) => {
+        if (!text.trim() || isLoading) return;
 
         const userMessage = {
             id: `user-${Date.now()}`,
             sender: 'user',
-            text: inputText.trim(),
+            text: text.trim(),
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
 
         setMessages(prev => [...prev, userMessage]);
-        setInputText('');
         setIsLoading(true);
 
         try {
@@ -75,8 +92,15 @@ const MotherAIChatAssistant = () => {
         }
     };
 
+    const handleSend = async (e) => {
+        if (e) e.preventDefault();
+        const textToSend = inputText;
+        setInputText('');
+        await sendMessage(textToSend);
+    };
+
     const handleSuggestionClick = (suggestion) => {
-        setInputText(suggestion);
+        sendMessage(suggestion);
     };
 
     return (
@@ -109,7 +133,7 @@ const MotherAIChatAssistant = () => {
                     </div>
 
                     {/* Message Body */}
-                    <div className="ai-chat-body" ref={chatBodyRef}>
+                    <div className="ai-chat-body" ref={chatBodyRef} onScroll={handleScroll}>
                         {messages.map(msg => (
                             <div 
                                 key={msg.id} 
@@ -144,7 +168,51 @@ const MotherAIChatAssistant = () => {
                                 <span className="ai-message-time">{msg.time}</span>
                             </div>
                         ))}
+
+                        {/* Typing Indicator */}
+                        {isLoading && (
+                            <div className="ai-message ai-message--ai">
+                                <div className="ai-message-bubble" style={{ width: 'fit-content' }}>
+                                    <div className="ai-typing-indicator">
+                                        <div className="ai-typing-dot"></div>
+                                        <div className="ai-typing-dot"></div>
+                                        <div className="ai-typing-dot"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
+
+                    {/* Back to Top Button */}
+                    {showBackToTop && (
+                        <div style={{ position: 'absolute', bottom: '80px', left: '0', right: '0', display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+                            <button 
+                                onClick={scrollToTop}
+                                aria-label="Back to top"
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    padding: '6px 14px',
+                                    backgroundColor: '#fff',
+                                    border: '1px solid #eef0f4',
+                                    borderRadius: '20px',
+                                    boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                                    color: 'var(--color-primary, #6B5B95)',
+                                    fontSize: '12px',
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    pointerEvents: 'auto',
+                                    transition: 'all 0.2s ease',
+                                    zIndex: 10
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                                onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                            >
+                                <ArrowUp size={14} /> Back to Top
+                            </button>
+                        </div>
+                    )}
 
                     {/* Input Footer */}
                     <div className="ai-chat-footer">

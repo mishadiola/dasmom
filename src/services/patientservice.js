@@ -1112,6 +1112,7 @@ export default class PatientService {
       station_ass: stationId,
       province: patientData.province,
       philhealthnumber: patientData.philhealth || null,
+      bloodtype: patientData.bloodType || null,
       created_by: createdBy,
       emergency_contact: {
         name: patientData.emName || null,

@@ -43,6 +43,9 @@ const DeliveryOutcomes = () => {
     const { confirm, alert: customAlert } = useModal();
     const babyService = new BabyService();
     const [searchTerm, setSearchTerm] = useState('');
+    const [periodFilter, setPeriodFilter] = useState('This Year');
+    const [customDateRange, setCustomDateRange] = useState({ from: '', to: '' });
+    const [appliedCustomDateRange, setAppliedCustomDateRange] = useState({ from: '', to: '' });
     const [filters, setFilters] = useState({
         type: 'All',
         outcome: 'All',
@@ -73,70 +76,99 @@ const DeliveryOutcomes = () => {
     const [loading, setLoading] = useState(true);
     const [stations, setStations] = useState(['All Stations']);
     const [staffList, setStaffList] = useState([]);
-    const [careSchedules, setCareSchedules] = useState([]);
-    const [careSchedulesPage, setCareSchedulesPage] = useState(1);
+
+    const { displayStats, activePeriodText } = useMemo(() => {
+        let text = '';
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth();
+        const currentQuarter = Math.floor(currentMonth / 3);
+
+        const formatDate = (date) => {
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        };
+
+        if (periodFilter === 'This Month') {
+            const start = new Date(currentYear, currentMonth, 1);
+            const end = new Date(currentYear, currentMonth + 1, 0);
+            text = `${formatDate(start)} – ${formatDate(end)}`;
+        } else if (periodFilter === 'This Quarter') {
+            const start = new Date(currentYear, currentQuarter * 3, 1);
+            const end = new Date(currentYear, currentQuarter * 3 + 3, 0);
+            text = `${formatDate(start)} – ${formatDate(end)}`;
+        } else if (periodFilter === 'This Year') {
+            const start = new Date(currentYear, 0, 1);
+            const end = new Date(currentYear, 11, 31);
+            text = `${formatDate(start)} – ${formatDate(end)}`;
+        } else if (periodFilter === 'All Time') {
+            text = 'All Time';
+        } else if (periodFilter === 'Custom Date Range') {
+            if (appliedCustomDateRange.from && appliedCustomDateRange.to) {
+                // Adjust for timezones strictly using substrings to avoid off-by-one errors with plain Date()
+                const fromParts = appliedCustomDateRange.from.split('-');
+                const toParts = appliedCustomDateRange.to.split('-');
+                const from = new Date(fromParts[0], fromParts[1] - 1, fromParts[2]);
+                const to = new Date(toParts[0], toParts[1] - 1, toParts[2]);
+                text = `${formatDate(from)} – ${formatDate(to)}`;
+            } else {
+                text = 'No Range Applied';
+            }
+        }
+
+        const periodDeliveries = deliveries.filter(d => {
+            if (!d.deliveryDate) return false;
+            const dDate = new Date(d.deliveryDate);
+            if (isNaN(dDate.getTime())) return false;
+
+            if (periodFilter === 'This Month') {
+                return dDate.getFullYear() === currentYear && dDate.getMonth() === currentMonth;
+            }
+            if (periodFilter === 'This Quarter') {
+                return dDate.getFullYear() === currentYear && Math.floor(dDate.getMonth() / 3) === currentQuarter;
+            }
+            if (periodFilter === 'This Year') {
+                return dDate.getFullYear() === currentYear;
+            }
+            if (periodFilter === 'All Time') {
+                return true;
+            }
+            if (periodFilter === 'Custom Date Range') {
+                if (!appliedCustomDateRange.from || !appliedCustomDateRange.to) return true;
+                const from = new Date(`${appliedCustomDateRange.from}T00:00:00`);
+                const to = new Date(`${appliedCustomDateRange.to}T23:59:59.999`);
+                return dDate >= from && dDate <= to;
+            }
+            return true;
+        });
+
+        const totalDeliveries = periodDeliveries.length;
+        const nsdCount = periodDeliveries.filter(d => d.deliveryType === 'NSD').length;
+        const csCount = periodDeliveries.filter(d => d.deliveryType === 'CS').length;
+        const complicationCount = periodDeliveries.filter(d => d.complications && d.complications !== 'None').length;
+        const highRiskCount = periodDeliveries.filter(d => d.riskLevel === 'High Risk' || d.riskLevel === 'High').length;
+
+        return {
+            activePeriodText: text,
+            displayStats: [
+                { label: 'Total Deliveries', value: totalDeliveries, color: 'lilac' },
+                { label: 'Normal vs CS', value: `${nsdCount} / ${csCount}`, color: 'sage' },
+                { label: 'Complications', value: complicationCount, color: 'orange' },
+                { label: 'High-Risk Deliveries', value: highRiskCount, color: 'rose' }
+            ]
+        };
+    }, [deliveries, periodFilter, appliedCustomDateRange]);
 
     const loadData = async () => {
         setLoading(true);
         try {
-            const patientService = new PatientService();
-            const [allDeliv, allStats, prenatalVisits, vaccinationResult, postpartumResult] = await Promise.all([
+            const [allDeliv, allStats] = await Promise.all([
                 babyService.getAllDeliveries(),
-                babyService.getDeliveryStats(),
-                patientService.getPrenatalVisits({ includeArchived: true }),
-                supabase
-                    .from('vaccinations')
-                    .select('id, patient_id, scheduled_vaccination, vaccinated_date, status, notes, vaccine_inventory(vaccine_name), patient_basic_info!vaccinations_patient_id_fkey(first_name, last_name, stations:station_ass(station_name))')
-                    .not('patient_id', 'is', null)
-                    .order('scheduled_vaccination', { ascending: true, nullsFirst: false }),
-                supabase
-                    .from('deliveries')
-                    .select('id, mother_id, delivery_date, postpartum_visit_date, patient_basic_info!deliveries_mother_id_fkey(first_name, last_name, stations:station_ass(station_name))')
-                    .not('postpartum_visit_date', 'is', null)
-                    .order('postpartum_visit_date', { ascending: true })
+                babyService.getDeliveryStats()
             ]);
             setDeliveries(allDeliv || []);
-            setStats(allStats || []);
-
-            const vaccinationRows = vaccinationResult.data || [];
-            const postpartumRows = postpartumResult.data || [];
-            setCareSchedules([
-                ...(prenatalVisits || []).map(visit => ({
-                    id: `prenatal-${visit.id}`,
-                    patientId: visit.patientId,
-                    patientName: visit.patientName,
-                    station: '',
-                    scheduleType: 'Prenatal Visit',
-                    date: visit.visitDate || visit.visit_date,
-                    status: visit.status || 'Scheduled',
-                    details: visit.risk || 'Routine prenatal care'
-                })),
-                ...vaccinationRows.map(record => ({
-                    id: `vaccine-${record.id}`,
-                    patientId: record.patient_id,
-                    patientName: `${record.patient_basic_info?.first_name || ''} ${record.patient_basic_info?.last_name || ''}`.trim() || record.patient_id,
-                    station: record.patient_basic_info?.stations?.station_name || '',
-                    scheduleType: 'Vaccination',
-                    date: record.scheduled_vaccination || record.vaccinated_date,
-                    status: record.status || 'Pending',
-                    details: record.vaccine_inventory?.vaccine_name || record.notes || 'Vaccine'
-                })),
-                ...postpartumRows.map(record => ({
-                    id: `postpartum-${record.id}`,
-                    patientId: record.mother_id,
-                    patientName: `${record.patient_basic_info?.first_name || ''} ${record.patient_basic_info?.last_name || ''}`.trim() || record.mother_id,
-                    station: record.patient_basic_info?.stations?.station_name || '',
-                    scheduleType: 'Postpartum Follow-up',
-                    date: record.postpartum_visit_date || record.delivery_date,
-                    status: 'Scheduled',
-                    details: 'Postpartum care'
-                }))
-            ].filter(schedule => schedule.date));
         } catch (err) {
             console.error('Error loading delivery outcomes:', err);
             setDeliveries([]);
-            setStats([]);
-            setCareSchedules([]);
         } finally {
             setLoading(false);
         }
@@ -338,9 +370,7 @@ const DeliveryOutcomes = () => {
         });
     };
 
-    const careSchedulesPerPage = 10;
-    const careSchedulesTotalPages = Math.ceil(careSchedules.length / careSchedulesPerPage);
-    const displayedCareSchedules = careSchedules.slice((careSchedulesPage - 1) * careSchedulesPerPage, careSchedulesPage * careSchedulesPerPage);
+
 
     return (
         <div className="do-page">
@@ -360,9 +390,96 @@ const DeliveryOutcomes = () => {
                 </div>
             </div>
 
+            {/* Delivery Summary Filter Bar */}
+            <div className="stats-header-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', padding: '16px 20px', borderRadius: '12px', border: '1px solid #eef0f4', marginBottom: '16px', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                <div>
+                    <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-text)', margin: '0 0 4px 0' }}>Delivery Summary</h2>
+                    <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>Statistics based on delivery date</p>
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <label style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>Period:</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
+                            <select 
+                                value={periodFilter} 
+                                onChange={e => {
+                                    setPeriodFilter(e.target.value);
+                                    if (e.target.value !== 'Custom Date Range') {
+                                        setCustomDateRange({ from: '', to: '' });
+                                        setAppliedCustomDateRange({ from: '', to: '' });
+                                    }
+                                }}
+                                style={{ 
+                                    padding: '8px 32px 8px 12px', 
+                                    borderRadius: '8px', 
+                                    border: '1px solid #e2e8f0', 
+                                    fontSize: '13.5px', 
+                                    fontWeight: 500,
+                                    outline: 'none',
+                                    appearance: 'none',
+                                    backgroundColor: '#f8f9fb',
+                                    cursor: 'pointer',
+                                    minWidth: '150px',
+                                    color: 'var(--color-text)'
+                                }}
+                            >
+                                <option value="This Month">This Month</option>
+                                <option value="This Quarter">This Quarter</option>
+                                <option value="This Year">This Year</option>
+                                <option value="All Time">All Time</option>
+                                <option value="Custom Date Range">Custom Date Range</option>
+                            </select>
+                            <ChevronDown size={14} style={{ position: 'absolute', right: '12px', pointerEvents: 'none', color: '#64748b' }} />
+                        </div>
+                    </div>
+
+                    {periodFilter === 'Custom Date Range' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', background: '#f8f9fb', padding: '8px 12px', borderRadius: '8px', border: '1px solid #eef0f4' }}>
+                            <span style={{ fontSize: '12.5px', color: '#64748b', fontWeight: 500 }}>From</span>
+                            <input 
+                                type="date" 
+                                value={customDateRange.from}
+                                onChange={e => setCustomDateRange(prev => ({ ...prev, from: e.target.value }))}
+                                style={{ padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '12.5px', outline: 'none' }}
+                            />
+                            <span style={{ fontSize: '12.5px', color: '#64748b', fontWeight: 500, marginLeft: '4px' }}>To</span>
+                            <input 
+                                type="date" 
+                                value={customDateRange.to}
+                                min={customDateRange.from}
+                                onChange={e => setCustomDateRange(prev => ({ ...prev, to: e.target.value }))}
+                                style={{ padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '12.5px', outline: 'none' }}
+                            />
+                            <button 
+                                className="btn btn-primary"
+                                style={{ padding: '6px 12px', fontSize: '12.5px', minHeight: 'unset', marginLeft: '4px' }}
+                                disabled={!customDateRange.from || !customDateRange.to || customDateRange.from > customDateRange.to}
+                                onClick={() => setAppliedCustomDateRange(customDateRange)}
+                            >
+                                Apply
+                            </button>
+                            {appliedCustomDateRange.from && (
+                                <button 
+                                    className="btn btn-outline"
+                                    style={{ padding: '6px 12px', fontSize: '12.5px', minHeight: 'unset' }}
+                                    onClick={() => {
+                                        setPeriodFilter('This Year');
+                                        setCustomDateRange({ from: '', to: '' });
+                                        setAppliedCustomDateRange({ from: '', to: '' });
+                                    }}
+                                >
+                                    Reset
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+
             {/* Stats Cards */}
             <div className="do-stats-grid">
-                {stats.map((s, i) => (
+                {displayStats.map((s, i) => (
                     <div key={i} className={`stat-card stat-card--${s.color}`}>
                         <div className="stat-top">
                             <div className={`stat-icon stat-icon--${s.color}`}>
@@ -371,6 +488,9 @@ const DeliveryOutcomes = () => {
                         </div>
                         <div className="stat-value">{s.value}</div>
                         <div className="stat-label">{s.label}</div>
+                        <div className="stat-period" style={{ fontSize: '11.5px', color: '#64748b', marginTop: '6px', fontWeight: 500 }}>
+                            {activePeriodText}
+                        </div>
                     </div>
                 ))}
             </div>
@@ -627,71 +747,7 @@ const DeliveryOutcomes = () => {
                         </div>
                     </div>
 
-                    <div className="do-card">
-                        <div className="do-card-head">
-                            <h2><Calendar size={17} /> Care Schedules ({careSchedules.length})</h2>
-                            <span className="do-count">Prenatal, vaccination, and postpartum</span>
-                        </div>
-                        <div className="table-responsive">
-                            <table className="do-table">
-                                <thead>
-                                    <tr>
-                                        <th className="row-number-header" style={{ width: '50px' }}>#</th>
-                                        <th>Patient</th>
-                                        <th>Schedule Type</th>
-                                        <th>Date</th>
-                                        <th>Status</th>
-                                        <th>Details</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {displayedCareSchedules.length > 0 ? displayedCareSchedules.map((schedule, index) => (
-                                        <tr key={schedule.id}>
-                                            <td className="row-number-cell" style={{ width: '50px' }}>
-                                                {(careSchedulesPage - 1) * careSchedulesPerPage + index + 1}
-                                            </td>
-                                            <td>
-                                                <div className="do-patient">
-                                                    <div className="do-avatar">{schedule.patientName?.split(' ').slice(0, 2).map(name => name[0]).join('')}</div>
-                                                    <div>
-                                                        <span className="do-name">{schedule.patientName}</span>
-                                                        <span className="do-pid">{formatMotherId(schedule.patientId)}{schedule.station ? ` · ${schedule.station}` : ''}</span>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td><span className="dt-badge dt-na">{schedule.scheduleType}</span></td>
-                                            <td>{new Date(schedule.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</td>
-                                            <td><span className="status-badge">{schedule.status}</span></td>
-                                            <td>{schedule.details}</td>
-                                        </tr>
-                                    )) : (
-                                        <tr><td colSpan="6" className="do-empty">No care schedules found.</td></tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                        {careSchedulesTotalPages > 1 && (
-                            <div className="pagination-container" style={{ padding: '12px 20px', borderTop: '1px solid #eef0f4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '12px', color: '#64748b' }}>
-                                    Showing {(careSchedulesPage - 1) * careSchedulesPerPage + 1} to {Math.min(careSchedulesPage * careSchedulesPerPage, careSchedules.length)} of {careSchedules.length}
-                                </span>
-                                <div className="pagination-controls" style={{ display: 'flex', gap: '8px' }}>
-                                    <button 
-                                        className="btn btn-outline" 
-                                        style={{ padding: '4px 12px', fontSize: '12px', minHeight: 'unset' }}
-                                        onClick={() => setCareSchedulesPage(p => Math.max(1, p - 1))}
-                                        disabled={careSchedulesPage === 1}
-                                    >Previous</button>
-                                    <button 
-                                        className="btn btn-outline"
-                                        style={{ padding: '4px 12px', fontSize: '12px', minHeight: 'unset' }}
-                                        onClick={() => setCareSchedulesPage(p => Math.min(careSchedulesTotalPages, p + 1))}
-                                        disabled={careSchedulesPage === careSchedulesTotalPages}
-                                    >Next</button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
+
                 </div>
                 {/* ── Right Column: Panels ── */}
                 <div className="do-side-col" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>

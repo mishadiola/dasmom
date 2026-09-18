@@ -7,6 +7,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useModal } from '../../context/ModalContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { AuthContext } from '../../context/AuthContext';
+import { useContext } from 'react';
 import '../../styles/pages/UserSettings.css';
 
 
@@ -15,6 +17,7 @@ const UserSettings = () => {
     const navigate = useNavigate();
     const { alert: customAlert } = useModal();
     const { t } = useLanguage();
+    const { logout } = useContext(AuthContext);
     const [showFaqModal, setShowFaqModal] = useState(false);
     const [expandedFaq, setExpandedFaq] = useState(null);
 
@@ -29,14 +32,19 @@ const UserSettings = () => {
         { q: t('faq_q8'), a: t('faq_a8') }
     ];
 
-    // Prevent body scroll when modal is open
+    // Prevent body scroll and hide chatbot when modal is open
     useEffect(() => {
         if (showFaqModal) {
             document.body.style.overflow = 'hidden';
+            document.body.classList.add('faq-open');
         } else {
             document.body.style.overflow = 'unset';
+            document.body.classList.remove('faq-open');
         }
-        return () => { document.body.style.overflow = 'unset'; }
+        return () => { 
+            document.body.style.overflow = 'unset'; 
+            document.body.classList.remove('faq-open');
+        }
     }, [showFaqModal]);
 
 
@@ -56,8 +64,14 @@ const UserSettings = () => {
         lastLogin: "March 07, 2026 at 2:45 PM"
     };
 
-    const handleLogout = () => {
-        navigate('/');
+    const handleLogout = async () => {
+        try {
+            await logout();
+            navigate('/mother-login', { replace: true });
+        } catch (error) {
+            console.error('Logout error:', error);
+            await customAlert({ title: 'Logout Failed', text: 'An error occurred while logging out.', iconType: 'danger' });
+        }
     };
 
     const handlePasswordChange = async (e) => {
@@ -143,19 +157,19 @@ const UserSettings = () => {
                         <h2>{t('settings_support', 'Support & Contact')}</h2>
                     </div>
                     <div className="support-links">
-                        <a href="#" className="support-item">
+                        <a href="mailto:cho3.salawag@gmail.com" className="support-item">
                             <div className="support-icon-wrap"><Mail size={18} /></div>
                             <div className="support-text">
-                                <h3>{t('settings_contact_cho', 'Contact CHO')}</h3>
-                                <p>Email: support@cityhealth.gov.ph</p>
+                                <h3>{t('settings_contact_cho_email', 'Contact CHO III')}</h3>
+                                <p>Email: cho3.salawag@gmail.com</p>
                             </div>
                             <ExternalLink size={16} />
                         </a>
-                        <a href="#" className="support-item">
+                        <a href="tel:09452694260" className="support-item">
                             <div className="support-icon-wrap"><Phone size={18} /></div>
                             <div className="support-text">
-                                <h3>{t('settings_hotline', 'Emergency Hotline')}</h3>
-                                <p>Call: (046) 123-4567 — Dasmariñas City</p>
+                                <h3>{t('settings_contact_cho_phone', 'Contact CHO III')}</h3>
+                                <p>Phone: 0945 269 4260</p>
                             </div>
                             <ExternalLink size={16} />
                         </a>

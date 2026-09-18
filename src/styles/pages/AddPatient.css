@@ -1170,4 +1170,60 @@
     font-size: 13px;
     color: #8c2a3c;
     border: 1px dashed rgba(183, 58, 82, 0.2);
-}
+}
+
+/* ══════════════════════════════════════════
+   TOOLTIPS
+══════════════════════════════════════════ */
+.tooltip-container {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.tooltip-content {
+    visibility: hidden;
+    opacity: 0;
+    position: absolute;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    width: 240px;
+    background-color: #fafbfc;
+    color: var(--color-text);
+    text-align: left;
+    padding: 10px 14px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    border: 1px solid #eef0f4;
+    font-size: 12.5px;
+    font-weight: 400;
+    line-height: 1.4;
+    z-index: 1000;
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+    text-transform: none !important;
+}
+
+.tooltip-content::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -6px;
+    border-width: 6px;
+    border-style: solid;
+    border-color: #ffffff transparent transparent transparent;
+}
+
+.tooltip-container:hover .tooltip-content,
+.tooltip-container:focus-within .tooltip-content {
+    visibility: visible;
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.info-icon-tooltip {
+    outline: none;
+}
+

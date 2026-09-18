@@ -10,7 +10,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import supabase from '../../config/supabaseclient';
 import '../../styles/pages/Analytics.css';
 import * as XLSX from 'xlsx';
-import StaffPerformanceReport from '../../components/StaffPerformanceReport';
 
 /* ════════════════════════════════════════════════════════════════
    ERROR BOUNDARY — catches render crashes and shows fallback UI
@@ -1049,7 +1048,6 @@ const Analytics = () => {
                 </div>
             </section>
 
-            <StaffPerformanceReport />
 
             {/* ── Executive Analytics Tab Bar ── */}
             <nav className="analytics-tabs-container" aria-label="Executive Analytics tabs">

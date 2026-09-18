@@ -360,7 +360,29 @@ const Dashboard = () => {
                 <div className="welcome-left">
                     <p className="welcome-greeting">Good day, {displayName} <span className="wave-emoji">👋</span></p>
                     <p className="welcome-sub">
-                        You have <strong>{liveStats.apptToday} appointments</strong> today and <strong>{liveStats.highRisk} high-risk alerts</strong> requiring attention.
+                        You have <strong 
+                            onClick={() => navigate('/dashboard/prenatal')}
+                            style={{ cursor: 'pointer', textDecoration: 'none' }}
+                            onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                            onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={e => { if(e.key === 'Enter') navigate('/dashboard/prenatal') }}
+                            aria-label="View today's appointments"
+                        >
+                            {liveStats.apptToday} appointments
+                        </strong> today and <strong 
+                            onClick={() => navigate('/dashboard/high-risk')}
+                            style={{ cursor: 'pointer', textDecoration: 'none' }}
+                            onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                            onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={e => { if(e.key === 'Enter') navigate('/dashboard/high-risk') }}
+                            aria-label="View high-risk patients"
+                        >
+                            {liveStats.highRisk} high-risk alerts
+                        </strong> requiring attention.
                     </p>
                 </div>
                 <div className="welcome-actions-panel">
