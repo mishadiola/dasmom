@@ -17,6 +17,10 @@ import '../../styles/pages/Vaccinations.css';
 import '../../styles/components/SharedFilters.css';
 import Legend from '../../components/Legend/Legend';
 import { formatMotherId, formatNewbornId } from '../../utils/displayIds';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import ExportModal from '../../components/ExportModal';
 
 // Constants for vaccine and supplement types
 const VACCINE_TYPES = [
@@ -1080,11 +1084,22 @@ const Vaccinations = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState({ patientType: 'All', item: 'All Items' });
 
-    const hasActiveFilters = filters.patientType !== 'All' || filters.item !== 'All Items' || searchTerm !== '';
+    const [showExportModal, setShowExportModal] = useState(false);
+    const [dateFilter, setDateFilter] = useState('all'); // 'all' | 'this_month' | 'this_year' | 'custom'
+    const [customDateFrom, setCustomDateFrom] = useState('');
+    const [customDateTo, setCustomDateTo] = useState('');
+    const [dateFilterError, setDateFilterError] = useState('');
+    const dateFilterLabel = dateFilter === 'this_month' ? 'This Month' : dateFilter === 'this_year' ? 'This Year' : dateFilter === 'custom' ? 'Custom' : 'All';
+
+    const hasActiveFilters = filters.patientType !== 'All' || filters.item !== 'All Items' || searchTerm !== '' || dateFilter !== 'all';
 
     const clearFilters = () => {
         setFilters({ patientType: 'All', item: 'All Items' });
         setSearchTerm('');
+        setDateFilter('all');
+        setCustomDateFrom('');
+        setCustomDateTo('');
+        setDateFilterError('');
         setActivePopover(null);
     };
 
@@ -1465,7 +1480,27 @@ const Vaccinations = () => {
                 matchTab = rStatus === 'completed' || rStatus === 'administered' || rStatus === 'ongoing' || r.administeredDate;
             }
 
-            return matchSearch && matchType && matchItem && matchTab;
+            // Date filter using administeredDate
+            let matchDate = true;
+            if (dateFilter !== 'all') {
+                const dDate = r.administeredDate ? new Date(r.administeredDate) : null;
+                if (!dDate || isNaN(dDate.getTime())) {
+                    matchDate = false;
+                } else {
+                    const now = new Date();
+                    if (dateFilter === 'this_month') {
+                        matchDate = dDate.getMonth() === now.getMonth() && dDate.getFullYear() === now.getFullYear();
+                    } else if (dateFilter === 'this_year') {
+                        matchDate = dDate.getFullYear() === now.getFullYear();
+                    } else if (dateFilter === 'custom' && customDateFrom && customDateTo) {
+                        const from = new Date(`${customDateFrom}T00:00:00`);
+                        const to = new Date(`${customDateTo}T23:59:59.999`);
+                        matchDate = dDate >= from && dDate <= to;
+                    }
+                }
+            }
+
+            return matchSearch && matchType && matchItem && matchTab && matchDate;
         })
         .sort((a, b) => {
             if (!sortField) {
@@ -1482,6 +1517,101 @@ const Vaccinations = () => {
             return sortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
         });
 
+    const getExportData = (dateRange) => {
+        let toExport = allRecords;
+        
+        if (dateRange && (dateRange.from || dateRange.to)) {
+            toExport = allRecords.filter(d => {
+                const dDate = d.administeredDate ? new Date(d.administeredDate) : null;
+                if (!dDate) return false;
+                if (dateRange.from && dDate < dateRange.from) return false;
+                if (dateRange.to && dDate > dateRange.to) return false;
+                return true;
+            });
+        }
+
+        return toExport.map(d => ({
+            'Patient Name': d.patientName || d.babyName,
+            'Patient ID': d.patientId,
+            'Patient Type': d.type,
+            'Item Type': d.itemType === 'vaccine' ? 'Vaccine' : 'Supplement',
+            'Item Name': d.itemName,
+            'Dose': d.dose || 'N/A',
+            'Status': d.status,
+            'Administered Date': formatReadableDate(d.administeredDate) || 'N/A',
+            'Scheduled Date': formatReadableDate(d.scheduledDate) || 'N/A',
+            'Staff': d.staff || 'N/A',
+            'Station': d.station || 'N/A',
+        }));
+    };
+
+    const handleExport = (exportConfig) => {
+        const { format, dateRange, reportPeriodText } = exportConfig;
+        const exportData = getExportData(dateRange);
+
+        if (format === 'excel') {
+            let worksheetData = [
+                ["Report: Distribution Records"],
+                [`Period: ${reportPeriodText}`],
+                []
+            ];
+
+            if (exportData.length > 0) {
+                worksheetData = worksheetData.concat([
+                    Object.keys(exportData[0]),
+                    ...exportData.map(obj => Object.values(obj))
+                ]);
+            } else {
+                worksheetData.push(["No records found for the selected period."]);
+            }
+
+            const ws = XLSX.utils.aoa_to_sheet(worksheetData);
+            
+            if (exportData.length > 0) {
+                const colWidths = [
+                    { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, 
+                    { wch: 25 }, { wch: 10 }, { wch: 15 }, { wch: 20 }, 
+                    { wch: 20 }, { wch: 20 }, { wch: 20 }
+                ];
+                ws['!cols'] = colWidths;
+            }
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Distribution Records');
+
+            const dateStr = new Date().toISOString().split('T')[0];
+            XLSX.writeFile(wb, `Distribution_Records_${dateStr}.xlsx`);
+        } else if (format === 'pdf') {
+            const doc = new jsPDF('landscape');
+            
+            doc.setFontSize(16);
+            doc.text("Distribution Records Report", 14, 20);
+            
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(`Period: ${reportPeriodText}`, 14, 28);
+            
+            if (exportData.length === 0) {
+                doc.text("No records found for the selected period.", 14, 40);
+            } else {
+                const head = [Object.keys(exportData[0])];
+                const body = exportData.map(obj => Object.values(obj));
+                
+                doc.autoTable({
+                    startY: 35,
+                    head: head,
+                    body: body,
+                    theme: 'grid',
+                    styles: { fontSize: 8 },
+                    headStyles: { fillColor: [185, 129, 138] }
+                });
+            }
+            
+            const dateStr = new Date().toISOString().split('T')[0];
+            doc.save(`Distribution_Records_${dateStr}.pdf`);
+        }
+    };
+
     // Pagination logic
     const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
     const paginatedRecords = filteredRecords.slice(
@@ -1489,17 +1619,6 @@ const Vaccinations = () => {
         currentPage * itemsPerPage
     );
 
-    const [showExportMenu, setShowExportMenu] = useState(false);
-
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (showExportMenu && !event.target.closest('.export-dropdown-container')) {
-                setShowExportMenu(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [showExportMenu]);
 
     const SortBtn = ({ field }) => (
         <button className="sort-btn" onClick={() => handleSort(field)}>
@@ -1540,24 +1659,9 @@ const Vaccinations = () => {
                 </div>
                 <div className="header-actions">
                     <div className="export-dropdown-container" style={{ position: 'relative' }}>
-                        <button className="btn btn-outline" onClick={() => setShowExportMenu(!showExportMenu)}>
+                        <button className="btn btn-outline" onClick={() => setShowExportModal(true)}>
                             <Download size={16} /> Export
                         </button>
-                        {showExportMenu && (
-                            <div className="export-dropdown" style={{
-                                position: 'absolute', top: '100%', right: 0, marginTop: '8px',
-                                background: '#fff', border: '1px solid #eaeaea', borderRadius: '8px',
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '8px',
-                                display: 'flex', flexDirection: 'column', gap: '4px', zIndex: 100, minWidth: '150px'
-                            }}>
-                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
-                                    <Download size={14} style={{ marginRight: '8px' }} /> Excel (.xlsx)
-                                </button>
-                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
-                                    <Download size={14} style={{ marginRight: '8px' }} /> PDF (.pdf)
-                                </button>
-                            </div>
-                        )}
                     </div>
                     <button className="btn btn-outline" onClick={() => setRecordModal({ mode: 'supplement' })}><Pill size={16} /> Record Supplement</button>
                     <button className="btn btn-primary" onClick={() => setRecordModal({ mode: 'vaccine' })}><Syringe size={16} /> Record Vaccination</button>
@@ -1642,9 +1746,64 @@ const Vaccinations = () => {
                         )}
                     </div>
 
-
-
-
+                    {/* Date Filter */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${dateFilter !== 'all' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'date' ? null : 'date')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            <Calendar size={14} className="filter-btn-icon" /> 
+                            <span>Date: {dateFilterLabel}</span>
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        
+                        {activePopover === 'date' && (
+                            <div className="filter-popover" style={{ minWidth: '240px' }}>
+                                <div className="popover-title">Date</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${dateFilter === 'all' ? 'selected' : ''}`} onClick={() => { setDateFilter('all'); setCustomDateFrom(''); setCustomDateTo(''); setDateFilterError(''); setActivePopover(null); }}>All Time</button>
+                                    <button className={`popover-opt-btn ${dateFilter === 'this_month' ? 'selected' : ''}`} onClick={() => { setDateFilter('this_month'); setCustomDateFrom(''); setCustomDateTo(''); setDateFilterError(''); setActivePopover(null); }}>This Month</button>
+                                    <button className={`popover-opt-btn ${dateFilter === 'this_year' ? 'selected' : ''}`} onClick={() => { setDateFilter('this_year'); setCustomDateFrom(''); setCustomDateTo(''); setDateFilterError(''); setActivePopover(null); }}>This Year</button>
+                                    <button className={`popover-opt-btn ${dateFilter === 'custom' ? 'selected' : ''}`} onClick={() => { setDateFilter('custom'); setDateFilterError(''); }}>Custom Range</button>
+                                </div>
+                                {dateFilter === 'custom' && (
+                                    <div className="date-custom-range-section">
+                                        <div className="date-custom-range-fields">
+                                            <div className="date-custom-field">
+                                                <label>From</label>
+                                                <input type="date" value={customDateFrom} onChange={e => { setCustomDateFrom(e.target.value); setDateFilterError(''); }} />
+                                            </div>
+                                            <div className="date-custom-field">
+                                                <label>To</label>
+                                                <input type="date" value={customDateTo} min={customDateFrom} onChange={e => { setCustomDateTo(e.target.value); setDateFilterError(''); }} />
+                                            </div>
+                                        </div>
+                                        {dateFilterError && (
+                                            <div className="date-filter-error">
+                                                <AlertTriangle size={12} /> {dateFilterError}
+                                            </div>
+                                        )}
+                                        <div className="date-custom-actions">
+                                            <button className="date-custom-cancel" onClick={() => { setDateFilter('all'); setCustomDateFrom(''); setCustomDateTo(''); setDateFilterError(''); setActivePopover(null); }}>Cancel</button>
+                                            <button className="date-custom-apply" onClick={() => {
+                                                if (!customDateFrom || !customDateTo) {
+                                                    setDateFilterError('Both dates are required.');
+                                                    return;
+                                                }
+                                                if (new Date(customDateFrom) > new Date(customDateTo)) {
+                                                    setDateFilterError('From date cannot be later than To.');
+                                                    return;
+                                                }
+                                                setDateFilterError('');
+                                                setActivePopover(null);
+                                            }}>Apply</button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
                     {hasActiveFilters && (
                         <button className="clear-filters-btn" onClick={clearFilters}>Clear All</button>
                     )}
@@ -1906,6 +2065,21 @@ const Vaccinations = () => {
                     </div>
                 </div>
             )}
+            {newbornVaccinationModal && (
+                <NewbornVaccinationModal
+                    newbornId={newbornVaccinationModal.newbornId}
+                    newbornName={newbornVaccinationModal.newbornName}
+                    initialTab={newbornVaccinationModal.initialTab}
+                    onClose={handleModalClose}
+                />
+            )}
+
+            <ExportModal
+                isOpen={showExportModal}
+                onClose={() => setShowExportModal(false)}
+                onExport={handleExport}
+                title="Export Distribution Records"
+            />
         </div>
     );
 };

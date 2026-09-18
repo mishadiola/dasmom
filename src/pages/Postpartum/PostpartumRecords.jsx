@@ -620,10 +620,10 @@ const PostpartumRecords = () => {
                             </table>
                             {/* Pagination Controls */}
                             {filtered.length > 0 && (
-                                <div className="table-pagination">
-                                    <div className="pagination-info">
+                                <div className="pagination-wrap">
+                                    <span className="pagination-info">
                                         Showing {((currentPage - 1) * itemsPerPage) + 1}–{Math.min(currentPage * itemsPerPage, filtered.length)} of {filtered.length}
-                                    </div>
+                                    </span>
                                     <div className="pagination-controls">
                                         <button 
                                             className="page-btn" 

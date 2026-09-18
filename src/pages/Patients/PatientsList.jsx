@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import {
     Search, Filter, Plus, ChevronLeft, ChevronRight, ChevronDown, Check,
-    Eye, Edit, Archive, ArchiveRestore, Activity, CalendarPlus,
+    Eye, Edit, Archive, ArchiveRestore, Activity, CalendarPlus, Calendar,
     FileText, User, Users, MapPin, Clock, AlertTriangle,
     X, CheckCircle2, Info
 } from 'lucide-react';
@@ -213,7 +213,6 @@ const PatientsList = () => {
 
     const [searchTerm, setSearchTerm] = useState('');
     const [archiveFilter, setArchiveFilter] = useState('all'); // 'active' | 'archived' | 'all'
-    const [outcomeFilter, setOutcomeFilter] = useState('all');
     const [filters, setFilters] = useState({
         trimesters: [],
         risks: [],
@@ -224,6 +223,12 @@ const PatientsList = () => {
     
     const [activePopover, setActivePopover] = useState(null);
     const [stationSearch, setStationSearch] = useState('');
+
+    // Date filter state
+    const [dateFilter, setDateFilter] = useState('all'); // 'all' | 'this_month' | 'this_year' | 'custom'
+    const [customDateFrom, setCustomDateFrom] = useState('');
+    const [customDateTo, setCustomDateTo] = useState('');
+    const [dateFilterError, setDateFilterError] = useState('');
     
     useEffect(() => {
         const handleScroll = () => {
@@ -352,8 +357,6 @@ const PatientsList = () => {
         const matchesRisk = filters.risks.length === 0 || filters.risks.includes(derivedRisk);
         const matchesType = filters.patientType === 'All' || (p.patientType || p.type) === filters.patientType;
         const matchesStation = filters.stations.length === 0 || filters.stations.includes(p.station);
-        const outcome = p.pregnancyOutcome || (p.pregnancyStatus?.toLowerCase() === 'pregnant' ? 'Pregnant' : 'Other');
-        const matchesOutcome = outcomeFilter === 'all' || outcome === outcomeFilter;
         
         const isArchived = (p.archiveStatus || 'active') === 'archived';
         const matchesArchive = archiveFilter === 'all'
@@ -362,7 +365,27 @@ const PatientsList = () => {
                 ? isArchived
                 : !isArchived;
 
-        return matchesSearch && matchesTri && matchesRisk && matchesType && matchesStation && matchesArchive && matchesOutcome;
+        // Date filter using createdAt
+        let matchesDate = true;
+        if (dateFilter !== 'all') {
+            const created = p.createdAt ? new Date(p.createdAt) : null;
+            if (!created) {
+                matchesDate = false;
+            } else {
+                const now = new Date();
+                if (dateFilter === 'this_month') {
+                    matchesDate = created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
+                } else if (dateFilter === 'this_year') {
+                    matchesDate = created.getFullYear() === now.getFullYear();
+                } else if (dateFilter === 'custom' && customDateFrom && customDateTo) {
+                    const from = new Date(`${customDateFrom}T00:00:00`);
+                    const to = new Date(`${customDateTo}T23:59:59.999`);
+                    matchesDate = created >= from && created <= to;
+                }
+            }
+        }
+
+        return matchesSearch && matchesTri && matchesRisk && matchesType && matchesStation && matchesArchive && matchesDate;
     });
 
     const sortedPatients = [...filteredPatients].sort((a, b) => {
@@ -409,20 +432,35 @@ const PatientsList = () => {
     const clearFilters = () => {
         setFilters({ trimesters: [], risks: [], stations: [], patientType: 'All', sortBy: 'newest' });
         setArchiveFilter('all');
-        setOutcomeFilter('all');
+        setDateFilter('all');
+        setCustomDateFrom('');
+        setCustomDateTo('');
+        setDateFilterError('');
         setSearchTerm('');
         setCurrentPage(1);
         setActivePopover(null);
     };
 
-    const hasActiveFilters = filters.trimesters.length > 0 || filters.risks.length > 0 || filters.stations.length > 0 || filters.sortBy !== 'newest' || archiveFilter !== 'all' || outcomeFilter !== 'all';
+    const dateFilterLabel = dateFilter === 'this_month' ? 'This Month' : dateFilter === 'this_year' ? 'This Year' : dateFilter === 'custom' ? 'Custom' : 'All';
+
+    const hasActiveFilters = filters.trimesters.length > 0 || filters.risks.length > 0 || filters.stations.length > 0 || filters.sortBy !== 'newest' || archiveFilter !== 'all' || dateFilter !== 'all';
 
     const [showExportModal, setShowExportModal] = useState(false);
 
     const handleExport = async (exportConfig) => {
-        const { format } = exportConfig;
-        
-        const exportData = sortedPatients.map(p => ({
+        const { format, dateRange, reportPeriodText } = exportConfig;
+
+        // Filter by date range using createdAt
+        let dataToExport = sortedPatients;
+        if (dateRange && dateRange.from && dateRange.to) {
+            dataToExport = sortedPatients.filter(p => {
+                const created = p.createdAt ? new Date(p.createdAt) : null;
+                if (!created) return false;
+                return created >= dateRange.from && created <= dateRange.to;
+            });
+        }
+
+        const exportData = dataToExport.map(p => ({
             'Patient ID': formatMotherId(p.id),
             'Name': p.name || '',
             'Type': p.patientType || p.type || 'Mother',
@@ -438,13 +476,19 @@ const PatientsList = () => {
             const worksheet = XLSX.utils.json_to_sheet(exportData);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, 'Patient Profiles');
-            XLSX.writeFile(workbook, 'patient_profiles.xlsx');
+            XLSX.writeFile(workbook, `patient_profiles_${reportPeriodText || 'all'}.xlsx`);
         } else if (format === 'pdf') {
             try {
                 const jsPDF = (await import('jspdf')).default;
                 const autoTable = (await import('jspdf-autotable')).default;
                 
                 const doc = new jsPDF();
+                
+                doc.text("Patient Profiles List", 14, 15);
+                if (reportPeriodText) {
+                    doc.setFontSize(10);
+                    doc.text(`Period: ${reportPeriodText}`, 14, 22);
+                }
                 
                 const tableColumn = ["Patient ID", "Name", "Type", "Station", "Age", "Gestation", "Risk", "Total Visits", "Next Appt"];
                 const tableRows = exportData.map(obj => [
@@ -459,17 +503,15 @@ const PatientsList = () => {
                     obj['Next Appointment']
                 ]);
 
-                doc.text("Patient Profiles List", 14, 15);
-                
                 autoTable(doc, {
                     head: [tableColumn],
                     body: tableRows,
-                    startY: 20,
+                    startY: reportPeriodText ? 28 : 20,
                     styles: { fontSize: 8 },
                     headStyles: { fillColor: [147, 111, 199] }
                 });
 
-                doc.save("patient_profiles.pdf");
+                doc.save(`patient_profiles_${reportPeriodText || 'all'}.pdf`);
             } catch (error) {
                 console.error("Error generating PDF:", error);
                 await customAlert({ title: 'Error', text: 'Unable to generate PDF right now.', iconType: 'danger' });
@@ -708,37 +750,64 @@ const PatientsList = () => {
                         )}
                     </div>
 
-                    {/* Pregnancy Outcome Filter */}
+
+
+                    {/* Date Filter Popover */}
                     <div className="filter-dropdown-container">
-                        <button
-                            className={`filter-btn ${outcomeFilter !== 'all' ? 'active-filter' : ''}`}
-                            onClick={() => setActivePopover(activePopover === 'outcome' ? null : 'outcome')}
+                        <button 
+                            className={`filter-btn ${dateFilter !== 'all' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'date' ? null : 'date')}
                             style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                         >
-                            <Activity size={14} className="filter-btn-icon" />
-                            <span>{outcomeFilter === 'all' ? 'All Outcomes' : outcomeFilter}</span>
+                            <Calendar size={14} className="filter-btn-icon" /> 
+                            <span>Date: {dateFilterLabel}</span>
                             <ChevronDown size={14} className="filter-btn-icon" />
                         </button>
-                        {activePopover === 'outcome' && (
-                            <div className="filter-popover">
-                                <div className="popover-title">Pregnancy Outcome</div>
+                        
+                        {activePopover === 'date' && (
+                            <div className="filter-popover" style={{ minWidth: '240px' }}>
+                                <div className="popover-title">Registration Date</div>
                                 <div className="popover-options">
-                                    {[
-                                        ['all', 'All Outcomes'],
-                                        ['Pregnant', 'Currently Pregnant'],
-                                        ['Live Birth', 'Successful Delivery'],
-                                        ['Miscarriage', 'Miscarriage'],
-                                        ['Other', 'Other / No Outcome']
-                                    ].map(([value, label]) => (
-                                        <button
-                                            key={value}
-                                            className={`popover-opt-btn ${outcomeFilter === value ? 'selected' : ''}`}
-                                            onClick={() => { setOutcomeFilter(value); setActivePopover(null); setCurrentPage(1); }}
-                                        >
-                                            {label}
-                                        </button>
-                                    ))}
+                                    <button className={`popover-opt-btn ${dateFilter === 'all' ? 'selected' : ''}`} onClick={() => { setDateFilter('all'); setCustomDateFrom(''); setCustomDateTo(''); setDateFilterError(''); setActivePopover(null); setCurrentPage(1); }}>All Time</button>
+                                    <button className={`popover-opt-btn ${dateFilter === 'this_month' ? 'selected' : ''}`} onClick={() => { setDateFilter('this_month'); setCustomDateFrom(''); setCustomDateTo(''); setDateFilterError(''); setActivePopover(null); setCurrentPage(1); }}>This Month</button>
+                                    <button className={`popover-opt-btn ${dateFilter === 'this_year' ? 'selected' : ''}`} onClick={() => { setDateFilter('this_year'); setCustomDateFrom(''); setCustomDateTo(''); setDateFilterError(''); setActivePopover(null); setCurrentPage(1); }}>This Year</button>
+                                    <button className={`popover-opt-btn ${dateFilter === 'custom' ? 'selected' : ''}`} onClick={() => { setDateFilter('custom'); setDateFilterError(''); }}>Custom Range</button>
                                 </div>
+                                {dateFilter === 'custom' && (
+                                    <div className="date-custom-range-section">
+                                        <div className="date-custom-range-fields">
+                                            <div className="date-custom-field">
+                                                <label>From</label>
+                                                <input type="date" value={customDateFrom} onChange={e => { setCustomDateFrom(e.target.value); setDateFilterError(''); }} />
+                                            </div>
+                                            <div className="date-custom-field">
+                                                <label>To</label>
+                                                <input type="date" value={customDateTo} min={customDateFrom} onChange={e => { setCustomDateTo(e.target.value); setDateFilterError(''); }} />
+                                            </div>
+                                        </div>
+                                        {dateFilterError && (
+                                            <div className="date-filter-error">
+                                                <AlertTriangle size={12} /> {dateFilterError}
+                                            </div>
+                                        )}
+                                        <div className="date-custom-actions">
+                                            <button className="date-custom-cancel" onClick={() => { setDateFilter('all'); setCustomDateFrom(''); setCustomDateTo(''); setDateFilterError(''); setActivePopover(null); setCurrentPage(1); }}>Cancel</button>
+                                            <button className="date-custom-apply" onClick={() => {
+                                                if (!customDateFrom || !customDateTo) {
+                                                    setDateFilterError('Both dates are required.');
+                                                    return;
+                                                }
+                                                if (new Date(customDateFrom) > new Date(customDateTo)) {
+                                                    setDateFilterError('From date cannot be later than To.');
+                                                    return;
+                                                }
+                                                setDateFilterError('');
+                                                setActivePopover(null);
+                                                setCurrentPage(1);
+                                            }}>Apply</button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -962,6 +1031,12 @@ const PatientsList = () => {
                 <button className="toast-close" onClick={() => setVitalToast(false)}><X size={14} /></button>
             </div>
         )}
+
+        <ExportModal 
+            isOpen={showExportModal} 
+            onClose={() => setShowExportModal(false)} 
+            onExport={handleExport} 
+        />
         </>
     );
 };

@@ -586,6 +586,8 @@ const NewbornTracking = () => {
                 <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </div>
         </div>
+    );
+
     return (
         <div className="nb-page vacc-tracking-page">
 

@@ -546,7 +546,8 @@ class InventoryService {
             expiration_date: inventoryRow?.expiration_date || row?.expiration_date || null,
             doses: inventoryRow?.doses || row?.doses || null,
             batch: row?.batch ?? inventoryRow?.batch ?? null,
-            manufactured_date: inventoryRow?.manufactured_date || row?.manufactured_date || null
+            manufactured_date: inventoryRow?.manufactured_date || row?.manufactured_date || null,
+            created_at: row?.created_at || inventoryRow?.created_at || row?.updated_at || null
           };
         }
 
@@ -561,7 +562,8 @@ class InventoryService {
           expiration_date: row.expiration_date,
           doses: row.doses,
           batch: row.batch,
-          manufactured_date: row.manufactured_date
+          manufactured_date: row.manufactured_date,
+          created_at: row.created_at
         };
       });
 
@@ -643,7 +645,8 @@ class InventoryService {
             brand: inventoryRow?.brand || row?.brand || '',
             expiration_date: inventoryRow?.expiration_date || row?.expiration_date || null,
             batch_number: row?.batch ?? inventoryRow?.batch_number ?? null,
-            manufactured_date: inventoryRow?.manufactured_date || row?.manufactured_date || null
+            manufactured_date: inventoryRow?.manufactured_date || row?.manufactured_date || null,
+            created_at: row?.created_at || inventoryRow?.created_at || row?.updated_at || null
           };
         }
 
@@ -657,7 +660,8 @@ class InventoryService {
           brand: row.brand,
           expiration_date: row.expiration_date,
           batch_number: row.batch_number,
-          manufactured_date: row.manufactured_date
+          manufactured_date: row.manufactured_date,
+          created_at: row.created_at
         };
       });
     } catch (err) {

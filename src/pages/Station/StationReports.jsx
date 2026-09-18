@@ -10,6 +10,10 @@ import '../../styles/pages/StationReports.css';
 import PatientService from '../../services/patientservice';
 import Legend from '../../components/Legend/Legend';
 import supabase from '../../config/supabaseclient';
+import ExportModal from '../../components/ExportModal';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 /* ════════════════════════════
    MAIN COMPONENT
@@ -124,17 +128,71 @@ const StationReports = () => {
         return 'st-status--healthy';
     };
 
-    const [showExportMenu, setShowExportMenu] = useState(false);
+    const [showExportModal, setShowExportModal] = useState(false);
 
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (showExportMenu && !event.target.closest('.export-dropdown-container')) {
-                setShowExportMenu(false);
+    const handleExport = (exportConfig) => {
+        const { format, reportPeriodText } = exportConfig;
+        const exportData = stations.map(s => ({
+            'Station': s.name,
+            'Total Patients': s.totalPatients,
+            'High-Risk': s.highRisk,
+            'Deliveries (Month)': s.recentDeliveries,
+            'Newborns': s.newborns,
+            'Vaccination Coverage (%)': s.vaccCoverage,
+            'Supplement Coverage (%)': s.suppCoverage,
+            '1st Trimester': s.trimester?.first || 0,
+            '2nd Trimester': s.trimester?.second || 0,
+            '3rd Trimester': s.trimester?.third || 0,
+            'Complications': s.complications || 0,
+        }));
+
+        if (format === 'excel') {
+            let worksheetData = [
+                ['Report: DASMOM+ Station Reports'],
+                [`Generated: ${new Date().toLocaleString()}`],
+                [`Period: ${reportPeriodText}`],
+                []
+            ];
+            if (exportData.length > 0) {
+                worksheetData = worksheetData.concat([
+                    Object.keys(exportData[0]),
+                    ...exportData.map(obj => Object.values(obj))
+                ]);
+            } else {
+                worksheetData.push(['No station data found.']);
             }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [showExportMenu]);
+            const ws = XLSX.utils.aoa_to_sheet(worksheetData);
+            if (exportData.length > 0) {
+                ws['!cols'] = Object.keys(exportData[0]).map(key => ({ wch: Math.max(key.length, 15) }));
+            }
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Station Reports');
+            XLSX.writeFile(wb, `Station_Reports_${new Date().toISOString().split('T')[0]}.xlsx`);
+        } else if (format === 'pdf') {
+            const doc = new jsPDF('landscape');
+            doc.setFontSize(16);
+            doc.text('DASMOM+ Station Reports', 14, 20);
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
+            doc.text(`Period: ${reportPeriodText}`, 14, 34);
+            if (exportData.length === 0) {
+                doc.text('No station data found.', 14, 46);
+            } else {
+                const head = [Object.keys(exportData[0])];
+                const body = exportData.map(obj => Object.values(obj));
+                doc.autoTable({
+                    startY: 42,
+                    head,
+                    body,
+                    theme: 'grid',
+                    styles: { fontSize: 8 },
+                    headStyles: { fillColor: [185, 129, 138] }
+                });
+            }
+            doc.save(`Station_Reports_${new Date().toISOString().split('T')[0]}.pdf`);
+        }
+    };
 
     // Calculate derived summary values
     const totalStations = stations.length;
@@ -156,26 +214,9 @@ const StationReports = () => {
                     <button className="btn btn-outline" onClick={() => setShowCharts(v => !v)}>
                         <Activity size={16} /> {showCharts ? 'Hide Charts' : 'Show Charts'}
                     </button>
-                    <div className="export-dropdown-container" style={{ position: 'relative' }}>
-                        <button className="btn btn-outline" onClick={() => setShowExportMenu(!showExportMenu)}>
-                            <Download size={16} /> Export
-                        </button>
-                        {showExportMenu && (
-                            <div className="export-dropdown" style={{
-                                position: 'absolute', top: '100%', right: 0, marginTop: '8px',
-                                background: '#fff', border: '1px solid rgba(185,129,138,0.15)', borderRadius: '12px',
-                                boxShadow: '0 8px 24px rgba(45,34,52,0.1)', padding: '6px',
-                                display: 'flex', flexDirection: 'column', gap: '2px', zIndex: 100, minWidth: '160px'
-                            }}>
-                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '10px 14px', width: '100%', display: 'flex', alignItems: 'center', borderRadius: '8px' }}>
-                                    <Download size={14} style={{ marginRight: '8px' }} /> Excel (.xlsx)
-                                </button>
-                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '10px 14px', width: '100%', display: 'flex', alignItems: 'center', borderRadius: '8px' }}>
-                                    <Download size={14} style={{ marginRight: '8px' }} /> PDF (.pdf)
-                                </button>
-                            </div>
-                        )}
-                    </div>
+                    <button className="btn btn-outline" onClick={() => setShowExportModal(true)}>
+                        <Download size={16} /> Export
+                    </button>
                     <button className="btn btn-primary"><FileText size={16} /> Generate Report</button>
                 </div>
             </div>
@@ -432,6 +473,12 @@ const StationReports = () => {
 
             {/* ── Detail Modal ── */}
             {selectedStation && <DetailModal station={selectedStation} onClose={() => setSelectedStation(null)} navigate={navigate} />}
+
+            <ExportModal
+                isOpen={showExportModal}
+                onClose={() => setShowExportModal(false)}
+                onExport={handleExport}
+            />
         </div>
     );
 };
@@ -591,17 +638,65 @@ const ChartsSection = ({ stations }) => {
 ════════════════════════════ */
 const DetailModal = ({ station, onClose, navigate }) => {
     const [tab, setTab] = useState('overview');
-    const [showExportMenu, setShowExportMenu] = useState(false);
+    const [showDetailExportModal, setShowDetailExportModal] = useState(false);
 
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (showExportMenu && !event.target.closest('.export-dropdown-container')) {
-                setShowExportMenu(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [showExportMenu]);
+    const handleDetailExport = (exportConfig) => {
+        const { format, reportPeriodText } = exportConfig;
+        const exportData = [{
+            'Station': station.name,
+            'Total Patients': station.totalPatients,
+            'High-Risk': station.highRisk,
+            'Deliveries (Month)': station.recentDeliveries,
+            'NSD': station.deliveryTypes?.nsd || 0,
+            'CS': station.deliveryTypes?.cs || 0,
+            'Complications': station.complications || 0,
+            'Newborns': station.newborns,
+            'Low Birth Weight': station.lbwBabies || 0,
+            'NICU': station.nicuBabies || 0,
+            'Vaccination Coverage (%)': station.vaccCoverage,
+            'Supplement Coverage (%)': station.suppCoverage,
+            '1st Trimester': station.trimester?.first || 0,
+            '2nd Trimester': station.trimester?.second || 0,
+            '3rd Trimester': station.trimester?.third || 0,
+        }];
+
+        if (format === 'excel') {
+            let worksheetData = [
+                [`Report: ${station.name} — Station Detail Report`],
+                [`Generated: ${new Date().toLocaleString()}`],
+                [`Period: ${reportPeriodText}`],
+                []
+            ];
+            worksheetData = worksheetData.concat([
+                Object.keys(exportData[0]),
+                ...exportData.map(obj => Object.values(obj))
+            ]);
+            const ws = XLSX.utils.aoa_to_sheet(worksheetData);
+            ws['!cols'] = Object.keys(exportData[0]).map(key => ({ wch: Math.max(key.length, 15) }));
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Station Detail');
+            XLSX.writeFile(wb, `Station_${station.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`);
+        } else if (format === 'pdf') {
+            const doc = new jsPDF('landscape');
+            doc.setFontSize(16);
+            doc.text(`${station.name} — Station Detail Report`, 14, 20);
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
+            doc.text(`Period: ${reportPeriodText}`, 14, 34);
+            const head = [Object.keys(exportData[0])];
+            const body = exportData.map(obj => Object.values(obj));
+            doc.autoTable({
+                startY: 42,
+                head,
+                body,
+                theme: 'grid',
+                styles: { fontSize: 8 },
+                headStyles: { fillColor: [185, 129, 138] }
+            });
+            doc.save(`Station_${station.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+        }
+    };
 
     const TABS = [
         { id: 'overview',   label: 'Patients Overview', icon: Users },
@@ -790,26 +885,14 @@ const DetailModal = ({ station, onClose, navigate }) => {
 
                 <div className="modal-footer">
                     <button className="btn btn-outline" onClick={onClose}>Close</button>
-                    <div className="export-dropdown-container" style={{ position: 'relative' }}>
-                        <button className="btn btn-outline" onClick={() => setShowExportMenu(!showExportMenu)}>
-                            <Download size={14} /> Export
-                        </button>
-                        {showExportMenu && (
-                            <div className="export-dropdown" style={{
-                                position: 'absolute', bottom: '100%', right: 0, marginBottom: '8px',
-                                background: '#fff', border: '1px solid rgba(185,129,138,0.15)', borderRadius: '12px',
-                                boxShadow: '0 8px 24px rgba(45,34,52,0.1)', padding: '6px',
-                                display: 'flex', flexDirection: 'column', gap: '2px', zIndex: 100, minWidth: '160px'
-                            }}>
-                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '10px 14px', width: '100%', display: 'flex', alignItems: 'center', borderRadius: '8px' }}>
-                                    <Download size={14} style={{ marginRight: '8px' }} /> Excel (.xlsx)
-                                </button>
-                                <button className="btn btn-text" onClick={() => { setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '10px 14px', width: '100%', display: 'flex', alignItems: 'center', borderRadius: '8px' }}>
-                                    <Download size={14} style={{ marginRight: '8px' }} /> PDF (.pdf)
-                                </button>
-                            </div>
-                        )}
-                    </div>
+                    <button className="btn btn-outline" onClick={() => setShowDetailExportModal(true)}>
+                        <Download size={14} /> Export
+                    </button>
+                    <ExportModal
+                        isOpen={showDetailExportModal}
+                        onClose={() => setShowDetailExportModal(false)}
+                        onExport={handleDetailExport}
+                    />
                     <button className="btn btn-primary"><FileText size={14} /> Generate Full Report</button>
                 </div>
             </div>

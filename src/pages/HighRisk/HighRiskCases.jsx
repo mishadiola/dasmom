@@ -527,7 +527,7 @@ const HighRiskCases = () => {
           <div className="hr-card">
             <div className="hr-card-head">
               <h2 style={{ color: '#dc2626' }}>
-                <AlertTriangle size={17} /> Real‑Time High‑Risk Monitoring
+                <AlertTriangle size={17} /> High‑Risk Monitoring
               </h2>
               <span className="hr-count">{filteredPatients.length} patients</span>
             </div>

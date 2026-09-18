@@ -847,3 +847,62 @@
     background: linear-gradient(90deg, var(--color-rose), var(--color-rose-dark));
     transition: width 0.5s ease;
 }
+
+/* ════════════════════════════
+   PAGINATION FOOTER
+════════════════════════════ */
+.pp-card .pagination-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-top: 1px solid #eef0f4;
+    background: #fcfcfd;
+    border-radius: 0 0 14px 14px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.pp-card .pagination-info {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    font-weight: 500;
+}
+
+.pp-card .pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pp-card .page-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1.5px solid #eef0f4;
+    background: #fff;
+    color: var(--color-text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.pp-card .page-btn:hover:not(:disabled) {
+    border-color: var(--color-rose);
+    color: var(--color-rose);
+}
+
+.pp-card .page-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+    .pp-card .pagination-wrap {
+        padding: 12px 14px;
+        flex-direction: column;
+        align-items: center;
+    }
+}

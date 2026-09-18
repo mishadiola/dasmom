@@ -25,6 +25,17 @@ import { formatMotherId } from '../../utils/displayIds';
 
 const COMPLICATION_OPTIONS = ['None', 'Hemorrhage', 'Infection', 'Preeclampsia', 'Placenta Previa', 'Preterm'];
 const DELIVERY_TYPES = ['NSD', 'CS', 'Breech'];
+
+// Display mapping: DB value → full human-readable name
+const formatDeliveryType = (type) => {
+    if (!type) return 'N/A';
+    const upper = type.toUpperCase();
+    if (upper.includes('NSD') || upper === 'NORMAL') return 'Normal Spontaneous Delivery';
+    if (upper.includes('CS') || upper.includes('CESAREAN')) return 'Cesarean Section';
+    if (upper.includes('BREECH')) return 'Breech Delivery';
+    if (type.includes('N/A')) return type;
+    return type;
+};
 const MISCARRIAGE_SYMPTOMS = ['Cramping', 'Vaginal bleeding', 'Lower back pain', 'Abdominal pain', 'Fever', 'Dizziness'];
 
 const getSections = (outcome) => outcome === 'Miscarriage'
@@ -57,14 +68,6 @@ const DeliveryOutcomes = () => {
         view: 'outcomes'
     });
 
-    const hasActiveFilters = filters.type !== 'All' || filters.outcome !== 'All' || filters.complication !== 'All' || filters.station !== 'All' || searchTerm !== '';
-
-    const clearFilters = () => {
-        setFilters({ ...filters, type: 'All', outcome: 'All', complication: 'All', station: 'All' });
-        setSearchTerm('');
-        setActivePopover(null);
-    };
-
     const [showModal, setShowModal] = useState(false);
     const [showViewModal, setShowViewModal] = useState(false);
     const [showLegend, setShowLegend] = useState(false);
@@ -80,6 +83,25 @@ const DeliveryOutcomes = () => {
     const [stations, setStations] = useState(['All Stations']);
     const [staffList, setStaffList] = useState([]);
     const [showExportModal, setShowExportModal] = useState(false);
+
+    // Table date filter state (separate from summary period filter and export modal)
+    const [dateFilter, setDateFilter] = useState('all'); // 'all' | 'this_month' | 'this_year' | 'custom'
+    const [customDateFrom, setCustomDateFrom] = useState('');
+    const [customDateTo, setCustomDateTo] = useState('');
+    const [dateFilterError, setDateFilterError] = useState('');
+    const dateFilterLabel = dateFilter === 'this_month' ? 'This Month' : dateFilter === 'this_year' ? 'This Year' : dateFilter === 'custom' ? 'Custom' : 'All';
+
+    const hasActiveFilters = filters.type !== 'All' || filters.outcome !== 'All' || filters.complication !== 'All' || filters.station !== 'All' || searchTerm !== '' || dateFilter !== 'all';
+
+    const clearFilters = () => {
+        setFilters({ ...filters, type: 'All', outcome: 'All', complication: 'All', station: 'All' });
+        setSearchTerm('');
+        setDateFilter('all');
+        setCustomDateFrom('');
+        setCustomDateTo('');
+        setDateFilterError('');
+        setActivePopover(null);
+    };
 
     const { displayStats, activePeriodText } = useMemo(() => {
         let text = '';
@@ -218,7 +240,7 @@ const DeliveryOutcomes = () => {
             'Station': d.station,
             'Delivery Date': d.deliveryDate,
             'Delivery Time': formatTime12Hour(d.deliveryTime) || '',
-            'Delivery Type': d.deliveryType,
+            'Delivery Type': formatDeliveryType(d.deliveryType),
             'Risk Level': d.riskLevel,
             'Complications': d.complications || 'None',
             'Baby Name': d.babyName || '',
@@ -328,7 +350,27 @@ const DeliveryOutcomes = () => {
                     (filters.complication === 'None' ? d.complications === 'None' : d.complications !== 'None');
                 const matchStation = filters.station === 'All' || d.station === filters.station;
 
-                return matchSearch && matchType && matchOutcome && matchComp && matchStation;
+                // Date filter using deliveryDate
+                let matchDate = true;
+                if (dateFilter !== 'all') {
+                    const dDate = d.deliveryDate ? new Date(d.deliveryDate) : null;
+                    if (!dDate || isNaN(dDate.getTime())) {
+                        matchDate = false;
+                    } else {
+                        const now = new Date();
+                        if (dateFilter === 'this_month') {
+                            matchDate = dDate.getMonth() === now.getMonth() && dDate.getFullYear() === now.getFullYear();
+                        } else if (dateFilter === 'this_year') {
+                            matchDate = dDate.getFullYear() === now.getFullYear();
+                        } else if (dateFilter === 'custom' && customDateFrom && customDateTo) {
+                            const from = new Date(`${customDateFrom}T00:00:00`);
+                            const to = new Date(`${customDateTo}T23:59:59.999`);
+                            matchDate = dDate >= from && dDate <= to;
+                        }
+                    }
+                }
+
+                return matchSearch && matchType && matchOutcome && matchComp && matchStation && matchDate;
             })
             .sort((a, b) => {
                 const field = sortField;
@@ -338,7 +380,7 @@ const DeliveryOutcomes = () => {
                     ? String(va).localeCompare(String(vb))
                     : String(vb).localeCompare(String(va));
             });
-    }, [currentData, searchTerm, filters, sortField, sortAsc]);
+    }, [currentData, searchTerm, filters, sortField, sortAsc, dateFilter, customDateFrom, customDateTo]);
 
     const getRowClass = (d) => {
         if (d.riskLevel?.includes('High') || (d.complications && d.complications !== 'None')) 
@@ -383,9 +425,9 @@ const DeliveryOutcomes = () => {
 
         // Parse actual stored type
         const tUp = typeStr.toUpperCase();
-        if (tUp.includes('NSD') || tUp === 'NORMAL') type = 'NSD (Normal)';
-        else if (tUp.includes('CS') || tUp.includes('CESAREAN')) type = 'CS (Cesarean)';
-        else if (tUp.includes('BREECH')) type = 'Breech';
+        if (tUp.includes('NSD') || tUp === 'NORMAL') type = 'Normal Spontaneous Delivery';
+        else if (tUp.includes('CS') || tUp.includes('CESAREAN')) type = 'Cesarean Section';
+        else if (tUp.includes('BREECH')) type = 'Breech Delivery';
         else if (typeStr) type = typeStr;
 
         // Apply rules
@@ -594,7 +636,7 @@ const DeliveryOutcomes = () => {
                             style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                         >
                             <Activity size={14} className="filter-btn-icon" />
-                            <span>{filters.type === 'All' ? 'All Types' : filters.type}</span>
+                            <span>{filters.type === 'All' ? 'All Types' : formatDeliveryType(filters.type)}</span>
                             <ChevronDown size={14} className="filter-btn-icon" />
                         </button>
                         {activePopover === 'type' && (
@@ -603,7 +645,7 @@ const DeliveryOutcomes = () => {
                                 <div className="popover-options">
                                     <button className={`popover-opt-btn ${filters.type === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('type', 'All'); setActivePopover(null); }}>All Types</button>
                                     {DELIVERY_TYPES.map(t => (
-                                        <button key={t} className={`popover-opt-btn ${filters.type === t ? 'selected' : ''}`} onClick={() => { handleFilter('type', t); setActivePopover(null); }}>{t}</button>
+                                        <button key={t} className={`popover-opt-btn ${filters.type === t ? 'selected' : ''}`} onClick={() => { handleFilter('type', t); setActivePopover(null); }}>{formatDeliveryType(t)}</button>
                                     ))}
                                 </div>
                             </div>
@@ -680,6 +722,66 @@ const DeliveryOutcomes = () => {
                             </div>
                         )}
                     </div>
+
+                    {/* Date Filter Popover */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${dateFilter !== 'all' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'date' ? null : 'date')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            <Calendar size={14} className="filter-btn-icon" /> 
+                            <span>Date: {dateFilterLabel}</span>
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        
+                        {activePopover === 'date' && (
+                            <div className="filter-popover" style={{ minWidth: '240px' }}>
+                                <div className="popover-title">Delivery Date</div>
+                                <div className="popover-options">
+                                    <button className={`popover-opt-btn ${dateFilter === 'all' ? 'selected' : ''}`} onClick={() => { setDateFilter('all'); setCustomDateFrom(''); setCustomDateTo(''); setDateFilterError(''); setActivePopover(null); }}>All Time</button>
+                                    <button className={`popover-opt-btn ${dateFilter === 'this_month' ? 'selected' : ''}`} onClick={() => { setDateFilter('this_month'); setCustomDateFrom(''); setCustomDateTo(''); setDateFilterError(''); setActivePopover(null); }}>This Month</button>
+                                    <button className={`popover-opt-btn ${dateFilter === 'this_year' ? 'selected' : ''}`} onClick={() => { setDateFilter('this_year'); setCustomDateFrom(''); setCustomDateTo(''); setDateFilterError(''); setActivePopover(null); }}>This Year</button>
+                                    <button className={`popover-opt-btn ${dateFilter === 'custom' ? 'selected' : ''}`} onClick={() => { setDateFilter('custom'); setDateFilterError(''); }}>Custom Range</button>
+                                </div>
+                                {dateFilter === 'custom' && (
+                                    <div className="date-custom-range-section">
+                                        <div className="date-custom-range-fields">
+                                            <div className="date-custom-field">
+                                                <label>From</label>
+                                                <input type="date" value={customDateFrom} onChange={e => { setCustomDateFrom(e.target.value); setDateFilterError(''); }} />
+                                            </div>
+                                            <div className="date-custom-field">
+                                                <label>To</label>
+                                                <input type="date" value={customDateTo} min={customDateFrom} onChange={e => { setCustomDateTo(e.target.value); setDateFilterError(''); }} />
+                                            </div>
+                                        </div>
+                                        {dateFilterError && (
+                                            <div className="date-filter-error">
+                                                <AlertTriangle size={12} /> {dateFilterError}
+                                            </div>
+                                        )}
+                                        <div className="date-custom-actions">
+                                            <button className="date-custom-cancel" onClick={() => { setDateFilter('all'); setCustomDateFrom(''); setCustomDateTo(''); setDateFilterError(''); setActivePopover(null); }}>Cancel</button>
+                                            <button className="date-custom-apply" onClick={() => {
+                                                if (!customDateFrom || !customDateTo) {
+                                                    setDateFilterError('Both dates are required.');
+                                                    return;
+                                                }
+                                                if (new Date(customDateFrom) > new Date(customDateTo)) {
+                                                    setDateFilterError('From date cannot be later than To.');
+                                                    return;
+                                                }
+                                                setDateFilterError('');
+                                                setActivePopover(null);
+                                            }}>Apply</button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
                     {hasActiveFilters && (
                         <button className="clear-filters-btn" onClick={clearFilters}>Clear All</button>
                     )}
@@ -696,9 +798,9 @@ const DeliveryOutcomes = () => {
                             {
                                 title: "TYPE",
                                 items: [
-                                    { label: "NSD (Normal)", className: "dt-nsd" },
-                                    { label: "CS (Cesarean)", className: "dt-cs" },
-                                    { label: "Breech", className: "dt-breech" },
+                                    { label: "Normal Spontaneous Delivery", className: "dt-nsd" },
+                                    { label: "Cesarean Section", className: "dt-cs" },
+                                    { label: "Breech Delivery", className: "dt-breech" },
                                     { label: "N/A – Not Applicable", className: "dt-na" }
                                 ]
                             },
@@ -1520,9 +1622,9 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                                 <label>Type <span className="req">*</span></label>
                                 <select value={form.deliveryType} onChange={e => updateForm('deliveryType', e.target.value)} disabled={form.pregnancyOutcome === 'Miscarriage'} className={isFieldInvalid('Delivery Type', form.deliveryType) ? 'field-error' : ''}>
                                     <option value="">Select type...</option>
-                                    <option value="NSD">NSD (Normal)</option>
-                                    <option value="CS">CS (Cesarean)</option>
-                                    <option value="Breech">Breech</option>
+                                    <option value="NSD">Normal Spontaneous Delivery</option>
+                                    <option value="CS">Cesarean Section</option>
+                                    <option value="Breech">Breech Delivery</option>
                                     <option value="N/A - Not Applicable" style={{ display: 'none' }}>N/A - Not Applicable</option>
                                 </select>
                             </div>
@@ -1770,7 +1872,7 @@ const ViewDeliveryModal = ({ show, onClose, delivery }) => {
                                 </div>
                                 <div className="view-field">
                                     <label>Type:</label>
-                                    <span>{delivery.deliveryType}</span>
+                                    <span>{formatDeliveryType(delivery.deliveryType)}</span>
                                 </div>
                                 <div className="view-field">
                                 </div>

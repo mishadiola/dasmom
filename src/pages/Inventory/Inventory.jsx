@@ -80,13 +80,21 @@ const Inventory = () => {
   useClickOutside(filterRowRef, () => setActivePopover(null));
   const [activeSummaryFilter, setActiveSummaryFilter] = useState(null);
   const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
+  const [dateFilter, setDateFilter] = useState('all');
+  const [customDateFrom, setCustomDateFrom] = useState('');
+  const [customDateTo, setCustomDateTo] = useState('');
+  const [dateFilterError, setDateFilterError] = useState('');
 
-  const hasActiveFilters = statusFilter !== 'All' || archiveFilter !== 'active' || searchTerm !== '';
+  const hasActiveFilters = statusFilter !== 'All' || archiveFilter !== 'active' || searchTerm !== '' || dateFilter !== 'all';
 
   const clearFilters = () => {
       setStatusFilter('All');
       setArchiveFilter('active');
       setSearchTerm('');
+      setDateFilter('all');
+      setCustomDateFrom('');
+      setCustomDateTo('');
+      setDateFilterError('');
       setActivePopover(null);
   };
   const [archivedIds, setArchivedIds] = useState(() => {
@@ -120,7 +128,11 @@ const Inventory = () => {
   const [historySearch, setHistorySearch] = useState('');
   const [historyStationFilter, setHistoryStationFilter] = useState('All');
   const [historyTypeFilter, setHistoryTypeFilter] = useState('All');
-  const [historyDateFilter, setHistoryDateFilter] = useState('');
+  const [historyDateFilter, setHistoryDateFilter] = useState('all');
+  const [historyCustomDateFrom, setHistoryCustomDateFrom] = useState('');
+  const [historyCustomDateTo, setHistoryCustomDateTo] = useState('');
+  const [historyDateFilterError, setHistoryDateFilterError] = useState('');
+  const [showDistExportModal, setShowDistExportModal] = useState(false);
 
   // Expandable rows for station inventory
   const [expandedStationRows, setExpandedStationRows] = useState({});
@@ -312,7 +324,8 @@ const Inventory = () => {
         expiration_date: row?.expiration_date || null,
         doses: row?.doses || null,
         batch: row?.batch || null,
-        manufactured_date: row?.manufactured_date || null
+        manufactured_date: row?.manufactured_date || null,
+        created_at: row?.created_at || null
       }));
       const mappedSupplements = (suppData || []).map(row => ({
         id: row?.id || '',
@@ -324,7 +337,8 @@ const Inventory = () => {
         brand: row?.brand || '',
         expiration_date: row?.expiration_date || null,
         batch_number: row?.batch_number || null,
-        manufactured_date: row?.manufactured_date || null
+        manufactured_date: row?.manufactured_date || null,
+        created_at: row?.created_at || null
       }));
 
       console.log('Mapped vaccines:', mappedVaccines.length, 'Mapped supplements:', mappedSupplements.length);
@@ -532,9 +546,26 @@ const Inventory = () => {
       // Filter the items within the group based on the archiveFilter
       const filteredSubItems = item.items.filter(i => {
         const isArchived = archivedIds.includes(i.id) || i.status === 'archived';
-        if (archiveFilter === 'active') return !isArchived;
-        if (archiveFilter === 'archived') return isArchived;
-        return true; // 'all'
+        if (archiveFilter === 'active' && isArchived) return false;
+        if (archiveFilter === 'archived' && !isArchived) return false;
+        
+        if (dateFilter !== 'all') {
+          const dDate = i.created_at ? new Date(i.created_at) : null;
+          if (!dDate || isNaN(dDate.getTime())) return false;
+          
+          const now = new Date();
+          if (dateFilter === 'this_month') {
+              if (dDate.getMonth() !== now.getMonth() || dDate.getFullYear() !== now.getFullYear()) return false;
+          } else if (dateFilter === 'this_year') {
+              if (dDate.getFullYear() !== now.getFullYear()) return false;
+          } else if (dateFilter === 'custom' && customDateFrom && customDateTo) {
+              const from = new Date(`${customDateFrom}T00:00:00`);
+              const to = new Date(`${customDateTo}T23:59:59.999`);
+              if (dDate < from || dDate > to) return false;
+          }
+        }
+        
+        return true;
       }).map(i => {
         // If it's in our local storage archived list, enforce the status so UI reflects it
         if (archivedIds.includes(i.id)) {
@@ -600,7 +631,7 @@ const Inventory = () => {
   // Reset page when filters or tab change
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, searchTerm, statusFilter, activeSummaryFilter, archiveFilter]);
+  }, [activeTab, searchTerm, statusFilter, activeSummaryFilter, archiveFilter, dateFilter, customDateFrom, customDateTo]);
 
   const [showExportModal, setShowExportModal] = useState(false);
 
@@ -710,6 +741,82 @@ const Inventory = () => {
       
       const dateStr = new Date().toISOString().split('T')[0];
       doc.save(`Inventory_Report_${dateStr}.pdf`);
+    }
+  };
+
+  const handleDistExport = (exportConfig) => {
+    const { format, dateRange, reportPeriodText } = exportConfig;
+    
+    let toExport = distributionHistory;
+    if (dateRange && (dateRange.from || dateRange.to)) {
+      toExport = distributionHistory.filter(d => {
+        const dDate = d.distribution_date ? new Date(d.distribution_date) : null;
+        if (!dDate) return false;
+        if (dateRange.from && dDate < dateRange.from) return false;
+        if (dateRange.to && dDate > dateRange.to) return false;
+        return true;
+      });
+    }
+    
+    const exportData = toExport.map(d => ({
+      'Date': formatReadableDate(d.distribution_date),
+      'Item Name': d.item_name || '',
+      'Item Type': d.item_type || '',
+      'Quantity': d.quantity || 0,
+      'Destination Station': d.destination_station || '',
+      'Released By': d.released_by || '',
+      'Brand': d.brand || 'N/A',
+      'Batch': d.batch && d.batch !== 'N/A' ? d.batch : 'N/A',
+      'Remarks': d.remarks || ''
+    }));
+    
+    if (format === 'excel') {
+      let worksheetData = [
+        ["Report: DASMOM+ Station Distribution Report"],
+        [`Generated: ${new Date().toLocaleString()}`],
+        [`Period: ${reportPeriodText}`],
+        []
+      ];
+      if (exportData.length > 0) {
+        worksheetData = worksheetData.concat([
+          Object.keys(exportData[0]),
+          ...exportData.map(obj => Object.values(obj))
+        ]);
+      } else {
+        worksheetData.push(["No distribution records found for the selected period."]);
+      }
+      const ws = XLSX.utils.aoa_to_sheet(worksheetData);
+      if (exportData.length > 0) {
+        ws['!cols'] = Object.keys(exportData[0]).map(key => ({ wch: Math.max(key.length, 15) }));
+      }
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Distribution");
+      const dateStr = new Date().toISOString().split('T')[0];
+      XLSX.writeFile(wb, `Station_Distribution_${dateStr}.xlsx`);
+    } else if (format === 'pdf') {
+      const doc = new jsPDF('landscape');
+      doc.setFontSize(16);
+      doc.text("DASMOM+ Station Distribution Report", 14, 20);
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
+      doc.text(`Period: ${reportPeriodText}`, 14, 34);
+      if (exportData.length === 0) {
+        doc.text("No distribution records found for the selected period.", 14, 46);
+      } else {
+        const head = [Object.keys(exportData[0])];
+        const body = exportData.map(obj => Object.values(obj));
+        doc.autoTable({
+          startY: 42,
+          head: head,
+          body: body,
+          theme: 'grid',
+          styles: { fontSize: 8 },
+          headStyles: { fillColor: [185, 129, 138] }
+        });
+      }
+      const dateStr = new Date().toISOString().split('T')[0];
+      doc.save(`Station_Distribution_${dateStr}.pdf`);
     }
   };
 
@@ -991,7 +1098,26 @@ const Inventory = () => {
     const matchesSearch = !search || rec.item_name?.toLowerCase().includes(search) || rec.destination_station?.toLowerCase().includes(search) || rec.released_by?.toLowerCase().includes(search);
     const matchesStation = historyStationFilter === 'All' || rec.destination_station === historyStationFilter;
     const matchesType = historyTypeFilter === 'All' || rec.item_type === historyTypeFilter;
-    const matchesDate = !historyDateFilter || rec.distribution_date === historyDateFilter;
+    
+    let matchesDate = true;
+    if (historyDateFilter !== 'all') {
+      const dDate = rec.distribution_date ? new Date(rec.distribution_date) : null;
+      if (!dDate || isNaN(dDate.getTime())) {
+        matchesDate = false;
+      } else {
+        const now = new Date();
+        if (historyDateFilter === 'this_month') {
+          matchesDate = dDate.getMonth() === now.getMonth() && dDate.getFullYear() === now.getFullYear();
+        } else if (historyDateFilter === 'this_year') {
+          matchesDate = dDate.getFullYear() === now.getFullYear();
+        } else if (historyDateFilter === 'custom' && historyCustomDateFrom && historyCustomDateTo) {
+          const from = new Date(`${historyCustomDateFrom}T00:00:00`);
+          const to = new Date(`${historyCustomDateTo}T23:59:59.999`);
+          matchesDate = dDate >= from && dDate <= to;
+        }
+      }
+    }
+    
     return matchesSearch && matchesStation && matchesType && matchesDate;
   });
   const distTotalPages = Math.ceil(filteredDistHistory.length / distItemsPerPage);
@@ -1188,6 +1314,69 @@ const Inventory = () => {
             )}
           </div>
 
+          {/* Date Filter */}
+          <div className="filter-dropdown-container">
+            <button 
+                className={`filter-btn ${dateFilter !== 'all' ? 'active-filter' : ''}`}
+                onClick={() => setActivePopover(activePopover === 'date' ? null : 'date')}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+                <Calendar size={14} className="filter-btn-icon" /> 
+                <span>Date: {
+                    dateFilter === 'all' ? 'All Time' :
+                    dateFilter === 'this_month' ? 'This Month' :
+                    dateFilter === 'this_year' ? 'This Year' :
+                    'Custom'
+                }</span>
+                <ChevronDown size={14} className="filter-btn-icon" />
+            </button>
+            
+            {activePopover === 'date' && (
+                <div className="filter-popover" style={{ minWidth: '240px' }}>
+                    <div className="popover-title">Date</div>
+                    <div className="popover-options">
+                        <button className={`popover-opt-btn ${dateFilter === 'all' ? 'selected' : ''}`} onClick={() => { setDateFilter('all'); setCustomDateFrom(''); setCustomDateTo(''); setDateFilterError(''); setActivePopover(null); }}>All Time</button>
+                        <button className={`popover-opt-btn ${dateFilter === 'this_month' ? 'selected' : ''}`} onClick={() => { setDateFilter('this_month'); setCustomDateFrom(''); setCustomDateTo(''); setDateFilterError(''); setActivePopover(null); }}>This Month</button>
+                        <button className={`popover-opt-btn ${dateFilter === 'this_year' ? 'selected' : ''}`} onClick={() => { setDateFilter('this_year'); setCustomDateFrom(''); setCustomDateTo(''); setDateFilterError(''); setActivePopover(null); }}>This Year</button>
+                        <button className={`popover-opt-btn ${dateFilter === 'custom' ? 'selected' : ''}`} onClick={() => { setDateFilter('custom'); setDateFilterError(''); }}>Custom Range</button>
+                    </div>
+                    {dateFilter === 'custom' && (
+                        <div className="date-custom-range-section">
+                            <div className="date-custom-range-fields">
+                                <div className="date-custom-field">
+                                    <label>From</label>
+                                    <input type="date" value={customDateFrom} onChange={e => { setCustomDateFrom(e.target.value); setDateFilterError(''); }} />
+                                </div>
+                                <div className="date-custom-field">
+                                    <label>To</label>
+                                    <input type="date" value={customDateTo} min={customDateFrom} onChange={e => { setCustomDateTo(e.target.value); setDateFilterError(''); }} />
+                                </div>
+                            </div>
+                            {dateFilterError && (
+                                <div className="date-filter-error">
+                                    <AlertTriangle size={12} /> {dateFilterError}
+                                </div>
+                            )}
+                            <div className="date-custom-actions">
+                                <button className="date-custom-cancel" onClick={() => { setDateFilter('all'); setCustomDateFrom(''); setCustomDateTo(''); setDateFilterError(''); setActivePopover(null); }}>Cancel</button>
+                                <button className="date-custom-apply" onClick={() => {
+                                    if (!customDateFrom || !customDateTo) {
+                                        setDateFilterError('Both dates are required.');
+                                        return;
+                                    }
+                                    if (new Date(customDateFrom) > new Date(customDateTo)) {
+                                        setDateFilterError('From date cannot be later than To.');
+                                        return;
+                                    }
+                                    setDateFilterError('');
+                                    setActivePopover(null);
+                                }}>Apply</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+          </div>
           {hasActiveFilters && (
               <button className="clear-filters-btn" onClick={clearFilters}>Clear All</button>
           )}
@@ -1641,6 +1830,13 @@ const Inventory = () => {
           <button
             className="btn btn-outline"
             style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            onClick={() => setShowDistExportModal(true)}
+          >
+            <Download size={16} /> Export
+          </button>
+          <button
+            className="btn btn-outline"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
             onClick={() => setMainTab('inventory')}
           >
             <ArrowLeft size={16} /> Back to Inventory
@@ -1741,15 +1937,73 @@ const Inventory = () => {
             <option value="Vaccine">Vaccines</option>
             <option value="Supplement">Supplements</option>
           </select>
-          <input
-            type="date"
-            value={historyDateFilter}
-            onChange={e => setHistoryDateFilter(e.target.value)}
-            className="filter-btn"
-            style={{ cursor: 'pointer' }}
-          />
-          {(historySearch || historyStationFilter !== 'All' || historyTypeFilter !== 'All' || historyDateFilter) && (
-            <button className="clear-filters-btn" onClick={() => { setHistorySearch(''); setHistoryStationFilter('All'); setHistoryTypeFilter('All'); setHistoryDateFilter(''); }}>Clear All</button>
+          
+          {/* Date Filter */}
+          <div className="filter-dropdown-container" style={{ position: 'relative' }}>
+            <button 
+                className={`filter-btn ${historyDateFilter !== 'all' ? 'active-filter' : ''}`}
+                onClick={() => setActivePopover(activePopover === 'distDate' ? null : 'distDate')}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+                <Calendar size={14} className="filter-btn-icon" /> 
+                <span>Date: {
+                    historyDateFilter === 'all' ? 'All Time' :
+                    historyDateFilter === 'this_month' ? 'This Month' :
+                    historyDateFilter === 'this_year' ? 'This Year' :
+                    'Custom'
+                }</span>
+                <ChevronDown size={14} className="filter-btn-icon" />
+            </button>
+            
+            {activePopover === 'distDate' && (
+                <div className="filter-popover" style={{ minWidth: '240px' }}>
+                    <div className="popover-title">Distribution Date</div>
+                    <div className="popover-options">
+                        <button className={`popover-opt-btn ${historyDateFilter === 'all' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('all'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); }}>All Time</button>
+                        <button className={`popover-opt-btn ${historyDateFilter === 'this_month' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('this_month'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); }}>This Month</button>
+                        <button className={`popover-opt-btn ${historyDateFilter === 'this_year' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('this_year'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); }}>This Year</button>
+                        <button className={`popover-opt-btn ${historyDateFilter === 'custom' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('custom'); setHistoryDateFilterError(''); }}>Custom Range</button>
+                    </div>
+                    {historyDateFilter === 'custom' && (
+                        <div className="date-custom-range-section">
+                            <div className="date-custom-range-fields">
+                                <div className="date-custom-field">
+                                    <label>From</label>
+                                    <input type="date" value={historyCustomDateFrom} onChange={e => { setHistoryCustomDateFrom(e.target.value); setHistoryDateFilterError(''); }} />
+                                </div>
+                                <div className="date-custom-field">
+                                    <label>To</label>
+                                    <input type="date" value={historyCustomDateTo} min={historyCustomDateFrom} onChange={e => { setHistoryCustomDateTo(e.target.value); setHistoryDateFilterError(''); }} />
+                                </div>
+                            </div>
+                            {historyDateFilterError && (
+                                <div className="date-filter-error">
+                                    <AlertTriangle size={12} /> {historyDateFilterError}
+                                </div>
+                            )}
+                            <div className="date-custom-actions">
+                                <button className="date-custom-cancel" onClick={() => { setHistoryDateFilter('all'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); }}>Cancel</button>
+                                <button className="date-custom-apply" onClick={() => {
+                                    if (!historyCustomDateFrom || !historyCustomDateTo) {
+                                        setHistoryDateFilterError('Both dates are required.');
+                                        return;
+                                    }
+                                    if (new Date(historyCustomDateFrom) > new Date(historyCustomDateTo)) {
+                                        setHistoryDateFilterError('From date cannot be later than To.');
+                                        return;
+                                    }
+                                    setHistoryDateFilterError('');
+                                    setActivePopover(null);
+                                }}>Apply</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+          </div>
+
+          {(historySearch || historyStationFilter !== 'All' || historyTypeFilter !== 'All' || historyDateFilter !== 'all') && (
+            <button className="clear-filters-btn" onClick={() => { setHistorySearch(''); setHistoryStationFilter('All'); setHistoryTypeFilter('All'); setHistoryDateFilter('all'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); }}>Clear All</button>
           )}
         </div>
       </div>
@@ -2478,6 +2732,13 @@ const Inventory = () => {
         isOpen={showExportModal} 
         onClose={() => setShowExportModal(false)} 
         onExport={handleExport} 
+        title="Export Inventory Records"
+      />
+      <ExportModal 
+        isOpen={showDistExportModal} 
+        onClose={() => setShowDistExportModal(false)} 
+        onExport={handleDistExport} 
+        title="Export Station Distribution"
       />
     </div>
   );
