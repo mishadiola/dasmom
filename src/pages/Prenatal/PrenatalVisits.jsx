@@ -6,7 +6,8 @@ import {
     Search, Plus, Eye, Edit2, Trash2, CalendarCheck,
     AlertTriangle, HeartPulse, Filter, Clock, ChevronLeft,
     ChevronRight, Calendar as CalendarIcon, Users, MapPin, X,
-    CheckCircle2, Zap, RotateCcw, Syringe, ArchiveRestore
+    CheckCircle2, Zap, RotateCcw, Syringe, ArchiveRestore,
+    Download
 } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
 import ScheduledVisitModal from '../../components/Prenatal/ScheduledVisitModal';
@@ -14,6 +15,10 @@ import PatientModal from '../../components/Prenatal/PatientModal';
 import PostpartumVisitModal from '../../components/PostpartumVisitModal';
 import { RecordModal } from '../Vaccinations/Vaccinations';
 import { useNavigate } from 'react-router-dom';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import ExportModal from '../../components/ExportModal';
 import '../../styles/pages/PrenatalVisits.css';
 import Legend from '../../components/Legend/Legend';
 import { formatMotherId } from '../../utils/displayIds';
@@ -135,6 +140,8 @@ const PrenatalVisits = () => {
     const [selectedVisit, setSelectedVisit] = useState(null);
     const [postpartumVisitMother, setPostpartumVisitMother] = useState(null);
     const [vaccinationRecordModal, setVaccinationRecordModal] = useState(null);
+    const [showExportMenu, setShowExportMenu] = useState(false);
+    const exportMenuRef = useRef(null);
 
     // -- Derived Data --
     const [appointments, setAppointments] = useState([]);
@@ -721,6 +728,118 @@ const PrenatalVisits = () => {
     const tabStartIndex = (currentPage - 1) * itemsPerPage;
     const paginatedTabVisits = tabVisits.slice(tabStartIndex, tabStartIndex + itemsPerPage);
 
+    // --- Export Logic ---
+    const [showExportModal, setShowExportModal] = useState(false);
+
+    const getFilterDescription = () => {
+        const date = currentDate || new Date();
+        const monthYear = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const typeStr = visitTypeTab.charAt(0).toUpperCase() + visitTypeTab.slice(1);
+        const catStr = visitCategoryTab.charAt(0).toUpperCase() + visitCategoryTab.slice(1);
+        let desc = `${monthYear} · ${typeStr} · ${catStr}`;
+        if (filterStatus !== 'All') {
+            desc += ` · Status: ${filterStatus}`;
+        }
+        if (searchTerm) {
+            desc += ` · Search: "${searchTerm}"`;
+        }
+        return desc;
+    };
+
+    const getExportData = (dateRange) => {
+        let filteredForExport = tabVisits;
+        
+        if (dateRange && (dateRange.from || dateRange.to)) {
+            filteredForExport = tabVisits.filter(v => {
+                const vDateStr = v.visitDate || v.date;
+                if (!vDateStr) return false;
+                const vDate = new Date(`${vDateStr}T00:00:00`);
+                if (dateRange.from && vDate < dateRange.from) return false;
+                if (dateRange.to && vDate > dateRange.to) return false;
+                return true;
+            });
+        }
+
+        return filteredForExport.map(v => ({
+            "Patient Name": v.patientName || 'N/A',
+            "Patient ID": v.patientId || 'N/A',
+            "Visit Type": (v.type || v.visitType || visitTypeTab).toUpperCase(),
+            "Scheduled Date": formatReadableDate(v.visitDate || v.date) || v.visitDate || v.date || 'N/A',
+            "Scheduled Time": v.visitTime || v.time || 'N/A',
+            "Station": v.raw?.patient_basic_info?.stations?.station_name || v.station || 'N/A',
+            "Assigned Staff": v.assignedStaff || 'N/A',
+            "Status": v.status || 'N/A'
+        }));
+    };
+
+    const handleExport = (exportConfig) => {
+        const { format, dateRange, reportPeriodText } = exportConfig;
+        const data = getExportData(dateRange);
+        
+        const filterDesc = getFilterDescription();
+        const fullDesc = `${reportPeriodText} · ${filterDesc}`;
+
+        if (format === 'excel') {
+            let worksheetData = [
+                ["Report: Visits & Scheduling"],
+                [`Period: ${reportPeriodText}`],
+                [`Filters: ${filterDesc}`],
+                []
+            ];
+
+            if (data.length > 0) {
+                worksheetData = worksheetData.concat([
+                    Object.keys(data[0]),
+                    ...data.map(obj => Object.values(obj))
+                ]);
+            } else {
+                worksheetData.push(["No records found for the selected period and filters."]);
+            }
+
+            const ws = XLSX.utils.aoa_to_sheet(worksheetData);
+            
+            if (data.length > 0) {
+                const colWidths = Object.keys(data[0]).map(key => ({ wch: Math.max(key.length, 15) }));
+                ws['!cols'] = colWidths;
+            }
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Visits");
+            
+            const dateStr = new Date().toISOString().split('T')[0];
+            XLSX.writeFile(wb, `Visits_Schedules_${dateStr}.xlsx`);
+        } else if (format === 'pdf') {
+            const doc = new jsPDF('landscape');
+            
+            doc.setFontSize(16);
+            doc.text("Visits & Scheduling Report", 14, 20);
+            
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(`Period: ${reportPeriodText}`, 14, 28);
+            doc.text(`Filters: ${filterDesc}`, 14, 34);
+            
+            if (data.length === 0) {
+                doc.text("No records found for the selected period and filters.", 14, 46);
+            } else {
+                const head = [Object.keys(data[0])];
+                const body = data.map(obj => Object.values(obj));
+                
+                doc.autoTable({
+                    startY: 42,
+                    head: head,
+                    body: body,
+                    theme: 'grid',
+                    styles: { fontSize: 8 },
+                    headStyles: { fillColor: [185, 129, 138] }
+                });
+            }
+            
+            const dateStr = new Date().toISOString().split('T')[0];
+            doc.save(`Visits_Schedules_${dateStr}.pdf`);
+        }
+    };
+
     return (
         <div className="prenatal-visits-overall">
             {toast && <div className="toast toast--success"><CheckCircle2 size={16} /> {toast}</div>}
@@ -731,7 +850,14 @@ const PrenatalVisits = () => {
                     <h1 className="page-title">Visits &amp; Scheduling</h1>
                     <p className="page-subtitle">Manage patient visits and schedules with up to 30 appointments per day — 25 for regular visits and 5 for rescheduled visits.</p>
                 </div>
-                <div className="header-actions">
+                <div className="header-actions" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <button
+                        className="btn btn-outline"
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                        onClick={() => setShowExportModal(true)}
+                    >
+                        <Download size={16} /> Export
+                    </button>
                     <button
                         className="btn btn-primary"
                         style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
@@ -1480,6 +1606,11 @@ const PrenatalVisits = () => {
                     onSave={() => { setVaccinationRecordModal(null); fetchData(); }}
                 />
             )}
+            <ExportModal 
+                isOpen={showExportModal} 
+                onClose={() => setShowExportModal(false)} 
+                onExport={handleExport} 
+            />
         </div>
     );
 };

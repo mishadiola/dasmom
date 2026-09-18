@@ -15,6 +15,9 @@ import PatientService from '../../services/patientservice';
 import supabase from '../../config/supabaseclient';
 import '../../styles/components/SharedFilters.css';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import ExportModal from '../../components/ExportModal';
 import { formatTime12Hour } from '../../utils/pregnancyUtils';
 import { useModal } from '../../context/ModalContext';
 import Legend from '../../components/Legend/Legend';
@@ -76,6 +79,7 @@ const DeliveryOutcomes = () => {
     const [loading, setLoading] = useState(true);
     const [stations, setStations] = useState(['All Stations']);
     const [staffList, setStaffList] = useState([]);
+    const [showExportModal, setShowExportModal] = useState(false);
 
     const { displayStats, activePeriodText } = useMemo(() => {
         let text = '';
@@ -195,8 +199,20 @@ const DeliveryOutcomes = () => {
         setFilters(prev => ({ ...prev, [key]: value }));
     };
 
-    const handleExport = () => {
-        const exportData = filtered.map(d => ({
+    const getExportData = (dateRange) => {
+        let toExport = deliveries;
+        
+        if (dateRange && (dateRange.from || dateRange.to)) {
+            toExport = deliveries.filter(d => {
+                if (!d.deliveryDate) return false;
+                const dDate = new Date(d.deliveryDate);
+                if (dateRange.from && dDate < dateRange.from) return false;
+                if (dateRange.to && dDate > dateRange.to) return false;
+                return true;
+            });
+        }
+
+        return toExport.map(d => ({
             'Patient Name': d.patientName,
             'Patient ID': formatMotherId(d.patientId),
             'Station': d.station,
@@ -209,42 +225,81 @@ const DeliveryOutcomes = () => {
             'Baby Outcome': d.babyOutcome,
             'Staff': d.staff || '',
         }));
+    };
 
-        const ws = XLSX.utils.json_to_sheet(exportData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Delivery Outcomes');
+    const handleExport = (exportConfig) => {
+        const { format, dateRange, reportPeriodText } = exportConfig;
+        const exportData = getExportData(dateRange);
 
-        // Auto-size columns
-        const colWidths = [
-            { wch: 25 }, // Patient Name
-            { wch: 15 }, // Patient ID
-            { wch: 20 }, // Station
-            { wch: 15 }, // Delivery Date
-            { wch: 15 }, // Delivery Time
-            { wch: 15 }, // Delivery Type
-            { wch: 15 }, // Risk Level
-            { wch: 20 }, // Complications
-            { wch: 20 }, // Baby Name
-            { wch: 15 }, // Baby Outcome
-            { wch: 20 }, // Staff
-        ];
-        ws['!cols'] = colWidths;
+        if (format === 'excel') {
+            let worksheetData = [
+                ["Report: Delivery Outcomes"],
+                [`Period: ${reportPeriodText}`],
+                []
+            ];
 
-        // Add header styling
-        const range = XLSX.utils.decode_range(ws['!ref']);
-        for (let C = range.s.c; C <= range.e.c; ++C) {
-            const cell = ws[XLSX.utils.encode_cell({ r: 0, c: C })];
-            if (cell) {
-                cell.s = {
-                    font: { bold: true, color: { rgb: 'FFFFFF' } },
-                    fill: { fgColor: { rgb: 'B9818A' } },
-                    alignment: { horizontal: 'center', vertical: 'center' }
-                };
+            if (exportData.length > 0) {
+                worksheetData = worksheetData.concat([
+                    Object.keys(exportData[0]),
+                    ...exportData.map(obj => Object.values(obj))
+                ]);
+            } else {
+                worksheetData.push(["No records found for the selected period."]);
             }
-        }
 
-        const dateStr = new Date().toISOString().split('T')[0];
-        XLSX.writeFile(wb, `Delivery_Outcomes_${dateStr}.xlsx`);
+            const ws = XLSX.utils.aoa_to_sheet(worksheetData);
+            
+            if (exportData.length > 0) {
+                const colWidths = [
+                    { wch: 25 }, // Patient Name
+                    { wch: 15 }, // Patient ID
+                    { wch: 20 }, // Station
+                    { wch: 15 }, // Delivery Date
+                    { wch: 15 }, // Delivery Time
+                    { wch: 15 }, // Delivery Type
+                    { wch: 15 }, // Risk Level
+                    { wch: 20 }, // Complications
+                    { wch: 20 }, // Baby Name
+                    { wch: 15 }, // Baby Outcome
+                    { wch: 20 }, // Staff
+                ];
+                ws['!cols'] = colWidths;
+            }
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Delivery Outcomes');
+
+            const dateStr = new Date().toISOString().split('T')[0];
+            XLSX.writeFile(wb, `Delivery_Outcomes_${dateStr}.xlsx`);
+        } else if (format === 'pdf') {
+            const doc = new jsPDF('landscape');
+            
+            doc.setFontSize(16);
+            doc.text("Delivery Outcomes Report", 14, 20);
+            
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(`Period: ${reportPeriodText}`, 14, 28);
+            
+            if (exportData.length === 0) {
+                doc.text("No records found for the selected period.", 14, 40);
+            } else {
+                const head = [Object.keys(exportData[0])];
+                const body = exportData.map(obj => Object.values(obj));
+                
+                doc.autoTable({
+                    startY: 35,
+                    head: head,
+                    body: body,
+                    theme: 'grid',
+                    styles: { fontSize: 8 },
+                    headStyles: { fillColor: [185, 129, 138] }
+                });
+            }
+            
+            const dateStr = new Date().toISOString().split('T')[0];
+            doc.save(`Delivery_Outcomes_${dateStr}.pdf`);
+        }
     };
 
     const handleSort = (field) => {
@@ -382,8 +437,14 @@ const DeliveryOutcomes = () => {
                     </h1>
                     <p className="page-subtitle">Record and monitor birth outcomes, including delivery type, complications, and baby status.</p>
                 </div>
-                <div className="header-actions">
-                    <button className="btn btn-outline" onClick={handleExport}><Download size={16} /> Export Report</button>
+                <div className="header-actions" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <button
+                        className="btn btn-outline"
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                        onClick={() => setShowExportModal(true)}
+                    >
+                        <Download size={16} /> Export
+                    </button>
                     <button className="btn btn-primary" onClick={() => setShowModal(true)}>
                         <Plus size={16} /> Record New Delivery
                     </button>
@@ -662,7 +723,16 @@ const DeliveryOutcomes = () => {
                     <div className="do-card">
                         <div className="do-card-head">
                             <h2><Baby size={17} /> Birth Records ({filtered.length})</h2>
-                            <span className="do-count">{filtered.length} records</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span className="do-count">{filtered.length} records</span>
+                                <button 
+                                    className="filter-btn" 
+                                    onClick={() => setShowExportModal(true)}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 10px', fontSize: '12px' }}
+                                >
+                                    <Download size={13} /> Export
+                                </button>
+                            </div>
                         </div>
                         <div className="table-responsive">
                             <table className="do-table">
@@ -807,6 +877,12 @@ const DeliveryOutcomes = () => {
                     </div>
                 </div>
             </div>
+            
+            <ExportModal 
+                isOpen={showExportModal} 
+                onClose={() => setShowExportModal(false)} 
+                onExport={handleExport} 
+            />
         </div>
     );
 };

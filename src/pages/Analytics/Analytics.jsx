@@ -9,7 +9,10 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import supabase from '../../config/supabaseclient';
 import '../../styles/pages/Analytics.css';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import ExportModal from '../../components/ExportModal';
 
 /* ════════════════════════════════════════════════════════════════
    ERROR BOUNDARY — catches render crashes and shows fallback UI
@@ -140,6 +143,9 @@ const Analytics = () => {
 
     // ── Hover Tooltip State ──
     const [hoveredDot, setHoveredDot] = useState(null);
+
+    // ── Export Modal State ──
+    const [showExportModal, setShowExportModal] = useState(false);
 
     // ── Load live Supabase records ──
     useEffect(() => {
@@ -700,56 +706,274 @@ const Analytics = () => {
         return insights;
     }, [activeData, dashboardMetrics, trendData]);
 
+    // ── Export Data Aggregation ──
+    const getExportDataForDateRange = (dateRange) => {
+        const liveAgg = {
+            'Dasma 1': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0, ppEligible: 0, ppCompleted: 0 },
+            'Dasma 2': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0, ppEligible: 0, ppCompleted: 0 },
+            'Dasma 3': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0, ppEligible: 0, ppCompleted: 0 },
+            'Dasma 4': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0, ppEligible: 0, ppCompleted: 0 },
+            'Salawag': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0, ppEligible: 0, ppCompleted: 0 },
+            'Armstrong': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0, ppEligible: 0, ppCompleted: 0 },
+            'City Health Office 3': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0, ppEligible: 0, ppCompleted: 0 }
+        };
+
+        const isWithinExportDateRange = (dateString) => {
+            if (!dateString) return true;
+            const d = new Date(dateString);
+            if (isNaN(d.getTime())) return true;
+            if (dateRange?.from && d < dateRange.from) return false;
+            if (dateRange?.to && d > dateRange.to) return false;
+            return true;
+        };
+
+        const latestVisits = {};
+        dbData.visits.forEach(v => {
+            if (!v.patient_id) return;
+            const existing = latestVisits[v.patient_id];
+            if (!existing || new Date(v.visit_date) > new Date(existing.visit_date)) latestVisits[v.patient_id] = v;
+        });
+
+        const activePregnancies = {};
+        dbData.pregnancies.forEach(p => {
+            if (String(p.pregn_postp || '').toLowerCase() === 'pregnant') {
+                const existing = activePregnancies[p.patient_id];
+                if (!existing || new Date(p.created_at) > new Date(existing.created_at)) activePregnancies[p.patient_id] = p;
+            }
+        });
+
+        dbData.patients.forEach(pat => {
+            if (!isWithinExportDateRange(pat.created_at)) return;
+            const station = normalizeStation(pat.stations?.station_name);
+            if (!liveAgg[station]) return;
+            const preg = activePregnancies[pat.id];
+            if (!preg) return;
+
+            let detail = { risk: 'Low', status: 'Pregnant', risk_factors: '' };
+            const v = latestVisits[pat.id];
+            if (v) detail = { risk: v.calculated_risk || 'Low', status: 'Pregnant', risk_factors: v.risk_factors || '' };
+            else if (preg) detail = { risk: preg.risk_level || 'Low', status: 'Pregnant', risk_factors: '' };
+
+            let age = 25;
+            if (pat.date_of_birth) {
+                const birth = new Date(pat.date_of_birth);
+                age = new Date().getFullYear() - birth.getFullYear();
+            }
+
+            if (detail.status?.toLowerCase() === 'pregnant') {
+                liveAgg[station].patients++;
+                if (detail.risk === 'High') liveAgg[station].highRisk++;
+                else if (detail.risk === 'Moderate') liveAgg[station].moderateRisk++;
+                else liveAgg[station].lowRisk++;
+                
+                if (age < 20) liveAgg[station].teenage++;
+                if (age >= 35) liveAgg[station].advancedAge++;
+            }
+            
+            if (detail.risk_factors) {
+                const factors = detail.risk_factors.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+                factors.forEach(f => {
+                    if (f.includes('hyper') || f.includes('bp')) liveAgg[station].compHyper++;
+                    if (f.includes('preeclampsia') || f.includes('pre-eclampsia')) liveAgg[station].recComp++;
+                    if (f.includes('anemia')) liveAgg[station].compOther++;
+                    if (f.includes('diabet')) liveAgg[station].compInfect++; 
+                });
+            }
+        });
+
+        dbData.visits.forEach(v => {
+            const pat = dbData.patients.find(p => p.id === v.patient_id);
+            const station = normalizeStation(pat?.stations?.station_name);
+            if (!liveAgg[station]) return;
+            if (!isWithinExportDateRange(v.visit_date)) return;
+            const isMissed = v.status === 'Missed' || (v.visit_date && new Date(v.visit_date) < new Date() && v.status === 'Scheduled');
+            if (isMissed) liveAgg[station].missedAppt++;
+        });
+
+        dbData.deliveries.forEach(d => {
+            const pat = dbData.patients.find(p => p.id === d.mother_id);
+            const station = normalizeStation(pat?.stations?.station_name || pat?.barangay);
+            if (!liveAgg[station]) return;
+            if (!isWithinExportDateRange(d.delivery_date)) return;
+
+            liveAgg[station].deliveries++;
+
+            const toStr = (val) => val ? String(val).toLowerCase() : '';
+            const dtype = toStr(d.delivery_type);
+            if (dtype.includes('cs') || dtype.includes('cesarean')) liveAgg[station].csDel++;
+            else if (dtype.includes('assist')) liveAgg[station].assistedDel++;
+            else liveAgg[station].normalDel++;
+
+            const comps = toStr(d.complications);
+            if (comps.includes('hemorrhage') || comps.includes('bleed')) liveAgg[station].compHemorr++;
+        });
+
+        dbData.vaccinations.forEach(v => {
+            const patId = v.patient_id || v.newborn_id;
+            const pat = dbData.patients.find(p => p.id === patId);
+            const station = normalizeStation(pat?.stations?.station_name);
+            if (!liveAgg[station]) return;
+            if (!isWithinExportDateRange(v.vaccinated_date)) return;
+
+            liveAgg[station].totalVacc++;
+            if (v.status === 'Completed') liveAgg[station].completedVacc++;
+        });
+
+        const mergedStations = {};
+        STATIONS.forEach(st => {
+            if (st === 'All Stations') return;
+            const live = liveAgg[st];
+            mergedStations[st] = {
+                name: st,
+                ...live,
+                compliancePP: live.ppEligible > 0 ? Math.round((live.ppCompleted / live.ppEligible) * 100) : 0
+            };
+        });
+        
+        let totals = { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0, ppEligible: 0, ppCompleted: 0 };
+        const relevantStations = (filters.station && filters.station !== 'All Stations') ? [filters.station] : STATIONS.filter(s => s !== 'All Stations');
+        relevantStations.forEach(st => {
+            if (mergedStations[st]) {
+                const s = mergedStations[st];
+                Object.keys(totals).forEach(k => { totals[k] += s[k] || 0; });
+            }
+        });
+
+        const vaccRate = totals.totalVacc > 0 ? Math.round((totals.completedVacc / totals.totalVacc) * 100) : 0;
+        const ppRate = totals.ppEligible > 0 ? Math.round((totals.ppCompleted / totals.ppEligible) * 100) : 0;
+        const totalVisits = totals.patients * 4;
+        const missedRate = totalVisits > 0 ? Math.round((totals.missedAppt / totalVisits) * 100) : 0;
+
+        return {
+            totalPregnant: totals.patients,
+            highRisk: totals.highRisk,
+            teenage: totals.teenage,
+            advancedAge: totals.advancedAge,
+            deliveries: totals.deliveries,
+            vaccRate,
+            ppRate,
+            missedRate,
+            normalDel: totals.normalDel,
+            assistedDel: totals.assistedDel,
+            csDel: totals.csDel,
+            compHemorr: totals.compHemorr,
+            compHyper: totals.compHyper,
+            compInfect: totals.compInfect,
+            compOther: totals.compOther,
+            recNormal: totals.recNormal,
+            recObs: totals.recObs,
+            recComp: totals.recComp,
+            mergedStations
+        };
+    };
+
     // ── Export Sheet Handler ──
-    const handleExportReport = () => {
-        const wb = XLSX.utils.book_new();
-
-        // Sheet 1: Executive KPI Overview
+    const handleExport = (exportConfig) => {
+        const { format, dateRange, reportPeriodText } = exportConfig;
+        const data = getExportDataForDateRange(dateRange);
+        
         const kpiOverview = [
-            { 'Intelligence Metric': 'Total Managed Patients', 'Value / Rate': activeData.totalPregnant, 'Trend Period': trendsCalculated.totChange },
-            { 'Intelligence Metric': 'High-Risk Cases', 'Value / Rate': activeData.highRisk, 'Trend Period': trendsCalculated.hrChange },
-            { 'Intelligence Metric': 'Teenage Pregnancies', 'Value / Rate': activeData.teenage, 'Trend Period': 'Live count' },
-            { 'Intelligence Metric': 'Advanced Maternal Age Cases', 'Value / Rate': activeData.advancedAge, 'Trend Period': 'Live count' },
-            { 'Intelligence Metric': 'Deliveries Count (This Period)', 'Value / Rate': activeData.deliveries, 'Trend Period': trendsCalculated.delChange },
-            { 'Intelligence Metric': 'Vaccination Completion Rate', 'Value / Rate': `${activeData.vaccRate}%`, 'Trend Period': vaccTrendsCalculated.vmChange },
-            { 'Intelligence Metric': 'Postpartum Follow-up Compliance', 'Value / Rate': `${activeData.ppRate}%`, 'Trend Period': trendsCalculated.ppChange },
-            { 'Intelligence Metric': 'Missed Appointment Rate', 'Value / Rate': `${activeData.missedRate}%`, 'Trend Period': trendsCalculated.missedChange }
+            { 'Intelligence Metric': 'Total Managed Patients', 'Value / Rate': data.totalPregnant },
+            { 'Intelligence Metric': 'High-Risk Cases', 'Value / Rate': data.highRisk },
+            { 'Intelligence Metric': 'Teenage Pregnancies', 'Value / Rate': data.teenage },
+            { 'Intelligence Metric': 'Advanced Maternal Age Cases', 'Value / Rate': data.advancedAge },
+            { 'Intelligence Metric': 'Deliveries Count (This Period)', 'Value / Rate': data.deliveries },
+            { 'Intelligence Metric': 'Vaccination Completion Rate', 'Value / Rate': `${data.vaccRate}%` },
+            { 'Intelligence Metric': 'Postpartum Follow-up Compliance', 'Value / Rate': `${data.ppRate}%` },
+            { 'Intelligence Metric': 'Missed Appointment Rate', 'Value / Rate': `${data.missedRate}%` }
         ];
-        const wsKpi = XLSX.utils.json_to_sheet(kpiOverview);
-        XLSX.utils.book_append_sheet(wb, wsKpi, 'Executive Summary');
 
-        // Sheet 2: Station Comparison Data
-        const comparisonSheet = stationsRanked.map((s, idx) => ({
-            'Rank': idx + 1,
-            'Station Area': s.name,
-            'Active Patients': s.patients,
-            'High Risk Count': s.highRisk,
-            'Vaccination Rate (%)': s.vaccRate,
-            'Postpartum Compliance (%)': s.compliance,
-            'Missed Visits': s.missed
-        }));
-        const wsComp = XLSX.utils.json_to_sheet(comparisonSheet);
-        XLSX.utils.book_append_sheet(wb, wsComp, 'Station Comparison');
+        const stationComparison = Object.values(data.mergedStations).map((s, idx) => {
+            const vRate = s.totalVacc > 0 ? Math.round((s.completedVacc / s.totalVacc) * 100) : 0;
+            const missedTotal = s.patients * 4;
+            const mRate = missedTotal > 0 ? Math.round((s.missedAppt / missedTotal) * 100) : 0;
+            return {
+                'Station Area': s.name,
+                'Active Patients': s.patients,
+                'High Risk Count': s.highRisk,
+                'Vaccination Rate (%)': vRate,
+                'Postpartum Compliance (%)': s.compliancePP,
+                'Missed Visits': s.missedAppt
+            };
+        });
 
-        // Sheet 3: Delivery outcomes & recovery
         const outcomesSheet = [
-            { 'Outcomes Segment': 'Normal Spontaneous Delivery (NSD)', 'Count': activeData.normalDel },
-            { 'Outcomes Segment': 'Assisted Delivery', 'Count': activeData.assistedDel },
-            { 'Outcomes Segment': 'Cesarean Section (CS)', 'Count': activeData.csDel },
-            { 'Complications': 'Postpartum Hemorrhage', 'Count': activeData.compHemorr },
-            { 'Complications': 'Hypertensive Crisis', 'Count': activeData.compHyper },
-            { 'Complications': 'Infection / Sepsis', 'Count': activeData.compInfect },
-            { 'Complications': 'Other / Retained Placenta', 'Count': activeData.compOther },
-            { 'Recovery State': 'Fully Recovered', 'Count': activeData.recNormal },
-            { 'Recovery State': 'Under Midwife Observation', 'Count': activeData.recObs },
-            { 'Recovery State': 'Complicated Cases', 'Count': activeData.recComp }
+            { 'Outcomes Segment': 'Normal Spontaneous Delivery (NSD)', 'Count': data.normalDel },
+            { 'Outcomes Segment': 'Assisted Delivery', 'Count': data.assistedDel },
+            { 'Outcomes Segment': 'Cesarean Section (CS)', 'Count': data.csDel },
+            { 'Complications': 'Postpartum Hemorrhage', 'Count': data.compHemorr },
+            { 'Complications': 'Hypertensive Crisis', 'Count': data.compHyper },
+            { 'Complications': 'Infection / Sepsis', 'Count': data.compInfect },
+            { 'Complications': 'Other / Retained Placenta', 'Count': data.compOther },
+            { 'Recovery State': 'Fully Recovered', 'Count': data.recNormal },
+            { 'Recovery State': 'Under Midwife Observation', 'Count': data.recObs },
+            { 'Recovery State': 'Complicated Cases', 'Count': data.recComp }
         ];
-        const wsOut = XLSX.utils.json_to_sheet(outcomesSheet);
-        XLSX.utils.book_append_sheet(wb, wsOut, 'Deliveries and Recovery');
 
-        // Save
-        const dateStr = new Date().toISOString().split('T')[0];
-        XLSX.writeFile(wb, `DASMOM_Analytics_Intelligence_${dateStr}.xlsx`);
+        if (format === 'excel') {
+            const wb = XLSX.utils.book_new();
+            
+            const wsKpi = XLSX.utils.json_to_sheet(kpiOverview);
+            XLSX.utils.book_append_sheet(wb, wsKpi, 'Executive Summary');
+
+            const wsComp = XLSX.utils.json_to_sheet(stationComparison);
+            XLSX.utils.book_append_sheet(wb, wsComp, 'Station Comparison');
+
+            const wsOut = XLSX.utils.json_to_sheet(outcomesSheet);
+            XLSX.utils.book_append_sheet(wb, wsOut, 'Deliveries and Recovery');
+
+            const dateStr = new Date().toISOString().split('T')[0];
+            XLSX.writeFile(wb, `DASMOM_Analytics_Intelligence_${dateStr}.xlsx`);
+        } else if (format === 'pdf') {
+            const doc = new jsPDF('portrait');
+            
+            doc.setFontSize(16);
+            doc.text("DASMOM+ Analytics Intelligence Report", 14, 20);
+            
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(`Period: ${reportPeriodText}`, 14, 28);
+            
+            doc.setFontSize(12);
+            doc.setTextColor(0);
+            doc.text("Executive Summary", 14, 38);
+            
+            doc.autoTable({
+                startY: 42,
+                head: [['Intelligence Metric', 'Value / Rate']],
+                body: kpiOverview.map(obj => [obj['Intelligence Metric'], obj['Value / Rate']]),
+                theme: 'grid',
+                styles: { fontSize: 8 },
+                headStyles: { fillColor: [185, 129, 138] }
+            });
+            
+            let finalY = doc.lastAutoTable.finalY + 10;
+            doc.text("Station Comparison", 14, finalY);
+            
+            doc.autoTable({
+                startY: finalY + 4,
+                head: [Object.keys(stationComparison[0])],
+                body: stationComparison.map(obj => Object.values(obj)),
+                theme: 'grid',
+                styles: { fontSize: 8 },
+                headStyles: { fillColor: [185, 129, 138] }
+            });
+            
+            finalY = doc.lastAutoTable.finalY + 10;
+            doc.text("Deliveries and Recovery", 14, finalY);
+            
+            doc.autoTable({
+                startY: finalY + 4,
+                head: [['Category', 'Count']],
+                body: outcomesSheet.map(obj => [obj['Outcomes Segment'] || obj['Complications'] || obj['Recovery State'], obj['Count']]),
+                theme: 'grid',
+                styles: { fontSize: 8 },
+                headStyles: { fillColor: [185, 129, 138] }
+            });
+            
+            const dateStr = new Date().toISOString().split('T')[0];
+            doc.save(`DASMOM_Analytics_Intelligence_${dateStr}.pdf`);
+        }
     };
 
     // ── SVG Chart Drawing Helpers ──
@@ -979,8 +1203,8 @@ const Analytics = () => {
                     </h1>
                     <p className="page-subtitle">View overall maternal health trends and performance across CHO III.</p>
                 </div>
-                <div className="header-actions">
-                    <button className="btn-export-analytics" onClick={handleExportReport} aria-label="Export report to Excel">
+                <div className="analytics-header-actions">
+                    <button className="btn-export-analytics" onClick={() => setShowExportModal(true)} aria-label="Export report">
                         <Download size={16} />
                         <span>Export Analytics</span>
                     </button>
@@ -1559,6 +1783,11 @@ const Analytics = () => {
                 </>
             )}
 
+            <ExportModal 
+                isOpen={showExportModal} 
+                onClose={() => setShowExportModal(false)} 
+                onExport={handleExport} 
+            />
         </div>
     );
 };

@@ -24,12 +24,17 @@ import {
   MapPin,
   Calendar,
   Send,
-  Hash
+  Hash,
+  Download
 } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
 import InventoryService from '../../services/inventoryservice';
 import PatientService from '../../services/patientservice';
 import { useModal } from '../../context/ModalContext';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import ExportModal from '../../components/ExportModal';
 import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/Inventory.css';
 
@@ -597,6 +602,117 @@ const Inventory = () => {
     setCurrentPage(1);
   }, [activeTab, searchTerm, statusFilter, activeSummaryFilter, archiveFilter]);
 
+  const [showExportModal, setShowExportModal] = useState(false);
+
+  const getFilterDescription = () => {
+    const typeStr = activeTab.charAt(0).toUpperCase() + activeTab.slice(1);
+    let desc = `Type: ${typeStr}`;
+    if (statusFilter !== 'All') desc += ` · Status: ${statusFilter}`;
+    if (activeSummaryFilter) desc += ` · Summary: ${activeSummaryFilter}`;
+    if (archiveFilter !== 'active') desc += ` · Archive: ${archiveFilter}`;
+    if (searchTerm) desc += ` · Search: "${searchTerm}"`;
+    return desc;
+  };
+
+  const getExportData = (dateRange) => {
+    const rows = [];
+    filteredItems.forEach(group => {
+      group.items.forEach(item => {
+        let includeItem = true;
+        if (dateRange && (dateRange.from || dateRange.to)) {
+          if (!item.last_updated) {
+             includeItem = false;
+          } else {
+             const uDate = new Date(item.last_updated);
+             if (dateRange.from && uDate < dateRange.from) includeItem = false;
+             if (dateRange.to && uDate > dateRange.to) includeItem = false;
+          }
+        }
+        
+        if (includeItem) {
+          rows.push({
+            'Item Name': item.item_name || group.item_name || 'N/A',
+            'Category / Type': activeTab === 'vaccines' ? 'Vaccine' : 'Supplement',
+            'Current Stock': item.quantity || 0,
+            'Unit': item.unit || group.unit || (activeTab === 'vaccines' ? 'vials' : 'tablets'),
+            'Stock Status': getStatus(item.quantity || 0, item.max_stock || item.max_quantity || item.max_quant || 0).label,
+            'Expiration Date': formatReadableDate(item.expiration_date) || 'N/A',
+            'Batch/Lot Number': item.batch || item.batch_number || 'N/A',
+            'Last Updated': formatReadableDate(item.last_updated) || 'N/A'
+          });
+        }
+      });
+    });
+    return rows;
+  };
+
+  const handleExport = (exportConfig) => {
+    const { format, dateRange, reportPeriodText } = exportConfig;
+    const data = getExportData(dateRange);
+    const filterDesc = getFilterDescription();
+    const fullDesc = `${reportPeriodText} · ${filterDesc}`;
+    
+    if (format === 'excel') {
+      let worksheetData = [
+        ["Report: DASMOM+ Inventory Management Report"],
+        [`Generated: ${new Date().toLocaleString()}`],
+        [`Scope: ${fullDesc}`],
+        []
+      ];
+
+      if (data.length > 0) {
+        worksheetData = worksheetData.concat([
+          Object.keys(data[0]),
+          ...data.map(obj => Object.values(obj))
+        ]);
+      } else {
+        worksheetData.push(["No records found for the selected period and filters."]);
+      }
+
+      const ws = XLSX.utils.aoa_to_sheet(worksheetData);
+      
+      if (data.length > 0) {
+        const colWidths = Object.keys(data[0]).map(key => ({ wch: Math.max(key.length, 15) }));
+        ws['!cols'] = colWidths;
+      }
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Inventory");
+      
+      const dateStr = new Date().toISOString().split('T')[0];
+      XLSX.writeFile(wb, `Inventory_Report_${dateStr}.xlsx`);
+    } else if (format === 'pdf') {
+      const doc = new jsPDF('landscape');
+      
+      doc.setFontSize(16);
+      doc.text("DASMOM+ Inventory Management Report", 14, 20);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
+      doc.text(`Scope: ${fullDesc}`, 14, 34);
+      
+      if (data.length === 0) {
+        doc.text("No records found for the selected period and filters.", 14, 46);
+      } else {
+        const head = [Object.keys(data[0])];
+        const body = data.map(obj => Object.values(obj));
+        
+        doc.autoTable({
+          startY: 42,
+          head: head,
+          body: body,
+          theme: 'grid',
+          styles: { fontSize: 8 },
+          headStyles: { fillColor: [185, 129, 138] }
+        });
+      }
+      
+      const dateStr = new Date().toISOString().split('T')[0];
+      doc.save(`Inventory_Report_${dateStr}.pdf`);
+    }
+  };
+
   const generateBatchNumber = async (itemName) => {
     try {
       const table = activeTab === 'vaccines' ? 'vaccine_inventory' : 'supplement_inventory';
@@ -916,7 +1032,14 @@ const Inventory = () => {
           </h1>
           <p className="page-subtitle">Track and manage vaccine and supplement supplies across CHO stations to help maintain adequate stock levels.</p>
         </div>
-        <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+        <div className="header-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button
+            className="btn btn-outline"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            onClick={() => setShowExportModal(true)}
+          >
+            <Download size={16} /> Export
+          </button>
           <button
             className="btn btn-outline"
             style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
@@ -2348,6 +2471,14 @@ const Inventory = () => {
         </div>
       )}
 
+      {showAddModal && renderAddModal()}
+      {showUpdateModal && renderUpdateModal()}
+
+      <ExportModal 
+        isOpen={showExportModal} 
+        onClose={() => setShowExportModal(false)} 
+        onExport={handleExport} 
+      />
     </div>
   );
 };

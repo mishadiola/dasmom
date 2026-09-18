@@ -10,6 +10,7 @@ import {
 import BabyService from '../../services/babyservices';
 import PatientService from '../../services/patientservice';
 import * as XLSX from 'xlsx';
+import ExportModal from '../../components/ExportModal';
 import Legend from '../../components/Legend/Legend';
 import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/PostpartumRecords.css';
@@ -249,17 +250,7 @@ const PostpartumRecords = () => {
         CheckCircle2
     };
 
-    const [showExportMenu, setShowExportMenu] = useState(false);
-
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (showExportMenu && !event.target.closest('.export-dropdown-container')) {
-                setShowExportMenu(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [showExportMenu]);
+    const [showExportModal, setShowExportModal] = useState(false);
 
     const handleFilter = (key, val) => {
         setFilters(prev => ({ ...prev, [key]: val }));
@@ -278,8 +269,19 @@ const PostpartumRecords = () => {
         return 'recovery-normal';
     };
 
-    const handleExportExcel = () => {
-        const exportData = filtered.map(m => ({
+    const getExportData = (dateRange) => {
+        let toExport = filtered;
+        if (dateRange && (dateRange.from || dateRange.to)) {
+            toExport = filtered.filter(m => {
+                if (!m.deliveryDate) return false;
+                const dDate = new Date(m.deliveryDate);
+                if (dateRange.from && dDate < dateRange.from) return false;
+                if (dateRange.to && dDate > dateRange.to) return false;
+                return true;
+            });
+        }
+        
+        return toExport.map(m => ({
             'Patient Name': m.name,
             'Patient ID': formatMotherId(m.patientId),
             'Station': m.station,
@@ -291,87 +293,70 @@ const PostpartumRecords = () => {
             'Last Checkup': m.lastCheckup,
             'Next Follow-up': m.nextFollowUp,
             'Follow-up Status': m.followUpStatus,
-            'Complications': m.complications,
+            'Complications': m.complications || 'None',
         }));
-
-        const ws = XLSX.utils.json_to_sheet(exportData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Postpartum Records');
-
-        // Auto-size columns
-        const colWidths = [
-            { wch: 25 }, // Patient Name
-            { wch: 15 }, // Patient ID
-            { wch: 20 }, // Station
-            { wch: 15 }, // Delivery Type
-            { wch: 15 }, // Delivery Date
-            { wch: 18 }, // Days Postpartum
-            { wch: 15 }, // Baby Outcome
-            { wch: 15 }, // Recovery Status
-            { wch: 15 }, // Last Checkup
-            { wch: 15 }, // Next Follow-up
-            { wch: 15 }, // Follow-up Status
-            { wch: 25 }, // Complications
-        ];
-        ws['!cols'] = colWidths;
-
-        // Add header styling
-        const range = XLSX.utils.decode_range(ws['!ref']);
-        for (let C = range.s.c; C <= range.e.c; ++C) {
-            const cell = ws[XLSX.utils.encode_cell({ r: 0, c: C })];
-            if (cell) {
-                cell.s = {
-                    font: { bold: true, color: { rgb: 'FFFFFF' } },
-                    fill: { fgColor: { rgb: 'B9818A' } },
-                    alignment: { horizontal: 'center', vertical: 'center' }
-                };
-            }
-        }
-
-        const dateStr = new Date().toISOString().split('T')[0];
-        XLSX.writeFile(wb, `Postpartum_Records_${dateStr}.xlsx`);
     };
 
-    const handleExportPDF = async () => {
-        try {
-            const jsPDF = (await import('jspdf')).default;
-            const autoTable = (await import('jspdf-autotable')).default;
-            
-            const doc = new jsPDF('landscape');
-            
-            const tableColumn = ["Patient", "ID", "Station", "Del. Type", "Del. Date", "Days PP", "Baby Outcome", "Recovery", "Next FU", "FU Status", "Complications"];
-            const tableRows = [];
+    const handleExport = async (exportConfig) => {
+        const { format, dateRange, reportPeriodText } = exportConfig;
+        const exportData = getExportData(dateRange);
 
-            filtered.forEach(m => {
-                tableRows.push([
-                    m.name || '',
-                    m.patientId || '',
-                    m.station || '',
-                    m.deliveryType || '',
-                    m.deliveryDate || '',
-                    m.daysPostpartum || '',
-                    m.babyOutcome || '',
-                    m.recoveryStatus || '',
-                    m.nextFollowUp || '',
-                    m.followUpStatus || '',
-                    m.complications || 'None'
-                ]);
-            });
+        if (format === 'excel') {
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Postpartum Records');
 
-            doc.text("Postpartum Records List", 14, 15);
-            
-            autoTable(doc, {
-                head: [tableColumn],
-                body: tableRows,
-                startY: 20,
-                styles: { fontSize: 7 },
-                headStyles: { fillColor: [147, 111, 199] }
-            });
+            const colWidths = [
+                { wch: 25 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, 
+                { wch: 15 }, { wch: 18 }, { wch: 15 }, { wch: 15 }, 
+                { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 25 }, 
+            ];
+            ws['!cols'] = colWidths;
+
+            const range = XLSX.utils.decode_range(ws['!ref']);
+            for (let C = range.s.c; C <= range.e.c; ++C) {
+                const cell = ws[XLSX.utils.encode_cell({ r: 0, c: C })];
+                if (cell) {
+                    cell.s = {
+                        font: { bold: true, color: { rgb: 'FFFFFF' } },
+                        fill: { fgColor: { rgb: 'B9818A' } },
+                        alignment: { horizontal: 'center', vertical: 'center' }
+                    };
+                }
+            }
 
             const dateStr = new Date().toISOString().split('T')[0];
-            doc.save(`Postpartum_Records_${dateStr}.pdf`);
-        } catch (error) {
-            console.error("Error generating PDF:", error);
+            XLSX.writeFile(wb, `Postpartum_Records_${dateStr}.xlsx`);
+        } else if (format === 'pdf') {
+            try {
+                const jsPDF = (await import('jspdf')).default;
+                const autoTable = (await import('jspdf-autotable')).default;
+                
+                const doc = new jsPDF('landscape');
+                
+                if (exportData.length === 0) {
+                    doc.text("No records found for the selected period.", 14, 20);
+                } else {
+                    const tableColumn = Object.keys(exportData[0]);
+                    const tableRows = exportData.map(obj => Object.values(obj));
+
+                    doc.text("Postpartum Records List", 14, 15);
+                    doc.setFontSize(10);
+                    doc.text(`Period: ${reportPeriodText}`, 14, 22);
+                    
+                    autoTable(doc, {
+                        head: [tableColumn],
+                        body: tableRows,
+                        startY: 28,
+                        styles: { fontSize: 7 },
+                        headStyles: { fillColor: [147, 111, 199] }
+                    });
+                }
+                const dateStr = new Date().toISOString().split('T')[0];
+                doc.save(`Postpartum_Records_${dateStr}.pdf`);
+            } catch (error) {
+                console.error("Error generating PDF:", error);
+            }
         }
     };
 
@@ -400,26 +385,9 @@ const PostpartumRecords = () => {
                     <p className="page-subtitle">Monitor mothers after delivery, including recovery, complications, and follow-up visits.</p>
                 </div>
                 <div className="header-actions">
-                    <div className="export-dropdown-container" style={{ position: 'relative' }}>
-                        <button className="btn btn-outline" onClick={() => setShowExportMenu(!showExportMenu)}>
+                        <button className="btn btn-outline" onClick={() => setShowExportModal(true)}>
                             <Download size={16} /> Export
                         </button>
-                        {showExportMenu && (
-                            <div className="export-dropdown" style={{
-                                position: 'absolute', top: '100%', right: 0, marginTop: '8px',
-                                background: '#fff', border: '1px solid #eaeaea', borderRadius: '8px',
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '8px',
-                                display: 'flex', flexDirection: 'column', gap: '4px', zIndex: 100, minWidth: '150px'
-                            }}>
-                                <button className="btn btn-text" onClick={() => { handleExportExcel(); setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
-                                    <Download size={14} style={{ marginRight: '8px' }} /> Excel (.xlsx)
-                                </button>
-                                <button className="btn btn-text" onClick={() => { handleExportPDF(); setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
-                                    <Download size={14} style={{ marginRight: '8px' }} /> PDF (.pdf)
-                                </button>
-                            </div>
-                        )}
-                    </div>
                 </div>
             </div>
 
@@ -743,6 +711,11 @@ const PostpartumRecords = () => {
             {selectedMother && <DetailModal mother={selectedMother} onClose={() => setSelectedMother(null)} />}
             {visitMother && <PostpartumVisitModal mother={visitMother} onClose={() => setVisitMother(null)} onSave={refreshRecords} />}
 
+            <ExportModal 
+                isOpen={showExportModal} 
+                onClose={() => setShowExportModal(false)} 
+                onExport={handleExport} 
+            />
         </div>
     );
 };

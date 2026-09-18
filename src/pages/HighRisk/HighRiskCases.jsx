@@ -20,6 +20,7 @@ import {
   Info
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import ExportModal from '../../components/ExportModal';
 import Legend from '../../components/Legend/Legend';
 import PatientService from '../../services/patientservice';
 import '../../styles/components/SharedFilters.css';
@@ -321,19 +322,11 @@ const HighRiskCases = () => {
   const stationDistribution = getStationDistribution();
   const totalAssignedCases = stationDistribution.reduce((sum, item) => sum + item.count, 0);
 
-  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
 
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (showExportMenu && !event.target.closest('.export-dropdown-container')) {
-        setShowExportMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showExportMenu]);
-
-  const handleExportExcel = () => {
+  const handleExport = async (exportConfig) => {
+    const { format } = exportConfig;
+    
     const exportData = filteredPatients.map(p => ({
         'Patient ID': p.id || '',
         'Name': p.name || '',
@@ -345,48 +338,44 @@ const HighRiskCases = () => {
         'Next Appointment': p.nextVisit || 'Initial'
     }));
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'High Risk Cases');
-    XLSX.writeFile(workbook, 'high_risk_cases.xlsx');
-  };
+    if (format === 'excel') {
+        const worksheet = XLSX.utils.json_to_sheet(exportData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'High Risk Cases');
+        XLSX.writeFile(workbook, 'high_risk_cases.xlsx');
+    } else if (format === 'pdf') {
+        try {
+            const jsPDF = (await import('jspdf')).default;
+            const autoTable = (await import('jspdf-autotable')).default;
+            
+            const doc = new jsPDF('landscape');
+            
+            const tableColumn = ["Patient ID", "Name", "Station", "Age", "Gestation", "Risk Level", "Conditions", "Next Appt"];
+            const tableRows = exportData.map(obj => [
+                obj['Patient ID'],
+                obj['Name'],
+                obj['Station'],
+                obj['Age'],
+                obj['Gestation'],
+                obj['Risk Level'],
+                obj['Conditions'],
+                obj['Next Appointment']
+            ]);
 
-  const handleExportPDF = async () => {
-    try {
-      const jsPDF = (await import('jspdf')).default;
-      const autoTable = (await import('jspdf-autotable')).default;
-      
-      const doc = new jsPDF('landscape');
-      
-      const tableColumn = ["Patient ID", "Name", "Station", "Age", "Gestation", "Risk Level", "Conditions", "Next Appt"];
-      const tableRows = [];
+            doc.text("High Risk Cases List", 14, 15);
+            
+            autoTable(doc, {
+                head: [tableColumn],
+                body: tableRows,
+                startY: 20,
+                styles: { fontSize: 8 },
+                headStyles: { fillColor: [147, 111, 199] }
+            });
 
-      filteredPatients.forEach(p => {
-        tableRows.push([
-          p.id || '',
-          p.name || '',
-          p.station || 'Unassigned',
-          p.age || 'N/A',
-          p.weeks ? `${p.weeks} weeks` : 'N/A',
-          p.riskLevel || 'High Risk',
-          p.condition || '',
-          p.nextVisit || 'Initial'
-        ]);
-      });
-
-      doc.text("High Risk Cases List", 14, 15);
-      
-      autoTable(doc, {
-        head: [tableColumn],
-        body: tableRows,
-        startY: 20,
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [147, 111, 199] }
-      });
-
-      doc.save("high_risk_cases.pdf");
-    } catch (error) {
-      console.error("Error generating PDF:", error);
+            doc.save("high_risk_cases.pdf");
+        } catch (error) {
+            console.error("Error generating PDF:", error);
+        }
     }
   };
 
@@ -433,26 +422,9 @@ const HighRiskCases = () => {
         </div>
 
         <div className="header-actions">
-          <div className="export-dropdown-container" style={{ position: 'relative' }}>
-            <button className="btn btn-outline" onClick={() => setShowExportMenu(!showExportMenu)}>
-              <FileText size={16} /> Export
-            </button>
-            {showExportMenu && (
-              <div className="export-dropdown" style={{
-                position: 'absolute', top: '100%', right: 0, marginTop: '8px',
-                background: '#fff', border: '1px solid #eaeaea', borderRadius: '8px',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '8px',
-                display: 'flex', flexDirection: 'column', gap: '4px', zIndex: 100, minWidth: '150px'
-              }}>
-                <button className="btn btn-text" onClick={() => { handleExportExcel(); setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
-                  <FileText size={14} style={{ marginRight: '8px' }} /> Excel (.xlsx)
-                </button>
-                <button className="btn btn-text" onClick={() => { handleExportPDF(); setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
-                  <FileText size={14} style={{ marginRight: '8px' }} /> PDF (.pdf)
-                </button>
-              </div>
-            )}
-          </div>
+          <button className="btn btn-outline" onClick={() => setShowExportModal(true)}>
+            <FileText size={16} /> Export
+          </button>
         </div>
       </div>
 
@@ -752,6 +724,12 @@ const HighRiskCases = () => {
           </div>
         </div>
       </div>
+      <ExportModal 
+          isOpen={showExportModal} 
+          onClose={() => setShowExportModal(false)} 
+          onExport={handleExport} 
+          hideDateRange={true}
+      />
     </div>
   );
 };

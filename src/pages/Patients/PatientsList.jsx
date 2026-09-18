@@ -14,6 +14,7 @@ import EditPatientModal from '../../components/Patient/EditPatientModal';
 import { useModal } from '../../context/ModalContext';
 import Legend from '../../components/Legend/Legend';
 import { formatMotherId } from '../../utils/displayIds';
+import ExportModal from '../../components/ExportModal';
 
 // Helper function to extract first 4 numeric digits from patient ID
 const getShortPatientId = (id) => {
@@ -416,19 +417,11 @@ const PatientsList = () => {
 
     const hasActiveFilters = filters.trimesters.length > 0 || filters.risks.length > 0 || filters.stations.length > 0 || filters.sortBy !== 'newest' || archiveFilter !== 'all' || outcomeFilter !== 'all';
 
-    const [showExportMenu, setShowExportMenu] = useState(false);
+    const [showExportModal, setShowExportModal] = useState(false);
 
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (showExportMenu && !event.target.closest('.export-dropdown-container')) {
-                setShowExportMenu(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [showExportMenu]);
-
-    const handleExportExcel = () => {
+    const handleExport = async (exportConfig) => {
+        const { format } = exportConfig;
+        
         const exportData = sortedPatients.map(p => ({
             'Patient ID': formatMotherId(p.id),
             'Name': p.name || '',
@@ -441,52 +434,46 @@ const PatientsList = () => {
             'Next Appointment': p.nextAppt || 'No upcoming appt'
         }));
 
-        const worksheet = XLSX.utils.json_to_sheet(exportData);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Patient Profiles');
+        if (format === 'excel') {
+            const worksheet = XLSX.utils.json_to_sheet(exportData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Patient Profiles');
+            XLSX.writeFile(workbook, 'patient_profiles.xlsx');
+        } else if (format === 'pdf') {
+            try {
+                const jsPDF = (await import('jspdf')).default;
+                const autoTable = (await import('jspdf-autotable')).default;
+                
+                const doc = new jsPDF();
+                
+                const tableColumn = ["Patient ID", "Name", "Type", "Station", "Age", "Gestation", "Risk", "Total Visits", "Next Appt"];
+                const tableRows = exportData.map(obj => [
+                    obj['Patient ID'],
+                    obj['Name'],
+                    obj['Type'],
+                    obj['Station'],
+                    obj['Age'],
+                    obj['Gestation'],
+                    obj['Risk Level'],
+                    obj['Total Visits'],
+                    obj['Next Appointment']
+                ]);
 
-        XLSX.writeFile(workbook, 'patient_profiles.xlsx');
-    };
+                doc.text("Patient Profiles List", 14, 15);
+                
+                autoTable(doc, {
+                    head: [tableColumn],
+                    body: tableRows,
+                    startY: 20,
+                    styles: { fontSize: 8 },
+                    headStyles: { fillColor: [147, 111, 199] }
+                });
 
-    const handleExportPDF = async () => {
-        try {
-            const jsPDF = (await import('jspdf')).default;
-            const autoTable = (await import('jspdf-autotable')).default;
-            
-            const doc = new jsPDF();
-            
-            const tableColumn = ["Patient ID", "Name", "Type", "Station", "Age", "Gestation", "Risk", "Total Visits", "Next Appt"];
-            const tableRows = [];
-
-            sortedPatients.forEach(p => {
-                const patientData = [
-                    p.id || '',
-                    p.name || '',
-                    p.patientType || p.type || 'Mother',
-                    p.station || 'Unassigned',
-                    p.age || 'N/A',
-                    p.weeks ? `${p.weeks}w (T${p.trimester || 1})` : 'N/A',
-                    p.risk || 'Normal',
-                    p.totalVisits || 0,
-                    p.nextAppt || 'No upcoming appt'
-                ];
-                tableRows.push(patientData);
-            });
-
-            doc.text("Patient Profiles List", 14, 15);
-            
-            autoTable(doc, {
-                head: [tableColumn],
-                body: tableRows,
-                startY: 20,
-                styles: { fontSize: 8 },
-                headStyles: { fillColor: [147, 111, 199] }
-            });
-
-            doc.save("patient_profiles.pdf");
-        } catch (error) {
-            console.error("Error generating PDF:", error);
-            await customAlert({ title: 'Error', text: 'Unable to generate PDF right now.', iconType: 'danger' });
+                doc.save("patient_profiles.pdf");
+            } catch (error) {
+                console.error("Error generating PDF:", error);
+                await customAlert({ title: 'Error', text: 'Unable to generate PDF right now.', iconType: 'danger' });
+            }
         }
     };
 
@@ -585,37 +572,10 @@ const PatientsList = () => {
                     <p className="page-subtitle">Manage and monitor all registered pregnant patients, including archived records.</p>
                 </div>
                 <div className="header-actions">
-                    <div className="export-dropdown-container" style={{ position: 'relative' }}>
-                        <button className="btn btn-outline" onClick={() => setShowExportMenu(!showExportMenu)}>
+                        <button className="btn btn-outline" onClick={() => setShowExportModal(true)}>
                             <FileText size={16} />
                             Export
                         </button>
-                        {showExportMenu && (
-                            <div className="export-dropdown" style={{
-                                position: 'absolute',
-                                top: '100%',
-                                right: 0,
-                                marginTop: '8px',
-                                background: '#fff',
-                                border: '1px solid #eaeaea',
-                                borderRadius: '8px',
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                                padding: '8px',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '4px',
-                                zIndex: 100,
-                                minWidth: '150px'
-                            }}>
-                                <button className="btn btn-text" onClick={() => { handleExportExcel(); setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
-                                    <FileText size={14} style={{ marginRight: '8px' }} /> Excel (.xlsx)
-                                </button>
-                                <button className="btn btn-text" onClick={() => { handleExportPDF(); setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
-                                    <FileText size={14} style={{ marginRight: '8px' }} /> PDF (.pdf)
-                                </button>
-                            </div>
-                        )}
-                    </div>
                     <button className="btn btn-primary" onClick={() => navigate('/dashboard/patients/add')}>
                         <Plus size={16} />
                         Add Pregnancy

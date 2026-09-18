@@ -10,6 +10,7 @@ import {
 import NewbornService from '../../services/newbornservice';
 import PatientService from '../../services/patientservice';
 import * as XLSX from 'xlsx';
+import ExportModal from '../../components/ExportModal';
 import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/NewbornTracking.css';
 import Legend from '../../components/Legend/Legend';
@@ -488,20 +489,21 @@ const NewbornTracking = () => {
         return 'progress-started';
     };
 
-    const [showExportMenu, setShowExportMenu] = useState(false);
+    const [showExportModal, setShowExportModal] = useState(false);
 
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (showExportMenu && !event.target.closest('.export-dropdown-container')) {
-                setShowExportMenu(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [showExportMenu]);
-
-    const handleExportExcel = () => {
-        const exportData = filtered.map(b => {
+    const getExportData = (dateRange) => {
+        let toExport = filtered;
+        if (dateRange && (dateRange.from || dateRange.to)) {
+            toExport = filtered.filter(b => {
+                if (!b.birthDate) return false;
+                const bDate = new Date(b.birthDate);
+                if (dateRange.from && bDate < dateRange.from) return false;
+                if (dateRange.to && bDate > dateRange.to) return false;
+                return true;
+            });
+        }
+        
+        return toExport.map(b => {
             const progress = getVaccinationProgress(b);
             const nextVaccine = getNextVaccine(b);
             return {
@@ -517,63 +519,55 @@ const NewbornTracking = () => {
                 'Next Due Date': nextVaccine?.date || '—',
             };
         });
-
-        const ws = XLSX.utils.json_to_sheet(exportData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Newborn Vaccination Tracking');
-
-        // Auto-size columns
-        const colWidths = [
-            { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 12 },
-            { wch: 18 }, { wch: 15 }, { wch: 12 }, { wch: 25 }, { wch: 15 }
-        ];
-        ws['!cols'] = colWidths;
-
-        const dateStr = new Date().toISOString().split('T')[0];
-        XLSX.writeFile(wb, `Newborn_Vaccination_Tracking_${dateStr}.xlsx`);
     };
 
-    const handleExportPDF = async () => {
-        try {
-            const jsPDF = (await import('jspdf')).default;
-            const autoTable = (await import('jspdf-autotable')).default;
-            
-            const doc = new jsPDF('landscape');
-            
-            const tableColumn = ["Baby Name", "Mother Name", "Baby ID", "Station", "Birth Date", "Completed", "Total", "Progress", "Next Vaccine", "Next Due"];
-            const tableRows = [];
+    const handleExport = async (exportConfig) => {
+        const { format, dateRange, reportPeriodText } = exportConfig;
+        const exportData = getExportData(dateRange);
 
-            filtered.forEach(b => {
-                const progress = getVaccinationProgress(b);
-                const nextVaccine = getNextVaccine(b);
-                tableRows.push([
-                    b.babyName || '',
-                    b.motherName || '',
-                    b.id || '',
-                    b.station || '',
-                    formatDateLong(b.birthDate) || '',
-                    progress.completed || 0,
-                    progress.total || 0,
-                    `${progress.percentage}%`,
-                    nextVaccine ? `${nextVaccine.vaccine} (${nextVaccine.dose})` : 'All Completed',
-                    nextVaccine?.date || '—'
-                ]);
-            });
+        if (format === 'excel') {
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Newborn Vaccination Tracking');
 
-            doc.text("Newborn Vaccination Tracking List", 14, 15);
-            
-            autoTable(doc, {
-                head: [tableColumn],
-                body: tableRows,
-                startY: 20,
-                styles: { fontSize: 8 },
-                headStyles: { fillColor: [147, 111, 199] }
-            });
+            const colWidths = [
+                { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 12 },
+                { wch: 18 }, { wch: 15 }, { wch: 12 }, { wch: 25 }, { wch: 15 }
+            ];
+            ws['!cols'] = colWidths;
 
             const dateStr = new Date().toISOString().split('T')[0];
-            doc.save(`Newborn_Vaccination_Tracking_${dateStr}.pdf`);
-        } catch (error) {
-            console.error("Error generating PDF:", error);
+            XLSX.writeFile(wb, `Newborn_Vaccination_Tracking_${dateStr}.xlsx`);
+        } else if (format === 'pdf') {
+            try {
+                const jsPDF = (await import('jspdf')).default;
+                const autoTable = (await import('jspdf-autotable')).default;
+                
+                const doc = new jsPDF('landscape');
+                
+                if (exportData.length === 0) {
+                    doc.text("No records found for the selected period.", 14, 20);
+                } else {
+                    const tableColumn = Object.keys(exportData[0]);
+                    const tableRows = exportData.map(obj => Object.values(obj));
+
+                    doc.text("Newborn Vaccination Tracking List", 14, 15);
+                    doc.setFontSize(10);
+                    doc.text(`Period: ${reportPeriodText}`, 14, 22);
+                    
+                    autoTable(doc, {
+                        head: [tableColumn],
+                        body: tableRows,
+                        startY: 28,
+                        styles: { fontSize: 8 },
+                        headStyles: { fillColor: [147, 111, 199] }
+                    });
+                }
+                const dateStr = new Date().toISOString().split('T')[0];
+                doc.save(`Newborn_Vaccination_Tracking_${dateStr}.pdf`);
+            } catch (error) {
+                console.error("Error generating PDF:", error);
+            }
         }
     };
 
@@ -592,8 +586,6 @@ const NewbornTracking = () => {
                 <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </div>
         </div>
-    );
-
     return (
         <div className="nb-page vacc-tracking-page">
 
@@ -604,26 +596,9 @@ const NewbornTracking = () => {
                     <p className="page-subtitle">View and manage newborn records, including vaccination status and newborn information.</p>
                 </div>
                 <div className="header-actions">
-                    <div className="export-dropdown-container" style={{ position: 'relative' }}>
-                        <button className="btn btn-outline" onClick={() => setShowExportMenu(!showExportMenu)}>
-                            <Download size={14} /> Export
-                        </button>
-                        {showExportMenu && (
-                            <div className="export-dropdown" style={{
-                                position: 'absolute', top: '100%', right: 0, marginTop: '8px',
-                                background: '#fff', border: '1px solid #eaeaea', borderRadius: '8px',
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '8px',
-                                display: 'flex', flexDirection: 'column', gap: '4px', zIndex: 100, minWidth: '150px'
-                            }}>
-                                <button className="btn btn-text" onClick={() => { handleExportExcel(); setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
-                                    <Download size={14} style={{ marginRight: '8px' }} /> Excel (.xlsx)
-                                </button>
-                                <button className="btn btn-text" onClick={() => { handleExportPDF(); setShowExportMenu(false); }} style={{ justifyContent: 'flex-start', padding: '8px 12px', width: '100%', display: 'flex', alignItems: 'center' }}>
-                                    <Download size={14} style={{ marginRight: '8px' }} /> PDF (.pdf)
-                                </button>
-                            </div>
-                        )}
-                    </div>
+                    <button className="btn btn-outline" onClick={() => setShowExportModal(true)}>
+                        <Download size={16} /> Export
+                    </button>
                 </div>
             </div>
 
@@ -1033,6 +1008,11 @@ const NewbornTracking = () => {
 
             {/* ── Vaccination Detail Modal ── */}
             {selectedBaby && <VaccinationDetailModal baby={selectedBaby} onClose={() => setSelectedBaby(null)} />}
+            <ExportModal 
+                isOpen={showExportModal} 
+                onClose={() => setShowExportModal(false)} 
+                onExport={handleExport} 
+            />
         </div>
     );
 };

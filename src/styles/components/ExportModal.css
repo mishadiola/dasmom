@@ -1,0 +1,241 @@
+.export-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+}
+
+.export-modal {
+  background: white;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 440px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.export-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.export-modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.export-modal-close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.export-modal-close:hover {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.export-modal-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.export-modal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.export-modal-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  margin: 0;
+}
+
+.export-date-presets {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.export-preset-btn {
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.export-preset-btn:hover {
+  background: #f8fafc;
+}
+
+.export-preset-btn.active {
+  background: #f0fdf4;
+  border-color: #22c55e;
+  color: #15803d;
+}
+
+.export-custom-dates {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #f8fafc;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.export-date-field {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 4px;
+}
+
+.export-date-field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.export-date-field input {
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.export-date-field input:focus {
+  border-color: #94a3b8;
+}
+
+.export-error-msg {
+  font-size: 12px;
+  color: #ef4444;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.export-format-options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.export-format-card {
+  border: 1px solid #e2e8f0;
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.export-format-card:hover {
+  background: #f8fafc;
+}
+
+.export-format-card.active {
+  border-color: #b9818a;
+  background: #fdfafb;
+  box-shadow: 0 0 0 1px #b9818a;
+}
+
+.export-format-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+}
+
+.export-format-ext {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+}
+
+.export-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+
+.export-cancel-btn {
+  padding: 8px 16px;
+  background: white;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.export-cancel-btn:hover {
+  background: #f1f5f9;
+}
+
+.export-submit-btn {
+  padding: 8px 24px;
+  background: #b9818a;
+  border: none;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.export-submit-btn:hover {
+  background: #a36b74;
+}
+
+.export-submit-btn:disabled {
+  background: #cbd5e1;
+  cursor: not-allowed;
+}
