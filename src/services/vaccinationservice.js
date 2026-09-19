@@ -187,21 +187,23 @@ class VaccinationService {
         { months: 9, vaccines: [
             'Inactivated Polio Vaccine (IPV)',
             'Measles, Mumps, Rubella Vaccine (MMR)'
-          ], doses: [2, 1] }
+          ], doses: [2, 1] },
+
+        // 12 months (1 year)
+        { months: 12, vaccines: [
+            'Measles, Mumps, Rubella Vaccine (MMR)'
+          ], doses: [2] }
       ];
 
       const birthDateObj = new Date(birthDate);
-      const today = new Date();
-      
-      // Check if baby was born recently (within 3 months) and hasn't got vaccines yet
-      const daysSinceBirth = Math.floor((today - birthDateObj) / (1000 * 60 * 60 * 24));
-      const useTodayAsBase = daysSinceBirth > 0 && daysSinceBirth < 90;
-      const baseDate = useTodayAsBase ? today : birthDateObj;
-      
+      if (Number.isNaN(birthDateObj.getTime())) {
+        throw new Error('Invalid baby birth date provided for newborn vaccination schedule');
+      }
+
       const inserts = [];
 
       for (const schedule of vaccineSchedule) {
-        const scheduledDate = this.computeScheduledDate(baseDate, schedule.months);
+        const scheduledDate = this.computeScheduledDate(birthDateObj, schedule.months);
         const dateStr = scheduledDate.toISOString().split('T')[0];
 
         for (let i = 0; i < schedule.vaccines.length; i++) {
@@ -217,7 +219,7 @@ class VaccinationService {
           const nextScheduleIndex = vaccineSchedule.findIndex(s => s.months > schedule.months);
           if (nextScheduleIndex !== -1) {
             const nextSchedule = vaccineSchedule[nextScheduleIndex];
-            const nextDate = this.computeScheduledDate(baseDate, nextSchedule.months);
+            const nextDate = this.computeScheduledDate(birthDateObj, nextSchedule.months);
             nextDue = nextDate.toISOString().split('T')[0];
           }
 
@@ -239,7 +241,7 @@ class VaccinationService {
         .insert(inserts);
 
       if (error) throw error;
-      console.log(`✅ Scheduled ${inserts.length} vaccines for newborn ${newbornId} (base date: ${useTodayAsBase ? 'today' : 'birth date'})`);
+      console.log(`✅ Scheduled ${inserts.length} vaccines for newborn ${newbornId} using DOB-based due dates`);
       return { success: true, count: inserts.length };
     } catch (error) {
       console.error('Error scheduling newborn vaccinations:', error);
