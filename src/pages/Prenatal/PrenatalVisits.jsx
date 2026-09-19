@@ -343,11 +343,12 @@ const PrenatalVisits = () => {
         };
         loadPatients();
 
-        const stored = localStorage.getItem('dasmom_manual_visits');
+        const manualVisitsKey = user?.id ? `dasmom_manual_visits_${user.id}` : null;
+        const stored = manualVisitsKey ? localStorage.getItem(manualVisitsKey) : null;
         if (stored) {
             try { setManualVisits(JSON.parse(stored)); } catch (_) {}
         }
-    }, [patientService]);
+    }, [patientService, user?.id]);
 
     useEffect(() => {
         if (visitTypeTab !== 'postpartum') {
@@ -525,7 +526,9 @@ const PrenatalVisits = () => {
         };
 
         const updated = [newRecord, ...manualVisits];
-        localStorage.setItem('dasmom_manual_visits', JSON.stringify(updated));
+        if (user?.id) {
+            localStorage.setItem(`dasmom_manual_visits_${user.id}`, JSON.stringify(updated));
+        }
         setManualVisits(updated);
 
         // Reset form

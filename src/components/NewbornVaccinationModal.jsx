@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import supabase from '../config/supabaseclient';
 import PatientService from '../services/patientservice';
+import VaccinationService from '../services/vaccinationservice';
 import { X, Syringe, CheckCircle2, RefreshCw } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
 
@@ -93,6 +94,7 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
             const patientService = new PatientService();
             const currentUser = await patientService.getCurrentUserId();
             if (!currentUser) throw new Error('No logged-in user');
+            const assignedStaff = await new VaccinationService().getAssignedStaffForNewborn(newborn.id);
 
             for (const vaccId of selectedIds) {
                 // Get the vaccine record to find the vaccine name
@@ -132,6 +134,7 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
                     vaccinated_date: date, 
                     status: 'Completed', 
                     created_by: currentUser,
+                    assigned_staff: assignedStaff,
                     remarks: remarks || null
                 };
                 if (vaccineInvId) {

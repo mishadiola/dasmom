@@ -535,6 +535,10 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
 
             const currentUser = await patientService.getCurrentUserId();
             if (!currentUser) throw new Error('No logged-in user');
+            const vaccinationService = new VaccinationService();
+            const assignedStaff = form.patientType === 'Mother'
+                ? await vaccinationService.getAssignedStaffForPatient(patientId)
+                : await vaccinationService.getAssignedStaffForNewborn(patientId);
 
             if (mode === 'vaccine') {
                 // Handle checkbox-selected vaccines (new multi-vaccine selection)
@@ -667,6 +671,7 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                             status: 'Completed',
                             created_by: currentUser,
                             vaccinated_by: currentUser,
+                            assigned_staff: assignedStaff,
                             remarks: form.remarks || null
                         };
                         
@@ -759,6 +764,7 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                         status: 'Completed',
                         created_by: currentUser,
                         vaccinated_by: currentUser,
+                        assigned_staff: assignedStaff,
                         remarks: form.remarks || null
                     };
 

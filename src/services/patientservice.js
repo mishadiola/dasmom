@@ -846,6 +846,7 @@ export default class PatientService {
 
   async getPrenatalVisits({ includeArchived = false } = {}) {
   try {
+    const { role, currentUser } = await this.getCurrentUserAccess();
     const archivedPatientIds = includeArchived ? new Set() : await this.getArchivedPatientIds();
 
     // Get all deliveries to identify postpartum patients
@@ -875,7 +876,7 @@ export default class PatientService {
       }
     });
 
-    const { data, error } = await this.supabase
+    let visitsQuery = this.supabase
       .from('prenatal_visits')
       .select(`
         id, 
@@ -893,7 +894,13 @@ export default class PatientService {
         calculated_risk,
         risk_factors,
         patient_basic_info!inner(first_name, last_name, middle_name)
-      `)
+      `);
+
+    if (role === 'staff' && currentUser?.id) {
+      visitsQuery = visitsQuery.eq('assigned_staff', currentUser.id);
+    }
+
+    const { data, error } = await visitsQuery
       .order('visit_date', { ascending: false })
       .limit(100);
 
@@ -936,6 +943,7 @@ export default class PatientService {
   async getAppointments(startDate, endDate, view = 'day', options = {}) {
   try {
     const { includeArchived = false } = options;
+    const { role, currentUser } = await this.getCurrentUserAccess();
     const archivedPatientIds = includeArchived ? new Set() : await this.getArchivedPatientIds();
 
     // Get all deliveries to identify postpartum patients
@@ -970,6 +978,10 @@ export default class PatientService {
       .select(`
         id, visit_date, next_appt_date, next_appt_type, patient_id, patient_basic_info!inner(first_name, last_name)
       `);
+
+    if (role === 'staff' && currentUser?.id) {
+      query = query.eq('assigned_staff', currentUser.id);
+    }
 
     const isValidDate = (value) => {
       return typeof value === 'string' && value.trim().length > 0 && !Number.isNaN(new Date(value).getTime());
@@ -1046,8 +1058,37 @@ export default class PatientService {
     return timeSlots[Math.abs(hash) % timeSlots.length];
   }
 
+  async resolveAssignedStaff({ requestedStaffId, currentUserId, role, stationId }) {
+    const assignedStaffId = role === 'staff'
+      ? currentUserId
+      : (requestedStaffId || (role === 'cho personnel' ? currentUserId : null));
+
+    if (!assignedStaffId) return null;
+
+    const { data: staffProfile, error } = await this.supabase
+      .from('staff_profiles')
+      .select('id, station_ass')
+      .eq('id', assignedStaffId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!staffProfile) throw new Error('The selected assigned staff member was not found.');
+
+    if (role === 'cho personnel' && staffProfile.station_ass !== stationId) {
+      throw new Error('CHO personnel can only assign patients to staff in their own station.');
+    }
+
+    if (role === 'staff' && assignedStaffId !== currentUserId) {
+      throw new Error('Staff users can only assign patients to themselves.');
+    }
+
+    return staffProfile.id;
+  }
+
   async addPatient(patientData) {
-    const createdBy = await this.getCurrentUserId();
+    const { data: sessionData } = await this.supabase.auth.getSession();
+    const staffSessionUser = sessionData?.session?.user;
+    const createdBy = staffSessionUser?.id || null;
     if (!createdBy) throw new Error("No logged-in user");
 
     const currentUser = await authService.getAuthUser();
@@ -1067,6 +1108,13 @@ export default class PatientService {
       stationId = await authService.getOrCreateStationId(patientData.station);
     }
 
+    const assignedStaff = await this.resolveAssignedStaff({
+      requestedStaffId: patientData.retained_staff,
+      currentUserId: createdBy,
+      role: currentUserRole,
+      stationId
+    });
+
     const authUser = await authService.createUserAccount({
       email: patientData.email,
       password: patientData.password || 'mother123!',
@@ -1076,9 +1124,10 @@ export default class PatientService {
       }
     });
 
-    const { data: activeSession } = await this.supabase.auth.getSession();
-    if (activeSession?.session?.user?.id !== createdBy) {
-      throw new Error('Staff session was not restored after creating the patient account. Please sign in again and retry.');
+    const { data: activeSession, error: activeSessionError } = await this.supabase.auth.getSession();
+    const activeStaffId = activeSession?.session?.user?.id;
+    if (activeSessionError || activeStaffId !== createdBy) {
+      throw new Error('Your staff session expired while creating the patient. Please sign in again and retry.');
     }
 
     // Use the real UUID from the auth/public user record as the database ID.
@@ -1202,8 +1251,6 @@ export default class PatientService {
           .map(v => ({ ...v, date: new Date(v.date).toISOString().split('T')[0] }))
       : [];
 
-    const retainedStaff = await this.getRetainedStaff(patientData.station);
-
     // Skip prenatal visit scheduling for postpartum patients
     if (patientData.pregnancyStatus === 'Postpartum') {
       console.log('Skipping prenatal visit scheduling for postpartum patient');
@@ -1267,7 +1314,7 @@ export default class PatientService {
         next_appt_type: 'Follow-up Checkup',
         status: 'Attended',
         attended_date: new Date().toISOString(),
-        assigned_staff: retainedStaff?.[0]?.id || null,
+        assigned_staff: assignedStaff,
         calculated_risk: patientData.riskLevel || 'Normal',
         risk_factors: patientData.riskFactors || null,
         created_by: createdBy
@@ -1287,13 +1334,13 @@ export default class PatientService {
         patientId,
         safeSchedulePreview,
         createdBy,
-        { retained_staff: retainedStaff?.[0]?.id || null },
+        { retained_staff: assignedStaff },
         30
       );
     } else {
       await this.smartSemesterScheduling({
         patientId, lmp: patientData.lmp, createdBy,
-        maxPerDay: 35, retained_staff: retainedStaff?.[0]?.id || null
+        maxPerDay: 35, retained_staff: assignedStaff
       });
     }
 
@@ -1373,6 +1420,15 @@ async smartSemesterScheduling({ patientId, lmp, createdBy, maxPerDay = 35, retai
 
 async schedulePrenatalVaccinations(patientId, lmp, createdBy) {
   try {
+    const { data: assignedVisit } = await this.supabase
+      .from('prenatal_visits')
+      .select('assigned_staff')
+      .eq('patient_id', patientId)
+      .not('assigned_staff', 'is', null)
+      .order('visit_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const assignedStaff = assignedVisit?.assigned_staff || null;
     const today = new Date().toISOString().split('T')[0];
 
     const { data: visits, error: visitsError } = await this.supabase
@@ -1424,6 +1480,7 @@ async schedulePrenatalVaccinations(patientId, lmp, createdBy) {
         status: 'Pending',
         scheduled_vaccination: tdapDate,
         vaccinated_date: null,
+        assigned_staff: assignedStaff,
         created_by: createdBy,
         notes: 'Tdap (Tetanus-Diphtheria) prenatal vaccine - target 27 to 36 weeks'
       });
@@ -1436,6 +1493,7 @@ async schedulePrenatalVaccinations(patientId, lmp, createdBy) {
         status: 'Pending',
         scheduled_vaccination: fluDate,
         vaccinated_date: null,
+        assigned_staff: assignedStaff,
         created_by: createdBy,
         notes: 'Influenza (Flu) prenatal vaccine - any time during pregnancy'
       });
@@ -2033,6 +2091,23 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
   async addExistingPregnancy(patientId, patientData, createdBy = null) {
     try {
       const resolvedCreatedBy = createdBy || (await this.getCurrentUserId());
+      const currentUser = await authService.getAuthUser();
+      const currentUserRole = (currentUser?.role || '').toLowerCase();
+      const { data: patientProfile, error: patientProfileError } = await this.supabase
+        .from('patient_basic_info')
+        .select('station_ass')
+        .eq('id', patientId)
+        .maybeSingle();
+
+      if (patientProfileError) throw patientProfileError;
+
+      const assignedStaff = await this.resolveAssignedStaff({
+        requestedStaffId: patientData.retained_staff,
+        currentUserId: resolvedCreatedBy,
+        role: currentUserRole,
+        stationId: patientProfile?.station_ass || null
+      });
+
       const { data: latestPregnancy, error: latestErr } = await this.supabase
         .from('pregnancy_info')
         .select('*')
@@ -2079,7 +2154,6 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
             .map(v => ({ ...v, date: new Date(v.date).toISOString().split('T')[0] }))
         : [];
 
-      const retainedStaff = patientData.station ? await this.getRetainedStaff(patientData.station) : [];
       const actualVisitDate = today;
       const bpMatch = patientData.bp ? patientData.bp.match(/^(\d+)[/\s](\d+)$/) : null;
       const weeksAtVisit = patientData.lmp ? this.calculateWeeks(patientData.lmp) : 0;
@@ -2108,7 +2182,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         next_appt_type: 'Follow-up Checkup',
         status: 'Attended',
         attended_date: new Date().toISOString(),
-        assigned_staff: retainedStaff?.[0]?.id || null,
+        assigned_staff: assignedStaff,
         calculated_risk: patientData.riskLevel || 'Normal',
         risk_factors: patientData.riskFactors || null,
         created_by: resolvedCreatedBy
@@ -2123,7 +2197,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           patientId,
           futureSchedule,
           resolvedCreatedBy,
-          { retained_staff: retainedStaff?.[0]?.id || null },
+          { retained_staff: assignedStaff },
           35
         );
       } else {
@@ -2132,7 +2206,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           lmp: patientData.lmp,
           createdBy: resolvedCreatedBy,
           maxPerDay: 35,
-          retained_staff: retainedStaff?.[0]?.id || null
+          retained_staff: assignedStaff
         });
       }
 

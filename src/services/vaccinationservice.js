@@ -12,6 +12,31 @@ class VaccinationService {
     return user?.id || null;
   }
 
+  async getAssignedStaffForPatient(patientId) {
+    const { data, error } = await this.supabase
+      .from('prenatal_visits')
+      .select('assigned_staff')
+      .eq('patient_id', patientId)
+      .not('assigned_staff', 'is', null)
+      .order('visit_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data?.assigned_staff || null;
+  }
+
+  async getAssignedStaffForNewborn(newbornId) {
+    const { data, error } = await this.supabase
+      .from('newborns')
+      .select('mother_id')
+      .eq('id', newbornId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data?.mother_id ? this.getAssignedStaffForPatient(data.mother_id) : null;
+  }
+
   /**
    * Calculate the scheduled date for a vaccine based on birth date and months offset
    */
@@ -200,6 +225,7 @@ class VaccinationService {
         throw new Error('Invalid baby birth date provided for newborn vaccination schedule');
       }
 
+      const assignedStaff = await this.getAssignedStaffForNewborn(newbornId);
       const inserts = [];
 
       for (const schedule of vaccineSchedule) {
@@ -231,6 +257,7 @@ class VaccinationService {
             vaccinated_date: null,
             status: 'Pending',
             created_by: createdBy,
+            assigned_staff: assignedStaff,
             notes: `${doseOrdinal} dose of ${vaccine}`
           });
         }
@@ -275,6 +302,9 @@ class VaccinationService {
 
       // Use the vaccine with the nearest expiration date
       const vaccInv = vaccInvItems[0];
+      const assignedStaff = patientType === 'Mother'
+        ? await this.getAssignedStaffForPatient(patientId)
+        : await this.getAssignedStaffForNewborn(patientId);
 
       if (vaccineId) {
         // Update existing scheduled vaccine record
@@ -286,6 +316,7 @@ class VaccinationService {
             status: 'Completed',
             created_by: currentUser,
             vaccinated_by: currentUser,
+            assigned_staff: assignedStaff,
             notes: notes || null,
             remarks: remarks || null
           })
@@ -304,6 +335,7 @@ class VaccinationService {
           status: 'Completed',
           created_by: currentUser,
           vaccinated_by: currentUser,
+          assigned_staff: assignedStaff,
           notes: notes || null,
           remarks: remarks || null
         };
@@ -515,6 +547,7 @@ class VaccinationService {
   async scheduleMaternalVaccinations(patientId, firstVaccineDate, firstVaccineName, createdBy, lmpDate = null) {
     try {
       const schedule = [];
+      const assignedStaff = await this.getAssignedStaffForPatient(patientId);
       const baseDate = new Date(firstVaccineDate);
       
       // Tetanus-Diphtheria (Td) Schedule
@@ -621,6 +654,9 @@ class VaccinationService {
       }
 
       if (schedule.length > 0) {
+        schedule.forEach((vaccination) => {
+          vaccination.assigned_staff = assignedStaff;
+        });
         const { error } = await this.supabase
           .from('vaccinations')
           .insert(schedule);
@@ -645,6 +681,7 @@ class VaccinationService {
   async schedulePostpartumMaternalVaccinations(patientId, deliveryDate, createdBy) {
     try {
       const schedule = [];
+      const assignedStaff = await this.getAssignedStaffForPatient(patientId);
       const today = new Date();
       const deliveryDateObj = new Date(deliveryDate);
       const daysSinceDelivery = Math.floor((today - deliveryDateObj) / (1000 * 60 * 60 * 24));
@@ -667,6 +704,7 @@ class VaccinationService {
         status: 'Pending',
         vaccinated_date: null,
         created_by: createdBy,
+        assigned_staff: assignedStaff,
         notes: '1st dose of MMR (Measles, Mumps, Rubella) - After delivery if not immune'
       });
 
