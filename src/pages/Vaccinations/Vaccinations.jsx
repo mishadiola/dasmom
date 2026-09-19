@@ -1317,7 +1317,7 @@ const Vaccinations = () => {
                     patientId: record.patient_id,
                     patientName: patientMap.get(record.patient_id)?.name || 'Unknown',
                     station: patientMap.get(record.patient_id)?.station || 'Unknown',
-                    type: patientMap.get(record.patient_id)?.type || 'Unknown',
+                    type: 'Mother',
                     supplement: suppMap.get(record.supplement_inventory_id) || 'Unknown',
                     dose: record.dosage,
                     date: record.start_date,
@@ -1450,7 +1450,7 @@ const Vaccinations = () => {
         }))
     ];
 
-    const filteredRecords = allRecords
+    const filteredRecordItems = allRecords
         .filter(r => {
             // Global search
             const q = searchTerm.toLowerCase();
@@ -1464,7 +1464,8 @@ const Vaccinations = () => {
             let matchItem = true;
             if (filterItem === 'vaccines') {
                 matchItem = r.itemType === 'vaccine';
-            } else if (filterItem === 'supplements') {
+            } 
+            else if (filterItem === 'supplements') {
                 matchItem = r.itemType === 'supplement';
             }
 
@@ -1474,9 +1475,11 @@ const Vaccinations = () => {
             
             if (activeTab === 'pending') {
                 matchTab = (rStatus === 'pending' || rStatus === 'scheduled') && (!r.scheduledDate || r.scheduledDate >= todayStr);
-            } else if (activeTab === 'missed') {
+            } 
+            else if (activeTab === 'missed') {
                 matchTab = (rStatus === 'missed' || rStatus === 'overdue') || ((rStatus === 'pending' || rStatus === 'scheduled') && r.scheduledDate && r.scheduledDate < todayStr);
-            } else if (activeTab === 'administered') {
+            } 
+            else if (activeTab === 'administered') {
                 matchTab = rStatus === 'completed' || rStatus === 'administered' || rStatus === 'ongoing' || r.administeredDate;
             }
 
@@ -1486,10 +1489,11 @@ const Vaccinations = () => {
                 const dDate = r.administeredDate ? new Date(r.administeredDate) : null;
                 if (!dDate || isNaN(dDate.getTime())) {
                     matchDate = false;
-                } else {
-                    const now = new Date();
-                    if (dateFilter === 'this_month') {
-                        matchDate = dDate.getMonth() === now.getMonth() && dDate.getFullYear() === now.getFullYear();
+                } 
+            else {
+                 const now = new Date();
+                if (dateFilter === 'this_month') {
+                    matchDate = dDate.getMonth() === now.getMonth() && dDate.getFullYear() === now.getFullYear();
                     } else if (dateFilter === 'this_year') {
                         matchDate = dDate.getFullYear() === now.getFullYear();
                     } else if (dateFilter === 'custom' && customDateFrom && customDateTo) {
@@ -1516,6 +1520,58 @@ const Vaccinations = () => {
             const va = a[sortField] ?? ''; const vb = b[sortField] ?? '';
             return sortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
         });
+
+    // Show one row per patient while keeping every matching item available in the row summary.
+    const filteredRecords = Array.from(filteredRecordItems.reduce((patientMap, record) => {
+        const patientKey = `${record.type}:${record.patientId}`;
+        const existing = patientMap.get(patientKey);
+
+        if (existing) {
+            existing.records.push(record);
+            return patientMap;
+        }
+
+        patientMap.set(patientKey, {
+            ...record,
+            records: [record],
+            itemNames: [record.itemName],
+            itemTypes: [record.itemType],
+            pendingCount: 0,
+            missedCount: 0,
+            administeredCount: 0
+        });
+        return patientMap;
+    }, new Map()).values()).map(patient => {
+        patient.records.forEach(record => {
+            const status = (record.status || '').toLowerCase();
+            const isMissed = status === 'missed' || status === 'overdue' || (
+                (status === 'pending' || status === 'scheduled') && record.scheduledDate && record.scheduledDate < todayStr
+            );
+            const isAdministered = status === 'completed' || status === 'administered' || status === 'ongoing' || record.administeredDate;
+
+            if (isMissed) patient.missedCount += 1;
+            else if (isAdministered) patient.administeredCount += 1;
+            else patient.pendingCount += 1;
+
+            if (!patient.itemNames.includes(record.itemName)) patient.itemNames.push(record.itemName);
+            if (!patient.itemTypes.includes(record.itemType)) patient.itemTypes.push(record.itemType);
+        });
+
+        patient.itemName = patient.itemNames.join(', ');
+        patient.itemType = patient.itemTypes.length === 1 ? patient.itemTypes[0] : 'mixed';
+        patient.status = activeTab === 'missed' ? 'Missed' : activeTab === 'administered' ? 'Administered' : 'Pending';
+        patient.scheduledDate = patient.records
+            .map(record => record.scheduledDate)
+            .filter(Boolean)
+            .sort()[0] || null;
+        patient.administeredDate = patient.records
+            .map(record => record.administeredDate)
+            .filter(Boolean)
+            .sort()
+            .pop() || null;
+
+        return patient;
+    });
 
     const getExportData = (dateRange) => {
         let toExport = allRecords;
@@ -1893,9 +1949,9 @@ const Vaccinations = () => {
                                             </td>
                                             <td className="col-item">
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                    <strong>{item.itemName}</strong>
-                                                    <span className={item.itemType === 'vaccine' ? 'badge-vaccine' : 'badge-supplement'} style={{ alignSelf: 'flex-start' }}>
-                                                        {item.itemType === 'vaccine' ? 'Vaccine' : 'Supplement'}
+                                                    <strong>{item.itemNames.length > 2 ? `${item.itemNames.slice(0, 2).join(', ')} + ${item.itemNames.length - 2} more` : item.itemName}</strong>
+                                                    <span className={item.itemType === 'vaccine' ? 'badge-vaccine' : item.itemType === 'supplement' ? 'badge-supplement' : 'badge-vaccine'} style={{ alignSelf: 'flex-start' }}>
+                                                        {item.itemType === 'mixed' ? 'Vaccines & Supplements' : item.itemType === 'vaccine' ? 'Vaccine' : 'Supplement'}
                                                     </span>
                                                 </div>
                                             </td>
@@ -1912,6 +1968,7 @@ const Vaccinations = () => {
                                                     ['missed', 'overdue'].includes((item.status || '').toLowerCase()) ? 'status-missed' : 'status-pending'
                                                 }`}>
                                                     {item.status}
+                                                    {item.itemType === 'mixed' && <small style={{ display: 'block', marginTop: '3px' }}>{item.records.length} items</small>}
                                                 </span>
                                             </td>
                                             <td className="col-actions">
@@ -1920,8 +1977,8 @@ const Vaccinations = () => {
                                                     {activeTab !== 'administered' && (
                                                         <button 
                                                             className="action-btn record-btn" 
-                                                            title={`Record ${item.itemType}`}
-                                                            onClick={() => setRecordModal({ mode: item.itemType, initialPatientType: item.type, initialPatientName: item.patientName })}
+                                                            title="Record vaccination or supplement"
+                                                            onClick={() => setRecordModal({ mode: item.itemTypes.includes('vaccine') ? 'vaccine' : 'supplement', initialPatientType: item.type, initialPatientName: item.patientName })}
                                                         >
                                                             <Plus size={13} />
                                                         </button>
