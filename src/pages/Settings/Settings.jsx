@@ -12,6 +12,11 @@ import {
 } from 'lucide-react';
 import '../../styles/pages/Settings.css';
 import { useModal } from '../../context/ModalContext';
+import {
+    getSystemSettings,
+    resetSystemSettings,
+    saveSystemSettings,
+} from '../../utils/systemSettings';
 
 /* ════════════════════════════
    MOCK DATA
@@ -927,10 +932,25 @@ const UserAccountsTab = () => {
    TAB 3: SYSTEM SETTINGS
 ════════════════════════════ */
 const SystemSettingsTab = () => {
-    const [notifs, setNotifs] = useState({ highRiskEmail: true, appointmentReminder: true, lowStock: true });
-    const [reports, setReports] = useState({ format: 'PDF', includeStation: true, includePatientSummary: true });
+    const [notifs, setNotifs] = useState(() => getSystemSettings().notifications);
+    const [reports, setReports] = useState(() => getSystemSettings().reports);
+    const [saved, setSaved] = useState(false);
 
-    const toggle = (group, setter, key) => setter(prev => ({ ...prev, [key]: !prev[key] }));
+    const toggle = (setter, key) => setter(prev => ({ ...prev, [key]: !prev[key] }));
+
+    const handleSave = () => {
+        saveSystemSettings({ notifications: notifs, reports });
+        setSaved(true);
+        window.setTimeout(() => setSaved(false), 2500);
+    };
+
+    const handleReset = () => {
+        const defaults = resetSystemSettings();
+        setNotifs(defaults.notifications);
+        setReports(defaults.reports);
+        setSaved(true);
+        window.setTimeout(() => setSaved(false), 2500);
+    };
 
     const ToggleSwitch = ({ value, onChange, label, desc }) => (
         <div className="setting-row">
@@ -957,17 +977,17 @@ const SystemSettingsTab = () => {
                     <ToggleSwitch
                         value={notifs.highRiskEmail} label="High-Risk Case Alerts"
                         desc="Send email when a new high-risk patient is flagged"
-                        onChange={() => toggle(notifs, setNotifs, 'highRiskEmail')}
+                        onChange={() => toggle(setNotifs, 'highRiskEmail')}
                     />
                     <ToggleSwitch
                         value={notifs.appointmentReminder} label="Appointment Reminders"
                         desc="Notify staff of upcoming prenatal and postpartum visits"
-                        onChange={() => toggle(notifs, setNotifs, 'appointmentReminder')}
+                        onChange={() => toggle(setNotifs, 'appointmentReminder')}
                     />
                     <ToggleSwitch
                         value={notifs.lowStock} label="Low Stock Alerts"
                         desc="Alert when vaccine or supplement stock falls below threshold"
-                        onChange={() => toggle(notifs, setNotifs, 'lowStock')}
+                        onChange={() => toggle(setNotifs, 'lowStock')}
                     />
                 </div>
 
@@ -988,19 +1008,19 @@ const SystemSettingsTab = () => {
                     <ToggleSwitch
                         value={reports.includeStation} label="Include Station Summary"
                         desc="Add station-level breakdown in reports"
-                        onChange={() => toggle(reports, setReports, 'includeStation')}
+                        onChange={() => toggle(setReports, 'includeStation')}
                     />
                     <ToggleSwitch
                         value={reports.includePatientSummary} label="Include Patient Summary"
                         desc="Add individual patient summaries in reports"
-                        onChange={() => toggle(reports, setReports, 'includePatientSummary')}
+                        onChange={() => toggle(setReports, 'includePatientSummary')}
                     />
                 </div>
             </div>
 
             <div className="settings-save-bar">
-                <button className="btn btn-outline"><RotateCcw size={14} /> Reset to Defaults</button>
-                <button className="btn btn-primary"><Save size={14} /> Save Settings</button>
+                <button className="btn btn-outline" onClick={handleReset}><RotateCcw size={14} /> Reset to Defaults</button>
+                <button className="btn btn-primary" onClick={handleSave}><Save size={14} /> {saved ? 'Settings Saved' : 'Save Settings'}</button>
             </div>
         </div>
     );

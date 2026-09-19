@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { X, FileSpreadsheet, FileText, AlertCircle } from 'lucide-react';
 import '../styles/components/ExportModal.css';
+import { getSystemSettings } from '../utils/systemSettings';
 
 const ExportModal = ({ isOpen, onClose, onExport, hideDateRange = false }) => {
     const [datePreset, setDatePreset] = useState('This Month');
@@ -15,7 +16,7 @@ const ExportModal = ({ isOpen, onClose, onExport, hideDateRange = false }) => {
             setDatePreset('This Month');
             setCustomFrom('');
             setCustomTo('');
-            setFormat('excel');
+            setFormat(getSystemSettings().reports.format === 'PDF' ? 'pdf' : 'excel');
             setError('');
         }
     }, [isOpen]);
@@ -59,6 +60,7 @@ const ExportModal = ({ isOpen, onClose, onExport, hideDateRange = false }) => {
 
         onExport({
             format,
+            reportSettings: getSystemSettings().reports,
             dateRange: {
                 from: fromDate,
                 to: toDate

@@ -14,6 +14,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import ExportModal from '../../components/ExportModal';
+import { getSystemSettings } from '../../utils/systemSettings';
 
 /* ════════════════════════════════════════════════════════════════
    ERROR BOUNDARY — catches render crashes and shows fallback UI
@@ -883,6 +884,7 @@ const Analytics = () => {
     // ── Export Sheet Handler ──
     const handleExport = (exportConfig) => {
         const { format, dateRange, reportPeriodText } = exportConfig;
+        const reportSettings = exportConfig.reportSettings || getSystemSettings().reports;
         const data = getExportDataForDateRange(dateRange);
         
         const kpiOverview = [
@@ -926,11 +928,15 @@ const Analytics = () => {
         if (format === 'excel') {
             const wb = XLSX.utils.book_new();
             
-            const wsKpi = XLSX.utils.json_to_sheet(kpiOverview);
-            XLSX.utils.book_append_sheet(wb, wsKpi, 'Executive Summary');
+            if (reportSettings.includePatientSummary) {
+                const wsKpi = XLSX.utils.json_to_sheet(kpiOverview);
+                XLSX.utils.book_append_sheet(wb, wsKpi, 'Executive Summary');
+            }
 
-            const wsComp = XLSX.utils.json_to_sheet(stationComparison);
-            XLSX.utils.book_append_sheet(wb, wsComp, 'Station Comparison');
+            if (reportSettings.includeStation) {
+                const wsComp = XLSX.utils.json_to_sheet(stationComparison);
+                XLSX.utils.book_append_sheet(wb, wsComp, 'Station Comparison');
+            }
 
             const wsOut = XLSX.utils.json_to_sheet(outcomesSheet);
             XLSX.utils.book_append_sheet(wb, wsOut, 'Deliveries and Recovery');
@@ -949,30 +955,34 @@ const Analytics = () => {
             
             doc.setFontSize(12);
             doc.setTextColor(0);
-            doc.text("Executive Summary", 14, 38);
-            
-            doc.autoTable({
-                startY: 42,
-                head: [['Intelligence Metric', 'Value / Rate']],
-                body: kpiOverview.map(obj => [obj['Intelligence Metric'], obj['Value / Rate']]),
-                theme: 'grid',
-                styles: { fontSize: 8 },
-                headStyles: { fillColor: [185, 129, 138] }
-            });
-            
-            let finalY = doc.lastAutoTable.finalY + 10;
-            doc.text("Station Comparison", 14, finalY);
-            
-            doc.autoTable({
-                startY: finalY + 4,
-                head: [Object.keys(stationComparison[0])],
-                body: stationComparison.map(obj => Object.values(obj)),
-                theme: 'grid',
-                styles: { fontSize: 8 },
-                headStyles: { fillColor: [185, 129, 138] }
-            });
-            
-            finalY = doc.lastAutoTable.finalY + 10;
+            let finalY = 38;
+
+            if (reportSettings.includePatientSummary) {
+                doc.text("Executive Summary", 14, finalY);
+                doc.autoTable({
+                    startY: finalY + 4,
+                    head: [['Intelligence Metric', 'Value / Rate']],
+                    body: kpiOverview.map(obj => [obj['Intelligence Metric'], obj['Value / Rate']]),
+                    theme: 'grid',
+                    styles: { fontSize: 8 },
+                    headStyles: { fillColor: [185, 129, 138] }
+                });
+                finalY = doc.lastAutoTable.finalY + 10;
+            }
+
+            if (reportSettings.includeStation) {
+                doc.text("Station Comparison", 14, finalY);
+                doc.autoTable({
+                    startY: finalY + 4,
+                    head: [Object.keys(stationComparison[0])],
+                    body: stationComparison.map(obj => Object.values(obj)),
+                    theme: 'grid',
+                    styles: { fontSize: 8 },
+                    headStyles: { fillColor: [185, 129, 138] }
+                });
+                finalY = doc.lastAutoTable.finalY + 10;
+            }
+
             doc.text("Deliveries and Recovery", 14, finalY);
             
             doc.autoTable({
