@@ -121,7 +121,6 @@ const Inventory = () => {
     distribution_date: new Date().toISOString().split('T')[0],
     released_by: '',
     remarks: '',
-    station_batch: ''
   });
 
   // History section filters state
@@ -992,8 +991,7 @@ const Inventory = () => {
         destinationStation: distForm.destination_station,
         distributedBy: distributedById || null,
         distributedDate: distForm.distribution_date,
-        remarks: distForm.remarks || null,
-        stationBatch: distForm.station_batch || null
+        remarks: distForm.remarks || null
       });
 
       // Build a UI record (prefer DB-provided fields when available)
@@ -1005,7 +1003,7 @@ const Inventory = () => {
         distribution_date: distData?.distributed_date || distForm.distribution_date,
         item_name: selectedItem.item_name,
         brand: selectedItem.brand || '',
-        batch: distForm.station_batch || String(selectedItem.batch || selectedItem.batch_number || 'N/A'),
+        batch: result?.stationInventory?.batch ?? null,
         item_type: distForm.item_type === 'vaccine' ? 'Vaccine' : 'Supplement',
         quantity: distData?.quantity || qtyToDistribute,
         unit: selectedItem.unit,
@@ -1026,7 +1024,6 @@ const Inventory = () => {
         distribution_date: new Date().toISOString().split('T')[0],
         released_by: user?.fullName || user?.email?.split('@')[0] || '',
         remarks: '',
-        station_batch: ''
       });
 
       // Refresh stats and inventory immediately
@@ -1853,7 +1850,6 @@ const Inventory = () => {
                 distribution_date: new Date().toISOString().split('T')[0],
                 released_by: user?.fullName || user?.email?.split('@')[0] || '',
                 remarks: '',
-                station_batch: ''
               });
               setShowDistributionModal(true);
             }}
@@ -2608,18 +2604,6 @@ const Inventory = () => {
                     <option value="">— Select station —</option>
                     {availableStations.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
-                </div>
-
-                {/* Station Batch (station-specific) */}
-                <div className="form-group">
-                  <label>Station Batch <span style={{ color: '#999', fontWeight: 400 }}>(optional)</span></label>
-                  <input
-                    type="text"
-                    value={distForm.station_batch}
-                    onChange={e => setDistForm({ ...distForm, station_batch: e.target.value })}
-                    placeholder="e.g. Batch A-2026"
-                    className="form-control"
-                  />
                 </div>
 
                 {/* Distribution Date & Released By */}

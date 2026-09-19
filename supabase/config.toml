@@ -7,6 +7,9 @@ project_id = "dasmom"
 [functions.create-mother]
 verify_jwt = false
 
+[functions.create-staff]
+verify_jwt = false
+
 [api]
 enabled = true
 # Port to use for the API URL.

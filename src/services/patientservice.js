@@ -88,62 +88,27 @@ export default class PatientService {
 
   async getArchivedPatientIds() {
     const { data, error } = await this.supabase
-      .from('patient_basic_info')
-      .select('id, emergency_contact');
+      .from('users')
+      .select('id, is_archived')
+      .eq('is_archived', true);
 
     if (error) throw error;
 
     return new Set(
       (data || [])
-        .filter((patient) => this.getArchiveStateFromPatient(patient) === 'archived')
-        .map((patient) => patient.id)
+        .map((user) => user.id)
         .filter(Boolean)
     );
   }
 
   getArchiveStateFromPatient(patient) {
-    const rawContact = patient?.emergency_contact;
-    if (rawContact && typeof rawContact === 'object' && !Array.isArray(rawContact)) {
-      const metadata = rawContact.__system_metadata || rawContact.system_metadata || {};
-      if (metadata.archive_status === 'archived' || metadata.archiveStatus === 'archived') {
-        return 'archived';
-      }
-      if (metadata.archive_status === 'active' || metadata.archiveStatus === 'active') {
-        return 'active';
-      }
-    }
-    return 'active';
+    return patient?.is_archived === true ? 'archived' : 'active';
   }
 
   async archivePatient(patientId) {
-    const currentUserId = await this.getCurrentUserId();
-    if (!currentUserId) throw new Error('No logged-in user');
-
-    const { data: patientRow, error: fetchError } = await this.supabase
-      .from('patient_basic_info')
-      .select('emergency_contact')
-      .eq('id', patientId)
-      .maybeSingle();
-
-    if (fetchError) throw fetchError;
-
-    const existingContact = (patientRow?.emergency_contact && typeof patientRow.emergency_contact === 'object' && !Array.isArray(patientRow.emergency_contact))
-      ? patientRow.emergency_contact
-      : {};
-
-    const nextContact = {
-      ...existingContact,
-      __system_metadata: {
-        ...(existingContact.__system_metadata || existingContact.system_metadata || {}),
-        archive_status: 'archived',
-        archived_at: new Date().toISOString(),
-        archived_by: currentUserId,
-      },
-    };
-
     const { error } = await this.supabase
-      .from('patient_basic_info')
-      .update({ emergency_contact: nextContact })
+      .from('users')
+      .update({ is_archived: true })
       .eq('id', patientId);
 
     if (error) throw error;
@@ -151,36 +116,9 @@ export default class PatientService {
   }
 
   async restorePatient(patientId) {
-    const { data: patientRow, error: fetchError } = await this.supabase
-      .from('patient_basic_info')
-      .select('emergency_contact')
-      .eq('id', patientId)
-      .maybeSingle();
-
-    if (fetchError) throw fetchError;
-
-    const existingContact = (patientRow?.emergency_contact && typeof patientRow.emergency_contact === 'object' && !Array.isArray(patientRow.emergency_contact))
-      ? patientRow.emergency_contact
-      : {};
-
-    const nextContact = { ...existingContact };
-    if (nextContact.__system_metadata) {
-      const metadata = { ...(nextContact.__system_metadata || {}) };
-      delete metadata.archive_status;
-      delete metadata.archiveStatus;
-      delete metadata.archived_at;
-      delete metadata.archived_by;
-
-      if (Object.keys(metadata).length > 0) {
-        nextContact.__system_metadata = metadata;
-      } else {
-        delete nextContact.__system_metadata;
-      }
-    }
-
     const { error } = await this.supabase
-      .from('patient_basic_info')
-      .update({ emergency_contact: nextContact })
+      .from('users')
+      .update({ is_archived: false })
       .eq('id', patientId);
 
     if (error) throw error;
@@ -226,7 +164,7 @@ export default class PatientService {
   async getAllPatients({ includeArchived = false } = {}) {
     try {
       const { role, stationId } = await this.getCurrentUserAccess();
-      const archivedPatientIds = includeArchived ? new Set() : await this.getArchivedPatientIds();
+      const archivedPatientIds = await this.getArchivedPatientIds();
 
       let patientsQuery = this.supabase
         .from('patient_basic_info')
@@ -348,7 +286,7 @@ export default class PatientService {
         const hasDelivered = postpartumDays !== null && postpartumDays >= 0;
         const isPostpartum = hasDelivered && postpartumDays <= 42;
         
-        const archiveState = this.getArchiveStateFromPatient(p);
+        const archiveState = archivedPatientIds.has(p.id) ? 'archived' : this.getArchiveStateFromPatient(p);
 
         // Determine archive status
         let archiveStatus = 'active';
@@ -498,6 +436,7 @@ export default class PatientService {
     if (!term || term.length < 2) return [];
 
     const { role, stationId } = await this.getCurrentUserAccess();
+    const archivedPatientIds = await this.getArchivedPatientIds();
     const safeTerm = term.trim().replace(/%/g, '\\%');
 
     const applyStationFilter = (baseQuery) => {
@@ -547,7 +486,7 @@ export default class PatientService {
     const seenIds = new Set();
 
     for (const patient of allPatients) {
-      if (!seenIds.has(patient.id)) {
+      if (!seenIds.has(patient.id) && !archivedPatientIds.has(patient.id)) {
         seenIds.add(patient.id);
         uniquePatients.push(patient);
       }
@@ -1829,6 +1768,14 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
     if (!patientData) return null;
 
+    const { data: userData, error: userError } = await this.supabase
+      .from('users')
+      .select('is_archived, is_deactivated')
+      .eq('id', patientId)
+      .maybeSingle();
+
+    if (userError) throw userError;
+
     if (role === 'cho personnel' || role === 'staff') {
       if (!stationId || patientData.station_ass !== stationId) {
         return null;
@@ -1905,10 +1852,12 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       phone: rawEmergencyContact.phone || rawEmergencyContact.contact_no || ''
     };
 
-    const archiveStatus = this.getArchiveStateFromPatient(patientData) === 'archived' ? 'archived' : 'active';
+    const archiveStatus = userData?.is_archived ? 'archived' : 'active';
 
     return {
       ...patientData,
+      isArchived: Boolean(userData?.is_archived),
+      isDeactivated: Boolean(userData?.is_deactivated),
       archiveStatus,
       name: `${patientData.first_name || ''} ${patientData.last_name || ''}`.trim(),
       age: this.calculateAge(patientData.date_of_birth),

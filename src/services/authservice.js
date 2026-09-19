@@ -86,9 +86,30 @@ export default class AuthService {
 
     if (!userId) throw new Error('User ID is required');
 
-    // Use SECURITY DEFINER function to create/update user record
-    // This bypasses RLS to allow staff/CHO to create patient accounts
     try {
+      // Prefer a direct public.users update so email_address is always populated
+      // from the canonical auth email when the DB row exists.
+      const { data: existingUser, error: selectError } = await this.supabase
+        .from('users')
+        .select('id, email_address')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (selectError) throw selectError;
+
+      if (existingUser) {
+        const { error: updateError } = await this.supabase
+          .from('users')
+          .update({
+            email_address: normalizedEmail || existingUser.email_address,
+            usertype: existingUser.usertype || null,
+          })
+          .eq('id', userId);
+
+        if (updateError) throw updateError;
+      }
+
+      // Use the security-definer RPC as the fallback/account-creation path.
       const { error: rpcError } = await this.supabase.rpc('create_patient_user_record', {
         p_user_id: userId,
         p_email: normalizedEmail,
@@ -152,69 +173,23 @@ export default class AuthService {
       return { id: functionData.userId };
     }
 
-    // Save current admin session BEFORE creating new auth account
-    const currentSessionRes = await this._withTimeout(this.supabase.auth.getSession(), 5000);
-    const adminSession = currentSessionRes?.data?.session;
-
-    const { data: authData, error: authError } = await this._withTimeout(this.supabase.auth.signUp({
-      email: normalizedEmail,
-      password,
-      options: {
-        data: {
-          role: String(role || '').trim().toLowerCase(),
-          ...(metadata || {})
+    // Create staff accounts server-side so the browser's active staff session is untouched.
+    const { data: functionData, error: functionError } = await this._withTimeout(
+      this.supabase.functions.invoke('create-staff', {
+        body: {
+          email: normalizedEmail,
+          password,
+          role: normalizedRole,
+          fullName: metadata?.full_name || normalizedEmail,
         }
-      }
-    }), 10000);
+      }),
+      15000
+    );
 
-    if (authError) throw authError;
+    if (functionError) throw functionError;
+    if (!functionData?.userId) throw new Error('Staff account function did not return a user ID');
 
-    const authUser = authData?.user;
-    if (!authUser?.id) {
-      throw new Error('Failed to create auth user');
-    }
-
-    try {
-      await this.ensurePublicUserRecord({
-        userId: authUser.id,
-        email: normalizedEmail,
-        role,
-        password,
-      });
-    } catch (userInsertError) {
-      console.error('Failed to create public users row for auth account:', userInsertError);
-      throw userInsertError;
-    }
-
-    // CRITICAL: Sign out the newly created patient to prevent auth listener from hijacking context
-    try {
-      await this._withTimeout(this.supabase.auth.signOut(), 3000);
-      console.log('✅ Signed out patient account');
-    } catch (signOutErr) {
-      console.error('⚠️ Failed to sign out patient:', signOutErr);
-    }
-
-    // Restore and verify the original session before the caller writes staff-owned records.
-    if (adminSession) {
-      let restored = false;
-      for (let attempt = 0; attempt < 2 && !restored; attempt++) {
-        try {
-          await this._withTimeout(this.supabase.auth.setSession(adminSession), 5000);
-          const { data: restoredSession } = await this._withTimeout(this.supabase.auth.getSession(), 5000);
-          restored = restoredSession?.session?.user?.id === adminSession.user?.id;
-        } catch (sessionErr) {
-          console.error('⚠️ Failed to restore admin session:', sessionErr);
-        }
-      }
-
-      if (!restored) {
-        throw new Error('Could not restore the staff session after creating the patient account. Please sign in again.');
-      }
-
-      console.log('✅ Restored and verified original session after creating patient account');
-    }
-
-    return authUser;
+    return { id: functionData.userId };
   }
 
   async login(email, password) {
@@ -242,7 +217,7 @@ export default class AuthService {
     const { data: userData, error: userError } = await this._withTimeout(
       this.supabase
         .from('users')
-        .select('id, email_address, usertype')
+        .select('id, email_address, usertype, is_archived, is_deactivated')
         .eq('id', authUser.id)
         .maybeSingle(),
       8000
@@ -250,6 +225,10 @@ export default class AuthService {
 
     if (userError) throw userError;
     if (!userData) throw new Error('User record not found in database');
+    if (userData.is_deactivated) {
+      await this.supabase.auth.signOut();
+      throw new Error('This account has been deactivated. Please contact an administrator.');
+    }
 
     let role = 'user';
     if (userData.usertype) {
@@ -275,6 +254,8 @@ export default class AuthService {
       id: userData.id,
       email: userData.email_address,
       role: role,
+      isArchived: Boolean(userData.is_archived),
+      isDeactivated: Boolean(userData.is_deactivated),
       displayName: profile.displayName,
       fullName: profile.fullName,
     };
@@ -350,7 +331,7 @@ export default class AuthService {
       const res = await this._withTimeout(
         this.supabase
           .from('users')
-          .select('id, email_address, usertype')
+          .select('id, email_address, usertype, is_archived, is_deactivated')
           .eq('id', authUser.id)
           .maybeSingle(),
         8000
@@ -364,6 +345,11 @@ export default class AuthService {
 
     if (!userData || !userData.id) {
       console.warn('No valid user data found');
+      this._currentUser = null;
+      return null;
+    }
+    if (userData.is_deactivated) {
+      await this.supabase.auth.signOut();
       this._currentUser = null;
       return null;
     }
@@ -391,6 +377,8 @@ export default class AuthService {
       id: userData.id,
       email: userData.email_address,
       role: role,
+      isArchived: Boolean(userData.is_archived),
+      isDeactivated: Boolean(userData.is_deactivated),
       displayName: profile.displayName,
       fullName: profile.fullName,
     };

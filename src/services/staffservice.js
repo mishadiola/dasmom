@@ -87,7 +87,7 @@ export default class StaffService {
           .order('created_at', { ascending: false }),
         this.supabase
           .from('users')
-          .select('id, email_address, usertype'),
+          .select('id, email_address, usertype, is_archived, is_deactivated'),
         this.supabase
           .from('user_type')
           .select('id, user_type')
@@ -101,21 +101,21 @@ export default class StaffService {
       const mapped = (staffRows || []).map(staff => {
         const user = userMap.get(staff.id);
         const roleName = userTypeMap.get(user?.usertype) || 'Staff';
-        const email = user?.email_address || 'N/A';
+        const email = user?.email_address || staff?.email_address || 'N/A';
 
-        if (!user?.email_address) {
+        if (!user?.email_address && !staff?.email_address) {
           console.warn('Staff profile missing public users email', { staffId: staff.id, profile: staff.full_name, userRow: user || null });
         }
 
         return {
           id: staff.id,
           name: staff.full_name,
-          email,
+          email: typeof email === 'string' && email.trim() ? email.trim() : 'N/A',
           role: this.formatRoleLabel(roleName),
           station: staff.stations?.station_name || 'No Assignment',
           employeeId: staff.employee_id,
-          status: 'Active',
-          archiveStatus: StaffService.getArchivedStaffIds().has(staff.id) ? 'archived' : 'active',
+          status: user?.is_deactivated ? 'Deactivated' : 'Active',
+          archiveStatus: user?.is_archived ? 'archived' : 'active',
           lastLogin: 'N/A',
           avatar: staff.full_name
             ?.split(' ')
@@ -130,28 +130,6 @@ export default class StaffService {
     } catch (error) {
       console.error('❌ getAllStaff:', error);
       return [];
-    }
-  }
-
-  // ── localStorage-based archive persistence ──────────────────────────────
-  // Stores a Set of archived staff IDs in localStorage so archive status
-  // survives page refreshes without needing a DB schema change.
-  static ARCHIVE_KEY = 'dasmom_archived_staff';
-
-  static getArchivedStaffIds() {
-    try {
-      const raw = localStorage.getItem(StaffService.ARCHIVE_KEY);
-      return new Set(raw ? JSON.parse(raw) : []);
-    } catch {
-      return new Set();
-    }
-  }
-
-  static setArchivedStaffIds(idSet) {
-    try {
-      localStorage.setItem(StaffService.ARCHIVE_KEY, JSON.stringify([...idSet]));
-    } catch (err) {
-      console.error('Failed to persist archived staff ids:', err);
     }
   }
 
@@ -189,16 +167,28 @@ export default class StaffService {
     }
   }
 
-  archiveStaff(staffId) {
-    const ids = StaffService.getArchivedStaffIds();
-    ids.add(staffId);
-    StaffService.setArchivedStaffIds(ids);
+  async archiveStaff(staffId) {
+    const { error } = await this.supabase
+      .from('users')
+      .update({ is_archived: true })
+      .eq('id', staffId);
+    if (error) throw error;
   }
 
-  restoreStaff(staffId) {
-    const ids = StaffService.getArchivedStaffIds();
-    ids.delete(staffId);
-    StaffService.setArchivedStaffIds(ids);
+  async restoreStaff(staffId) {
+    const { error } = await this.supabase
+      .from('users')
+      .update({ is_archived: false })
+      .eq('id', staffId);
+    if (error) throw error;
+  }
+
+  async setStaffDeactivated(staffId, isDeactivated) {
+    const { error } = await this.supabase
+      .from('users')
+      .update({ is_deactivated: Boolean(isDeactivated) })
+      .eq('id', staffId);
+    if (error) throw error;
   }
 
   /**
@@ -565,6 +555,19 @@ export default class StaffService {
     }
   }
 
+  resolveStaffEmail(data) {
+    const email = (
+      data?.users?.email_address ||
+      data?.email_address ||
+      data?.email ||
+      data?.user_email ||
+      data?.auth?.email ||
+      'N/A'
+    );
+
+    return typeof email === 'string' && email.trim() ? email.trim() : 'N/A';
+  }
+
   /**
    * Map staff database data to UI format
    */
@@ -572,7 +575,7 @@ export default class StaffService {
     return {
       id: data.id,
       name: data.full_name,
-      email: data.users?.email_address || data.email_address || 'N/A',
+      email: this.resolveStaffEmail(data),
       role: this.formatRoleLabel(data.users?.user_type?.user_type || data.user_type || 'Staff'),
       station: data.stations?.station_name || data.barangay_assignment || 'No Assignment',
       employeeId: data.employee_id,

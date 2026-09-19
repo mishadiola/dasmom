@@ -507,7 +507,12 @@ const ManageStationsModal = ({ onClose, onSuccess, initialStations }) => {
 ════════════════════════════ */
 const EditUserModal = ({ staff, onClose, onSuccess }) => {
     const staffService = new StaffService();
-    const [form, setForm] = useState({ name: staff.name, email: staff.email, role: normalizeRoleValue(staff.role), station: staff.station });
+    const [form, setForm] = useState({
+        name: staff?.name ?? '',
+        email: staff?.email ?? '',
+        role: normalizeRoleValue(staff?.role),
+        station: staff?.station ?? ''
+    });
     const [stations, setStations] = useState([]);
     const [roles, setRoles] = useState([]);
     const [showStationDropdown, setShowStationDropdown] = useState(false);
@@ -707,9 +712,11 @@ const UserAccountsTab = () => {
 
     const filtered = staff.filter(u => {
         const s = search.toLowerCase();
-        const matchS = u.name.toLowerCase().includes(s) || u.email.toLowerCase().includes(s);
+        const nameText = (u.name || '').toLowerCase();
+        const emailText = (u.email || '').toLowerCase();
+        const matchS = nameText.includes(s) || emailText.includes(s);
         const matchR = roleFilter === 'All' || normalizeRoleValue(u.role) === normalizeRoleValue(roleFilter);
-        
+
         const isArchived = u.archiveStatus === 'archived';
         let matchSt = true;
         if (statusFilter === 'Active') {
@@ -754,7 +761,7 @@ const UserAccountsTab = () => {
             });
 
             if (isConfirmed) {
-                staffService.archiveStaff(staffId);
+                await staffService.archiveStaff(staffId);
                 setStaff(prevStaff =>
                     prevStaff.map(u => u.id === staffId ? { ...u, archiveStatus: 'archived' } : u)
                 );
@@ -779,10 +786,40 @@ const UserAccountsTab = () => {
         });
 
         if (isConfirmed) {
-            staffService.restoreStaff(staffId);
+            await staffService.restoreStaff(staffId);
             setStaff(prevStaff =>
                 prevStaff.map(u => u.id === staffId ? { ...u, archiveStatus: 'active' } : u)
             );
+        }
+    };
+
+    const handleToggleDeactivation = async (staff) => {
+        const nextIsDeactivated = staff.status === 'Active';
+        const isConfirmed = await confirm({
+            title: nextIsDeactivated ? 'Deactivate Staff' : 'Activate Staff',
+            text: nextIsDeactivated
+                ? 'This account will no longer be able to log in.'
+                : 'This account will be allowed to log in again.',
+            confirmText: nextIsDeactivated ? 'Yes, Deactivate' : 'Yes, Activate',
+            cancelText: 'Cancel',
+            iconType: nextIsDeactivated ? 'warning' : 'info'
+        });
+
+        if (!isConfirmed) return;
+
+        try {
+            await staffService.setStaffDeactivated(staff.id, nextIsDeactivated);
+            setStaff(prevStaff => prevStaff.map(item => item.id === staff.id
+                ? { ...item, status: nextIsDeactivated ? 'Deactivated' : 'Active' }
+                : item
+            ));
+        } catch (err) {
+            console.error('Failed to update staff deactivation:', err);
+            await customAlert({
+                title: 'Error',
+                text: 'Unable to update this account status. Please try again.',
+                iconType: 'danger'
+            });
         }
     };
 
@@ -852,7 +889,7 @@ const UserAccountsTab = () => {
                                         <div className="row-actions">
                                             <button className="action-btn edit-btn" title="Edit" onClick={() => { setSelectedStaff(u); setShowEditModal(true); }}><Edit2 size={13} /></button>
                                             <button className="action-btn key-btn" title="Reset Password"><Key size={13} /></button>
-                                            <button className={`action-btn ${u.status === 'Active' ? 'deact-btn' : 'act-btn'}`} title={u.status === 'Active' ? 'Deactivate' : 'Activate'}>
+                                            <button className={`action-btn ${u.status === 'Active' ? 'deact-btn' : 'act-btn'}`} title={u.status === 'Active' ? 'Deactivate' : 'Activate'} onClick={() => handleToggleDeactivation(u)}>
                                                 {u.status === 'Active' ? <ToggleRight size={13} /> : <ToggleLeft size={13} />}
                                             </button>
                                             {u.role !== 'Super Admin' && (

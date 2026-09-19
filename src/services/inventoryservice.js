@@ -59,6 +59,21 @@ class InventoryService {
     return await this.auth.getOrCreateStationId(stationName.trim());
   }
 
+  async _getNextStationBatch(table, stationId) {
+    const { data, error } = await this.supabase
+      .from(table)
+      .select('batch')
+      .eq('station_id', stationId);
+
+    if (error) throw error;
+
+    const batches = (data || [])
+      .map(row => Number(row.batch))
+      .filter(batch => Number.isFinite(batch));
+
+    return (batches.length > 0 ? Math.max(...batches) : 0) + 1;
+  }
+
   async getCurrentUserScope() {
     return await this._getCurrentUserScope();
   }
@@ -270,12 +285,45 @@ class InventoryService {
       throw supplementResult.error;
     }
 
+    const stationIds = [...new Set((vaccineResult.data || [])
+      .concat(supplementResult.data || [])
+      .map(row => row.station_id)
+      .filter(Boolean))];
+    let stationVaccineRows = [];
+    let stationSupplementRows = [];
+
+    if (stationIds.length > 0) {
+      const [stationVaccineResult, stationSupplementResult] = await Promise.all([
+        this.supabase
+          .from('station_vaccine_inventory')
+          .select('station_id, vaccine_id, batch')
+          .in('station_id', stationIds),
+        this.supabase
+          .from('station_supplement_inventory')
+          .select('station_id, supplement_inventory_id, batch')
+          .in('station_id', stationIds)
+      ]);
+
+      if (stationVaccineResult.error) throw stationVaccineResult.error;
+      if (stationSupplementResult.error) throw stationSupplementResult.error;
+      stationVaccineRows = stationVaccineResult.data || [];
+      stationSupplementRows = stationSupplementResult.data || [];
+    }
+
+    const stationVaccineBatch = new Map(
+      stationVaccineRows.map(row => [`${row.station_id}:${row.vaccine_id}`, row.batch])
+    );
+    const stationSupplementBatch = new Map(
+      stationSupplementRows.map(row => [`${row.station_id}:${row.supplement_inventory_id}`, row.batch])
+    );
+
     const vaccineRecords = (vaccineResult.data || []).map(row => ({
       id: row.id,
       distribution_date: row.distributed_date,
       item_name: row.vaccine_inventory?.vaccine_name || 'Unknown',
       brand: row.vaccine_inventory?.brand || '',
-      batch: row.vaccine_inventory?.batch || null,
+      batch: stationVaccineBatch.get(`${row.station_id}:${row.vaccine_id}`) ?? null,
+      source_batch: row.vaccine_inventory?.batch || null,
       item_type: 'Vaccine',
       quantity: row.quantity,
       unit: row.vaccine_inventory?.unit || 'vials',
@@ -289,7 +337,8 @@ class InventoryService {
       distribution_date: row.distributed_date,
       item_name: row.supplement_inventory?.supplement_name || 'Unknown',
       brand: row.supplement_inventory?.brand || '',
-      batch: row.supplement_inventory?.batch_number || null,
+      batch: stationSupplementBatch.get(`${row.station_id}:${row.supplement_id}`) ?? null,
+      source_batch: row.supplement_inventory?.batch_number || null,
       item_type: 'Supplement',
       quantity: row.quantity,
       unit: row.supplement_inventory?.unit || 'pcs',
@@ -305,19 +354,19 @@ class InventoryService {
     });
   }
 
-  async distributeInventory({ itemType, itemId, quantity, destinationStation, distributedBy, distributedDate, remarks, stationBatch = null }) {
+  async distributeInventory({ itemType, itemId, quantity, destinationStation, distributedBy, distributedDate, remarks }) {
     if (!itemType || !['vaccine', 'supplement'].includes(itemType)) {
       throw new Error('Invalid item type for distribution');
     }
 
     if (itemType === 'vaccine') {
-      return await this.distributeVaccine(itemId, quantity, destinationStation, distributedBy, distributedDate, remarks, stationBatch);
+      return await this.distributeVaccine(itemId, quantity, destinationStation, distributedBy, distributedDate, remarks);
     }
 
-    return await this.distributeSupplement(itemId, quantity, destinationStation, distributedBy, distributedDate, remarks, stationBatch);
+    return await this.distributeSupplement(itemId, quantity, destinationStation, distributedBy, distributedDate, remarks);
   }
 
-  async distributeVaccine(vaccineId, quantity, stationName, distributedBy, distributedDate = new Date().toISOString().split('T')[0], remarks = null, stationBatch = null) {
+  async distributeVaccine(vaccineId, quantity, stationName, distributedBy, distributedDate = new Date().toISOString().split('T')[0], remarks = null) {
 
     const qty = Number(quantity);
     if (!vaccineId) throw new Error('Vaccine item is required');
@@ -370,23 +419,20 @@ class InventoryService {
     if (stationFetchError) throw stationFetchError;
 
     let stationInventory;
-    // Station should have its own batch value; do not copy main inventory batch
     if (stationExisting) {
-      const existingBatch = stationExisting.batch ?? null;
-      const batchToSet = stationBatch !== null && stationBatch !== undefined && stationBatch !== '' ? stationBatch : existingBatch;
-
       const { data, error } = await this.supabase
         .from('station_vaccine_inventory')
-        .update({ quantity: Number(stationExisting.quantity) + qty, batch: batchToSet, updated_at: distributedDate })
+        .update({ quantity: Number(stationExisting.quantity) + qty, updated_at: distributedDate })
         .eq('id', stationExisting.id)
         .select()
         .maybeSingle();
       if (error) throw error;
       stationInventory = data;
     } else {
+      const stationBatch = await this._getNextStationBatch('station_vaccine_inventory', station_id);
       const { data, error } = await this.supabase
         .from('station_vaccine_inventory')
-        .insert([{ station_id, vaccine_id: vaccineId, quantity: qty, batch: stationBatch || null, updated_at: distributedDate }])
+        .insert([{ station_id, vaccine_id: vaccineId, quantity: qty, batch: stationBatch, updated_at: distributedDate }])
         .select()
         .maybeSingle();
       if (error) throw error;
@@ -396,7 +442,7 @@ class InventoryService {
     return { distribution: distData, updatedMain, stationInventory };
   }
 
-  async distributeSupplement(supplementId, quantity, stationName, distributedBy, distributedDate = new Date().toISOString().split('T')[0], remarks = null, stationBatch = null) {
+  async distributeSupplement(supplementId, quantity, stationName, distributedBy, distributedDate = new Date().toISOString().split('T')[0], remarks = null) {
 
     const qty = Number(quantity);
     if (!supplementId) throw new Error('Supplement item is required');
@@ -448,23 +494,20 @@ class InventoryService {
     if (stationFetchError) throw stationFetchError;
 
     let stationInventory;
-    // Station supplement should use its own batch field
     if (stationExisting) {
-      const existingBatch = stationExisting.batch ?? null;
-      const batchToSet = stationBatch !== null && stationBatch !== undefined && stationBatch !== '' ? stationBatch : existingBatch;
-
       const { data, error } = await this.supabase
         .from('station_supplement_inventory')
-        .update({ quantity: Number(stationExisting.quantity) + qty, batch: batchToSet, updated_at: distributedDate })
+        .update({ quantity: Number(stationExisting.quantity) + qty, updated_at: distributedDate })
         .eq('id', stationExisting.id)
         .select()
         .maybeSingle();
       if (error) throw error;
       stationInventory = data;
     } else {
+      const stationBatch = await this._getNextStationBatch('station_supplement_inventory', station_id);
       const { data, error } = await this.supabase
         .from('station_supplement_inventory')
-        .insert([{ station_id, supplement_inventory_id: supplementId, quantity: qty, batch: stationBatch || null, updated_at: distributedDate }])
+        .insert([{ station_id, supplement_inventory_id: supplementId, quantity: qty, batch: stationBatch, updated_at: distributedDate }])
         .select()
         .maybeSingle();
       if (error) throw error;
