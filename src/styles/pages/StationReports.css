@@ -204,6 +204,151 @@
     flex-direction: column;
 }
 
+/* ════════════════════════════════════════════
+   PREGNANCY AGE REPORT
+════════════════════════════════════════════ */
+.st-age-report {
+    background: #ffffff;
+    border: 1px solid rgba(185, 129, 138, 0.12);
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+    padding: 24px;
+}
+
+.st-age-report-header,
+.st-age-filters {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.st-age-report-header {
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.st-age-filters {
+    padding: 16px;
+    background: #faf8f9;
+    border: 1px solid #f0edf1;
+    border-radius: 12px;
+    margin-bottom: 20px;
+}
+
+.st-age-filters .st-filter-group select {
+    min-width: 155px;
+}
+
+.st-age-content {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.6fr);
+    gap: 20px;
+}
+
+.st-age-chart-panel,
+.st-age-table-panel {
+    min-width: 0;
+    border: 1px solid #f0edf1;
+    border-radius: 12px;
+    padding: 18px;
+}
+
+.st-age-chart-panel .st-chart-header {
+    margin-bottom: 14px;
+}
+
+.st-age-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    max-height: 270px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.st-age-bar-row {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr) 24px;
+    align-items: center;
+    gap: 9px;
+    font-size: 12px;
+}
+
+.st-age-label {
+    color: var(--color-text-muted);
+    font-weight: 700;
+}
+
+.st-age-bar-track {
+    height: 13px;
+    background: #f3f1f4;
+    border-radius: 7px;
+    overflow: hidden;
+}
+
+.st-age-bar-fill {
+    height: 100%;
+    min-width: 4px;
+    border-radius: 7px;
+    background: linear-gradient(90deg, #b9818a, #d4a03c);
+    transition: width 0.35s ease;
+}
+
+.st-age-table-wrap {
+    max-height: 325px;
+    overflow: auto;
+}
+
+.st-age-table {
+    width: 100%;
+    min-width: 650px;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.st-age-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #faf8f9;
+    color: var(--color-text-muted);
+    font-size: 10.5px;
+    text-align: left;
+    text-transform: uppercase;
+    letter-spacing: 0.35px;
+}
+
+.st-age-table th,
+.st-age-table td {
+    padding: 10px 9px;
+    border-bottom: 1px solid #f0edf1;
+    white-space: nowrap;
+}
+
+.st-age-table td:first-child {
+    color: var(--color-text);
+    font-weight: 700;
+}
+
+.st-age-outcome {
+    display: inline-flex;
+    padding: 3px 8px;
+    border-radius: 10px;
+    font-size: 10.5px;
+    font-weight: 700;
+}
+
+.st-age-outcome--successful { background: rgba(123, 174, 94, 0.14); color: #4a7a30; }
+.st-age-outcome--unsuccessful { background: rgba(199, 88, 106, 0.14); color: #943848; }
+.st-age-outcome--pending { background: rgba(212, 160, 60, 0.14); color: #8a6a20; }
+
+.st-age-empty {
+    color: var(--color-text-muted);
+    text-align: center;
+    padding: 30px 12px;
+}
+
 /* ── Horizontal Bar Charts (Vaccination & Supplement Coverage) ── */
 .st-hbar-chart {
     display: flex;
@@ -1414,6 +1559,18 @@
     .detail-stats-grid {
         grid-template-columns: repeat(2, 1fr);
     }
+
+    .st-age-content {
+        grid-template-columns: 1fr;
+    }
+
+    .st-age-filters {
+        align-items: stretch;
+    }
+
+    .st-age-filters .st-filter-group {
+        flex: 1 1 calc(50% - 16px);
+    }
 }
 
 /* Mobile */
@@ -1460,6 +1617,14 @@
 
     .st-vbar-label {
         font-size: 8px;
+    }
+
+    .st-age-report {
+        padding: 16px;
+    }
+
+    .st-age-filters .st-filter-group {
+        flex-basis: 100%;
     }
 }
 

@@ -2576,6 +2576,122 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     }
   }
 
+  async getStationPregnancyAgeReport() {
+    try {
+      const [{ data: patients, error: patientsError }, { data: pregnancies, error: pregnanciesError }, { data: deliveries, error: deliveriesError }, { data: newborns, error: newbornsError }] = await Promise.all([
+        this.supabase
+          .from('patient_basic_info')
+          .select('id, first_name, last_name, date_of_birth, station_ass, municipality, stations:station_ass (station_name)'),
+        this.supabase
+          .from('pregnancy_info')
+          .select('id, patient_id, pregn_postp, miscarriage_info, created_at')
+          .order('created_at', { ascending: false }),
+        this.supabase
+          .from('deliveries')
+          .select('id, mother_id, delivery_date, delivery_type, delivery_mode'),
+        this.supabase
+          .from('newborns')
+          .select('id, mother_id, delivery_id, condition_at_birth')
+      ]);
+
+      if (patientsError) throw patientsError;
+      if (pregnanciesError) throw pregnanciesError;
+      if (deliveriesError) throw deliveriesError;
+      if (newbornsError) throw newbornsError;
+
+      const patientMap = new Map((patients || []).map(patient => [patient.id, patient]));
+      const latestPregnancyMap = new Map();
+      (pregnancies || []).forEach(pregnancy => {
+        if (!pregnancy.patient_id || latestPregnancyMap.has(pregnancy.patient_id)) return;
+        latestPregnancyMap.set(pregnancy.patient_id, pregnancy);
+      });
+
+      const calculateAgeAt = (dateOfBirth, eventDate) => {
+        if (!dateOfBirth || !eventDate) return null;
+        const birthDate = new Date(dateOfBirth);
+        const date = new Date(eventDate);
+        if (Number.isNaN(birthDate.getTime()) || Number.isNaN(date.getTime())) return null;
+        let age = date.getFullYear() - birthDate.getFullYear();
+        const birthdayPassed = date.getMonth() > birthDate.getMonth()
+          || (date.getMonth() === birthDate.getMonth() && date.getDate() >= birthDate.getDate());
+        if (!birthdayPassed) age -= 1;
+        return age >= 0 ? age : null;
+      };
+
+      const getStation = patient => patient?.stations?.station_name || patient?.municipality || 'Unknown';
+      const getRecord = ({ patientId, eventDate, deliveryType, outcome, source, id }) => {
+        const patient = patientMap.get(patientId);
+        if (!patient || !eventDate) return null;
+        return {
+          id,
+          patientId,
+          patientName: `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'Unknown Patient',
+          station: getStation(patient),
+          age: calculateAgeAt(patient.date_of_birth, eventDate),
+          eventDate,
+          deliveryType: deliveryType || 'N/A',
+          outcome,
+          source
+        };
+      };
+
+      const newbornsByDelivery = new Map();
+      (newborns || []).forEach(newborn => {
+        if (newborn.delivery_id) newbornsByDelivery.set(newborn.delivery_id, newborn);
+      });
+
+      const deliveryRecords = (deliveries || []).map(delivery => {
+        const newborn = newbornsByDelivery.get(delivery.id);
+        const type = delivery.delivery_type || delivery.delivery_mode || 'N/A';
+        const normalizedType = type.toLowerCase();
+        const outcome = normalizedType.includes('not applicable') || normalizedType === 'n/a'
+          ? 'Unsuccessful'
+          : newborn?.condition_at_birth?.toLowerCase() === 'stillbirth' ? 'Unsuccessful' : 'Successful';
+        return getRecord({
+          patientId: delivery.mother_id,
+          eventDate: delivery.delivery_date,
+          deliveryType: type,
+          outcome,
+          source: 'Delivery',
+          id: `delivery-${delivery.id}`
+        });
+      }).filter(Boolean);
+
+      const miscarriageRecords = (pregnancies || [])
+        .filter(pregnancy => pregnancy.miscarriage_info)
+        .map(pregnancy => {
+          const info = typeof pregnancy.miscarriage_info === 'string'
+            ? (() => { try { return JSON.parse(pregnancy.miscarriage_info); } catch { return {}; } })()
+            : pregnancy.miscarriage_info;
+          return getRecord({
+            patientId: pregnancy.patient_id,
+            eventDate: info?.date || pregnancy.created_at,
+            deliveryType: 'N/A',
+            outcome: 'Unsuccessful',
+            source: 'Pregnancy Outcome',
+            id: `pregnancy-${pregnancy.id}`
+          });
+        }).filter(Boolean);
+
+      const activePregnancyRecords = Array.from(latestPregnancyMap.values())
+        .filter(pregnancy => String(pregnancy.pregn_postp || '').toLowerCase() === 'pregnant')
+        .map(pregnancy => getRecord({
+          patientId: pregnancy.patient_id,
+          eventDate: pregnancy.created_at,
+          deliveryType: 'N/A',
+          outcome: 'Pending',
+          source: 'Current Pregnancy',
+          id: `current-${pregnancy.id}`
+        })).filter(Boolean);
+
+      return [...deliveryRecords, ...miscarriageRecords, ...activePregnancyRecords]
+        .sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate));
+    } catch (error) {
+      console.error('Error fetching station pregnancy age report:', error);
+      return [];
+    }
+  }
+
   async getStationReports() {
     try {
       const { data: stationRows, error: stationError } = await this.supabase
