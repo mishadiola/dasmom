@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext, useMemo, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import useClickOutside from '../../hooks/useClickOutside';
 import {
   Search,
@@ -13,6 +14,7 @@ import {
   Syringe,
   Pill,
   ChevronDown,
+  ChevronRight,
   Truck,
   Eye,
   Activity,
@@ -55,6 +57,8 @@ const formatReadableDate = (dateString) => {
 };
 
 const Inventory = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { alert: customAlert, confirm } = useModal();
   const { user } = useContext(AuthContext);
   const [userScope, setUserScope] = useState({ role: 'user', stationId: null, stationName: null, userId: user?.id || null });
@@ -106,7 +110,7 @@ const Inventory = () => {
     }
   });
   const [vaccStats, setVaccStats] = useState({ mothersPending: 0, newbornsPending: 0 });
-  const [pendingStockAlerts, setPendingStockAlerts] = useState({ count: 0, stations: [] });
+  const [pendingStockAlerts, setPendingStockAlerts] = useState({ count: 0, stations: [], vaccineIds: [] });
 
   // Station Distribution states
   const [showDistributionModal, setShowDistributionModal] = useState(false);
@@ -274,13 +278,15 @@ const Inventory = () => {
         if (needsStock) {
           alerts.push({
             id: row.id,
+            vaccineId: row.vaccine_inventory_id,
             stationName: stationId ? stationNameMap.get(stationId) || 'Unassigned station' : 'Unassigned station'
           });
         }
       }
 
       const stations = [...new Set(alerts.map(alert => alert.stationName).filter(Boolean))];
-      setPendingStockAlerts({ count: alerts.length, stations });
+      const vaccineIds = [...new Set(alerts.map(alert => alert.vaccineId).filter(Boolean))];
+      setPendingStockAlerts({ count: alerts.length, stations, vaccineIds });
     } catch (error) {
       console.error('Error loading pending stock alerts:', error);
       setPendingStockAlerts({ count: 0, stations: [] });
@@ -594,7 +600,9 @@ const Inventory = () => {
       
       // Apply summary card filter
       let matchesSummary = true;
-      if (activeSummaryFilter === 'lowStock') {
+      if (activeSummaryFilter === 'pendingStock') {
+        matchesSummary = item.items.some(i => pendingStockAlerts.vaccineIds.includes(i.id));
+      } else if (activeSummaryFilter === 'lowStock') {
         const percentage = item.total_max_stock ? Math.round((item.total_quantity || 0) / item.total_max_stock * 100) : 0;
         matchesSummary = percentage > 0 && percentage <= 20;
       } else if (activeSummaryFilter === 'mediumStock') {
@@ -1769,32 +1777,88 @@ const Inventory = () => {
           </div>
           <div className="alerts-list" style={{ padding: '8px 16px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {pendingStockAlerts.count > 0 && (
-              <div className="alert-item alert-warning" style={{ background: 'rgba(232,184,75,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px' }}>
-                <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', marginTop: '4px', flexShrink: 0, background: '#e8b84b' }}></div>
-                <div className="alert-body">
+              <div 
+                className="alert-item alert-warning clickable-alert" 
+                style={{ background: 'rgba(232,184,75,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px', alignItems: 'center' }}
+                onClick={() => {
+                  setActiveSummaryFilter('pendingStock');
+                  setActiveTab('vaccines');
+                  setMainTab('inventory');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                tabIndex="0"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setActiveSummaryFilter('pendingStock');
+                    setActiveTab('vaccines');
+                    setMainTab('inventory');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }
+                }}
+              >
+                <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, background: '#e8b84b' }}></div>
+                <div className="alert-body" style={{ flex: 1 }}>
                   <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Pending Vaccines Need Stock</p>
                   <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
                     {pendingStockAlerts.count} pending vaccination(s) need stock{pendingStockAlerts.stations.length > 0 ? ` for ${pendingStockAlerts.stations.join(', ')}` : ''}.
                   </span>
                 </div>
+                <ChevronRight size={14} style={{ color: '#e8b84b', opacity: 0.7 }} />
               </div>
             )}
             {lowStockCount > 0 && (
-              <div className="alert-item alert-warning" style={{ background: 'rgba(232,184,75,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px' }}>
-                <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', marginTop: '4px', flexShrink: 0, background: '#e8b84b' }}></div>
-                <div className="alert-body">
+              <div 
+                className="alert-item alert-warning clickable-alert" 
+                style={{ background: 'rgba(232,184,75,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px', alignItems: 'center' }}
+                onClick={() => {
+                  setActiveSummaryFilter('lowStock');
+                  setMainTab('inventory');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                tabIndex="0"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setActiveSummaryFilter('lowStock');
+                    setMainTab('inventory');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }
+                }}
+              >
+                <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, background: '#e8b84b' }}></div>
+                <div className="alert-body" style={{ flex: 1 }}>
                   <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Low Stock Warning</p>
                   <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{lowStockCount} items are running low on stock.</span>
                 </div>
+                <ChevronRight size={14} style={{ color: '#e8b84b', opacity: 0.7 }} />
               </div>
             )}
             {outOfStockCount > 0 && (
-              <div className="alert-item alert-critical" style={{ background: 'rgba(224,92,115,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px' }}>
-                <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', marginTop: '4px', flexShrink: 0, background: '#e05c73' }}></div>
-                <div className="alert-body">
+              <div 
+                className="alert-item alert-critical clickable-alert" 
+                style={{ background: 'rgba(224,92,115,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px', alignItems: 'center' }}
+                onClick={() => {
+                  setActiveSummaryFilter('outOfStock');
+                  setMainTab('inventory');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                tabIndex="0"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setActiveSummaryFilter('outOfStock');
+                    setMainTab('inventory');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }
+                }}
+              >
+                <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, background: '#e05c73' }}></div>
+                <div className="alert-body" style={{ flex: 1 }}>
                   <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Out of Stock</p>
                   <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{outOfStockCount} items are currently out of stock!</span>
                 </div>
+                <ChevronRight size={14} style={{ color: '#e05c73', opacity: 0.7 }} />
               </div>
             )}
             {pendingStockAlerts.count === 0 && lowStockCount === 0 && outOfStockCount === 0 && (

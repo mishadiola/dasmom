@@ -645,6 +645,20 @@
 
 .empty-icon { opacity: 0.2; margin-bottom: 12px; }
 
+/* ── Clickable Alerts ── */
+.clickable-alert {
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.clickable-alert.alert-warning:hover {
+    background: rgba(232, 184, 75, 0.15) !important;
+}
+
+.clickable-alert.alert-critical:hover {
+    background: rgba(224, 92, 115, 0.15) !important;
+}
+
 /* Responsive */
 @media (max-width: 1200px) {
     .inv-stats-grid { grid-template-columns: repeat(3, 1fr); }

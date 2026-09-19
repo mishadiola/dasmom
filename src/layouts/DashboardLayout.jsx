@@ -117,6 +117,8 @@ const DashboardLayout = () => {
                 const { data: todayAppts } = await supabase
                     .from('prenatal_visits')
                     .select(`
+                        id,
+                        patient_id,
                         visit_date,
                         patient_basic_info (first_name, last_name, barangay)
                     `)
@@ -124,11 +126,16 @@ const DashboardLayout = () => {
                     .limit(5);
 
                 if (todayAppts && todayAppts.length > 0) {
-                    notifList.push({
-                        category: 'appointments',
-                        type: 'info',
-                        text: `${todayAppts.length} prenatal visit${todayAppts.length > 1 ? 's' : ''} scheduled today`,
-                        time: 'Today'
+                    todayAppts.forEach(appt => {
+                        const patient = appt.patient_basic_info;
+                        notifList.push({
+                            category: 'appointments',
+                            type: 'info',
+                            text: `Prenatal visit scheduled today for ${patient?.first_name} ${patient?.last_name}`,
+                            time: 'Today',
+                            targetPath: '/dashboard/prenatal',
+                            targetState: { highlightVisitId: appt.id, patientId: appt.patient_id }
+                        });
                     });
                 }
 
@@ -136,6 +143,8 @@ const DashboardLayout = () => {
                 const { data: missedAppts } = await supabase
                     .from('prenatal_visits')
                     .select(`
+                        id,
+                        patient_id,
                         visit_date,
                         patient_basic_info (first_name, last_name)
                     `)
@@ -150,7 +159,9 @@ const DashboardLayout = () => {
                             category: 'appointments',
                             type: 'warning',
                             text: `${patient?.first_name} ${patient?.last_name} missed prenatal visit`,
-                            time: 'Missed'
+                            time: 'Missed',
+                            targetPath: '/dashboard/prenatal',
+                            targetState: { highlightVisitId: appt.id, patientId: appt.patient_id, filterStatus: 'Upcoming' }
                         });
                     });
                 }
@@ -158,7 +169,7 @@ const DashboardLayout = () => {
                 // Fetch low stock inventory items (≤20% = low stock)
                 const { data: inventory } = await supabase
                     .from('vaccine_inventory')
-                    .select('vaccine_name, quantity, max_quantity')
+                    .select('id, vaccine_name, quantity, max_quantity')
                     .limit(100);
 
                 if (inventory && inventory.length > 0) {
@@ -174,7 +185,9 @@ const DashboardLayout = () => {
                                 category: 'inventory',
                                 type: 'warning',
                                 text: `${item.vaccine_name} low stock (${item.quantity}/${item.max_quantity} units - ${percentage}%)`,
-                                time: 'Inventory'
+                                time: 'Inventory',
+                                targetPath: '/dashboard/inventory',
+                                targetState: { highlightItemId: item.id }
                             });
                         });
                 }
@@ -183,6 +196,8 @@ const DashboardLayout = () => {
                 const { data: highRiskPatients } = await supabase
                     .from('prenatal_visits')
                     .select(`
+                        id,
+                        patient_id,
                         calculated_risk,
                         patient_basic_info (first_name, last_name, barangay)
                     `)
@@ -196,7 +211,9 @@ const DashboardLayout = () => {
                             category: 'patients',
                             type: 'alert',
                             text: `${patient.patient_basic_info.first_name} ${patient.patient_basic_info.last_name} - ${patient.calculated_risk}`,
-                            time: patient.patient_basic_info.barangay
+                            time: patient.patient_basic_info.barangay,
+                            targetPath: '/dashboard/patients',
+                            targetState: { highlightPatientId: patient.patient_id }
                         });
                     });
                 }
@@ -225,6 +242,13 @@ const DashboardLayout = () => {
 
         fetchNotifications();
     }, [user, isUserView]);
+
+    const handleNotificationClick = (notif) => {
+        setNotifOpen(false);
+        if (notif.targetPath) {
+            navigate(notif.targetPath, { state: notif.targetState });
+        }
+    };
 
     const handleLogout = async () => {
         setUserMenuOpen(false);
@@ -437,7 +461,7 @@ const DashboardLayout = () => {
                                             notifications
                                                 .filter(n => notifFilter === 'all' || n.category === notifFilter)
                                                 .map((n, i) => (
-                                                    <li key={i} className={`notif-item notif-item--${n.type}`}>
+                                                    <li key={i} className={`notif-item notif-item--${n.type}`} onClick={() => handleNotificationClick(n)}>
                                                         <span className="notif-dot" aria-hidden="true" />
                                                         <div>
                                                             <p>{n.text}</p>

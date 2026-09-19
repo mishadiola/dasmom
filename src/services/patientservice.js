@@ -1770,7 +1770,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
     const { data: userData, error: userError } = await this.supabase
       .from('users')
-      .select('is_archived, is_deactivated')
+      .select('is_archived, is_deactivated, email_address')
       .eq('id', patientId)
       .maybeSingle();
 
@@ -1859,6 +1859,8 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       isArchived: Boolean(userData?.is_archived),
       isDeactivated: Boolean(userData?.is_deactivated),
       archiveStatus,
+      gmail: userData?.email_address || null,
+      email: userData?.email_address || null,
       name: `${patientData.first_name || ''} ${patientData.last_name || ''}`.trim(),
       age: this.calculateAge(patientData.date_of_birth),
         station: patientData.stations?.station_name || 'N/A',
