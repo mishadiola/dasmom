@@ -76,7 +76,7 @@ function App() {
 
           {/* DASHBOARD LAYOUT - ADMIN / STAFF */}
           <Route path="/dashboard" element={
-            <ProtectedRoute pageKey="admin">
+            <ProtectedRoute pageKey="dashboard">
               <DashboardLayout />
             </ProtectedRoute>
           }>
@@ -92,8 +92,16 @@ function App() {
             <Route path="inventory" element={<Inventory />} />
             <Route path="deliveries" element={<DeliveryOutcomes />} />
             <Route path="newborns" element={<NewbornTracking />} />
-            <Route path="stations" element={<StationReports />} />
-            <Route path="analytics" element={<Analytics />} />
+            <Route path="stations" element={
+              <ProtectedRoute pageKey="reports">
+                <StationReports />
+              </ProtectedRoute>
+            } />
+            <Route path="analytics" element={
+              <ProtectedRoute pageKey="analytics">
+                <Analytics />
+              </ProtectedRoute>
+            } />
             <Route path="settings" element={<Settings />} />
           </Route>
 

@@ -267,6 +267,7 @@ const DashboardLayout = () => {
     };
 
     // Filter nav items based on view
+    const canViewReports = ['admin', 'cho personnel'].includes(String(user?.role || '').toLowerCase());
     const filteredNavItems = isUserView ? [
         {
             section: t('nav_section_dashboard'),
@@ -284,7 +285,7 @@ const DashboardLayout = () => {
                 { label: t('nav_delivery_info'), icon: ClipboardList, path: '/mother-home/user-delivery-info' },
             ]
         }
-    ] : NAV_ITEMS;
+    ] : NAV_ITEMS.filter(group => group.section !== 'Reports' || canViewReports);
 
     return (
         <div className={`app-shell ${sidebarOpen ? 'sidebar-expanded' : 'sidebar-collapsed'}`}>

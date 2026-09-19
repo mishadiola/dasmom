@@ -2578,10 +2578,17 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
   async getStationPregnancyAgeReport() {
     try {
+      const { role, stationId } = await this.getCurrentUserAccess();
+      const isStationRestricted = role === 'cho personnel' || role === 'staff';
+      if (isStationRestricted && !stationId) return [];
+
+      let patientsQuery = this.supabase
+        .from('patient_basic_info')
+        .select('id, first_name, last_name, date_of_birth, station_ass, municipality, stations:station_ass (station_name)');
+      if (isStationRestricted) patientsQuery = patientsQuery.eq('station_ass', stationId);
+
       const [{ data: patients, error: patientsError }, { data: pregnancies, error: pregnanciesError }, { data: deliveries, error: deliveriesError }, { data: newborns, error: newbornsError }] = await Promise.all([
-        this.supabase
-          .from('patient_basic_info')
-          .select('id, first_name, last_name, date_of_birth, station_ass, municipality, stations:station_ass (station_name)'),
+        patientsQuery,
         this.supabase
           .from('pregnancy_info')
           .select('id, patient_id, pregn_postp, miscarriage_info, created_at')
@@ -2694,18 +2701,26 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
   async getStationReports() {
     try {
-      const { data: stationRows, error: stationError } = await this.supabase
+      const { role, stationId } = await this.getCurrentUserAccess();
+      const isStationRestricted = role === 'cho personnel' || role === 'staff';
+      if (isStationRestricted && !stationId) return [];
+
+      let stationsQuery = this.supabase
         .from('stations')
-        .select('station_name')
+        .select('id, station_name')
         .order('station_name', { ascending: true });
+      if (isStationRestricted) stationsQuery = stationsQuery.eq('id', stationId);
+      const { data: stationRows, error: stationError } = await stationsQuery;
 
       if (stationError) throw stationError;
 
       const allStations = [...new Set(stationRows?.map(s => s.station_name).filter(Boolean))];
 
-      const { data: patients, error: patientsError } = await this.supabase
+      let patientsQuery = this.supabase
         .from('patient_basic_info')
         .select('id, station_ass, station_ass, municipality, province, stations:station_ass (station_name)');
+      if (isStationRestricted) patientsQuery = patientsQuery.eq('station_ass', stationId);
+      const { data: patients, error: patientsError } = await patientsQuery;
 
       if (patientsError) throw patientsError;
 
