@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useContext, useMemo, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
 import useClickOutside from '../../hooks/useClickOutside';
 import {
   Search,
@@ -57,8 +56,6 @@ const formatReadableDate = (dateString) => {
 };
 
 const Inventory = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
   const { alert: customAlert, confirm } = useModal();
   const { user } = useContext(AuthContext);
   const [userScope, setUserScope] = useState({ role: 'user', stationId: null, stationName: null, userId: user?.id || null });
@@ -169,6 +166,8 @@ const Inventory = () => {
         id: row.id,
         quantity: Number(row.quantity) || 0,
         batch: row.batch || 'N/A',
+        unit: row.unit || grouped[groupKey].unit,
+        brand: row.brand || grouped[groupKey].brand,
         last_updated: row.last_updated || null
       });
     });
@@ -289,7 +288,7 @@ const Inventory = () => {
       setPendingStockAlerts({ count: alerts.length, stations, vaccineIds });
     } catch (error) {
       console.error('Error loading pending stock alerts:', error);
-      setPendingStockAlerts({ count: 0, stations: [] });
+      setPendingStockAlerts({ count: 0, stations: [], vaccineIds: [] });
     }
   };
 
@@ -1642,6 +1641,7 @@ const Inventory = () => {
                                     </div>
                                     <div style={{ fontSize: '12px', color: '#666', lineHeight: '1.6', marginBottom: '12px' }}>
                                       <div><strong>Brand:</strong> {subItem.brand || 'N/A'}</div>
+                                      <div><strong>Unit:</strong> {subItem.unit || 'N/A'}</div>
                                       <div><strong>Quantity:</strong> {subItem.quantity} / {subItem.max_stock} ({subPercentage}%)</div>
                                       <div><strong>Stock Status:</strong> <span className={`status-badge ${subStatus.class}`} style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '3px' }}>{subStatus.label}</span></div>
                                       <div><strong>Expiration:</strong> {subItem.expiration_date ? new Date(subItem.expiration_date).toLocaleDateString() : 'N/A'}</div>
@@ -2145,8 +2145,8 @@ const Inventory = () => {
                       </td>
                       <td style={{ padding: '8px 16px', fontSize: '12px', color: '#666' }}></td>
                       <td style={{ padding: '8px 16px', fontSize: '12px', textAlign: 'center', color: '#555' }}>{variant.quantity}</td>
-                      <td style={{ padding: '8px 16px', fontSize: '11px', color: '#999' }}></td>
-                      <td style={{ padding: '8px 16px', fontSize: '11px', color: '#999' }}></td>
+                      <td style={{ padding: '8px 16px', fontSize: '11px', color: '#666' }}>{variant.unit || 'N/A'}</td>
+                      <td style={{ padding: '8px 16px', fontSize: '11px', color: '#666' }}>{variant.brand || 'N/A'}</td>
                       <td style={{ padding: '8px 16px', fontSize: '11px', color: '#999' }}>
                         Updated: {variant.last_updated ? new Date(variant.last_updated).toLocaleDateString() : 'N/A'}
                       </td>
