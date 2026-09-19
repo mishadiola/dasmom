@@ -309,12 +309,38 @@ class BabyService {
         return false;
       });
 
-        const deliveryRecords = filtered.map(d => {
+      const motherIds = [...new Set(filtered.map(delivery => delivery.patient_basic_info?.id).filter(Boolean))];
+      const [{ data: mothers }, { data: pregnancies }, { data: visits }] = await Promise.all([
+        supabase.from('patient_basic_info').select('id, date_of_birth').in('id', motherIds),
+        supabase.from('pregnancy_info').select('patient_id, pregnancy_type, gravida, created_at').in('patient_id', motherIds).order('created_at', { ascending: false }),
+        supabase.from('prenatal_visits').select('patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm').in('patient_id', motherIds).eq('status', 'Attended').order('visit_date', { ascending: false })
+      ]);
+      const motherMap = new Map((mothers || []).map(mother => [mother.id, mother]));
+      const latestPregnancyMap = new Map();
+      (pregnancies || []).forEach(pregnancy => {
+        if (pregnancy.patient_id && !latestPregnancyMap.has(pregnancy.patient_id)) {
+          latestPregnancyMap.set(pregnancy.patient_id, pregnancy);
+        }
+      });
+      const latestVisitMap = new Map();
+      (visits || []).forEach(visit => {
+        if (visit.patient_id && !latestVisitMap.has(visit.patient_id)) {
+          latestVisitMap.set(visit.patient_id, visit);
+        }
+      });
+
+      const deliveryRecords = filtered.map(d => {
         const newborn = Array.isArray(d.newborns) ? d.newborns[0] : d.newborns;
         const staff = Array.isArray(d.staff_profiles) ? d.staff_profiles[0] : d.staff_profiles;
+        const motherId = d.patient_basic_info?.id || '';
+        const riskAssessment = this.patientService.getPregnancyRisk(
+          motherMap.get(motherId),
+          latestPregnancyMap.get(motherId),
+          latestVisitMap.get(motherId)
+        );
         return {
           id: d.id,
-          patientId: d.patient_basic_info?.id || '',
+          patientId: motherId,
           patientName: `${d.patient_basic_info?.first_name || ''} ${d.patient_basic_info?.last_name || ''}`.trim(),
           stationId: d.patient_basic_info?.station_ass || null,
           station: d.patient_basic_info?.stations?.station_name || d.patient_basic_info?.station_ass || 'Unassigned',
@@ -323,7 +349,7 @@ class BabyService {
           deliveryType: d.delivery_type,
           deliveryMode: d.delivery_mode || 'N/A',
           gestationalAge: d.gestational_age || 'N/A',
-          riskLevel: d.risk_level || 'Normal',
+          riskLevel: riskAssessment.riskLevel,
           complications: Array.isArray(d.complications) && d.complications.length ? d.complications.join(', ') : 'None',
           babyName: newborn?.baby_name || null,
           babyOutcome: newborn?.condition_at_birth || 'Healthy',

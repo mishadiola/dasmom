@@ -182,7 +182,7 @@ export default class PatientService {
       // 2. Get all pregnancy history rows so current patient status is based on the latest entry.
       const { data: pregnancies, error: err2 } = await this.supabase
         .from('pregnancy_info')
-        .select('patient_id, lmd, edd, pregn_postp, gravida, para, miscarriage_info, created_at');
+        .select('patient_id, lmd, edd, pregn_postp, pregnancy_type, gravida, para, miscarriage_info, created_at');
       if (err2) throw err2;
 
       const latestPregMap = new Map();
@@ -199,7 +199,7 @@ export default class PatientService {
       // 3. Get prenatal visits and compute attended visit totals plus the next appointment reference.
       const { data: visits, error: err3 } = await this.supabase
         .from('prenatal_visits')
-        .select('patient_id, visit_date, next_appt_date, status, risk_factors, calculated_risk')
+        .select('patient_id, visit_date, next_appt_date, status, risk_factors, calculated_risk, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm')
         .order('visit_date', { ascending: false });
       if (err3) throw err3;
 
@@ -252,8 +252,9 @@ export default class PatientService {
         const trimester = lmp ? this.getTrimesterFromWeek(weeks) : 0;
 
         const latestVisit = latestAttendedVisitMap.get(p.id);
-        const risk = latestVisit?.calculated_risk || 'Normal';
-        const riskFactors = latestVisit?.risk_factors ? latestVisit.risk_factors.split(',').map(s => s.trim()).filter(Boolean) : [];
+        const riskAssessment = this.getPregnancyRisk(p, pgi || {}, latestVisit);
+        const risk = riskAssessment.riskLevel;
+        const riskFactors = riskAssessment.riskFactors;
 
         // Format next appointment date, only show current or future appointments
         const rawNextAppt = nextApptMap.get(p.id) || null;
@@ -318,6 +319,8 @@ export default class PatientService {
           nextAppt,
           totalVisits: attendedCountMap.get(p.id) || 0,
           riskFactors,
+          gravida: riskAssessment.gravida,
+          pregnancyType: riskAssessment.pregnancyType,
           patientType,
           type: patientType,
           archiveStatus,
@@ -412,6 +415,50 @@ export default class PatientService {
       return 'Hypotension (Low)';
     }
     return 'Normal';
+  }
+
+  getPregnancyRisk(patient = {}, pregnancy = {}, visit = null) {
+    const factors = [];
+    const addFactor = (label) => {
+      if (label && !factors.includes(label)) factors.push(label);
+    };
+    const age = patient.date_of_birth ? Number(this.calculateAge(patient.date_of_birth)) : null;
+    const gravida = Number.parseInt(pregnancy.gravida, 10);
+    const pregnancyType = String(pregnancy.pregnancy_type || '').toLowerCase();
+    const riskText = String(visit?.risk_factors || '').toLowerCase();
+
+    if (age !== null && (age < 18 || age > 35)) addFactor(`Age ${age}`);
+    if (Number.isFinite(gravida) && gravida >= 3) addFactor(`Gravida ${gravida}`);
+    if (pregnancyType && pregnancyType !== 'singleton') addFactor('Multiple pregnancy');
+    if (riskText.includes('anemia') || riskText.includes('anaemia')) addFactor('Anemia');
+
+    if (this.isBPHighRisk(visit?.bp_systolic, visit?.bp_diastolic)) {
+      addFactor(this.getBPStatus(visit.bp_systolic, visit.bp_diastolic));
+    }
+
+    const temperature = Number(visit?.temp_c);
+    if (Number.isFinite(temperature) && (temperature < 35.1 || temperature > 37.5)) {
+      addFactor(temperature < 35.1 ? 'Hypothermia' : 'Fever');
+    }
+    const pulse = Number(visit?.pulse_bpm);
+    if (Number.isFinite(pulse) && (pulse < 60 || pulse > 100)) addFactor('Abnormal pulse');
+    const respiratoryRate = Number(visit?.resp_rate_cpm);
+    if (Number.isFinite(respiratoryRate) && (respiratoryRate < 12 || respiratoryRate > 20)) {
+      addFactor('Abnormal respiratory rate');
+    }
+    const fetalHeartRate = Number(visit?.fhr_bpm);
+    if (Number.isFinite(fetalHeartRate) && (fetalHeartRate < 110 || fetalHeartRate > 160)) {
+      addFactor('Abnormal fetal heart rate');
+    }
+
+    return {
+      isHighRisk: factors.length > 0,
+      riskLevel: factors.length > 0 ? 'High Risk' : 'Low Risk',
+      riskFactors: factors,
+      age: Number.isFinite(age) ? age : null,
+      gravida: Number.isFinite(gravida) ? gravida : null,
+      pregnancyType: pregnancy.pregnancy_type || 'Singleton',
+    };
   }
 
   async getAllMidwives() {
@@ -1445,7 +1492,7 @@ async getSlotCount(dateStr, timeSlot) {
 
       const { data: visits, error } = await this.supabase
         .from('prenatal_visits')
-        .select('patient_id, calculated_risk, created_at')
+        .select('patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm')
         .eq('status', 'Attended')
         .order('visit_date', { ascending: false });
 
@@ -1453,7 +1500,7 @@ async getSlotCount(dateStr, timeSlot) {
 
       const { data: pregnancies, error: pregError } = await this.supabase
         .from('pregnancy_info')
-        .select('patient_id, pregn_postp, created_at')
+        .select('patient_id, pregn_postp, pregnancy_type, gravida, created_at')
         .order('created_at', { ascending: false });
 
       if (pregError) throw pregError;
@@ -1480,14 +1527,26 @@ async getSlotCount(dateStr, timeSlot) {
         if (!preg || preg.pregn_postp?.toLowerCase() !== 'pregnant') return;
 
         const existing = latestVisitMap.get(v.patient_id);
-        if (!existing || new Date(v.created_at) > new Date(existing.created_at)) {
+        if (!existing || new Date(v.visit_date) > new Date(existing.visit_date)) {
           latestVisitMap.set(v.patient_id, v);
         }
       });
 
-      const highRiskCount = Array.from(latestVisitMap.values()).filter(visit => {
-        return visit.calculated_risk &&
-               visit.calculated_risk.toLowerCase().includes('high');
+      const { data: patients, error: patientError } = await this.supabase
+        .from('patient_basic_info')
+        .select('id, date_of_birth');
+      if (patientError) throw patientError;
+      const patientMap = new Map((patients || []).map(patient => [patient.id, patient]));
+
+      const highRiskCount = Array.from(latestPregMap.entries()).filter(([patientId, pregnancy]) => {
+        if (pregnancy.pregn_postp?.toLowerCase() !== 'pregnant') return false;
+        if (!includeArchived && archivedPatientIds.has(patientId)) return false;
+        if (deliveredPatients.has(patientId)) return false;
+        return this.getPregnancyRisk(
+          patientMap.get(patientId),
+          pregnancy,
+          latestVisitMap.get(patientId) || null
+        ).isHighRisk;
       }).length;
 
       return { highRiskCount };
@@ -1524,7 +1583,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
     const { data: pregnancies } = await this.supabase
       .from('pregnancy_info')
-      .select('patient_id, pregn_postp, created_at')
+      .select('patient_id, pregn_postp, pregnancy_type, gravida, created_at')
       .order('created_at', { ascending: false });
 
     const latestPregMap = new Map();
@@ -1547,6 +1606,10 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         status,
         bp_systolic,
         bp_diastolic,
+        temp_c,
+        pulse_bpm,
+        resp_rate_cpm,
+        fhr_bpm,
         next_appt_date,
         next_appt_type,
         weight_kg,
@@ -1584,17 +1647,11 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
     return Array.from(latestAttendedByPatient.values()).map((visit) => {
       const patient = visit.patient_basic_info || {};
-      const age = patient.date_of_birth ? this.calculateAge(patient.date_of_birth) : null;
-      const ageNum = age && age !== 'N/A' ? parseInt(age) : null;
-      const isAgeHighRisk = ageNum !== null && (ageNum < 18 || ageNum > 35);
-      const currentRisk = visit.calculated_risk || 'Normal';
-      const isHighRisk = currentRisk.toLowerCase().includes('high') || isAgeHighRisk;
-
-      const finalRisk = isHighRisk
-        ? 'High Risk'
-        : currentRisk.toLowerCase().includes('monitor')
-        ? 'Medium Risk'
-        : currentRisk || 'Normal';
+      const pregnancy = latestPregMap.get(visit.patient_id) || {};
+      const riskAssessment = this.getPregnancyRisk(patient, pregnancy, visit);
+      const ageNum = riskAssessment.age;
+      const isHighRisk = riskAssessment.isHighRisk;
+      const finalRisk = riskAssessment.riskLevel;
 
       const gestationalAge = visit.gestational_age ? parseInt(visit.gestational_age) || 0 : 0;
       const weeks = gestationalAge;
@@ -1607,9 +1664,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         edd.setDate(edd.getDate() + 280);
       }
 
-      const conditionDisplay = visit.risk_factors
-        ? visit.risk_factors
-        : 'High‑risk pregnancy';
+      const conditionDisplay = riskAssessment.riskFactors.join(', ') || 'High-risk pregnancy';
 
       return {
         id: patient.id || visit.patient_id,
@@ -1623,7 +1678,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         created_at: patient.created_at,
         riskLevel: finalRisk,
         condition: conditionDisplay,
-        gravida: null,
+        gravida: riskAssessment.gravida,
         lmd: lmd ? lmd.toISOString().split('T')[0] : null,
         edd: edd ? edd.toISOString().split('T')[0] : null,
         bp: visit.bp_systolic && visit.bp_diastolic ? `${visit.bp_systolic}/${visit.bp_diastolic}` : null,
@@ -1634,8 +1689,8 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           ? this.getBPStatus(visit.bp_systolic, visit.bp_diastolic)
           : null,
         weight_kg: visit.weight_kg || null,
-        pregnancyType: 'Singleton',
-        isMultipleBirth: false,
+        pregnancyType: riskAssessment.pregnancyType,
+        isMultipleBirth: riskAssessment.pregnancyType.toLowerCase() !== 'singleton',
         nextVisit: visit.next_appt_date
           ? new Date(visit.next_appt_date).toLocaleDateString('en-US', {
               month: 'short',
@@ -2718,7 +2773,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
       let patientsQuery = this.supabase
         .from('patient_basic_info')
-        .select('id, station_ass, station_ass, municipality, province, stations:station_ass (station_name)');
+        .select('id, station_ass, station_ass, municipality, province, date_of_birth, stations:station_ass (station_name)');
       if (isStationRestricted) patientsQuery = patientsQuery.eq('station_ass', stationId);
       const { data: patients, error: patientsError } = await patientsQuery;
 
@@ -2785,7 +2840,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
       const { data: pregnancies, error: pregError } = await this.supabase
         .from('pregnancy_info')
-        .select('patient_id, pregn_postp, lmd, edd, created_at')
+        .select('patient_id, pregn_postp, pregnancy_type, gravida, lmd, edd, created_at')
         .order('created_at', { ascending: false });
 
       if (pregError) throw pregError;
@@ -2803,7 +2858,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
       const { data: visits, error: visitsError } = await this.supabase
         .from('prenatal_visits')
-        .select('patient_id, visit_date, status, calculated_risk, risk_factors, trimester')
+        .select('patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm, trimester')
         .eq('status', 'Attended')
         .order('visit_date', { ascending: false });
 
@@ -2868,8 +2923,8 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
             else if (trimester === 3) station.trimester.third++;
           }
           const latestVisit = latestAttendedVisitMap.get(patientId);
-          const risk = latestVisit?.calculated_risk || 'Normal';
-          if (risk !== 'Normal') station.highRisk++;
+          const riskAssessment = this.getPregnancyRisk(patient, latestPreg, latestVisit);
+          if (riskAssessment.isHighRisk) station.highRisk++;
           const patientVaccinations = (vaccinations || []).filter(v => v.patient_id === patientId && v.status === 'Completed');
           if (patientVaccinations.length > 0) station.totalMaternalVaccinated++;
           const patientSupplements = (supplements || []).filter(s => s.patient_id === patientId && s.status === 'Completed');

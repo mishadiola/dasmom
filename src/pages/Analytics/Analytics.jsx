@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import supabase from '../../config/supabaseclient';
+import PatientService from '../../services/patientservice';
 import '../../styles/pages/Analytics.css';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -177,8 +178,8 @@ const Analytics = () => {
                     { data: newborns }
                 ] = await Promise.all([
                     supabase.from('patient_basic_info').select('id, first_name, last_name, station_ass, stations:station_ass(station_name), date_of_birth, created_at'),
-                    supabase.from('pregnancy_info').select('patient_id, pregn_postp, lmd, edd, gravida, para, miscarriage_info, created_at'),
-                    supabase.from('prenatal_visits').select('id, patient_id, visit_date, status, calculated_risk, risk_factors, next_appt_date, next_appt_type'),
+                    supabase.from('pregnancy_info').select('patient_id, pregn_postp, pregnancy_type, lmd, edd, gravida, para, miscarriage_info, created_at'),
+                    supabase.from('prenatal_visits').select('id, patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm, next_appt_date, next_appt_type'),
                     supabase.from('deliveries').select('id, mother_id, delivery_date, delivery_type, complications, risk_level'),
                     supabase.from('vaccinations').select('id, patient_id, newborn_id, status, dose_number, scheduled_vaccination, vaccinated_date'),
                     supabase.from('newborns').select('id, mother_id, delivery_id')
@@ -249,43 +250,48 @@ const Analytics = () => {
             return true;
         };
 
-        // Determine latest visit for each patient to get accurate risk factors
+        const riskService = new PatientService();
+
+        // Determine latest attended visit for each patient so resolved risk is removed.
         const latestVisits = {};
         dbData.visits.forEach(v => {
-            if (!v.patient_id) return;
+            if (!v.patient_id || v.status !== 'Attended') return;
             const existing = latestVisits[v.patient_id];
             if (!existing || new Date(v.visit_date) > new Date(existing.visit_date)) {
                 latestVisits[v.patient_id] = v;
             }
         });
 
-        // Determine patient trimesters & risk from pregnancy info
-        const patientDetails = {};
+        const latestPregnancies = {};
         dbData.pregnancies.forEach(p => {
             if (!p.patient_id) return;
+            const existing = latestPregnancies[p.patient_id];
+            if (!existing || new Date(p.created_at) > new Date(existing.created_at)) {
+                latestPregnancies[p.patient_id] = p;
+            }
+        });
+
+        // Determine patient trimesters and risk from the latest pregnancy and visit.
+        const patientDetails = {};
+        dbData.patients.forEach(patient => {
+            const p = latestPregnancies[patient.id];
+            if (!p) return;
             let weeks = 0;
             if (p.lmd) {
                 const diffTime = new Date() - new Date(p.lmd);
                 weeks = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 7));
             }
             const tri = weeks <= 12 ? '1' : weeks <= 26 ? '2' : '3';
-            
             const visit = latestVisits[p.patient_id] || {};
-            let riskGroup = 'Low';
-            const riskStr = (p.calculated_risk || p.risk_level || visit.calculated_risk || 'Normal').toLowerCase();
-            if (riskStr.includes('critical') || riskStr.includes('high') || riskStr.includes('warning')) {
-                riskGroup = 'High';
-            } else if (riskStr.includes('moderate') || riskStr.includes('monitor')) {
-                riskGroup = 'Moderate';
-            }
+            const assessment = riskService.getPregnancyRisk(patient, p, visit);
 
             patientDetails[p.patient_id] = {
                 trimester: tri,
-                risk: riskGroup,
+                risk: assessment.isHighRisk ? 'High' : 'Low',
                 status: p.pregn_postp,
                 created_at: p.created_at,
                 lmd: p.lmd,
-                risk_factors: visit.risk_factors || ''
+                risk_factors: assessment.riskFactors.join(', ')
             };
         });
 
@@ -727,9 +733,10 @@ const Analytics = () => {
             return true;
         };
 
+        const riskService = new PatientService();
         const latestVisits = {};
         dbData.visits.forEach(v => {
-            if (!v.patient_id) return;
+            if (!v.patient_id || v.status !== 'Attended') return;
             const existing = latestVisits[v.patient_id];
             if (!existing || new Date(v.visit_date) > new Date(existing.visit_date)) latestVisits[v.patient_id] = v;
         });
@@ -751,8 +758,14 @@ const Analytics = () => {
 
             let detail = { risk: 'Low', status: 'Pregnant', risk_factors: '' };
             const v = latestVisits[pat.id];
-            if (v) detail = { risk: v.calculated_risk || 'Low', status: 'Pregnant', risk_factors: v.risk_factors || '' };
-            else if (preg) detail = { risk: preg.risk_level || 'Low', status: 'Pregnant', risk_factors: '' };
+            if (preg) {
+                const assessment = riskService.getPregnancyRisk(pat, preg, v);
+                detail = {
+                    risk: assessment.isHighRisk ? 'High Risk' : 'Low Risk',
+                    status: 'Pregnant',
+                    risk_factors: assessment.riskFactors.join(', ')
+                };
+            }
 
             let age = 25;
             if (pat.date_of_birth) {
