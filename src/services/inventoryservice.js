@@ -525,6 +525,7 @@ class InventoryService {
       let query = supabase
         .from('vaccine_inventory')
         .select('id, vaccine_name, quantity, unit, max_quantity, created_by, created_at, brand, expiration_date, doses, batch, manufactured_date')
+        .order('created_at', { ascending: false })
         .limit(200);
 
       if (!isAdmin) {

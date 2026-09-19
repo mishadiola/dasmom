@@ -2709,9 +2709,6 @@ const Inventory = () => {
         </div>
       )}
 
-      {showAddModal && renderAddModal()}
-      {showUpdateModal && renderUpdateModal()}
-
       <ExportModal 
         isOpen={showExportModal} 
         onClose={() => setShowExportModal(false)} 
