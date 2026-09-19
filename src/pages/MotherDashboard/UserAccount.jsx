@@ -75,7 +75,7 @@ const UserAccount = () => {
                     suffix: patient.suffix || '',
                     dateOfBirth: patient.date_of_birth,
                     age: getAge(patient.date_of_birth),
-                    bloodType: patient.bloodtype || 'N/A',
+                    bloodType: patient.blood_type || patient.bloodtype || 'N/A',
                     civilStatus: patient.civil_status || 'N/A',
                     phone: patient.contact_no || 'N/A',
                     email: authUser?.email || 'N/A',

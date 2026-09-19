@@ -511,7 +511,7 @@ export default class PatientService {
     // Search by first_name
     const firstNameQuery = applyStationFilter(this.supabase
       .from('patient_basic_info')
-      .select('id, first_name, last_name, station_ass, province, stations:station_ass (station_name)')
+      .select('id, first_name, last_name, station_ass, province, blood_type, stations:station_ass (station_name)')
       .ilike('first_name', `%${safeTerm}%`)
       .order('created_at', { ascending: false })
       .limit(10));
@@ -522,7 +522,7 @@ export default class PatientService {
     // Search by last_name
     const lastNameQuery = applyStationFilter(this.supabase
       .from('patient_basic_info')
-      .select('id, first_name, last_name, station_ass, province, stations:station_ass (station_name)')
+      .select('id, first_name, last_name, station_ass, province, blood_type, stations:station_ass (station_name)')
       .ilike('last_name', `%${safeTerm}%`)
       .order('created_at', { ascending: false })
       .limit(10));
@@ -533,7 +533,7 @@ export default class PatientService {
     // Search by station label stored via stations relationship
     const stationQuery = applyStationFilter(this.supabase
       .from('patient_basic_info')
-      .select('id, first_name, last_name, station_ass, province, stations:station_ass (station_name)')
+      .select('id, first_name, last_name, station_ass, province, blood_type, stations:station_ass (station_name)')
       .ilike('stations.station_name', `%${safeTerm}%`)
       .order('created_at', { ascending: false })
       .limit(10));
@@ -580,6 +580,7 @@ export default class PatientService {
       return {
         id: patient.id,
         name: `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
+        blood_type: patient.blood_type || patient.bloodtype || null,
         station: stationName ? `${stationName}, ${patient.province || 'N/A'}` : (patient.province || 'N/A')
       };
     });
@@ -1112,7 +1113,7 @@ export default class PatientService {
       station_ass: stationId,
       province: patientData.province,
       philhealthnumber: patientData.philhealth || null,
-      bloodtype: patientData.bloodType || null,
+      blood_type: patientData.bloodType || null,
       created_by: createdBy,
       emergency_contact: {
         name: patientData.emName || null,
@@ -1917,7 +1918,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       dob: patientData.date_of_birth,
       civilStatus: patientData.civil_status,
       philhealth: patientData.philhealthnumber,
-      bloodType: patientData.bloodtype || 'Unknown',
+      bloodType: patientData.blood_type || patientData.bloodtype || 'Unknown',
       emergencyContact,
       medicalConditions: latestAttendedVisit?.risk_factors ? latestAttendedVisit.risk_factors.split(',').map(s=>s.trim()).filter(Boolean) : [],
       risk: latestAttendedVisit?.calculated_risk || 'Low Risk',
@@ -1999,7 +2000,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           last_name: updateData.last_name,
           date_of_birth: updateData.date_of_birth,
           civil_status: updateData.civil_status,
-          bloodtype: updateData.bloodtype,
+          blood_type: updateData.blood_type || updateData.bloodtype || null,
           philhealthnumber: updateData.philhealth,
           contact_no: updateData.phone,
           house_no: updateData.address,

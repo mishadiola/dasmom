@@ -116,7 +116,7 @@ const AddPatient = () => {
             suffix: patient.suffix || prev.suffix,
             dob: patient.date_of_birth || patient.dob || prev.dob,
             age: patient.age || prev.age,
-            bloodType: patient.bloodtype || prev.bloodType,
+            bloodType: patient.blood_type || patient.bloodtype || prev.bloodType,
             civilStatus: patient.civilStatus || patient.civil_status || prev.civilStatus,
             contactNumber: patient.phone || patient.contact_no || prev.contactNumber,
             address: patient.address || patient.house_no || prev.address,

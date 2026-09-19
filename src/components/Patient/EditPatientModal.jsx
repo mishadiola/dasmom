@@ -143,7 +143,7 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
                 last_name: formData.lastName,
                 date_of_birth: formData.dateOfBirth,
                 civil_status: formData.civilStatus,
-                bloodtype: formData.bloodType,
+                blood_type: formData.bloodType,
                 philhealth: formData.philhealth,
                 phone: formData.phone,
                 address: formData.address,
