@@ -696,7 +696,22 @@ const PrenatalVisits = () => {
             return dateB - dateA;
         });
 
-        return { upcoming, missed, completed };
+        if (visitTypeTab !== 'prenatal') {
+            return { upcoming, missed, completed };
+        }
+
+        const latestByPatient = (entries) => Array.from(
+            entries.reduce((patients, entry) => {
+                if (!patients.has(entry.patientId)) patients.set(entry.patientId, entry);
+                return patients;
+            }, new Map()).values()
+        );
+
+        return {
+            upcoming: latestByPatient(upcoming),
+            missed: latestByPatient(missed),
+            completed: latestByPatient(completed)
+        };
     };
 
     const categorizedVisits = categorizeVisits();
