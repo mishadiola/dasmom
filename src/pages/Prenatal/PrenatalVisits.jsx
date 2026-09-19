@@ -696,10 +696,6 @@ const PrenatalVisits = () => {
             return dateB - dateA;
         });
 
-        if (visitTypeTab !== 'prenatal') {
-            return { upcoming, missed, completed };
-        }
-
         const latestByPatient = (entries) => Array.from(
             entries.reduce((patients, entry) => {
                 if (!patients.has(entry.patientId)) patients.set(entry.patientId, entry);
