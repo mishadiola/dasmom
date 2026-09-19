@@ -17,7 +17,7 @@ import { RecordModal } from '../Vaccinations/Vaccinations';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import ExportModal from '../../components/ExportModal';
 import '../../styles/pages/PrenatalVisits.css';
 import Legend from '../../components/Legend/Legend';
@@ -836,7 +836,7 @@ const PrenatalVisits = () => {
                 const head = [Object.keys(data[0])];
                 const body = data.map(obj => Object.values(obj));
                 
-                doc.autoTable({
+                autoTable(doc, {
                     startY: 42,
                     head: head,
                     body: body,
