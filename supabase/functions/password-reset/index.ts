@@ -28,7 +28,7 @@ Deno.serve(async (request) => {
 
     const { data: userRow, error: userError } = await admin
       .from('users')
-      .select('id')
+      .select('id, user_type:user_type(user_type)')
       .eq('email_address', email)
       .maybeSingle();
     if (userError) throw userError;
@@ -36,7 +36,9 @@ Deno.serve(async (request) => {
     // Keep the response generic so this endpoint does not disclose account existence.
     if (!userRow?.id) return json({ sent: true });
 
-    const redirectTo = `${APP_URL.replace(/\/+$/, '')}/reset-password`;
+    const role = String(userRow.user_type?.user_type || '').trim().toLowerCase();
+    const accountType = ['mother', 'patient'].includes(role) ? 'mother' : 'staff';
+    const redirectTo = `${APP_URL.replace(/\/+$/, '')}/reset-password?accountType=${accountType}`;
     const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
       type: 'recovery',
       email,

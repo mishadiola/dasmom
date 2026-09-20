@@ -4,6 +4,8 @@ import supabase from '../config/supabaseclient';
 
 export default function ResetPassword() {
   const navigate = useNavigate();
+  const accountType = new URLSearchParams(window.location.search).get('accountType');
+  const loginPath = accountType === 'mother' ? '/mother-login' : '/login';
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const [message, setMessage] = useState('');
@@ -22,7 +24,7 @@ export default function ResetPassword() {
     setSaving(false);
     if (updateError) return setError(updateError.message);
     setMessage('Your password has been updated. You can now log in.');
-    setTimeout(() => navigate('/login'), 1200);
+    setTimeout(() => navigate(loginPath), 1200);
   };
 
   return (
@@ -36,6 +38,7 @@ export default function ResetPassword() {
         <input id="confirm-password" type="password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} minLength={8} required style={{ display: 'block', width: '100%', margin: '8px 0 16px', padding: 10 }} />
         {error && <p role="alert">{error}</p>}
         {message && <p role="status">{message}</p>}
+        <button type="button" onClick={() => navigate(loginPath)}>Go Back to Login</button>
         <button type="submit" disabled={saving}>{saving ? 'Updating...' : 'Update password'}</button>
       </form>
     </main>
