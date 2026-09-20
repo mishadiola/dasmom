@@ -343,6 +343,32 @@
     cursor: not-allowed;
 }
 
+.google-login-btn {
+    width: 100%;
+    min-height: 46px;
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    border: 1px solid rgba(45, 34, 52, 0.18);
+    border-radius: var(--radius-sm);
+    background: #fff;
+    color: var(--color-text);
+    font: 600 13px var(--font);
+    cursor: pointer;
+}
+
+.google-login-btn:hover:not(:disabled) {
+    border-color: var(--color-rose);
+    background: #fffafc;
+}
+
+.google-login-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 .btn-spinner {
     animation: spin 0.8s linear infinite;
 }

@@ -1,5 +1,16 @@
 # React + Vite
 
+## Account email and Google sign-in
+
+The `create-mother`, `create-staff`, and dedicated `password-reset` Edge Functions share the Brevo sender configured by these Supabase secrets:
+
+- `BREVO_API_KEY`
+- `BREVO_SENDER_EMAIL`
+- `BREVO_SENDER_NAME` (optional)
+- `DASMOM_APP_URL` (optional, defaults to `https://dasmom.vercel.app/`)
+
+Deploy the functions after setting those secrets, including `google-account-check` and `password-reset`. Password reset links always target `https://dasmom.vercel.app/reset-password`. In Supabase Authentication, enable the Google provider with the Google OAuth client ID and secret, and add the deployed DasMom URL plus the Supabase callback URL to the Google OAuth client's authorized redirect URIs. The login UI checks the entered email against an existing DasMom account before starting OAuth; Google must return that same email. Supabase identity linking must remain enabled so the Google identity is attached to the existing Auth user rather than creating a second application account.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

@@ -1,5 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { accountEmail, sendBrevoEmail } from '../_shared/email.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -53,6 +54,7 @@ Deno.serve(async (request) => {
     const password = String(body.password || '');
     const fullName = String(body.fullName || '').trim();
     const role = String(body.role || '').trim().toLowerCase();
+    const stationId = body.stationId ? String(body.stationId) : null;
 
     if (!email || !password || !fullName || !role) {
       return json({ error: 'Email, password, full name, and role are required' }, 400);
@@ -86,9 +88,31 @@ Deno.serve(async (request) => {
 
     if (userError) throw userError;
 
-    return json({ success: true, userId: createdUserId });
+    let stationName = String(body.stationName || '').trim();
+    if (!stationName && stationId) {
+      const { data: station, error: stationError } = await admin
+        .from('stations')
+        .select('station_name')
+        .eq('id', stationId)
+        .maybeSingle();
+      if (stationError) throw stationError;
+      stationName = station?.station_name || '';
+    }
+
+    await sendBrevoEmail(email, 'Welcome to DASMOM', accountEmail({
+      name: fullName,
+      email,
+      role,
+      station: stationName,
+      password,
+      accountType: 'staff',
+    }));
+
+    return json({ success: true, userId: createdUserId, message: 'Staff account created and welcome email sent' });
   } catch (error) {
     if (createdUserId) {
+      const { error: userCleanupError } = await admin.from('users').delete().eq('id', createdUserId);
+      if (userCleanupError) console.error('create-staff public user cleanup failed:', userCleanupError);
       const { error: cleanupError } = await admin.auth.admin.deleteUser(createdUserId);
       if (cleanupError) console.error('create-staff cleanup failed:', cleanupError);
     }

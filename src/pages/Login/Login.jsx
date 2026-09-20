@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Loader2, ShieldCheck, CheckCircle2, Clock, User, X, Mail, Lock, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Loader2, ShieldCheck, CheckCircle2, Clock, User, X, Mail, Lock, AlertCircle, Chrome } from 'lucide-react';
 import '../../styles/pages/Login.css';
 import logo from '../../assets/images/dasmom_logo.png';
 import AuthService from '../../services/authservice.js';
 import { AuthContext } from '../../context/AuthContext';
 import supabase from '../../config/supabaseclient';
+import { DASMOM_APP_URL, PASSWORD_RESET_URL } from '../../config/appConfig';
 
 const authService = new AuthService();
 const MAX_ATTEMPTS = 5;
@@ -165,11 +166,10 @@ export default function Login() {
     if (!forgotEmail.trim()) return;
 
         setIsLoading(true);
-        supabase.functions.invoke('create-mother', {
+        supabase.functions.invoke('password-reset', {
             body: {
-                action: 'password_reset',
                 email: forgotEmail.trim().toLowerCase(),
-                redirectTo: `${window.location.origin}/reset-password`
+            redirectTo: PASSWORD_RESET_URL,
             }
         }).then(() => {
       setIsLoading(false);
@@ -180,6 +180,24 @@ export default function Login() {
             setErrors(prev => ({ ...prev, form: 'Unable to send the reset email. Please try again.' }));
         });
   };
+
+    const handleGoogleLogin = async () => {
+        const normalizedEmail = email.trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+            setErrors(prev => ({ ...prev, email: 'Enter your registered email before using Google sign-in.' }));
+            emailRef.current?.focus();
+            return;
+        }
+
+        setIsLoading(true);
+        setErrors({ email: '', password: '', form: '', general: '' });
+        try {
+            await authService.signInWithGoogle(normalizedEmail, `${DASMOM_APP_URL}/login`);
+        } catch (error) {
+            setErrors(prev => ({ ...prev, form: error.message || 'Google sign-in failed.' }));
+            setIsLoading(false);
+        }
+    };
 
   const closeForgot = () => {
     setShowForgot(false);
@@ -341,6 +359,11 @@ export default function Login() {
                         {isLoading ? <Loader2 className="btn-spinner" size={20} aria-hidden="true" /> : isLocked ? `Locked · ${lockTimer}s` : 'Login'}
                     </button>
                 </form>
+
+                <button type="button" className="google-login-btn" onClick={handleGoogleLogin} disabled={isLoading || isLocked}>
+                    <Chrome size={18} aria-hidden="true" />
+                    Sign in with Google
+                </button>
 
                 <div className="last-login" aria-label="Last activity"><Clock size={12} aria-hidden="true" /><span>Last login: {lastLogin.time} · {lastLogin.device}</span></div>
                 <div className="login-notice" role="note"><p>Authorized personnel only. Access is monitored and recorded for security purposes.</p></div>

@@ -1,6 +1,7 @@
 
 import supabase from '../config/supabaseclient';
 import { getRoleConfig } from '../config/roleConfig';
+import { DASMOM_APP_URL } from '../config/appConfig';
 
 export default class AuthService {
   constructor() {
@@ -129,7 +130,7 @@ export default class AuthService {
     }
   }
 
-  async createUserAccount({ email, password, role, metadata = {} }) {
+  async createUserAccount({ email, password, role, metadata = {}, stationId = null, stationName = '' }) {
     const normalizedEmail = (email || '').trim().toLowerCase();
     if (!normalizedEmail) {
       throw new Error('Email is required');
@@ -181,6 +182,8 @@ export default class AuthService {
           password,
           role: normalizedRole,
           fullName: metadata?.full_name || normalizedEmail,
+          stationId,
+          stationName,
         }
       }),
       15000
@@ -190,6 +193,24 @@ export default class AuthService {
     if (!functionData?.userId) throw new Error('Staff account function did not return a user ID');
 
     return { id: functionData.userId };
+  }
+
+  async signInWithGoogle(email, redirectTo = `${DASMOM_APP_URL}/login`) {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (!normalizedEmail) throw new Error('Enter the email registered for your DasMom account first.');
+
+    const { data: check, error: checkError } = await this.supabase.functions.invoke('google-account-check', {
+      body: { email: normalizedEmail },
+    });
+    if (checkError) throw checkError;
+    if (!check?.allowed) throw new Error(check?.error || 'This email is not registered for a DasMom account.');
+
+    localStorage.setItem('dasmom_google_email', normalizedEmail);
+    const { error } = await this.supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo },
+    });
+    if (error) throw error;
   }
 
   async login(email, password) {

@@ -34,9 +34,22 @@ export const AuthProvider = ({ children }) => {
             console.log('AuthContext: No active session, user not loaded');
           }
         } else {
+          const expectedGoogleEmail = localStorage.getItem('dasmom_google_email');
+          const sessionEmail = session.user.email?.trim().toLowerCase();
+          if (expectedGoogleEmail && sessionEmail !== expectedGoogleEmail) {
+            localStorage.removeItem('dasmom_google_email');
+            await supabase.auth.signOut();
+            throw new Error('Use Google with the same email registered for your DasMom account.');
+          }
+
           // Valid session exists - load full user data
           const current = await authService.getAuthUser();
+          localStorage.removeItem('dasmom_google_email');
           if (isMounted && requestId === initRequest) {
+            if (!current) {
+              await supabase.functions.invoke('google-account-check', { body: { action: 'cleanup' } });
+              await supabase.auth.signOut();
+            }
             setUser(current);
             console.log('AuthContext: User loaded from active session', current);
           }

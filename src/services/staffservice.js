@@ -428,6 +428,8 @@ export default class StaffService {
         email,
         password,
         role,
+        stationId,
+        stationName: station || '',
         metadata: {
           full_name: fullName,
         }

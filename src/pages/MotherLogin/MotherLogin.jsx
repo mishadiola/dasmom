@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { 
-    Mail, Lock, Eye, EyeOff, Loader2, 
+    Mail, Lock, Eye, EyeOff, Loader2, Chrome,
     Calendar, Activity, Heart, Baby, ArrowLeft
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -11,13 +11,20 @@ import { AuthContext } from '../../context/AuthContext';
 import { useModal } from '../../context/ModalContext';
 import supabase from '../../config/supabaseclient';
 import { useLanguage } from '../../context/LanguageContext';
+import { DASMOM_APP_URL, PASSWORD_RESET_URL } from '../../config/appConfig';
 
 const MotherLogin = () => {
     const navigate = useNavigate();
     const { alert: customAlert } = useModal();
-    const { setUser } = useContext(AuthContext);
+    const { user, setUser, isAuthLoading } = useContext(AuthContext);
     const { t } = useLanguage();
     const authService = new AuthService();
+
+    React.useEffect(() => {
+        if (!isAuthLoading && user) {
+            navigate(authService.getRedirectRoute(user.role), { replace: true });
+        }
+    }, [user, isAuthLoading, navigate]);
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -31,11 +38,10 @@ const MotherLogin = () => {
 
         setIsLoading(true);
         try {
-            await supabase.functions.invoke('create-mother', {
+            await supabase.functions.invoke('password-reset', {
                 body: {
-                    action: 'password_reset',
                     email: resetEmail.trim().toLowerCase(),
-                    redirectTo: `${window.location.origin}/reset-password`
+                    redirectTo: PASSWORD_RESET_URL,
                 }
             });
             await customAlert({ title: t('login_reset_title'), text: t('login_reset_text'), iconType: 'success' });
@@ -69,6 +75,22 @@ const MotherLogin = () => {
         setIsLoading(false);
     }
 };
+
+    const handleGoogleLogin = async () => {
+        const normalizedEmail = email.trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+            await customAlert({ title: t('login_error_title'), text: 'Enter your registered email before using Google sign-in.', iconType: 'danger' });
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            await authService.signInWithGoogle(normalizedEmail, `${DASMOM_APP_URL}/mother-login`);
+        } catch (error) {
+            await customAlert({ title: t('login_error_title'), text: error.message || 'Google sign-in failed.', iconType: 'danger' });
+            setIsLoading(false);
+        }
+    };
 
     const highlights = [
         { icon: Activity, text: t('login_feature1') },
@@ -154,6 +176,10 @@ const MotherLogin = () => {
                                 </a>
                             </div>
                         </form>
+                        <button type="button" className="ml-google-btn" onClick={handleGoogleLogin} disabled={isLoading}>
+                            <Chrome size={18} aria-hidden="true" />
+                            Sign in with Google
+                        </button>
                     </div>
 
                     {/* Right Panel - Welcome Info */}

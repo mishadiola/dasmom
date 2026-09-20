@@ -22,7 +22,7 @@ export default function ResetPassword() {
     setSaving(false);
     if (updateError) return setError(updateError.message);
     setMessage('Your password has been updated. You can now log in.');
-    setTimeout(() => navigate('/mother-login'), 1200);
+    setTimeout(() => navigate('/login'), 1200);
   };
 
   return (

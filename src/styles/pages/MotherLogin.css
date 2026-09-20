@@ -268,6 +268,31 @@
     text-decoration: underline;
 }
 
+.ml-google-btn {
+    width: 100%;
+    min-height: 46px;
+    margin-top: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    border: 1px solid rgba(45, 34, 52, 0.18);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--color-text);
+    font: 600 14px var(--font);
+    cursor: pointer;
+}
+
+.ml-google-btn:hover:not(:disabled) {
+    border-color: var(--color-rose);
+}
+
+.ml-google-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 /* ════════════════════════════
    RIGHT PANEL - WELCOME INFO
 ════════════════════════════ */
