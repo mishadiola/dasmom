@@ -47,6 +47,7 @@ const MotherDashboard = () => {
                     const onboardingKey = `dasmom_onboarding_completed_${authUser.id}`;
                     const hasCompletedOnboarding = localStorage.getItem(onboardingKey) === 'true';
                     if (!hasCompletedOnboarding) {
+                        localStorage.setItem(onboardingKey, 'true');
                         setShowWelcome(true);
                     }
                 }
@@ -80,7 +81,7 @@ const MotherDashboard = () => {
                             date: v.visit_date,
                             time: new Date(v.visit_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
                             type: v.next_appt_type || 'Prenatal Checkup',
-                            staff: (v.assigned_staff && v.assigned_staff.length === 36 && v.assigned_staff.includes('-')) ? 'Healthcare Worker' : (v.assigned_staff || 'Healthcare Worker'),
+                            staff: v.assigned_staff_name || 'Healthcare Worker',
                             status: v.status || 'Scheduled',
                             location: patient.station || ''
                         }));
@@ -106,13 +107,13 @@ const MotherDashboard = () => {
                     let tempVal = 'N/A';
                     
                     const latestVisit = (patient.visits || [])
-                        .filter(v => v.visit_date)
+                        .filter(v => v.visit_date && (v.weight_kg || (v.bp_systolic && v.bp_diastolic) || v.temp_c || v.temperature))
                         .sort((a, b) => new Date(b.visit_date) - new Date(a.visit_date))[0];
 
                     if (latestVisit) {
                         weightVal = latestVisit.weight_kg ? `${latestVisit.weight_kg} kg` : 'N/A';
                         bpVal = latestVisit.bp_systolic && latestVisit.bp_diastolic ? `${latestVisit.bp_systolic}/${latestVisit.bp_diastolic}` : 'N/A';
-                        tempVal = latestVisit.temperature ? `${latestVisit.temperature} °C` : 'N/A';
+                        tempVal = (latestVisit.temp_c || latestVisit.temperature) ? `${latestVisit.temp_c || latestVisit.temperature} °C` : 'N/A';
                     }
 
                     const records = [
@@ -148,11 +149,6 @@ const MotherDashboard = () => {
     };
 
     const handleCloseWelcome = async () => {
-        const auth = new AuthService();
-        const authUser = await auth.getAuthUser();
-        if (authUser?.id) {
-            localStorage.setItem(`dasmom_onboarding_completed_${authUser.id}`, 'true');
-        }
         setShowWelcome(false);
     };
 

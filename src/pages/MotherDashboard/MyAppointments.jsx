@@ -86,10 +86,11 @@ const MyAppointments = () => {
                     .map(v => ({
                         id: v.id,
                         date: v.visit_date,
-                        time: v.visit_date ? new Date(v.visit_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '',
                         type: 'Prenatal',
                         status: v.status || 'Scheduled',
                         location: sanitizeUUID(patient.station, 'Health Station'),
+                        staffName: v.assigned_staff_name,
+                        staffStation: v.assigned_staff_station,
                         notes: v.clinical_notes || '',
                         color: 'green'
                     }));
@@ -103,6 +104,8 @@ const MyAppointments = () => {
                         type: 'Vaccination',
                         status: v.status || 'Scheduled',
                         location: sanitizeUUID(patient.station, 'Health Station'),
+                        staffName: v.assigned_staff_name,
+                        staffStation: v.assigned_staff_station,
                         notes: sanitizeUUID(v.notes || v.vaccine_name, 'Vaccination'),
                         color: 'yellow'
                     }));
@@ -121,6 +124,8 @@ const MyAppointments = () => {
                             type: 'Postpartum',
                             status,
                             location: sanitizeUUID(patient.station, 'Health Station'),
+                            staffName: d.assigned_staff_name,
+                            staffStation: d.assigned_staff_station,
                             notes: status === 'Completed'
                                 ? t('appt_postpartum_attended')
                                 : status === 'Missed'
@@ -276,9 +281,14 @@ const MyAppointments = () => {
                     </span>
                 </div>
                 <div className="appt-meta-row">
-                    <span><Clock size={14} /> {a.time || t('appt_tbd')}</span>
                     <span><MapPin size={14} /> {sanitizeUUID(a.location, 'Dasma I Health Station')}</span>
                 </div>
+                {a.staffName && (
+                    <div className="appt-staff-row">
+                        <span>Health worker: <strong>{a.staffName}</strong></span>
+                        {a.staffStation && <span>Assigned station: <strong>{a.staffStation}</strong></span>}
+                    </div>
+                )}
             </div>
             <div className="appt-actions">
                 <button className="btn-icon-outline desktop-only" title={t('appt_print')} onClick={(e) => e.stopPropagation()}><Printer size={16} /></button>
@@ -482,10 +492,6 @@ const MyAppointments = () => {
                                                             onClick={() => setSelectedAppt(appt)}
                                                             style={{cursor: 'pointer'}}
                                                         >
-                                                            <div className="schedule-time">
-                                                                <Clock size={14} />
-                                                                <span>{appt.time || t('appt_tbd')}</span>
-                                                            </div>
                                                             <div className="schedule-details">
                                                                 <span className="schedule-patient">{appt.type === 'Vaccination' ? appt.notes : `${appt.type} ${t('appt_visit')}`}</span>
                                                                 <span className="schedule-id">{appt.location || ''}</span>
@@ -648,13 +654,19 @@ const MyAppointments = () => {
                                     <span style={{fontWeight: 600}}>{formatReadableDate(selectedAppt.date)}</span>
                                 </div>
                                 <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                                    <span style={{color: '#64748b', fontSize: '13px', fontWeight: 600}}>{t('appt_time')}</span>
-                                    <span style={{fontWeight: 600}}>{selectedAppt.time || t('appt_not_specified')}</span>
-                                </div>
-                                <div style={{display: 'flex', justifyContent: 'space-between'}}>
                                     <span style={{color: '#64748b', fontSize: '13px', fontWeight: 600}}>{t('appt_location')}</span>
                                     <span style={{fontWeight: 600}}>{sanitizeUUID(selectedAppt.location, 'Dasma I Health Station')}</span>
                                 </div>
+                                <div style={{display: 'flex', justifyContent: 'space-between', gap: '16px'}}>
+                                    <span style={{color: '#64748b', fontSize: '13px', fontWeight: 600}}>Health worker</span>
+                                    <span style={{fontWeight: 600, textAlign: 'right'}}>{selectedAppt.staffName || 'Not assigned'}</span>
+                                </div>
+                                {selectedAppt.staffStation && (
+                                    <div style={{display: 'flex', justifyContent: 'space-between', gap: '16px'}}>
+                                        <span style={{color: '#64748b', fontSize: '13px', fontWeight: 600}}>Assigned station</span>
+                                        <span style={{fontWeight: 600, textAlign: 'right'}}>{selectedAppt.staffStation}</span>
+                                    </div>
+                                )}
                                 {selectedAppt.notes && (
                                     <div style={{marginTop: '8px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0'}}>
                                         <span style={{display: 'block', color: '#64748b', fontSize: '12px', fontWeight: 600, marginBottom: '4px'}}>{t('appt_notes')}</span>

@@ -1154,11 +1154,13 @@ const Vaccinations = () => {
                     status,
                     vaccinated_date,
                     scheduled_vaccination,
+                    vaccinated_by,
+                    assigned_staff,
                     notes,
                     created_at,
                     created_by,
                     staff_profiles!vaccinations_created_by_fkey (full_name),
-                    vaccine_inventory (vaccine_name),
+                    vaccine_inventory (vaccine_name, brand, unit, doses, batch, expiration_date),
                     patient_basic_info!vaccinations_patient_id_fkey (id, first_name, last_name, station_ass, stations:station_ass (station_name), province)
                 `)
                 .order('created_at', { ascending: false });
@@ -1271,12 +1273,8 @@ const Vaccinations = () => {
                     patientId = 'Unknown';
                 }
 
-                let vaccineName = record.vaccine_inventory?.vaccine_name;
-                if (!vaccineName && record.notes) {
-                    const match = record.notes.match(/(\d+)(?:st|nd|rd|th) dose of (.+)/);
-                    if (match) vaccineName = match[2];
-                }
-                vaccineName = vaccineName || 'Unknown';
+                const vaccineName = record.vaccine_inventory?.vaccine_name || null;
+                const scheduledVaccination = record.notes?.trim() || 'Scheduled vaccination';
 
                 const dose = record.dose_number ? `${record.dose_number}${record.dose_number === 1 ? 'st' : record.dose_number === 2 ? 'nd' : record.dose_number === 3 ? 'rd' : 'th'} Dose` : 'Unknown';
                 const vaccinationDate = record.vaccinated_date || null;
@@ -1299,7 +1297,9 @@ const Vaccinations = () => {
                     birthDate: birthDate,
                     station: station,
                     type,
-                    vaccine: vaccineName,
+                    vaccine: scheduledVaccination,
+                    actualVaccine: record.vaccine_inventory || null,
+                    scheduledVaccination,
                     dose,
                     date: vaccinationDate,
                     nextDue: scheduledDate,
@@ -1307,6 +1307,7 @@ const Vaccinations = () => {
                     expirationStatus: expStatus.status,
                     expirationClass: expStatus.class,
                     staff: staffMap.get(record.created_by) || 'Unknown',
+                    vaccinatedBy: staffMap.get(record.vaccinated_by) || staffMap.get(record.assigned_staff) || null,
                     notes: record.notes,
                     status: record.status || (vaccinationDate ? 'Completed' : 'Pending')
                 };
@@ -1954,8 +1955,20 @@ const Vaccinations = () => {
                                                 <span className={`type-badge type-${item.type.toLowerCase()}`}>{item.type}</span>
                                             </td>
                                             <td className="col-item">
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                    <strong>{item.itemNames.length > 2 ? `${item.itemNames.slice(0, 2).join(', ')} + ${item.itemNames.length - 2} more` : item.itemName}</strong>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                    {item.records.map(record => (
+                                                        <div key={record.id}>
+                                                            <strong>{record.scheduledVaccination}</strong>
+                                                            {record.actualVaccine && (
+                                                                <small style={{ display: 'block' }}>
+                                                                    Actual: {record.actualVaccine.vaccine_name}
+                                                                    {record.actualVaccine.brand ? ` · Brand: ${record.actualVaccine.brand}` : ''}
+                                                                    {record.dose ? ` · ${record.dose}` : ''}
+                                                                    {record.vaccinatedBy ? ` · By: ${record.vaccinatedBy}` : ''}
+                                                                </small>
+                                                            )}
+                                                        </div>
+                                                    ))}
                                                     <span className={item.itemType === 'vaccine' ? 'badge-vaccine' : item.itemType === 'supplement' ? 'badge-supplement' : 'badge-vaccine'} style={{ alignSelf: 'flex-start' }}>
                                                         {item.itemType === 'mixed' ? 'Vaccines & Supplements' : item.itemType === 'vaccine' ? 'Vaccine' : 'Supplement'}
                                                     </span>

@@ -156,9 +156,12 @@ export default class NewbornService {
                     dose_number,
                     scheduled_vaccination,
                     vaccinated_date,
+                    notes,
+                    vaccinated_by,
+                    assigned_staff,
                     status,
                     vaccine_inventory (
-                        vaccine_name
+                        vaccine_name, brand, unit, doses, batch, expiration_date
                     )
                 `)
                 .in('newborn_id', babyIds);
@@ -197,13 +200,19 @@ export default class NewbornService {
 
                     return {
                         id: v.id,
-                        vaccine: v.vaccine_inventory?.vaccine_name || 'Unknown',
+                        vaccine: v.vaccine_inventory?.vaccine_name || null,
+                        vaccine_name: v.vaccine_inventory?.vaccine_name || null,
+                        vaccine_inventory: v.vaccine_inventory || null,
+                        notes: v.notes || '',
                         dose: `Dose ${v.dose_number || ''}`.trim(),
+                        dose_number: v.dose_number,
                         status,
                         nextDue: scheduledDate,
                         date: vaccinatedDate,
                         scheduled_vaccination: scheduledDate,
-                        vaccinated_date: vaccinatedDate
+                        vaccinated_date: vaccinatedDate,
+                        vaccinated_by: v.vaccinated_by,
+                        assigned_staff: v.assigned_staff
                     };
                 }).sort((a, b) => {
                     if (!a.nextDue) return 1;

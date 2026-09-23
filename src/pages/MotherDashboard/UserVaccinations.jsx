@@ -5,7 +5,7 @@ import {
     Syringe, Search, Filter, Calendar, 
     CheckCircle2, Clock, AlertCircle, 
     ChevronRight, Info, Download, Printer,
-    HeartPulse, Baby, ArrowLeft
+    HeartPulse, Baby, ArrowLeft, UserRound, MapPin
 } from 'lucide-react';
 import '../../styles/pages/UserVaccinations.css';
 import VaccineDetailModal from '../../components/MotherDashboard/VaccineDetailModal';
@@ -178,7 +178,13 @@ const UserVaccinations = () => {
                                         }[status] || status}
                                     </span>
                                 </div>
-                                <h3 className="uv-vaccine-name">{displayName}</h3>
+                                <h3 className="uv-vaccine-name">Scheduled: {displayName}</h3>
+                                {vaccine.vaccine_inventory && (
+                                    <p className="uv-vaccine-desc">
+                                        Actual Vaccine Given: {vaccine.vaccine_inventory.vaccine_name}
+                                        {vaccine.vaccine_inventory.brand ? ` · Brand: ${vaccine.vaccine_inventory.brand}` : ''}
+                                    </p>
+                                )}
                                 {vaccine.personType === 'child' && (
                                     <p className="uv-vaccine-person">{t('vac_for')} <strong>{vaccine.personName}</strong></p>
                                 )}
@@ -194,13 +200,19 @@ const UserVaccinations = () => {
                                             <span className="value">{new Date(vaccine.vaccinated_date).toLocaleDateString('en-PH')}</span>
                                         </div>
                                     )}
-                                    {vaccine.scheduled_vaccination && vaccine.status !== 'Completed' && (
+                                    {vaccine.scheduled_vaccination && (
                                         <div className="uv-schedule-item">
                                             <span className="label">{t('vac_scheduled')}</span>
                                             <span className="value">{new Date(vaccine.scheduled_vaccination).toLocaleDateString('en-PH')}</span>
                                         </div>
                                     )}
                                 </div>
+                                {(vaccine.assigned_staff_name || vaccine.assigned_staff_station) && (
+                                    <div className="uv-assigned-staff">
+                                        {vaccine.assigned_staff_name && <span><UserRound size={14} /> Health worker: <strong>{vaccine.assigned_staff_name}</strong></span>}
+                                        {vaccine.assigned_staff_station && <span><MapPin size={14} /> Assigned station: <strong>{vaccine.assigned_staff_station}</strong></span>}
+                                    </div>
+                                )}
                                 <div className="uv-card-footer">
                                     <span>{t('vac_click_details')}</span>
                                     <ChevronRight size={14} />

@@ -244,6 +244,34 @@ CREATE POLICY staff_read_staff ON public.staff_profiles FOR SELECT TO authentica
     get_my_role() = 'staff'
     AND id = auth.uid()
   );
+CREATE POLICY patient_read_assigned_staff ON public.staff_profiles FOR SELECT TO authenticated
+  USING (
+    get_my_role() IN ('mother', 'patient')
+    AND (
+      EXISTS (
+        SELECT 1 FROM public.prenatal_visits v
+        WHERE v.patient_id = auth.uid()
+          AND v.assigned_staff = staff_profiles.id
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.vaccinations v
+        WHERE v.patient_id = auth.uid()
+          AND v.assigned_staff = staff_profiles.id
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM public.newborns n
+        JOIN public.vaccinations v ON v.newborn_id = n.id
+        WHERE n.mother_id = auth.uid()
+          AND v.assigned_staff = staff_profiles.id
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.deliveries d
+        WHERE d.mother_id = auth.uid()
+          AND d.attending_staff = staff_profiles.id
+      )
+    )
+  );
 
 -- patient_basic_info
 CREATE POLICY admin_patients ON public.patient_basic_info FOR ALL TO authenticated

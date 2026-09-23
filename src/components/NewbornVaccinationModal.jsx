@@ -54,7 +54,7 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
                 // Deduplicate vaccines by vaccine name and dose number
                 const mappedVaccines = (pending || []).map(v => ({
                     id: v.id,
-                    vaccine: v.vaccine_inventory?.vaccine_name || (v.notes ? v.notes.match(/(\d+)(?:st|nd|rd|th) dose of (.+)/)?.[2] : null) || 'Unknown Vaccine',
+                    vaccine: v.notes?.trim() || v.vaccine_inventory?.vaccine_name || 'Scheduled vaccination',
                     notes: v.notes,
                     dose_number: v.dose_number,
                     scheduled_vaccination: v.scheduled_vaccination

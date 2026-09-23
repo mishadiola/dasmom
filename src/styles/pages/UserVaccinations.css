@@ -240,6 +240,28 @@
     gap: 8px;
 }
 
+.uv-assigned-staff {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid #eef0f4;
+    border-radius: 10px;
+    color: var(--color-text-muted);
+    font-size: 12px;
+}
+
+.uv-assigned-staff span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.uv-assigned-staff strong {
+    color: var(--color-text);
+}
+
 .uv-schedule-item {
     display: flex;
     justify-content: space-between;

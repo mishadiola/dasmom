@@ -1101,7 +1101,10 @@ const PatientProfile = () => {
                                                 const statusBg = status === 'Completed' ? '#d1fae5' : '#fef3c7';
                                                 return (
                                                     <tr key={i} style={{ borderBottom: '1px solid #f8fafc' }}>
-                                                        <td style={{ padding: '20px 16px 20px 0', fontSize: '14px', color: '#0f172a', fontWeight: '600', maxWidth: '180px', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.4' }}>{v.vaccine_name}</td>
+                                                        <td style={{ padding: '20px 16px 20px 0', fontSize: '14px', color: '#0f172a', fontWeight: '600', maxWidth: '260px', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.4' }}>
+                                                            <div>Scheduled: {v.notes || 'Scheduled vaccination'}</div>
+                                                            {v.vaccine_inventory && <small style={{ display: 'block', color: '#64748b', marginTop: '4px' }}>Actual: {v.vaccine_inventory.vaccine_name}{v.vaccine_inventory.brand ? ` · Brand: ${v.vaccine_inventory.brand}` : ''}</small>}
+                                                        </td>
                                                         <td style={{ padding: '20px 16px', fontSize: '14px', color: '#475569', fontWeight: '500' }}>{v.dose_number}</td>
                                                         <td style={{ padding: '20px 16px', fontSize: '14px', color: '#475569', fontWeight: '500' }}>{v.vaccinated_date || v.scheduled_vaccination}</td>
                                                         <td style={{ padding: '20px 0 20px 16px', textAlign: 'right' }}>

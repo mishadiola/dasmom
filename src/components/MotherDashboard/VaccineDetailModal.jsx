@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
     X, Syringe, Calendar, 
-    CheckCircle2, Clock, AlertTriangle, Info
+    CheckCircle2, Clock, AlertTriangle, Info, UserRound, MapPin
 } from 'lucide-react';
 import '../../styles/components/VaccineDetailModal.css';
 import { useLanguage } from '../../context/LanguageContext';
@@ -19,7 +19,12 @@ const VaccineDetailModal = ({ vaccine, onClose }) => {
         }
     };
 
-    const displayName = vaccine.notes || vaccine.vaccine_name || vaccine.name || t('vax_modal_vaccine');
+    const scheduledVaccination = vaccine.notes?.trim() || 'Scheduled vaccination';
+    const actualVaccine = vaccine.vaccine_inventory || null;
+    const assignedStaffName = vaccine.assigned_staff_name || null;
+    const assignedStaffStation = vaccine.assigned_staff_station || null;
+    const vaccinatedBy = vaccine.vaccinated_by_name || null;
+    const displayName = scheduledVaccination;
     const status = vaccine.status || 'Unknown';
     
     const displayStatus = {
@@ -64,7 +69,7 @@ const VaccineDetailModal = ({ vaccine, onClose }) => {
                     <div className="vdm-section">
                         <h3><Calendar size={18} /> {t('vax_modal_details')}</h3>
                         <div className="vdm-details-grid">
-                            {vaccine.scheduled_vaccination && vaccine.status !== 'Completed' && (
+                            {vaccine.scheduled_vaccination && (
                                 <div className="vdm-detail-item">
                                     <span className="label">{t('vax_modal_scheduled_date')}</span>
                                     <span className="value">{new Date(vaccine.scheduled_vaccination).toLocaleDateString('en-PH')}</span>
@@ -80,6 +85,34 @@ const VaccineDetailModal = ({ vaccine, onClose }) => {
                                 <div className="vdm-detail-item">
                                     <span className="label">{t('vax_modal_dose_number')}</span>
                                     <span className="value">{t('vax_modal_dose')} {vaccine.dose_number}</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {actualVaccine && (
+                        <div className="vdm-section">
+                            <h3><Syringe size={18} /> Actual Vaccine Given</h3>
+                            <div className="vdm-details-grid">
+                                <div className="vdm-detail-item"><span className="label">Vaccine</span><span className="value">{actualVaccine.vaccine_name}</span></div>
+                                {actualVaccine.brand && <div className="vdm-detail-item"><span className="label">Brand</span><span className="value">{actualVaccine.brand}</span></div>}
+                                {actualVaccine.doses && <div className="vdm-detail-item"><span className="label">Inventory Doses</span><span className="value">{actualVaccine.doses}</span></div>}
+                                {vaccinatedBy && <div className="vdm-detail-item"><span className="label">Vaccinated By</span><span className="value">{vaccinatedBy}</span></div>}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="vdm-section">
+                        <h3><UserRound size={18} /> Assigned Health Worker</h3>
+                        <div className="vdm-details-grid">
+                            <div className="vdm-detail-item">
+                                <span className="label">Health worker</span>
+                                <span className="value">{assignedStaffName || 'Not assigned'}</span>
+                            </div>
+                            {assignedStaffStation && (
+                                <div className="vdm-detail-item">
+                                    <span className="label"><MapPin size={13} /> Assigned station</span>
+                                    <span className="value">{assignedStaffStation}</span>
                                 </div>
                             )}
                         </div>
