@@ -3,7 +3,7 @@ import {
     Mail, Lock, Eye, EyeOff, Loader2, Chrome,
     Calendar, Activity, Heart, Baby, ArrowLeft
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import '../../styles/pages/MotherLogin.css';
 import logo from '../../assets/images/dasmom_logo.png';
 import AuthService from '../../services/authservice';
@@ -15,16 +15,24 @@ import { DASMOM_APP_URL, PASSWORD_RESET_URL } from '../../config/appConfig';
 
 const MotherLogin = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { alert: customAlert } = useModal();
     const { user, setUser, isAuthLoading } = useContext(AuthContext);
     const { t } = useLanguage();
     const authService = new AuthService();
 
+    const getPostLoginRoute = () => {
+        const from = location.state?.from;
+        return from?.pathname?.startsWith('/')
+            ? `${from.pathname}${from.search || ''}${from.hash || ''}`
+            : authService.getRedirectRoute('mother');
+    };
+
     React.useEffect(() => {
         if (!isAuthLoading && user) {
-            navigate(authService.getRedirectRoute(user.role), { replace: true });
+            navigate(getPostLoginRoute(), { replace: true });
         }
-    }, [user, isAuthLoading, navigate]);
+    }, [user, isAuthLoading, navigate, location.state]);
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -66,7 +74,7 @@ const MotherLogin = () => {
         }
 
         setUser(user);
-        const route = authService.getRedirectRoute(user.role);
+        const route = getPostLoginRoute();
         navigate(route);
 
     } catch (err) {

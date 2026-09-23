@@ -18,7 +18,7 @@ export default function ProtectedRoute({ pageKey, children }) {
     const isMotherView = location.pathname.startsWith('/mother-home');
     const redirectPath = isMotherView ? '/mother-login' : '/';
     console.log(`No user in context, redirecting to ${redirectPath}`);
-    return <Navigate to={redirectPath} replace />;
+    return <Navigate to={redirectPath} replace state={{ from: location }} />;
   }
   const userRole = (user.role || 'user').toLowerCase();
   const config = getRoleConfig(userRole) || { allowedPages: [], redirect: '/' };

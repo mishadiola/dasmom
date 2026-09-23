@@ -6,7 +6,7 @@ const senderName = Deno.env.get('BREVO_SENDER_NAME') || 'DASMOM';
 
 const escapeHtml = (value: unknown) => String(value ?? '')
   .replaceAll('&', '&amp;')
-  .replaceAll('<', '&lt;')
+  .replaceAll('<', '&lt;')   
   .replaceAll('>', '&gt;')
   .replaceAll('"', '&quot;')
   .replaceAll("'", '&#039;');

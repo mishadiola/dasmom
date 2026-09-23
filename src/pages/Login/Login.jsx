@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Loader2, ShieldCheck, CheckCircle2, Clock, User, X, Mail, Lock, AlertCircle, Chrome } from 'lucide-react';
 import '../../styles/pages/Login.css';
 import logo from '../../assets/images/dasmom_logo.png';
@@ -13,6 +13,7 @@ const MAX_ATTEMPTS = 5;
 
 export default function Login() {
   const navigate = useNavigate();
+    const location = useLocation();
   const { user, setUser, isAuthLoading } = useContext(AuthContext);
 
   const emailRef = useRef(null);
@@ -24,18 +25,23 @@ export default function Login() {
 
   const [lastLogin, setLastLogin] = useState({ time: 'Checking...', device: '...' });
 
+    const getPostLoginRoute = (role) => {
+        const from = location.state?.from;
+        if (from?.pathname?.startsWith('/')) {
+            return `${from.pathname}${from.search || ''}${from.hash || ''}`;
+        }
+
+        if (role === 'admin') return '/dashboard';
+        if (role === 'mother') return '/mother-home';
+        return '/dashboard';
+    };
+
   useEffect(() => {
     if (isAuthLoading) return;
     if (!user) return;
 
-    const role = String(user.role || '').toLowerCase();
-    let redirect = '/';
-    if (role === 'admin') redirect = '/dashboard';
-    else if (role === 'mother') redirect = '/mother-home';
-    else redirect = '/dashboard';
-
-    navigate(redirect, { replace: true });
-  }, [user, isAuthLoading, navigate]);
+        navigate(getPostLoginRoute(String(user.role || '').toLowerCase()), { replace: true });
+    }, [user, isAuthLoading, navigate, location.state]);
 
   useEffect(() => {
     try {
@@ -136,10 +142,7 @@ export default function Login() {
           console.warn('Failed to save last login stat:', storageErr);
       }
 
-      let redirect = '/';
-      if (user.role === 'admin') redirect = '/dashboard'; 
-      else if (user.role === 'mother') redirect = '/mother-home'; 
-      else redirect = '/dashboard'; 
+            const redirect = getPostLoginRoute(String(user.role || '').toLowerCase());
 
       console.log('Redirecting to:', redirect);
       navigate(redirect);
