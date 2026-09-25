@@ -1,6 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { accountEmail, sendBrevoEmail } from '../_shared/email.ts';
+import { accountEmail, DUPLICATE_EMAIL_MESSAGE, isDuplicateEmailError, sendBrevoEmail } from '../_shared/email.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -129,6 +129,9 @@ Deno.serve(async (request) => {
 
     return json({ success: true, userId: createdUserId, message: 'Staff account created and welcome email sent' });
   } catch (error) {
+    if (isDuplicateEmailError(error)) {
+      return json({ code: 'EMAIL_ALREADY_EXISTS', error: DUPLICATE_EMAIL_MESSAGE }, 409);
+    }
     if (createdUserId) {
       const { error: userCleanupError } = await admin.from('users').delete().eq('id', createdUserId);
       if (userCleanupError) console.error('create-staff public user cleanup failed:', userCleanupError);

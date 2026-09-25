@@ -4,6 +4,18 @@ const brevoApiKey = Deno.env.get('BREVO_API_KEY');
 const senderEmail = Deno.env.get('BREVO_SENDER_EMAIL');
 const senderName = Deno.env.get('BREVO_SENDER_NAME') || 'DASMOM';
 
+export const DUPLICATE_EMAIL_MESSAGE = 'Email already exists. Please use a different email address.';
+
+export function isDuplicateEmailError(error: unknown) {
+  const candidate = error as { status?: number; code?: string; message?: string };
+  const message = String(candidate?.message || '').toLowerCase();
+  return candidate?.code === 'email_exists'
+    || candidate?.code === 'user_already_exists'
+    || message.includes('already registered')
+    || message.includes('already exists')
+    || (message.includes('email') && message.includes('exist'));
+}
+
 const escapeHtml = (value: unknown) => String(value ?? '')
   .replaceAll('&', '&amp;')
   .replaceAll('<', '&lt;')   

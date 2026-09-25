@@ -1,6 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { accountEmail, APP_URL, escapeHtml, sendBrevoEmail } from '../_shared/email.ts';
+import { accountEmail, APP_URL, DUPLICATE_EMAIL_MESSAGE, escapeHtml, isDuplicateEmailError, sendBrevoEmail } from '../_shared/email.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -126,6 +126,9 @@ Deno.serve(async (request) => {
     await sendBrevoEmail(mother.email, subject, html);
     return json({ sent: true });
   } catch (error) {
+    if (isDuplicateEmailError(error)) {
+      return json({ code: 'EMAIL_ALREADY_EXISTS', error: DUPLICATE_EMAIL_MESSAGE }, 409);
+    }
     if (createdUserId) {
       const { error: cleanupError } = await admin.auth.admin.deleteUser(createdUserId);
       if (cleanupError) console.error('create-mother cleanup failed:', cleanupError);

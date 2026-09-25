@@ -3,6 +3,8 @@ import supabase from '../config/supabaseclient';
 import { getRoleConfig } from '../config/roleConfig';
 import { DASMOM_APP_URL } from '../config/appConfig';
 
+const DUPLICATE_EMAIL_MESSAGE = 'Email already exists. Please use a different email address.';
+
 export default class AuthService {
   constructor() {
     this.supabase = supabase;
@@ -50,6 +52,25 @@ export default class AuthService {
       promise,
       new Promise((_, rej) => timer = setTimeout(() => rej(new Error('Request timed out')), timeoutMs))
     ]).finally(() => clearTimeout(timer));
+  }
+
+  async _throwAccountCreationError(functionError) {
+    const response = functionError?.context;
+    let payload = null;
+
+    try {
+      if (response?.json) {
+        payload = await (response.clone ? response.clone() : response).json();
+      }
+    } catch {
+      payload = null;
+    }
+
+    if (payload?.code === 'EMAIL_ALREADY_EXISTS') {
+      throw new Error(DUPLICATE_EMAIL_MESSAGE);
+    }
+
+    throw new Error('Unable to create account. Please try again.');
   }
 
   async getUserTypeIdByRole(role) {
@@ -161,7 +182,7 @@ export default class AuthService {
         15000
       );
 
-      if (functionError) throw functionError;
+      if (functionError) await this._throwAccountCreationError(functionError);
       if (!functionData?.userId) throw new Error('Patient account function did not return a user ID');
 
       await this.ensurePublicUserRecord({
@@ -189,7 +210,7 @@ export default class AuthService {
       15000
     );
 
-    if (functionError) throw functionError;
+    if (functionError) await this._throwAccountCreationError(functionError);
     if (!functionData?.userId) throw new Error('Staff account function did not return a user ID');
 
     return { id: functionData.userId };
