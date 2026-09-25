@@ -209,6 +209,7 @@ const Inventory = () => {
   const [selectedExistingItem, setSelectedExistingItem] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitInFlightRef = useRef(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedRow, setExpandedRow] = useState(null);
@@ -1014,10 +1015,12 @@ const Inventory = () => {
 
   const handleAddSubmit = async e => {
     e.preventDefault();
+    if (isSubmitting || submitInFlightRef.current) return;
     if (!dateValidation.isValid) {
       alert('Please correct the date errors before adding.');
       return;
     }
+    submitInFlightRef.current = true;
     setIsSubmitting(true);
     try {
       const table = activeTab === 'vaccines' ? 'vaccine_inventory' : 'supplement_inventory';
@@ -1052,6 +1055,7 @@ const Inventory = () => {
       console.error('handleAddSubmit error:', error);
       await customAlert({ title: 'Error', text: 'Failed to add item: ' + error.message, iconType: 'danger' });
     } finally {
+      submitInFlightRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -1101,6 +1105,8 @@ const Inventory = () => {
 
   const handleUpdateQuantity = async e => {
     e.preventDefault();
+    if (isSubmitting || submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
     setIsSubmitting(true);
     try {
       await inventoryService.updateInventoryQuantity(
@@ -1114,12 +1120,15 @@ const Inventory = () => {
     } catch (error) {
       await customAlert({ title: 'Error', text: 'Failed to update quantity: ' + error.message, iconType: 'danger' });
     } finally {
+      submitInFlightRef.current = false;
       setIsSubmitting(false);
     }
   };
 
   const handleDistributionSubmit = async e => {
     e.preventDefault();
+    if (isSubmitting || submitInFlightRef.current) return;
+    submitInFlightRef.current = true;
     setIsSubmitting(true);
     try {
       const table = distForm.item_type === 'vaccine' ? 'vaccine_inventory' : 'supplement_inventory';
@@ -1205,6 +1214,7 @@ const Inventory = () => {
       console.error('Error distributing inventory:', error);
       await customAlert({ title: 'Error', text: 'Failed to distribute items: ' + error.message, iconType: 'danger' });
     } finally {
+      submitInFlightRef.current = false;
       setIsSubmitting(false);
     }
   };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import {
@@ -78,6 +78,7 @@ const AddPatient = () => {
     const [activeTab, setActiveTab] = useState('personal');
     const [toast, setToast] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
+    const saveInFlightRef = useRef(false);
     const [missingFields, setMissingFields] = useState([]);
     const [nameValidationErrors, setNameValidationErrors] = useState({});
     const [loadingStations, setLoadingStations] = useState(true);
@@ -651,7 +652,7 @@ const AddPatient = () => {
 
     const handleSave = async (e) => {
         e.preventDefault();
-        if (isSaving || !user?.id) return;
+        if (isSaving || saveInFlightRef.current || !user?.id) return;
 
         // Validate name fields before submission
         const namePattern = /^[A-Za-z\s'-]*$/;
@@ -766,6 +767,7 @@ const AddPatient = () => {
             return;
         }
 
+        saveInFlightRef.current = true;
         setIsSaving(true);
 
         const today = new Date();
@@ -851,6 +853,7 @@ const AddPatient = () => {
             console.error('💥 Save failed:', err);
             setToast({ type: 'error', message: `Save failed: ${err.message}` });
         } finally {
+            saveInFlightRef.current = false;
             setIsSaving(false);
         }
     };

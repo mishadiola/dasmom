@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import AuthService from '../../services/authservice';
@@ -74,10 +74,12 @@ const AddStationModal = ({ onClose, onSuccess }) => {
     const staffService = new StaffService();
     const [stationName, setStationName] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const submitInFlightRef = useRef(false);
     const [error, setError] = useState('');
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (submitting || submitInFlightRef.current) return;
         setError('');
 
         if (!stationName.trim()) {
@@ -85,6 +87,7 @@ const AddStationModal = ({ onClose, onSuccess }) => {
             return;
         }
 
+        submitInFlightRef.current = true;
         setSubmitting(true);
         try {
             await staffService.addStation(stationName.trim());
@@ -96,6 +99,7 @@ const AddStationModal = ({ onClose, onSuccess }) => {
             console.error('Failed to create station:', err);
             setError(err.message || 'Failed to create station. Please try again.');
         } finally {
+            submitInFlightRef.current = false;
             setSubmitting(false);
         }
     };
@@ -168,6 +172,7 @@ const AddUserModal = ({ onClose, onSuccess }) => {
     const [showAddStationModal, setShowAddStationModal] = useState(false);
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const submitInFlightRef = useRef(false);
     const [error, setError] = useState('');
     const update = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -211,6 +216,7 @@ const AddUserModal = ({ onClose, onSuccess }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (submitting || submitInFlightRef.current) return;
         setError('');
 
         if (!form.name.trim() || !form.email.trim() || !form.password.trim() || !form.role.trim()) {
@@ -223,6 +229,7 @@ const AddUserModal = ({ onClose, onSuccess }) => {
             return;
         }
 
+        submitInFlightRef.current = true;
         setSubmitting(true);
         try {
             await staffService.addStaff({
@@ -239,6 +246,7 @@ const AddUserModal = ({ onClose, onSuccess }) => {
             console.error('Failed to create staff account:', err);
             setError(err.message || 'Failed to create account. Please try again.');
         } finally {
+            submitInFlightRef.current = false;
             setSubmitting(false);
         }
     };

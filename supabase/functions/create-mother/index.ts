@@ -21,6 +21,21 @@ const dateLabel = (value: string | null | undefined) => value
   ? new Date(value).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
   : 'Not set';
 
+async function emailAlreadyRegistered(email: string) {
+  const { data: userRow, error: userError } = await admin
+    .from('users')
+    .select('id')
+    .eq('email_address', email)
+    .maybeSingle();
+  if (userError) throw userError;
+  if (userRow?.id) return true;
+
+  const { data: authData, error: authError } = await admin.auth.admin.getUserByEmail(email);
+  if (authData?.user?.id) return true;
+  if (authError && authError.status !== 404) throw authError;
+  return false;
+}
+
 async function requireStaff(request: Request) {
   const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
   if (!token) return false;
@@ -69,9 +84,13 @@ Deno.serve(async (request) => {
     // Preserve the deployed function's original account-creation contract.
     if (!action && body.email && body.password && body.motherName) {
       if (!await requireStaff(request)) return json({ error: 'Staff authorization required' }, 401);
+      const email = String(body.email).trim().toLowerCase();
+      if (await emailAlreadyRegistered(email)) {
+        return json({ error: 'An account with this email already exists.' }, 409);
+      }
 
       const { data: userData, error: userError } = await admin.auth.admin.createUser({
-        email: String(body.email).trim().toLowerCase(),
+        email,
         password: String(body.password),
         email_confirm: true,
         user_metadata: { full_name: String(body.motherName) },
@@ -79,7 +98,6 @@ Deno.serve(async (request) => {
       if (userError) throw userError;
       createdUserId = userData.user?.id || null;
 
-      const email = String(body.email).trim().toLowerCase();
       await sendBrevoEmail(email, 'Welcome to DASMOM', accountEmail({
         name: String(body.motherName),
         email,

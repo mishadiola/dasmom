@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useContext } from 'react';
+import React, { useState, useEffect, useMemo, useContext, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
     ArrowLeft, ArrowRight, ChevronRight, Save, X, Activity, Baby, HeartPulse,
@@ -52,6 +52,8 @@ const AddPrenatalVisit = () => {
     const [midwives, setMidwives] = useState([]);
     const [midwivesLoading, setMidwivesLoading] = useState(false);
     const [isFormInitialized, setIsFormInitialized] = useState(false);
+    const saveInFlightRef = useRef(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     // Fetch patient data
     useEffect(() => {
@@ -256,6 +258,9 @@ const AddPrenatalVisit = () => {
 
     const handleSave = async (e) => {
         e.preventDefault();
+        if (isSaving || saveInFlightRef.current) return;
+        saveInFlightRef.current = true;
+        setIsSaving(true);
         try {
             const createdBy = await patientService.getCurrentUserId();
             if (!createdBy) throw new Error('Not authenticated');
@@ -375,6 +380,9 @@ const AddPrenatalVisit = () => {
         } catch (err) {
             console.error('Error saving visit:', err);
             setToast({ type: 'error', message: 'Error recording visit: ' + err.message });
+        } finally {
+            saveInFlightRef.current = false;
+            setIsSaving(false);
         }
     };
 
@@ -404,8 +412,8 @@ const AddPrenatalVisit = () => {
                 </div>
                 <div className="apv-actions">
                     <button className="btn btn-outline" onClick={() => navigate(-1)} type="button">Cancel</button>
-                    <button className="btn btn-primary" onClick={handleSave} form="pv-form" type="button">
-                        <Save size={15} /> Save Visit
+                    <button className="btn btn-primary" onClick={handleSave} form="pv-form" type="button" disabled={isSaving}>
+                        <Save size={15} /> {isSaving ? 'Saving...' : 'Save Visit'}
                     </button>
                 </div>
             </div>

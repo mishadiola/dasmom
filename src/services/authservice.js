@@ -229,6 +229,10 @@ export default class AuthService {
     }
     if (authError) {
       console.error('Auth signIn error:', authError);
+      const authMessage = String(authError.message || '').toLowerCase();
+      if (authError.status === 400 || authError.code === 'invalid_credentials' || authMessage.includes('invalid login credentials')) {
+        throw new Error('Incorrect email or password. Please check your credentials and try again.');
+      }
       throw authError;
     }
 

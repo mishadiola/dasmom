@@ -16,6 +16,21 @@ const admin = createClient(supabaseUrl, serviceRoleKey);
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: corsHeaders });
 
+async function emailAlreadyRegistered(email: string) {
+  const { data: userRow, error: userError } = await admin
+    .from('users')
+    .select('id')
+    .eq('email_address', email)
+    .maybeSingle();
+  if (userError) throw userError;
+  if (userRow?.id) return true;
+
+  const { data: authData, error: authError } = await admin.auth.admin.getUserByEmail(email);
+  if (authData?.user?.id) return true;
+  if (authError && authError.status !== 404) throw authError;
+  return false;
+}
+
 async function getCallerRole(request: Request) {
   const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
   if (!token) return null;
@@ -66,6 +81,10 @@ Deno.serve(async (request) => {
 
     if (caller.role === 'cho personnel' && role !== 'staff') {
       return json({ error: 'CHO Personnel can only create staff accounts' }, 403);
+    }
+
+    if (await emailAlreadyRegistered(email)) {
+      return json({ error: 'An account with this email already exists.' }, 409);
     }
 
     const { data: authData, error: authError } = await admin.auth.admin.createUser({

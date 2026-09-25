@@ -152,6 +152,24 @@ ALTER TABLE public.station_supplement_inventory ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.vaccinations
   ADD COLUMN IF NOT EXISTS assigned_staff UUID;
 
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_address_unique_idx
+  ON public.users (LOWER(BTRIM(email_address)))
+  WHERE email_address IS NOT NULL AND BTRIM(email_address) <> '';
+
+CREATE UNIQUE INDEX IF NOT EXISTS vaccine_inventory_item_key_unique_idx
+  ON public.vaccine_inventory (
+    LOWER(BTRIM(vaccine_name)),
+    LOWER(BTRIM(COALESCE(brand, ''))),
+    COALESCE(expiration_date, DATE '0001-01-01')
+  );
+
+CREATE UNIQUE INDEX IF NOT EXISTS supplement_inventory_item_key_unique_idx
+  ON public.supplement_inventory (
+    LOWER(BTRIM(supplement_name)),
+    LOWER(BTRIM(COALESCE(brand, ''))),
+    COALESCE(expiration_date, DATE '0001-01-01')
+  );
+
 -- Backfill existing vaccination ownership from the latest assigned prenatal visit.
 WITH latest_patient_assignment AS (
   SELECT DISTINCT ON (patient_id) patient_id, assigned_staff
