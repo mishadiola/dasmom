@@ -2,6 +2,7 @@ import supabase from '../config/supabaseclient';
 import AuthService from './authservice';
 import InventoryService from './inventoryservice';
 import VaccinationService from './vaccinationservice';
+import { isBatchExpired } from '../utils/inventoryUtils';
 
 const inventoryService = new InventoryService();
 const TIME_SLOTS_8TO4 = [
@@ -425,35 +426,94 @@ export default class PatientService {
     const age = patient.date_of_birth ? Number(this.calculateAge(patient.date_of_birth)) : null;
     const gravida = Number.parseInt(pregnancy.gravida, 10);
     const pregnancyType = String(pregnancy.pregnancy_type || '').toLowerCase();
-    const riskText = String(visit?.risk_factors || '').toLowerCase();
+    
+    // Process existing saved risk factors text to ensure conditions from registration are preserved
+    const riskText = String(visit?.risk_factors || '');
+    const riskTextLower = riskText.toLowerCase();
 
     if (age !== null && (age < 18 || age > 35)) addFactor(`Age ${age}`);
     if (Number.isFinite(gravida) && gravida >= 3) addFactor(`Gravida ${gravida}`);
     if (pregnancyType && pregnancyType !== 'singleton') addFactor('Multiple pregnancy');
-    if (riskText.includes('anemia') || riskText.includes('anaemia')) addFactor('Anemia');
+
+    // Also add any other text that might be comma-separated in riskText but not None
+    if (riskText) {
+      riskText.split(',').map(s => s.trim()).forEach(f => {
+        if (f && f.toLowerCase() !== 'none' && !factors.some(existing => existing.toLowerCase() === f.toLowerCase())) {
+          addFactor(f);
+        }
+      });
+    }
+
+    // Process known pre-existing conditions from text explicitly in case they were missed
+    if (riskTextLower.includes('hypertension')) addFactor('Hypertension');
+    if (riskTextLower.includes('diabetes')) addFactor('Diabetes');
+    if (riskTextLower.includes('heart disease')) addFactor('Heart Disease');
+    if (riskTextLower.includes('asthma')) addFactor('Asthma');
+    if (riskTextLower.includes('anemia') || riskTextLower.includes('anaemia')) addFactor('Anemia');
+    if (riskTextLower.includes('previous c-section') || riskTextLower.includes('c-section')) addFactor('Previous C-section');
 
     if (this.isBPHighRisk(visit?.bp_systolic, visit?.bp_diastolic)) {
-      addFactor(this.getBPStatus(visit.bp_systolic, visit.bp_diastolic));
+      addFactor(this.getBPStatus(visit?.bp_systolic, visit?.bp_diastolic));
     }
 
-    const temperature = Number(visit?.temp_c);
-    if (Number.isFinite(temperature) && (temperature < 35.1 || temperature > 37.5)) {
-      addFactor(temperature < 35.1 ? 'Hypothermia' : 'Fever');
+    const hasValue = (val) => val !== null && val !== undefined && String(val).trim() !== '';
+
+    if (hasValue(visit?.temp_c)) {
+      const temperature = Number(visit.temp_c);
+      if (Number.isFinite(temperature) && (temperature < 35.1 || temperature > 37.5)) {
+        addFactor(temperature < 35.1 ? 'Hypothermia' : 'Fever');
+      }
     }
-    const pulse = Number(visit?.pulse_bpm);
-    if (Number.isFinite(pulse) && (pulse < 60 || pulse > 100)) addFactor('Abnormal pulse');
-    const respiratoryRate = Number(visit?.resp_rate_cpm);
-    if (Number.isFinite(respiratoryRate) && (respiratoryRate < 12 || respiratoryRate > 20)) {
-      addFactor('Abnormal respiratory rate');
+
+    if (hasValue(visit?.pulse_bpm)) {
+      const pulse = Number(visit.pulse_bpm);
+      if (Number.isFinite(pulse) && (pulse < 60 || pulse > 100)) addFactor('Abnormal pulse');
     }
-    const fetalHeartRate = Number(visit?.fhr_bpm);
-    if (Number.isFinite(fetalHeartRate) && (fetalHeartRate < 110 || fetalHeartRate > 160)) {
-      addFactor('Abnormal fetal heart rate');
+
+    if (hasValue(visit?.resp_rate_cpm)) {
+      const respiratoryRate = Number(visit.resp_rate_cpm);
+      if (Number.isFinite(respiratoryRate) && (respiratoryRate < 12 || respiratoryRate > 20)) {
+        addFactor('Abnormal respiratory rate');
+      }
     }
+
+    if (hasValue(visit?.fhr_bpm)) {
+      const fetalHeartRate = Number(visit.fhr_bpm);
+      if (Number.isFinite(fetalHeartRate) && (fetalHeartRate < 110 || fetalHeartRate > 160)) {
+        addFactor('Abnormal fetal heart rate');
+      }
+    }
+
+    // Classify risk level based on gathered factors
+    const highRiskConditions = ['Hypertension', 'Diabetes', 'Heart Disease', 'Previous C-section', 'Hypothermia', 'Fever', 'Abnormal pulse', 'Abnormal respiratory rate', 'Abnormal fetal heart rate', 'Multiple pregnancy'];
+    
+    let isHigh = false;
+    let isMedium = false;
+    
+    for (const factor of factors) {
+      const lower = factor.toLowerCase();
+      if (
+        highRiskConditions.some(h => lower.includes(h.toLowerCase())) || 
+        lower.includes('age') || 
+        lower.includes('gravida') ||
+        lower.includes('high')
+      ) {
+        isHigh = true;
+      } else if (lower.includes('asthma') || lower.includes('anemia') || lower.includes('medium')) {
+        isMedium = true;
+      } else {
+        // Any other unrecognized factor defaults to High Risk
+        isHigh = true; 
+      }
+    }
+    
+    let riskLevel = 'Low Risk';
+    if (isHigh) riskLevel = 'High Risk';
+    else if (isMedium) riskLevel = 'Medium Risk';
 
     return {
-      isHighRisk: factors.length > 0,
-      riskLevel: factors.length > 0 ? 'High Risk' : 'Low Risk',
+      isHighRisk: isHigh,
+      riskLevel,
       riskFactors: factors,
       age: Number.isFinite(age) ? age : null,
       gravida: Number.isFinite(gravida) ? gravida : null,
@@ -2419,12 +2479,17 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         }
       }
       
-      // Combined status: prioritize expiration over stock level
-      let combinedStatus = item.quantity <= 0 ? 'critical' : item.quantity < (item.min_stock || item.max_stock * 0.2) ? 'low' : 'ok';
-      if (expiryStatus === 'expired') {
+      // Combined status: match Inventory Management thresholds
+      const percentage = (item.max_stock || item.min_stock * 5) ? Math.round((item.quantity / (item.max_stock || item.min_stock * 5)) * 100) : 0;
+      let combinedStatus = 'ok';
+      if (isBatchExpired(item.expiration_date)) {
         combinedStatus = 'expired';
-      } else if (expiryStatus === 'expiring-soon' && combinedStatus === 'ok') {
-        combinedStatus = 'expiring-soon';
+      } else if (item.quantity <= 0) {
+        combinedStatus = 'out';
+      } else if (percentage <= 20) {
+        combinedStatus = 'low';
+      } else if (percentage <= 50) {
+        combinedStatus = 'medium';
       }
       
       return {
@@ -2461,12 +2526,17 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         }
       }
       
-      // Combined status: prioritize expiration over stock level
-      let combinedStatus = item.quantity <= 0 ? 'critical' : item.quantity < (item.max_stock * 0.2) ? 'low' : 'ok';
-      if (expiryStatus === 'expired') {
+      // Combined status: match Inventory Management thresholds
+      const percentage = item.max_stock ? Math.round((item.quantity / item.max_stock) * 100) : 0;
+      let combinedStatus = 'ok';
+      if (isBatchExpired(item.expiration_date)) {
         combinedStatus = 'expired';
-      } else if (expiryStatus === 'expiring-soon' && combinedStatus === 'ok') {
-        combinedStatus = 'expiring-soon';
+      } else if (item.quantity <= 0) {
+        combinedStatus = 'out';
+      } else if (percentage <= 20) {
+        combinedStatus = 'low';
+      } else if (percentage <= 50) {
+        combinedStatus = 'medium';
       }
       
       return {

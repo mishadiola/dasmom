@@ -890,7 +890,13 @@ const AddPatient = () => {
                 'station',
                 ...(isExistingPatientMode ? [] : ['firstName', 'lastName', 'dob', 'email'])
             ];
+            const requiredEmergency = isExistingPatientMode
+                ? []
+                : (sameAsPatientAddress
+                    ? ['emName', 'emRel', 'emPhone']
+                    : ['emName', 'emRel', 'emPhone', 'emAddress']);
             checkFields(requiredPersonal);
+            checkFields(requiredEmergency);
 
             if (!isExistingPatientMode) {
                 if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
@@ -919,13 +925,7 @@ const AddPatient = () => {
             // No strict required fields in medical
         } else if (activeTab === 'prenatal') {
             const requiredVitals = ['weight', 'height', 'bp'];
-            const requiredEmergency = isExistingPatientMode
-                ? []
-                : (sameAsPatientAddress
-                    ? ['emName', 'emRel', 'emPhone']
-                    : ['emName', 'emRel', 'emPhone', 'emAddress']);
             checkFields(requiredVitals);
-            checkFields(requiredEmergency);
         }
 
         if (missing.length > 0) {
@@ -1341,6 +1341,83 @@ const AddPatient = () => {
                                 <div className="form-group">
                                     <label>Other Valid ID Number</label>
                                     <input name="validId" value={formData.validId} onChange={handleChange} />
+                                </div>
+                            </div>
+
+                            <hr className="divider" />
+                            <h3 className="section-subtitle">Emergency Contact Details <span className="req">*</span></h3>
+                            <div className="form-grid-2">
+                                <div className="form-group">
+                                    <label>Contact Person Name <span className="req">*</span></label>
+                                    <input 
+                                        type="text" 
+                                        name="emName" 
+                                        value={formData.emName} 
+                                        onChange={handleChange} 
+                                        className={missingFields.includes('emName') ? 'error-field' : ''}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>Relationship to Patient <span className="req">*</span></label>
+                                    <select 
+                                        name="emRel" 
+                                        value={formData.emRel} 
+                                        onChange={handleChange}
+                                        className={missingFields.includes('emRel') ? 'error-field' : ''}
+                                    >
+                                        <option value="">Select Relationship</option>
+                                        <option value="Spouse">Spouse</option>
+                                        <option value="Partner">Partner</option>
+                                        <option value="Parent">Parent</option>
+                                        <option value="Sibling">Sibling</option>
+                                        <option value="Guardian">Guardian</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label>Phone Number <span className="req">*</span></label>
+                                    <input 
+                                        type="tel" 
+                                        name="emPhone" 
+                                        value={formData.emPhone} 
+                                        onChange={handleChange} 
+                                        onBlur={(e) => {
+                                            // Validate on blur for immediate feedback
+                                            if (e.target.value && (e.target.value.length !== 11 || !e.target.value.startsWith('09'))) {
+                                                e.target.classList.add('error-field');
+                                            }
+                                        }}
+                                        placeholder="ex: 09123456789"
+                                        className={missingFields.includes('emPhone') || missingFields.includes('emPhone-invalid') ? 'error-field' : ''}
+                                    />
+                                    {missingFields.includes('emPhone-invalid') && (
+                                        <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
+                                            Contact number must start with 09 and be 11 digits long
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="form-group">
+                                    <label>Address {!sameAsPatientAddress && <span className="req">*</span>}</label>
+                                    <div className="checkbox-wrapper" style={{ marginBottom: '10px' }}>
+                                        <label className="checkbox-inline" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--color-text-muted)', cursor: 'pointer' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={sameAsPatientAddress}
+                                                onChange={(e) => setSameAsPatientAddress(e.target.checked)}
+                                                style={{ cursor: 'pointer', width: '16px', height: '16px', margin: 0 }}
+                                            />
+                                            <span>Same as Patient Address</span>
+                                        </label>
+                                    </div>
+                                    <input 
+                                        type="text" 
+                                        name="emAddress" 
+                                        value={formData.emAddress} 
+                                        onChange={handleChange} 
+                                        readOnly={sameAsPatientAddress}
+                                        className={!sameAsPatientAddress && missingFields.includes('emAddress') ? 'error-field' : ''}
+                                        style={sameAsPatientAddress ? { backgroundColor: '#f5f5f5', cursor: 'not-allowed' } : {}}
+                                    />
                                 </div>
                             </div>
                             </>
@@ -2051,82 +2128,7 @@ const AddPatient = () => {
                                 />
                             </div>
 
-                            <hr className="divider" />
-                            <h3 className="section-subtitle">Emergency Contact Details <span className="req">*</span></h3>
-                            <div className="form-grid-2">
-                                <div className="form-group">
-                                    <label>Contact Person Name <span className="req">*</span></label>
-                                    <input 
-                                        type="text" 
-                                        name="emName" 
-                                        value={formData.emName} 
-                                        onChange={handleChange} 
-                                        className={missingFields.includes('emName') ? 'error-field' : ''}
-                                    />
-                                </div>
-                                <div className="form-group">
-                                    <label>Relationship to Patient <span className="req">*</span></label>
-                                    <select 
-                                        name="emRel" 
-                                        value={formData.emRel} 
-                                        onChange={handleChange}
-                                        className={missingFields.includes('emRel') ? 'error-field' : ''}
-                                    >
-                                        <option value="">Select Relationship</option>
-                                        <option value="Spouse">Spouse</option>
-                                        <option value="Partner">Partner</option>
-                                        <option value="Parent">Parent</option>
-                                        <option value="Sibling">Sibling</option>
-                                        <option value="Guardian">Guardian</option>
-                                        <option value="Other">Other</option>
-                                    </select>
-                                </div>
-                                <div className="form-group">
-                                    <label>Phone Number <span className="req">*</span></label>
-                                    <input 
-                                        type="tel" 
-                                        name="emPhone" 
-                                        value={formData.emPhone} 
-                                        onChange={handleChange} 
-                                        onBlur={(e) => {
-                                            // Validate on blur for immediate feedback
-                                            if (e.target.value && (e.target.value.length !== 11 || !e.target.value.startsWith('09'))) {
-                                                e.target.classList.add('error-field');
-                                            }
-                                        }}
-                                        placeholder="ex: 09123456789"
-                                        className={missingFields.includes('emPhone') || missingFields.includes('emPhone-invalid') ? 'error-field' : ''}
-                                    />
-                                    {missingFields.includes('emPhone-invalid') && (
-                                        <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
-                                            Contact number must start with 09 and be 11 digits long
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="form-group">
-                                    <label>Address {!sameAsPatientAddress && <span className="req">*</span>}</label>
-                                    <div className="checkbox-wrapper" style={{ marginBottom: '10px' }}>
-                                        <label className="checkbox-inline" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--color-text-muted)', cursor: 'pointer' }}>
-                                            <input
-                                                type="checkbox"
-                                                checked={sameAsPatientAddress}
-                                                onChange={(e) => setSameAsPatientAddress(e.target.checked)}
-                                                style={{ cursor: 'pointer', width: '16px', height: '16px', margin: 0 }}
-                                            />
-                                            <span>Same as Patient Address</span>
-                                        </label>
-                                    </div>
-                                    <input 
-                                        type="text" 
-                                        name="emAddress" 
-                                        value={formData.emAddress} 
-                                        onChange={handleChange} 
-                                        readOnly={sameAsPatientAddress}
-                                        className={!sameAsPatientAddress && missingFields.includes('emAddress') ? 'error-field' : ''}
-                                        style={sameAsPatientAddress ? { backgroundColor: '#f5f5f5', cursor: 'not-allowed' } : {}}
-                                    />
-                                </div>
-                            </div>
+
                         </div>
                     )}
                     

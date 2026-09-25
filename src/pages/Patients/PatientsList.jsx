@@ -170,28 +170,59 @@ const RecordVitalsModal = ({ patient, onSave, onClose, supplements }) => {
 
                     <div className="vm-supplements">
                         <h3>Administer Supplements</h3>
-                        {supplements.map(sup => (
-                            <div key={sup.id} className="vm-supplement-item">
-                                <label>
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedSupplements[sup.id] || false}
-                                        onChange={e => setSelectedSupplements(prev => ({ ...prev, [sup.id]: e.target.checked }))}
-                                    />
-                                    {sup.name} (Stock: {sup.stock} {sup.unit})
-                                </label>
-                                {selectedSupplements[sup.id] && (
-                                    <input
-                                        type="number"
-                                        placeholder="Amount"
-                                        value={supplementAmounts[sup.id] || ''}
-                                        onChange={e => setSupplementAmounts(prev => ({ ...prev, [sup.id]: e.target.value }))}
-                                        min="0"
-                                        max={sup.stock}
-                                    />
-                                )}
-                            </div>
-                        ))}
+                        <p className="vm-supplements-desc">Select supplements to administer during this visit.</p>
+                        <div className="vm-supplements-list">
+                            {supplements.map(sup => {
+                                const isOutOfStock = sup.stock <= 0;
+                                const isSelected = selectedSupplements[sup.id] || false;
+                                return (
+                                    <div 
+                                        key={sup.id} 
+                                        className={`vm-sup-card ${isSelected ? 'selected' : ''} ${isOutOfStock ? 'out-of-stock' : ''}`}
+                                        onClick={() => {
+                                            if (!isOutOfStock) {
+                                                setSelectedSupplements(prev => ({ ...prev, [sup.id]: !prev[sup.id] }));
+                                            }
+                                        }}
+                                        style={{ flexDirection: 'column', alignItems: 'stretch', padding: '12px 16px' }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <div className="vm-sup-card-left">
+                                                <input
+                                                    type="checkbox"
+                                                    className="vm-sup-checkbox"
+                                                    checked={isSelected}
+                                                    disabled={isOutOfStock}
+                                                    readOnly
+                                                />
+                                                <div className="vm-sup-info">
+                                                    <span className="vm-sup-name">{sup.name}</span>
+                                                    <span className="vm-sup-type">Supplement</span>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className={`vm-sup-stock ${isOutOfStock ? 'out' : ''}`}>
+                                                {isOutOfStock ? 'Out of Stock' : `In Stock · ${sup.stock} ${sup.unit || 'pcs'}`}
+                                            </div>
+                                        </div>
+
+                                        {isSelected && (
+                                            <div className="vm-sup-amount-wrap" onClick={e => e.stopPropagation()}>
+                                                <input
+                                                    type="number"
+                                                    className="vm-sup-amount-input"
+                                                    placeholder="Amount"
+                                                    value={supplementAmounts[sup.id] || ''}
+                                                    onChange={e => setSupplementAmounts(prev => ({ ...prev, [sup.id]: e.target.value }))}
+                                                    min="1"
+                                                    max={sup.stock}
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
 
                     <div className="pv-modal-footer">
@@ -212,7 +243,7 @@ const PatientsList = () => {
     const [availableStations, setAvailableStations] = useState([]);
 
     const [searchTerm, setSearchTerm] = useState('');
-    const [archiveFilter, setArchiveFilter] = useState('all'); // 'active' | 'archived' | 'all'
+    const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
     const [filters, setFilters] = useState({
         trimesters: [],
         risks: [],
@@ -431,7 +462,7 @@ const PatientsList = () => {
 
     const clearFilters = () => {
         setFilters({ trimesters: [], risks: [], stations: [], patientType: 'All', sortBy: 'newest' });
-        setArchiveFilter('all');
+        setArchiveFilter('active');
         setDateFilter('all');
         setCustomDateFrom('');
         setCustomDateTo('');
@@ -608,7 +639,7 @@ const PatientsList = () => {
                     <div className="page-title-row">
                         <h1 className="page-title">Patient Profiles</h1>
                         <span className="title-statistic-badge">
-                            Total Patients: <strong>{patients.length}</strong>
+                            Total Patients: <strong>{filteredPatients.length}</strong>
                         </span>
                     </div>
                     <p className="page-subtitle">Manage and monitor all registered pregnant patients, including archived records.</p>

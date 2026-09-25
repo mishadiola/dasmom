@@ -35,7 +35,7 @@ export const translations = {
         more_settings: 'Settings',
 
         // User menu
-        menu_view_account: 'View Account',
+        menu_view_account: 'My Profile',
         menu_settings: 'Settings',
         menu_logout: 'Logout',
 
@@ -195,14 +195,14 @@ export const translations = {
         // ═══════════════════════════════════════════════
         // USER ACCOUNT
         // ═══════════════════════════════════════════════
-        acct_title: 'Account',
-        acct_subtitle: 'View your account information',
-        acct_loading: 'Loading your account information...',
+        acct_title: 'My Profile',
+        acct_subtitle: 'View your personal information',
+        acct_loading: 'Loading your personal information...',
         acct_loading_text: 'Loading...',
-        acct_error: 'Unable to load account information',
+        acct_error: 'Unable to load personal information',
         acct_not_authenticated: 'Not authenticated',
         acct_not_found: 'Patient data not found',
-        acct_load_failed: 'Failed to load your account information. Please try again.',
+        acct_load_failed: 'Failed to load your personal information. Please try again.',
         acct_patient_id: 'Patient ID:',
         acct_full_name: 'Full Name',
         acct_dob: 'Date of Birth',
@@ -214,7 +214,7 @@ export const translations = {
         acct_address: 'Address',
         acct_health_station: 'Health Station',
         acct_philhealth: 'PhilHealth Number',
-        acct_info_notice: 'Your account information is read-only. For changes, please contact your health station.',
+        acct_info_notice: 'Your personal information is read-only. For changes, please contact your health station.',
         acct_children_title: "My Children's Records",
         acct_child: 'child',
         acct_children: 'children',
@@ -502,7 +502,7 @@ export const translations = {
         more_settings: 'Mga Setting',
 
         // User menu
-        menu_view_account: 'Tingnan ang Account',
+        menu_view_account: 'My Profile',
         menu_settings: 'Mga Setting',
         menu_logout: 'Mag-logout',
 
@@ -662,14 +662,14 @@ export const translations = {
         // ═══════════════════════════════════════════════
         // USER ACCOUNT
         // ═══════════════════════════════════════════════
-        acct_title: 'Account',
-        acct_subtitle: 'Tingnan ang iyong impormasyon ng account',
-        acct_loading: 'Nilo-load ang iyong impormasyon...',
+        acct_title: 'My Profile',
+        acct_subtitle: 'Tingnan ang iyong personal na impormasyon',
+        acct_loading: 'Nilo-load ang iyong personal na impormasyon...',
         acct_loading_text: 'Naglo-load...',
-        acct_error: 'Hindi ma-load ang impormasyon ng account',
+        acct_error: 'Hindi ma-load ang personal na impormasyon',
         acct_not_authenticated: 'Hindi naka-authenticate',
         acct_not_found: 'Hindi nahanap ang data ng pasyente',
-        acct_load_failed: 'Hindi ma-load ang iyong impormasyon ng account. Subukan muli.',
+        acct_load_failed: 'Hindi ma-load ang iyong personal na impormasyon. Subukan muli.',
         acct_patient_id: 'Patient ID:',
         acct_full_name: 'Buong Pangalan',
         acct_dob: 'Petsa ng Kapanganakan',
@@ -681,7 +681,7 @@ export const translations = {
         acct_address: 'Tirahan',
         acct_health_station: 'Health Station',
         acct_philhealth: 'PhilHealth Number',
-        acct_info_notice: 'Ang iyong impormasyon ng account ay para sa pagtingin lamang. Para sa mga pagbabago, makipag-ugnayan sa iyong health station.',
+        acct_info_notice: 'Ang iyong personal na impormasyon ay para sa pagtingin lamang. Para sa mga pagbabago, makipag-ugnayan sa iyong health station.',
         acct_children_title: 'Mga Rekord ng Aking Anak',
         acct_child: 'anak',
         acct_children: 'mga anak',

@@ -36,6 +36,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import ExportModal from '../../components/ExportModal';
+import { isBatchExpired, getInventoryStatus } from '../../utils/inventoryUtils';
 import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/Inventory.css';
 
@@ -107,7 +108,7 @@ const Inventory = () => {
     }
   });
   const [vaccStats, setVaccStats] = useState({ mothersPending: 0, newbornsPending: 0 });
-  const [pendingStockAlerts, setPendingStockAlerts] = useState({ count: 0, stations: [], vaccineIds: [] });
+  const [pendingVaccinations, setPendingVaccinations] = useState([]);
 
   // Station Distribution states
   const [showDistributionModal, setShowDistributionModal] = useState(false);
@@ -217,78 +218,58 @@ const Inventory = () => {
   const supplementUnitOptions = ['tablets', 'capsules', 'sachets', 'bottles'];
   const unitOptions = activeTab === 'vaccines' ? vaccineUnitOptions : supplementUnitOptions;
 
-  const loadPendingStockAlerts = async () => {
-    try {
-      const { data: pendingRows, error: pendingError } = await inventoryService.supabase
-        .from('vaccinations')
-        .select('id, patient_id, newborn_id, vaccine_inventory_id, status')
-        .in('status', ['Pending', 'Overdue']);
+  const dateValidation = useMemo(() => {
+    let isValid = true;
+    let mfgError = '';
+    let expError = '';
+    let expWarning = '';
 
-      if (pendingError) throw pendingError;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
 
-      const { data: patientRows, error: patientError } = await inventoryService.supabase
-        .from('patient_basic_info')
-        .select('id, station_ass');
+    if (form.manufactured_date) {
+      const mDate = new Date(form.manufactured_date);
+      mDate.setHours(0, 0, 0, 0);
+      if (mDate > now) {
+        isValid = false;
+        mfgError = 'Manufactured date cannot be in the future.';
+      }
+    }
 
-      if (patientError) throw patientError;
-
-      const { data: newbornRows, error: newbornError } = await inventoryService.supabase
-        .from('newborns')
-        .select('id, mother_id');
-
-      if (newbornError) throw newbornError;
-
-      const { data: stationRows, error: stationError } = await inventoryService.supabase
-        .from('station_vaccine_inventory')
-        .select('station_id, vaccine_id, quantity')
-        .gt('quantity', 0);
-
-      if (stationError) throw stationError;
-
-      const { data: stationLookupRows, error: stationLookupError } = await inventoryService.supabase
-        .from('stations')
-        .select('id, station_name');
-
-      if (stationLookupError) throw stationLookupError;
-
-      const patientStationMap = new Map((patientRows || []).map(row => [row.id, row.station_ass]));
-      const newbornStationMap = new Map((newbornRows || []).map(row => [row.id, patientStationMap.get(row.mother_id)]));
-      const stationStockMap = new Map();
-      (stationRows || []).forEach(row => {
-        if (!row.station_id || !row.vaccine_id) return;
-        const existing = stationStockMap.get(row.station_id) || new Set();
-        existing.add(row.vaccine_id);
-        stationStockMap.set(row.station_id, existing);
-      });
-      const stationNameMap = new Map((stationLookupRows || []).map(row => [row.id, row.station_name]));
-
-      const alerts = [];
-      for (const row of pendingRows || []) {
-        const stationId = row.patient_id
-          ? patientStationMap.get(row.patient_id)
-          : row.newborn_id
-            ? newbornStationMap.get(row.newborn_id)
-            : null;
-
-        const stationStock = stationId ? (stationStockMap.get(stationId) || new Set()) : new Set();
-        const hasStock = Boolean(row.vaccine_inventory_id && stationStock.has(row.vaccine_inventory_id));
-        const needsStock = !stationId || !row.vaccine_inventory_id || !hasStock;
-
-        if (needsStock) {
-          alerts.push({
-            id: row.id,
-            vaccineId: row.vaccine_inventory_id,
-            stationName: stationId ? stationNameMap.get(stationId) || 'Unassigned station' : 'Unassigned station'
-          });
-        }
+    if (form.expiration_date) {
+      const eDate = new Date(form.expiration_date);
+      eDate.setHours(0, 0, 0, 0);
+      if (eDate < now) {
+        isValid = false;
+        expError = 'This item has already expired. Please enter a valid expiration date.';
+      } else if (eDate.getTime() === now.getTime()) {
+        expWarning = 'This item expires today.';
       }
 
-      const stations = [...new Set(alerts.map(alert => alert.stationName).filter(Boolean))];
-      const vaccineIds = [...new Set(alerts.map(alert => alert.vaccineId).filter(Boolean))];
-      setPendingStockAlerts({ count: alerts.length, stations, vaccineIds });
+      if (form.manufactured_date) {
+        const mDate = new Date(form.manufactured_date);
+        mDate.setHours(0, 0, 0, 0);
+        if (eDate < mDate) {
+          isValid = false;
+          expError = 'Expiration date cannot be earlier than the manufactured date.';
+        }
+      }
+    }
+
+    return { isValid, mfgError, expError, expWarning };
+  }, [form.manufactured_date, form.expiration_date]);
+
+  const loadPendingVaccinations = async () => {
+    try {
+      const { data, error } = await inventoryService.supabase
+        .from('vaccinations')
+        .select('vaccine_inventory_id')
+        .in('status', ['Pending', 'Overdue']);
+      if (error) throw error;
+      setPendingVaccinations(data || []);
     } catch (error) {
-      console.error('Error loading pending stock alerts:', error);
-      setPendingStockAlerts({ count: 0, stations: [], vaccineIds: [] });
+      console.error('Error loading pending vaccinations:', error);
+      setPendingVaccinations([]);
     }
   };
 
@@ -315,7 +296,7 @@ const Inventory = () => {
       console.log('Inventory data fetched - vaccines:', vaxData?.length || 0, 'supplements:', suppData?.length || 0, 'stats:', statsData);
 
       setVaccStats(statsData || { mothersPending: 0, newbornsPending: 0 });
-      await loadPendingStockAlerts();
+      await loadPendingVaccinations();
 
       const mappedVaccines = (vaxData || []).map(row => ({
         id: row?.id || '',
@@ -425,14 +406,8 @@ const Inventory = () => {
     };
   }, [user?.id]);
 
-  const getStatus = (qty, maxStock) => {
-    if (qty <= 0) return { label: 'Out of Stock', class: 'status-out' };
-    
-    const percentage = maxStock ? Math.round((qty / maxStock) * 100) : 0;
-    
-    if (percentage <= 20) return { label: 'Low Stock', class: 'status-low' };
-    if (percentage <= 50) return { label: 'Medium Stock', class: 'status-medium' };
-    return { label: 'In Stock', class: 'status-ok' };
+  const getStatus = (qty, maxStock, hasExpiredStock) => {
+    return getInventoryStatus(qty, maxStock, hasExpiredStock);
   };
 
   const getStockPercentage = (current, max) => {
@@ -466,8 +441,14 @@ const Inventory = () => {
         };
       }
       
-      // Add to totals
-      grouped[name].total_quantity += vaccine.quantity || 0;
+      const isExpired = isBatchExpired(vaccine.expiration_date || vaccine.expiry_date);
+      vaccine.isExpired = isExpired;
+      
+      // Add to totals (excluding expired stock from usable quantity if it has quantity > 0, wait: 
+      // "Any totals representing usable/current stock should exclude quantities belonging to expired batches where appropriate.")
+      if (!isExpired) {
+        grouped[name].total_quantity += vaccine.quantity || 0;
+      }
       grouped[name].total_max_stock += vaccine.max_stock || 0;
       
       // Store original item
@@ -515,8 +496,12 @@ const Inventory = () => {
         };
       }
       
-      // Add to totals
-      grouped[name].total_quantity += supplement.quantity || 0;
+      const isExpired = isBatchExpired(supplement.expiration_date || supplement.expiry_date);
+      supplement.isExpired = isExpired;
+      
+      if (!isExpired) {
+        grouped[name].total_quantity += supplement.quantity || 0;
+      }
       grouped[name].total_max_stock += supplement.max_stock || 0;
       
       // Store original item
@@ -578,15 +563,16 @@ const Inventory = () => {
         return i;
       });
 
-      // Recalculate totals for the filtered items only
-      const total_quantity = filteredSubItems.reduce((sum, i) => sum + (i.quantity || 0), 0);
+      const total_quantity = filteredSubItems.reduce((sum, i) => sum + (i.isExpired ? 0 : (i.quantity || 0)), 0);
       const total_max_stock = filteredSubItems.reduce((sum, i) => sum + (i.max_stock || i.max_quantity || i.max_quant || 0), 0);
+      const hasExpiredStock = filteredSubItems.some(i => i.isExpired && (i.quantity || 0) > 0);
 
       return {
         ...item,
         items: filteredSubItems,
         total_quantity,
-        total_max_stock
+        total_max_stock,
+        hasExpiredStock
       };
     })
     .filter(item => {
@@ -594,21 +580,24 @@ const Inventory = () => {
       if (item.items.length === 0) return false;
 
       const matchesSearch = (item.item_name || '').toLowerCase().includes(searchTerm.toLowerCase());
-      const status = getStatus(item.total_quantity || 0, item.total_max_stock).label;
-      const matchesStatus = statusFilter === 'All' || status === statusFilter;
+      const status = getStatus(item.total_quantity || 0, item.total_max_stock, item.hasExpiredStock).label;
+      const matchesStatus = statusFilter === 'All' || status === statusFilter || (statusFilter === 'Expired' && status === 'EXPIRED');
       
       // Apply summary card filter
       let matchesSummary = true;
-      if (activeSummaryFilter === 'pendingStock') {
-        matchesSummary = item.items.some(i => pendingStockAlerts.vaccineIds.includes(i.id));
-      } else if (activeSummaryFilter === 'lowStock') {
+      if (activeSummaryFilter === 'lowStock') {
         const percentage = item.total_max_stock ? Math.round((item.total_quantity || 0) / item.total_max_stock * 100) : 0;
-        matchesSummary = percentage > 0 && percentage <= 20;
+        matchesSummary = !item.hasExpiredStock && (item.total_quantity || 0) > 0 && percentage <= 20;
       } else if (activeSummaryFilter === 'mediumStock') {
         const percentage = item.total_max_stock ? Math.round((item.total_quantity || 0) / item.total_max_stock * 100) : 0;
-        matchesSummary = percentage > 20 && percentage <= 50;
+        matchesSummary = !item.hasExpiredStock && percentage > 20 && percentage <= 50;
+      } else if (activeSummaryFilter === 'normalStock') {
+        const percentage = item.total_max_stock ? Math.round((item.total_quantity || 0) / item.total_max_stock * 100) : 0;
+        matchesSummary = !item.hasExpiredStock && percentage > 50;
       } else if (activeSummaryFilter === 'outOfStock') {
-        matchesSummary = (item.total_quantity || 0) <= 0;
+        matchesSummary = !item.hasExpiredStock && (item.total_quantity || 0) <= 0;
+      } else if (activeSummaryFilter === 'expiredStock') {
+        matchesSummary = !!item.hasExpiredStock;
       }
       
       return matchesSearch && matchesStatus && matchesSummary;
@@ -618,16 +607,188 @@ const Inventory = () => {
   const getStockCount = (items) => {
     const lowStockCount = items.filter(i => {
       const percentage = i?.total_max_stock ? Math.round((i?.total_quantity || 0) / i?.total_max_stock * 100) : 0;
-      return percentage > 0 && percentage <= 20;
+      return (i?.total_quantity || 0) > 0 && percentage <= 20;
     }).length;
     const mediumStockCount = items.filter(i => {
       const percentage = i?.total_max_stock ? Math.round((i?.total_quantity || 0) / i?.total_max_stock * 100) : 0;
       return percentage > 20 && percentage <= 50;
     }).length;
+    const normalCount = items.filter(i => {
+      const percentage = i?.total_max_stock ? Math.round((i?.total_quantity || 0) / i?.total_max_stock * 100) : 0;
+      return percentage > 50;
+    }).length;
     const outOfStockCount = items.filter(i => (i?.total_quantity || 0) <= 0).length;
-    return { lowStockCount, mediumStockCount, outOfStockCount };
+    return { lowStockCount, mediumStockCount, normalCount, outOfStockCount };
   };
-  const { lowStockCount, mediumStockCount, outOfStockCount } = getStockCount(currentItems);
+  const { lowStockCount, mediumStockCount, normalCount, outOfStockCount } = getStockCount(currentItems);
+
+  const inventoryAlerts = useMemo(() => {
+    const alerts = [];
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    
+    const allItems = [...(vaccines || []), ...(supplements || [])].filter(item => 
+      !archivedIds.includes(item.id) && item.status !== 'archived'
+    );
+
+    let outOfStockGroups = [];
+    let lowStockGroups = [];
+    let expiredBatches = [];
+    let expiringSoonBatches = [];
+    let insufficientStockAlerts = [];
+
+    const groupedByName = {};
+    allItems.forEach(item => {
+      const name = item.item_name;
+      if (!groupedByName[name]) {
+        groupedByName[name] = { name, totalQuantity: 0, totalMaxStock: 0, usableQuantity: 0, unit: item.unit || 'units' };
+      }
+      const group = groupedByName[name];
+      group.totalQuantity += item.quantity || 0;
+      group.totalMaxStock += item.max_stock || 0;
+      
+      let isExpired = false;
+      
+      if (item.expiration_date) {
+        const expDate = new Date(item.expiration_date);
+        expDate.setHours(0, 0, 0, 0);
+        const daysUntil = Math.ceil((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysUntil < 0) {
+          isExpired = true;
+          if (item.quantity > 0) expiredBatches.push(item);
+        } else if (daysUntil <= 30) {
+          if (item.quantity > 0) expiringSoonBatches.push(item);
+        }
+      }
+      
+      if (!isExpired) {
+        group.usableQuantity += item.quantity || 0;
+      }
+    });
+
+    const demandByItemName = {};
+    (pendingVaccinations || []).forEach(row => {
+      if (row.vaccine_inventory_id) {
+        const matchedItem = allItems.find(i => i.id === row.vaccine_inventory_id);
+        if (matchedItem && matchedItem.item_name) {
+          demandByItemName[matchedItem.item_name] = (demandByItemName[matchedItem.item_name] || 0) + 1;
+        }
+      }
+    });
+
+    Object.values(groupedByName).forEach(group => {
+      const demand = demandByItemName[group.name] || 0;
+      if (demand > group.usableQuantity) {
+        insufficientStockAlerts.push({ group, shortage: demand - group.usableQuantity, demand });
+      }
+
+      if (group.totalQuantity <= 0) {
+        outOfStockGroups.push(group);
+      } else {
+        const percentage = group.totalMaxStock ? Math.round((group.totalQuantity / group.totalMaxStock) * 100) : 0;
+        if (percentage <= 20) {
+          lowStockGroups.push(group);
+        }
+      }
+    });
+
+    if (outOfStockGroups.length > 0) {
+      alerts.push({
+        id: 'outOfStock',
+        type: 'outOfStock',
+        priority: 1,
+        title: 'Out of Stock',
+        message: outOfStockGroups.length === 1
+          ? `${outOfStockGroups[0].name} is currently out of stock.`
+          : `${outOfStockGroups.length} inventory items are currently out of stock.`,
+        color: '#e05c73',
+        onClick: () => {
+          setActiveSummaryFilter('outOfStock');
+          setSearchTerm(outOfStockGroups.length === 1 ? outOfStockGroups[0].name : '');
+          setMainTab('inventory');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      });
+    }
+
+    if (expiredBatches.length > 0) {
+      alerts.push({
+        id: 'expired',
+        type: 'expired',
+        priority: 2,
+        title: 'Expired Stock',
+        message: expiredBatches.length === 1
+          ? `1 inventory batch has expired and requires attention.`
+          : `${expiredBatches.length} inventory batches have expired and require attention.`,
+        color: '#e05c73',
+        onClick: () => {
+           setSearchTerm(expiredBatches.length === 1 ? expiredBatches[0].item_name : '');
+           setActiveSummaryFilter('expiredStock');
+           setMainTab('inventory');
+           window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      });
+    }
+
+    if (insufficientStockAlerts.length > 0) {
+      alerts.push({
+        id: 'insufficient',
+        type: 'insufficient',
+        priority: 3,
+        title: 'Insufficient Stock for Upcoming Vaccinations',
+        message: insufficientStockAlerts.length === 1
+          ? `${insufficientStockAlerts[0].group.name} is short by ${insufficientStockAlerts[0].shortage} doses for upcoming scheduled vaccinations.`
+          : `${insufficientStockAlerts.length} items have insufficient stock for upcoming scheduled vaccinations.`,
+        color: '#e05c73',
+        onClick: () => {
+           setSearchTerm(insufficientStockAlerts.length === 1 ? insufficientStockAlerts[0].group.name : '');
+           setActiveSummaryFilter(null);
+           setMainTab('inventory');
+           window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      });
+    }
+
+    if (lowStockGroups.length > 0) {
+      alerts.push({
+        id: 'lowStock',
+        type: 'lowStock',
+        priority: 4,
+        title: 'Low Stock',
+        message: lowStockGroups.length === 1
+          ? `${lowStockGroups[0].name} has ${lowStockGroups[0].totalQuantity} ${lowStockGroups[0].unit} remaining.`
+          : `${lowStockGroups.length} inventory items are running low on stock.`,
+        color: '#e05c73',
+        onClick: () => {
+          setActiveSummaryFilter('lowStock');
+          setSearchTerm(lowStockGroups.length === 1 ? lowStockGroups[0].name : '');
+          setMainTab('inventory');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      });
+    }
+
+    if (expiringSoonBatches.length > 0) {
+      alerts.push({
+        id: 'expiringSoon',
+        type: 'expiringSoon',
+        priority: 5,
+        title: 'Expiring Soon',
+        message: expiringSoonBatches.length === 1
+          ? `1 inventory batch will expire soon.`
+          : `${expiringSoonBatches.length} inventory batches will expire soon.`,
+        color: '#e8b84b',
+        onClick: () => {
+           setSearchTerm(expiringSoonBatches.length === 1 ? expiringSoonBatches[0].item_name : '');
+           setActiveSummaryFilter(null);
+           setMainTab('inventory');
+           window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      });
+    }
+
+    return alerts.sort((a, b) => a.priority - b.priority);
+  }, [vaccines, supplements, archivedIds, pendingVaccinations]);
 
   // Pagination logic
   const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
@@ -672,7 +833,7 @@ const Inventory = () => {
             'Category / Type': activeTab === 'vaccines' ? 'Vaccine' : 'Supplement',
             'Current Stock': item.quantity || 0,
             'Unit': item.unit || group.unit || (activeTab === 'vaccines' ? 'vials' : 'tablets'),
-            'Stock Status': getStatus(item.quantity || 0, item.max_stock || item.max_quantity || item.max_quant || 0).label,
+            'Stock Status': getStatus(item.quantity || 0, item.max_stock || item.max_quantity || item.max_quant || 0, item.isExpired).label,
             'Expiration Date': formatReadableDate(item.expiration_date) || 'N/A',
             'Batch/Lot Number': item.batch || item.batch_number || 'N/A',
             'Last Updated': formatReadableDate(item.last_updated) || 'N/A'
@@ -853,6 +1014,10 @@ const Inventory = () => {
 
   const handleAddSubmit = async e => {
     e.preventDefault();
+    if (!dateValidation.isValid) {
+      alert('Please correct the date errors before adding.');
+      return;
+    }
     setIsSubmitting(true);
     try {
       const table = activeTab === 'vaccines' ? 'vaccine_inventory' : 'supplement_inventory';
@@ -1207,12 +1372,12 @@ const Inventory = () => {
           <div className="stat-label">Total Items</div>
         </div>
         <div 
-          className={`stat-card stat-card--orange ${activeSummaryFilter === 'lowStock' ? 'stat-card--active' : ''}`}
+          className={`stat-card stat-card--rose ${activeSummaryFilter === 'lowStock' ? 'stat-card--active' : ''}`}
           onClick={() => setActiveSummaryFilter('lowStock')}
-          style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+          style={{ cursor: 'pointer', transition: 'all 0.2s ease', background: '#e29b9d' }}
         >
           <div className="stat-top">
-            <div className="stat-icon stat-icon--orange">
+            <div className="stat-icon stat-icon--rose" style={{ background: 'rgba(255, 255, 255, 0.3)', color: '#803035' }}>
               <AlertTriangle size={20} />
             </div>
           </div>
@@ -1220,12 +1385,12 @@ const Inventory = () => {
           <div className="stat-label">Low Stock</div>
         </div>
         <div 
-          className={`stat-card stat-card--yellow ${activeSummaryFilter === 'mediumStock' ? 'stat-card--active' : ''}`}
+          className={`stat-card stat-card--orange ${activeSummaryFilter === 'mediumStock' ? 'stat-card--active' : ''}`}
           onClick={() => setActiveSummaryFilter('mediumStock')}
           style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
         >
           <div className="stat-top">
-            <div className="stat-icon stat-icon--yellow">
+            <div className="stat-icon stat-icon--orange">
               <Package size={20} />
             </div>
           </div>
@@ -1233,12 +1398,12 @@ const Inventory = () => {
           <div className="stat-label">Medium Stock</div>
         </div>
         <div 
-          className={`stat-card stat-card--rose ${activeSummaryFilter === 'outOfStock' ? 'stat-card--active' : ''}`}
+          className={`stat-card ${activeSummaryFilter === 'outOfStock' ? 'stat-card--active' : ''}`}
           onClick={() => setActiveSummaryFilter('outOfStock')}
-          style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+          style={{ cursor: 'pointer', transition: 'all 0.2s ease', background: '#d1d5db' }}
         >
           <div className="stat-top">
-            <div className="stat-icon stat-icon--rose">
+            <div className="stat-icon" style={{ background: 'rgba(255, 255, 255, 0.5)', color: '#4b5563', width: '40px', height: '40px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Package size={20} />
             </div>
           </div>
@@ -1286,7 +1451,8 @@ const Inventory = () => {
                     <div className="popover-title">Status</div>
                     <div className="popover-options">
                         <button className={`popover-opt-btn ${statusFilter === 'All' ? 'selected' : ''}`} onClick={() => { setStatusFilter('All'); setActivePopover(null); }}>All Status</button>
-                        <button className={`popover-opt-btn ${statusFilter === 'In Stock' ? 'selected' : ''}`} onClick={() => { setStatusFilter('In Stock'); setActivePopover(null); }}>In Stock</button>
+                        <button className={`popover-opt-btn ${statusFilter === 'Expired' || statusFilter === 'EXPIRED' ? 'selected' : ''}`} onClick={() => { setStatusFilter('Expired'); setActivePopover(null); }}>Expired</button>
+                        <button className={`popover-opt-btn ${statusFilter === 'Normal' ? 'selected' : ''}`} onClick={() => { setStatusFilter('Normal'); setActivePopover(null); }}>Normal</button>
                         <button className={`popover-opt-btn ${statusFilter === 'Medium Stock' ? 'selected' : ''}`} onClick={() => { setStatusFilter('Medium Stock'); setActivePopover(null); }}>Medium Stock</button>
                         <button className={`popover-opt-btn ${statusFilter === 'Low Stock' ? 'selected' : ''}`} onClick={() => { setStatusFilter('Low Stock'); setActivePopover(null); }}>Low Stock</button>
                         <button className={`popover-opt-btn ${statusFilter === 'Out of Stock' ? 'selected' : ''}`} onClick={() => { setStatusFilter('Out of Stock'); setActivePopover(null); }}>Out of Stock</button>
@@ -1485,7 +1651,7 @@ const Inventory = () => {
                               className="stock-progress-fill"
                               style={{ 
                                 width: `${percentage}%`,
-                                background: percentage <= 20 ? '#e05c73' : percentage <= 50 ? '#e8b84b' : '#6db8a0'
+                                background: status.label === 'EXPIRED' ? '#e05c73' : percentage <= 20 ? '#e05c73' : percentage <= 50 ? '#e8b84b' : '#6db8a0'
                               }}
                             ></div>
                           </div>
@@ -1498,10 +1664,13 @@ const Inventory = () => {
                             {item.items.map((subItem, idx) => {
                               const batchNumber = activeTab === 'vaccines' ? subItem.batch : subItem.batch_number;
                               const batchLabel = batchNumber ? `Batch ${batchNumber}` : 'Batch';
+                              const isExpired = subItem.isExpired;
                               return (
                                 <div key={idx} className="batch-item" style={{ fontSize: '11px', color: '#666' }}>
                                   <strong style={{ color: '#444' }}>{batchLabel}:</strong> {subItem.expiration_date ? 
-                                    `Expires ${new Date(subItem.expiration_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : 
+                                    (isExpired ? 
+                                      <span style={{ color: '#e05c73', fontWeight: '600' }}>Expired {new Date(subItem.expiration_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} <span style={{ padding: '2px 4px', background: '#fce8eb', borderRadius: '4px', fontSize: '9px', marginLeft: '4px' }}>EXPIRED</span></span> : 
+                                      `Expires ${new Date(subItem.expiration_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`) : 
                                     'No Expiry'
                                   }
                                 </div>
@@ -1595,7 +1764,7 @@ const Inventory = () => {
                               gap: '12px'
                             }}>
                               {item.items.map((subItem, idx) => {
-                                const subStatus = getStatus(subItem.quantity, subItem.max_stock);
+                                const subStatus = getStatus(subItem.quantity, subItem.max_stock, subItem.isExpired);
                                 const subPercentage = getStockPercentage(subItem.quantity || 0, subItem.max_stock || 500);
                                 const daysUntilExpiry = subItem.expiration_date 
                                   ? Math.ceil((new Date(subItem.expiration_date) - new Date()) / (1000 * 60 * 60 * 24))
@@ -1776,94 +1945,39 @@ const Inventory = () => {
             </h2>
           </div>
           <div className="alerts-list" style={{ padding: '8px 16px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {pendingStockAlerts.count > 0 && (
-              <div 
-                className="alert-item alert-warning clickable-alert" 
-                style={{ background: 'rgba(232,184,75,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px', alignItems: 'center' }}
-                onClick={() => {
-                  setActiveSummaryFilter('pendingStock');
-                  setActiveTab('vaccines');
-                  setMainTab('inventory');
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                tabIndex="0"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setActiveSummaryFilter('pendingStock');
-                    setActiveTab('vaccines');
-                    setMainTab('inventory');
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }
-                }}
-              >
-                <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, background: '#e8b84b' }}></div>
-                <div className="alert-body" style={{ flex: 1 }}>
-                  <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Pending Vaccines Need Stock</p>
-                  <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
-                    {pendingStockAlerts.count} pending vaccination(s) need stock{pendingStockAlerts.stations.length > 0 ? ` for ${pendingStockAlerts.stations.join(', ')}` : ''}.
-                  </span>
+            {inventoryAlerts.length > 0 ? (
+              inventoryAlerts.map((alert, index) => (
+                <div 
+                  key={`${alert.id}-${index}`}
+                  className="alert-item clickable-alert" 
+                  style={{ 
+                    background: `${alert.color}12`, // 0.07 opacity using hex alpha approximation
+                    display: 'flex', 
+                    gap: '10px', 
+                    padding: '10px', 
+                    borderRadius: '10px', 
+                    alignItems: 'center' 
+                  }}
+                  onClick={alert.onClick}
+                  tabIndex="0"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      alert.onClick();
+                    }
+                  }}
+                >
+                  <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, background: alert.color }}></div>
+                  <div className="alert-body" style={{ flex: 1 }}>
+                    <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px', color: alert.color }}>{alert.title}</p>
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{alert.message}</span>
+                  </div>
+                  <ChevronRight size={14} style={{ color: alert.color, opacity: 0.7 }} />
                 </div>
-                <ChevronRight size={14} style={{ color: '#e8b84b', opacity: 0.7 }} />
-              </div>
-            )}
-            {lowStockCount > 0 && (
-              <div 
-                className="alert-item alert-warning clickable-alert" 
-                style={{ background: 'rgba(232,184,75,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px', alignItems: 'center' }}
-                onClick={() => {
-                  setActiveSummaryFilter('lowStock');
-                  setMainTab('inventory');
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                tabIndex="0"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setActiveSummaryFilter('lowStock');
-                    setMainTab('inventory');
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }
-                }}
-              >
-                <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, background: '#e8b84b' }}></div>
-                <div className="alert-body" style={{ flex: 1 }}>
-                  <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Low Stock Warning</p>
-                  <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{lowStockCount} items are running low on stock.</span>
-                </div>
-                <ChevronRight size={14} style={{ color: '#e8b84b', opacity: 0.7 }} />
-              </div>
-            )}
-            {outOfStockCount > 0 && (
-              <div 
-                className="alert-item alert-critical clickable-alert" 
-                style={{ background: 'rgba(224,92,115,0.07)', display: 'flex', gap: '10px', padding: '10px', borderRadius: '10px', alignItems: 'center' }}
-                onClick={() => {
-                  setActiveSummaryFilter('outOfStock');
-                  setMainTab('inventory');
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                tabIndex="0"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setActiveSummaryFilter('outOfStock');
-                    setMainTab('inventory');
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }
-                }}
-              >
-                <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, background: '#e05c73' }}></div>
-                <div className="alert-body" style={{ flex: 1 }}>
-                  <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px' }}>Out of Stock</p>
-                  <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{outOfStockCount} items are currently out of stock!</span>
-                </div>
-                <ChevronRight size={14} style={{ color: '#e05c73', opacity: 0.7 }} />
-              </div>
-            )}
-            {pendingStockAlerts.count === 0 && lowStockCount === 0 && outOfStockCount === 0 && (
+              ))
+            ) : (
               <div style={{ textAlign: 'center', padding: '20px', fontSize: '12px', fontStyle: 'italic', color: 'var(--color-text-muted)' }}>
-                No urgent alerts.
+                No inventory alerts at this time.
               </div>
             )}
           </div>
@@ -2402,7 +2516,13 @@ const Inventory = () => {
                     onChange={e =>
                       setForm({ ...form, manufactured_date: e.target.value })
                     }
+                    style={dateValidation.mfgError ? { border: '1px solid #e05c73' } : {}}
                   />
+                  {dateValidation.mfgError && (
+                    <span style={{ color: '#e05c73', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                      ⚠ {dateValidation.mfgError}
+                    </span>
+                  )}
                 </div>
                 <div className="form-group">
                   <label>Expiration Date</label>
@@ -2412,7 +2532,18 @@ const Inventory = () => {
                     onChange={e =>
                       setForm({ ...form, expiration_date: e.target.value })
                     }
+                    style={dateValidation.expError ? { border: '1px solid #e05c73' } : dateValidation.expWarning ? { border: '1px solid #e8b84b' } : {}}
                   />
+                  {dateValidation.expError && (
+                    <span style={{ color: '#e05c73', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                      ⚠ {dateValidation.expError}
+                    </span>
+                  )}
+                  {dateValidation.expWarning && !dateValidation.expError && (
+                    <span style={{ color: '#e8b84b', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                      ⚠ {dateValidation.expWarning}
+                    </span>
+                  )}
                 </div>
                 <div className="form-grid">
                   <div className="form-group">
@@ -2473,7 +2604,7 @@ const Inventory = () => {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !dateValidation.isValid}
                 >
                   {isSubmitting ? 'Adding...' : 'Add Item'}
                 </button>

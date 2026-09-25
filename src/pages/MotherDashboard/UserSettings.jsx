@@ -10,14 +10,13 @@ import { useLanguage } from '../../context/LanguageContext';
 import { AuthContext } from '../../context/AuthContext';
 import { useContext } from 'react';
 import '../../styles/pages/UserSettings.css';
-
-
+import ResetPasswordModal from '../../components/ResetPasswordModal';
 
 const UserSettings = () => {
     const navigate = useNavigate();
     const { alert: customAlert } = useModal();
     const { t } = useLanguage();
-    const { logout } = useContext(AuthContext);
+    const { logout, user } = useContext(AuthContext);
     const [showFaqModal, setShowFaqModal] = useState(false);
     const [expandedFaq, setExpandedFaq] = useState(null);
 
@@ -74,11 +73,7 @@ const UserSettings = () => {
         }
     };
 
-    const handlePasswordChange = async (e) => {
-        e.preventDefault();
-        await customAlert({ title: 'Password Change', text: 'Password change initiated. In a real app, this would verify the current password.', iconType: 'info' });
-        setPasswords({ current: '', new: '', confirm: '' });
-    };
+    const [resetModalOpen, setResetModalOpen] = useState(false);
 
     return (
         <div className="user-settings-container">
@@ -103,41 +98,24 @@ const UserSettings = () => {
                         <h2>{t('settings_security', 'Security')}</h2>
                     </div>
                     
-                    <form className="password-form" onSubmit={handlePasswordChange}>
-                        <h3>{t('settings_change_password', 'Change Password')}</h3>
-                        <div className="input-group">
-                            <label>{t('settings_current_password', 'Current Password')}</label>
-                            <input 
-                                type="password" 
-                                placeholder={t('settings_current_password_ph', 'Enter current password')}
-                                value={passwords.current}
-                                onChange={(e) => setPasswords({...passwords, current: e.target.value})}
-                            />
-                        </div>
-                        <div className="input-row">
-                            <div className="input-group">
-                                <label>{t('settings_new_password', 'New Password')}</label>
-                                <input 
-                                    type="password" 
-                                    placeholder={t('settings_new_password_ph', 'Enter new password')}
-                                    value={passwords.new}
-                                    onChange={(e) => setPasswords({...passwords, new: e.target.value})}
-                                />
-                            </div>
-                            <div className="input-group">
-                                <label>{t('settings_confirm_password', 'Confirm New Password')}</label>
-                                <input 
-                                    type="password" 
-                                    placeholder={t('settings_confirm_password_ph', 'Confirm new password')}
-                                    value={passwords.confirm}
-                                    onChange={(e) => setPasswords({...passwords, confirm: e.target.value})}
-                                />
-                            </div>
-                        </div>
-                        <button type="submit" className="btn-update-password">{t('settings_update_password', 'Update Password')}</button>
-                    </form>
+                    <div style={{ padding: '24px', borderBottom: '1px solid rgba(45, 34, 52, 0.05)' }}>
+                        <h3 style={{ fontSize: '16px', fontWeight: '600', color: 'var(--color-text)', marginBottom: '8px' }}>
+                            Reset Password
+                        </h3>
+                        <p style={{ color: 'var(--color-text-muted)', fontSize: '14.5px', marginBottom: '16px' }}>
+                            Reset your password securely through your registered email address.
+                        </p>
+                        <button 
+                            type="button" 
+                            className="btn-update-password" 
+                            onClick={() => setResetModalOpen(true)}
+                            style={{ margin: 0, width: 'auto', padding: '10px 20px' }}
+                        >
+                            Reset Password
+                        </button>
+                    </div>
 
-                    <div className="login-history">
+                    <div className="login-history" style={{ marginTop: '0', paddingTop: '24px' }}>
                         <h3>{t('settings_login_history', 'Login History')}</h3>
                         <div className="history-item">
                             <Clock size={16} />
@@ -226,6 +204,11 @@ const UserSettings = () => {
                     </div>
                 </div>
             )}
+            <ResetPasswordModal 
+                isOpen={resetModalOpen} 
+                onClose={() => setResetModalOpen(false)}
+                initialEmail={user?.email || userData.email || ''}
+            />
         </div>
     );
 };

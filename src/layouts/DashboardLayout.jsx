@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
-    LayoutDashboard, Users, Baby, AlertTriangle, CalendarCheck,
+    LayoutDashboard, Users, User, Baby, AlertTriangle, CalendarCheck,
     HeartPulse, Syringe, Truck, Activity, BarChart3, Settings,
     Bell, LogOut, Menu, X, ChevronLeft, ChevronRight, Search, Shield,
-    MapPin, FileText, Stethoscope, RefreshCw, ClipboardList, Package, Languages
+    MapPin, FileText, Stethoscope, RefreshCw, ClipboardList, Package, Languages, Check
 } from 'lucide-react';
 import '../styles/layouts/DashboardLayout.css';
 import logo from '../assets/images/dasmom_logo.png';
@@ -61,12 +61,13 @@ const DashboardLayout = () => {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [sidebarMobile, setSidebarMobile] = useState(false);
     const [notifOpen, setNotifOpen] = useState(false);
-    const [notifFilter, setNotifFilter] = useState('all');
+    const [notifFilter, setNotifFilter] = useState('active');
     const [notifications, setNotifications] = useState([]);
     const [notifCount, setNotifCount] = useState(0);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
     const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
     const userMenuRef = useRef(null);
+    const notifRef = useRef(null);
     const navigate = useNavigate();
     const location = useLocation();
     const { user, logout: authLogout } = useContext(AuthContext);
@@ -92,6 +93,30 @@ const DashboardLayout = () => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, [userMenuOpen]);
+
+    // Click outside or press Esc to close notifications panel
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (notifRef.current && !notifRef.current.contains(event.target)) {
+                setNotifOpen(false);
+            }
+        };
+
+        const handleEscape = (event) => {
+            if (event.key === 'Escape') {
+                setNotifOpen(false);
+            }
+        };
+
+        if (notifOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener('keydown', handleEscape);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleEscape);
+        };
+    }, [notifOpen]);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -218,8 +243,18 @@ const DashboardLayout = () => {
                     });
                 }
 
+                // Process and resolve status
+                const resolvedIds = JSON.parse(window.localStorage.getItem('dasmom.resolvedNotifs') || '[]');
+                
+                notifList.forEach(n => {
+                    const idString = `${n.category}_${n.text}_${n.targetPath}`;
+                    // Simple hash or encode for safe ID
+                    n.id = btoa(encodeURIComponent(idString));
+                    n.isResolved = resolvedIds.includes(n.id);
+                });
+
                 setNotifications(notifList);
-                setNotifCount(notifList.length);
+                setNotifCount(notifList.filter(n => !n.isResolved).length);
 
                 // Set up real-time subscription for notifications
                 const subscription = supabase
@@ -247,6 +282,18 @@ const DashboardLayout = () => {
         setNotifOpen(false);
         if (notif.targetPath) {
             navigate(notif.targetPath, { state: notif.targetState });
+        }
+    };
+
+    const handleResolve = (id) => {
+        const resolvedIds = JSON.parse(window.localStorage.getItem('dasmom.resolvedNotifs') || '[]');
+        if (!resolvedIds.includes(id)) {
+            resolvedIds.push(id);
+            window.localStorage.setItem('dasmom.resolvedNotifs', JSON.stringify(resolvedIds));
+            
+            // Update local state
+            setNotifications(prev => prev.map(n => n.id === id ? { ...n, isResolved: true } : n));
+            setNotifCount(prev => Math.max(0, prev - 1));
         }
     };
 
@@ -423,7 +470,7 @@ const DashboardLayout = () => {
                         )}
 
                         {/* Notifications */}
-                        <div className="topbar-notif-wrap">
+                        <div className="topbar-notif-wrap" ref={notifRef}>
                             <button
                                 className="topbar-icon-btn"
                                 onClick={() => setNotifOpen((v) => !v)}
@@ -445,10 +492,12 @@ const DashboardLayout = () => {
                                                 value={notifFilter}
                                                 onChange={(e) => setNotifFilter(e.target.value)}
                                             >
+                                                <option value="active">Active</option>
+                                                <option value="resolved">Resolved</option>
                                                 <option value="all">All</option>
-                                                <option value="appointments">Appointments</option>
-                                                <option value="inventory">Inventory</option>
-                                                <option value="patients">Patients</option>
+                                                <option value="appointments">Appointments (Active)</option>
+                                                <option value="inventory">Inventory (Active)</option>
+                                                <option value="patients">Patients (Active)</option>
                                             </select>
                                             <button onClick={() => setNotifOpen(false)} aria-label="Close">
                                                 <X size={15} />
@@ -456,21 +505,57 @@ const DashboardLayout = () => {
                                         </div>
                                     </div>
                                     <ul className="notif-list">
-                                        {notifications.length === 0 ? (
-                                            <li className="notif-empty">No notifications</li>
-                                        ) : (
-                                            notifications
-                                                .filter(n => notifFilter === 'all' || n.category === notifFilter)
-                                                .map((n, i) => (
-                                                    <li key={i} className={`notif-item notif-item--${n.type}`} onClick={() => handleNotificationClick(n)}>
-                                                        <span className="notif-dot" aria-hidden="true" />
-                                                        <div>
-                                                            <p>{n.text}</p>
-                                                            <time>{n.time}</time>
-                                                        </div>
+                                        {(() => {
+                                            const filteredNotifs = notifications.filter(n => {
+                                                if (notifFilter === 'active') return !n.isResolved;
+                                                if (notifFilter === 'resolved') return n.isResolved;
+                                                if (notifFilter === 'all') return true;
+                                                return n.category === notifFilter && !n.isResolved;
+                                            });
+
+                                            if (filteredNotifs.length === 0) {
+                                                return (
+                                                    <li className="notif-empty" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                                        <Check size={16} /> No {notifFilter === 'resolved' ? 'resolved' : 'active'} notifications
                                                     </li>
-                                                ))
-                                        )}
+                                                );
+                                            }
+
+                                            return filteredNotifs.map((n, i) => (
+                                                <li key={n.id || i} className={`notif-item notif-item--${n.type}`} onClick={() => handleNotificationClick(n)} style={{ display: 'flex', alignItems: 'center' }}>
+                                                    <span className="notif-dot" aria-hidden="true" style={{ opacity: n.isResolved ? 0.3 : 1 }} />
+                                                    <div style={{ flex: 1, color: n.isResolved ? 'var(--color-text-muted)' : 'inherit' }}>
+                                                        <p>{n.text}</p>
+                                                        <time>{n.time}</time>
+                                                    </div>
+                                                    {!n.isResolved && (
+                                                        <button
+                                                            title="Mark as resolved"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleResolve(n.id);
+                                                            }}
+                                                            style={{
+                                                                background: 'none',
+                                                                border: 'none',
+                                                                color: 'var(--color-text-light)',
+                                                                cursor: 'pointer',
+                                                                padding: '6px',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                borderRadius: '50%',
+                                                                marginLeft: '8px'
+                                                            }}
+                                                            onMouseEnter={e => e.currentTarget.style.color = 'var(--color-primary)'}
+                                                            onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-light)'}
+                                                        >
+                                                            <Check size={16} />
+                                                        </button>
+                                                    )}
+                                                </li>
+                                            ));
+                                        })()}
                                     </ul>
                                 </div>
                             )}
@@ -504,7 +589,7 @@ const DashboardLayout = () => {
                                             navigate(isUserView ? '/mother-home/user-account' : '/dashboard/settings?tab=profile');
                                             setUserMenuOpen(false);
                                         }}>
-                                            <Users size={15} /> {isUserView ? t('menu_view_account') : 'View Account'}
+                                            <User size={15} /> {isUserView ? t('menu_view_account') : 'My Profile'}
                                         </button>
                                         <button className="user-menu-item" onClick={() => {
                                             navigate(isUserView ? '/mother-home/user-settings' : '/dashboard/settings');
@@ -575,7 +660,7 @@ const DashboardLayout = () => {
                                     <span>{t('more_daily_tips')}</span>
                                 </NavLink>
                                 <NavLink to="/mother-home/user-account" className="mobile-more-link" onClick={() => setMobileMoreOpen(false)}>
-                                    <div className="mobile-more-icon-wrap"><Users size={18} /></div>
+                                    <div className="mobile-more-icon-wrap"><User size={18} /></div>
                                     <span>{t('more_my_profile')}</span>
                                 </NavLink>
                                 <NavLink to="/mother-home/user-settings" className="mobile-more-link" onClick={() => setMobileMoreOpen(false)}>

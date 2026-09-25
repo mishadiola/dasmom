@@ -511,17 +511,21 @@ const Dashboard = () => {
                         {/* Stock Status Summary Cards */}
                         {!loadingStock && vaccineStock.length > 0 && (
                             <div className="stock-summary-cards">
-                                <div className="stock-summary-card stock-summary--critical">
-                                    <span className="stock-summary-count">{vaccineStock.filter(v => v.status === 'critical' || v.status === 'expired').length}</span>
-                                    <span className="stock-summary-label">Critical</span>
+                                <div className="stock-summary-card stock-summary--out">
+                                    <span className="stock-summary-count">{vaccineStock.filter(v => v.status === 'out').length}</span>
+                                    <span className="stock-summary-label">OUT OF STOCK</span>
                                 </div>
                                 <div className="stock-summary-card stock-summary--low">
-                                    <span className="stock-summary-count">{vaccineStock.filter(v => v.status === 'low' || v.status === 'expiring-soon').length}</span>
-                                    <span className="stock-summary-label">Low Stock</span>
+                                    <span className="stock-summary-count">{vaccineStock.filter(v => v.status === 'low').length}</span>
+                                    <span className="stock-summary-label">LOW STOCK</span>
+                                </div>
+                                <div className="stock-summary-card stock-summary--medium">
+                                    <span className="stock-summary-count">{vaccineStock.filter(v => v.status === 'medium').length}</span>
+                                    <span className="stock-summary-label">MEDIUM STOCK</span>
                                 </div>
                                 <div className="stock-summary-card stock-summary--ok">
                                     <span className="stock-summary-count">{vaccineStock.filter(v => v.status === 'ok').length}</span>
-                                    <span className="stock-summary-label">Normal</span>
+                                    <span className="stock-summary-label">NORMAL</span>
                                 </div>
                             </div>
                         )}
@@ -532,27 +536,27 @@ const Dashboard = () => {
                             ) : vaccineStock.length > 0 ? (
                                 vaccineStock
                                     .sort((a, b) => {
-                                        // Priority sort: Expired (0) → Critical (1) → Expiring Soon (2) → Low (3) → Ok (4)
-                                        const priority = { expired: 0, critical: 1, 'expiring-soon': 2, low: 3, ok: 4 };
+                                        // Priority sort: Expired (-1) -> Out (0) → Low (1) → Medium (2) → Normal (3)
+                                        const priority = { expired: -1, out: 0, low: 1, medium: 2, ok: 3 };
                                         return priority[a.status] - priority[b.status];
                                     })
                                     .slice(0, 5)
                                     .map((v, index) => (
-                                    <div key={`${v.name}-${index}`} className={`stock-item stock-item--${v.status}`}>
+                                    <div key={`${v.name}-${index}`} className={`stock-item stock-item--${v.status === 'expired' ? 'out' : v.status}`}>
                                         <div className="stock-info">
                                             <span className="stock-name">{v.name}</span>
                                             <div className="stock-bar-wrap">
                                                 <MiniBar
                                                     value={v.stock}
                                                     max={Math.max(v.stock, v.min) * 1.5}
-                                                    color={v.status === 'ok' ? 'sage' : v.status === 'low' ? 'yellow' : v.status === 'expiring-soon' ? 'orange' : 'rose'}
+                                                    color={v.status === 'ok' ? 'sage' : v.status === 'medium' ? 'orange' : 'rose'}
                                                 />
                                             </div>
                                         </div>
                                         <div className="stock-meta">
                                             <span className="stock-qty">{v.stock} {v.unit}</span>
-                                            <span className={`stock-badge stock-badge--${v.status}`}>
-                                                {v.status === 'ok' ? 'Normal' : v.status === 'expired' ? 'Expired' : v.status === 'expiring-soon' ? 'Expiring Soon' : v.status === 'low' ? 'Low' : 'Critical'}
+                                            <span className={`stock-badge stock-badge--${v.status === 'expired' ? 'out' : v.status}`}>
+                                                {v.status === 'expired' ? 'EXPIRED' : v.status === 'ok' ? 'Normal' : v.status === 'medium' ? 'Medium Stock' : v.status === 'low' ? 'Low Stock' : 'Out of Stock'}
                                             </span>
                                         </div>
                                         {v.expiration_date && (

@@ -1,7 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { 
     Mail, Lock, Eye, EyeOff, Loader2, Chrome,
-    Calendar, Activity, Heart, Baby, ArrowLeft
+    Calendar, Activity, Heart, Baby, ArrowLeft, X
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import '../../styles/pages/MotherLogin.css';
@@ -11,7 +11,8 @@ import { AuthContext } from '../../context/AuthContext';
 import { useModal } from '../../context/ModalContext';
 import supabase from '../../config/supabaseclient';
 import { useLanguage } from '../../context/LanguageContext';
-import { DASMOM_APP_URL, PASSWORD_RESET_URL } from '../../config/appConfig';
+import { DASMOM_APP_URL } from '../../config/appConfig';
+import ResetPasswordModal from '../../components/ResetPasswordModal';
 
 const MotherLogin = () => {
     const navigate = useNavigate();
@@ -39,26 +40,11 @@ const MotherLogin = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
-    const handleForgotPassword = async (event) => {
-        event.preventDefault();
-        const resetEmail = window.prompt(t('login_reset_prompt'));
-        if (!resetEmail?.trim()) return;
+    const [resetModalOpen, setResetModalOpen] = useState(false);
 
-        setIsLoading(true);
-        try {
-            await supabase.functions.invoke('password-reset', {
-                body: {
-                    email: resetEmail.trim().toLowerCase(),
-                    redirectTo: PASSWORD_RESET_URL,
-                }
-            });
-            await customAlert({ title: t('login_reset_title'), text: t('login_reset_text'), iconType: 'success' });
-        } catch (error) {
-            console.error('Password reset email failed:', error);
-            await customAlert({ title: t('login_reset_fail_title'), text: t('login_reset_fail_text'), iconType: 'danger' });
-        } finally {
-            setIsLoading(false);
-        }
+    const handleForgotPasswordClick = (event) => {
+        event.preventDefault();
+        setResetModalOpen(true);
     };
 
    const handleSubmit = async (e) => {
@@ -179,7 +165,7 @@ const MotherLogin = () => {
                             </button>
 
                             <div className="ml-form-footer">
-                                <a href="#forgot-password" className="ml-forgot-link" onClick={handleForgotPassword}>
+                                <a href="#forgot-password" className="ml-forgot-link" onClick={handleForgotPasswordClick}>
                                     {t('login_forgot')}
                                 </a>
                             </div>
@@ -224,6 +210,12 @@ const MotherLogin = () => {
                     </div>
                 </div>
             </main>
+
+            {/* Forgot Password Modal */}
+            <ResetPasswordModal 
+                isOpen={resetModalOpen} 
+                onClose={() => setResetModalOpen(false)} 
+            />
         </div>
     );
 };

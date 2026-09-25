@@ -280,39 +280,39 @@ const AddUserModal = ({ onClose, onSuccess }) => {
                                 )}
                             </select>
                         </div>
-                        <div className="form-group">
+                        <div className="form-group form-group--full">
                             <label>Assign Station / Barangay</label>
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                <div style={{ position: 'relative', flex: 1 }}>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <div style={{ position: 'relative', flex: '1 1 200px' }}>
                                     <select
                                         value={form.station}
                                         onChange={e => update('station', e.target.value)}
-                                        onFocus={() => setShowStationDropdown(true)}
-                                        style={{ width: '100%', paddingRight: '32px' }}
+                                        style={{ 
+                                            width: '100%', 
+                                            paddingRight: '36px',
+                                            appearance: 'none',
+                                            WebkitAppearance: 'none',
+                                            MozAppearance: 'none'
+                                        }}
                                     >
-                                        <option value="">Select station...</option>
+                                        <option value="">Select Station / Barangay...</option>
                                         {stations.map(s => (
                                             <option key={s} value={s}>{formatStationName(s)}</option>
                                         ))}
                                     </select>
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowStationDropdown(v => !v)}
-                                        style={{
+                                    <ChevronDown 
+                                        size={16} 
+                                        style={{ 
                                             position: 'absolute',
-                                            right: '8px',
+                                            right: '12px',
                                             top: '50%',
                                             transform: 'translateY(-50%)',
-                                            background: 'none',
-                                            border: 'none',
-                                            cursor: 'pointer',
-                                            padding: '4px',
-                                        }}
-                                    >
-                                        <ChevronDown size={16} />
-                                    </button>
+                                            pointerEvents: 'none',
+                                            color: '#666'
+                                        }} 
+                                    />
                                 </div>
-                                <button type="button" className="btn btn-outline" onClick={() => setShowAddStationModal(true)}>
+                                <button type="button" className="btn btn-outline" onClick={() => setShowAddStationModal(true)} style={{ whiteSpace: 'nowrap' }}>
                                     <SettingsIcon size={14} /> Manage Stations
                                 </button>
                             </div>
@@ -616,39 +616,39 @@ const EditUserModal = ({ staff, onClose, onSuccess }) => {
                                 )}
                             </select>
                         </div>
-                        <div className="form-group">
+                        <div className="form-group form-group--full">
                             <label>Assign Station / Barangay</label>
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                <div style={{ position: 'relative', flex: 1 }}>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <div style={{ position: 'relative', flex: '1 1 200px' }}>
                                     <select
                                         value={form.station}
                                         onChange={e => update('station', e.target.value)}
-                                        onFocus={() => setShowStationDropdown(true)}
-                                        style={{ width: '100%', paddingRight: '32px' }}
+                                        style={{ 
+                                            width: '100%', 
+                                            paddingRight: '36px',
+                                            appearance: 'none',
+                                            WebkitAppearance: 'none',
+                                            MozAppearance: 'none'
+                                        }}
                                     >
-                                        <option value="">Select station...</option>
+                                        <option value="">Select Station / Barangay...</option>
                                         {stations.map(s => (
                                             <option key={s} value={s}>{formatStationName(s)}</option>
                                         ))}
                                     </select>
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowStationDropdown(v => !v)}
-                                        style={{
+                                    <ChevronDown 
+                                        size={16} 
+                                        style={{ 
                                             position: 'absolute',
-                                            right: '8px',
+                                            right: '12px',
                                             top: '50%',
                                             transform: 'translateY(-50%)',
-                                            background: 'none',
-                                            border: 'none',
-                                            cursor: 'pointer',
-                                            padding: '4px',
-                                        }}
-                                    >
-                                        <ChevronDown size={16} />
-                                    </button>
+                                            pointerEvents: 'none',
+                                            color: '#666'
+                                        }} 
+                                    />
                                 </div>
-                                <button type="button" className="btn btn-outline" onClick={() => setShowAddStationModal(true)}>
+                                <button type="button" className="btn btn-outline" onClick={() => setShowAddStationModal(true)} style={{ whiteSpace: 'nowrap' }}>
                                     <Plus size={14} /> Add Station
                                 </button>
                             </div>
@@ -682,6 +682,7 @@ const UserAccountsTab = () => {
     const [search, setSearch] = useState('');
     const [roleFilter, setRoleFilter] = useState('All');
     const [statusFilter, setStatusFilter] = useState('Active'); // 'All' | 'Active' | 'Archived'
+    const [activePopover, setActivePopover] = useState(null);
     const [showModal, setShowModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [selectedStaff, setSelectedStaff] = useState(null);
@@ -700,6 +701,27 @@ const UserAccountsTab = () => {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (activePopover) {
+                const popoverElement = document.querySelector('.filter-popover');
+                const buttonElement = event.target.closest('.filter-btn');
+                
+                if (popoverElement && !popoverElement.contains(event.target) && !buttonElement) {
+                    setActivePopover(null);
+                }
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('touchstart', handleClickOutside);
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('touchstart', handleClickOutside);
+        };
+    }, [activePopover]);
 
     useEffect(() => {
         const fetchRoles = async () => {
@@ -846,17 +868,62 @@ const UserAccountsTab = () => {
                     <Search size={15} className="set-search-icon" />
                     <input className="set-search-input" placeholder="Search by name or email..." value={search} onChange={e => setSearch(e.target.value)} />
                 </div>
-                <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)} className="set-select">
-                    <option value="All">All Roles</option>
-                    {roleOptions.map(role => (
-                        <option key={role.id} value={role.value}>{formatRoleLabel(role.value)}</option>
-                    ))}
-                </select>
-                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="set-select">
-                    <option value="All">All Status</option>
-                    <option value="Active">Active</option>
-                    <option value="Archived">Archived</option>
-                </select>
+                <div className="filter-dropdown-container">
+                    <button 
+                        className={`filter-btn ${roleFilter !== 'All' ? 'active-filter' : ''}`}
+                        onClick={() => setActivePopover(activePopover === 'role' ? null : 'role')}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                    >
+                        <span>{roleFilter === 'All' ? 'All Roles' : formatRoleLabel(roleFilter)}</span>
+                        <ChevronDown size={14} className="filter-btn-icon" />
+                    </button>
+                    {activePopover === 'role' && (
+                        <div className="filter-popover" style={{ left: 0, right: 'auto', minWidth: '160px' }}>
+                            <div className="popover-title">ROLE</div>
+                            <div className="popover-options">
+                                <label className="popover-checkbox-label" style={{ cursor: 'pointer' }}>
+                                    <input type="checkbox" checked={roleFilter === 'All'} onChange={() => { setRoleFilter('All'); setActivePopover(null); }} />
+                                    All Roles
+                                </label>
+                                {roleOptions.map(role => (
+                                    <label key={role.id} className="popover-checkbox-label" style={{ cursor: 'pointer' }}>
+                                        <input type="checkbox" checked={roleFilter === role.value} onChange={() => { setRoleFilter(role.value); setActivePopover(null); }} />
+                                        {formatRoleLabel(role.value)}
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+                <div className="filter-dropdown-container">
+                    <button 
+                        className={`filter-btn ${statusFilter !== 'All' && statusFilter !== 'Active' ? 'active-filter' : ''}`}
+                        onClick={() => setActivePopover(activePopover === 'status' ? null : 'status')}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                    >
+                        <span>{statusFilter === 'All' ? 'All Status' : statusFilter}</span>
+                        <ChevronDown size={14} className="filter-btn-icon" />
+                    </button>
+                    {activePopover === 'status' && (
+                        <div className="filter-popover" style={{ left: 0, right: 'auto', minWidth: '140px' }}>
+                            <div className="popover-title">STATUS</div>
+                            <div className="popover-options">
+                                <label className="popover-checkbox-label" style={{ cursor: 'pointer' }}>
+                                    <input type="radio" name="statusFilter" checked={statusFilter === 'Active'} onChange={() => { setStatusFilter('Active'); setActivePopover(null); }} />
+                                    Active
+                                </label>
+                                <label className="popover-checkbox-label" style={{ cursor: 'pointer' }}>
+                                    <input type="radio" name="statusFilter" checked={statusFilter === 'Archived'} onChange={() => { setStatusFilter('Archived'); setActivePopover(null); }} />
+                                    Archived
+                                </label>
+                                <label className="popover-checkbox-label" style={{ cursor: 'pointer' }}>
+                                    <input type="radio" name="statusFilter" checked={statusFilter === 'All'} onChange={() => { setStatusFilter('All'); setActivePopover(null); }} />
+                                    All Status
+                                </label>
+                            </div>
+                        </div>
+                    )}
+                </div>
                 <button className="btn btn-primary" onClick={() => setShowModal(true)}><Plus size={15} /> Add Staff</button>
             </div>
 
