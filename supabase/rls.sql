@@ -80,6 +80,38 @@ AS $$
   );
 $$;
 
+CREATE OR REPLACE FUNCTION public.staff_attended_my_delivery(p_staff_id UUID)
+RETURNS BOOLEAN
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+SET row_security = off
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.deliveries d
+    WHERE d.mother_id = auth.uid()
+      AND d.attending_staff = p_staff_id
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.staff_assigned_my_prenatal_visit(p_staff_id UUID)
+RETURNS BOOLEAN
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+SET row_security = off
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.prenatal_visits v
+    WHERE v.patient_id = auth.uid()
+      AND v.assigned_staff = p_staff_id
+  );
+$$;
+
 CREATE OR REPLACE FUNCTION public.newborn_assigned_to_me(p_newborn_id UUID)
 RETURNS BOOLEAN
 LANGUAGE SQL
@@ -266,11 +298,7 @@ CREATE POLICY patient_read_assigned_staff ON public.staff_profiles FOR SELECT TO
   USING (
     get_my_role() IN ('mother', 'patient')
     AND (
-      EXISTS (
-        SELECT 1 FROM public.prenatal_visits v
-        WHERE v.patient_id = auth.uid()
-          AND v.assigned_staff = staff_profiles.id
-      )
+      public.staff_assigned_my_prenatal_visit(staff_profiles.id)
       OR EXISTS (
         SELECT 1 FROM public.vaccinations v
         WHERE v.patient_id = auth.uid()
@@ -283,11 +311,7 @@ CREATE POLICY patient_read_assigned_staff ON public.staff_profiles FOR SELECT TO
         WHERE n.mother_id = auth.uid()
           AND v.assigned_staff = staff_profiles.id
       )
-      OR EXISTS (
-        SELECT 1 FROM public.deliveries d
-        WHERE d.mother_id = auth.uid()
-          AND d.attending_staff = staff_profiles.id
-      )
+      OR public.staff_attended_my_delivery(staff_profiles.id)
     )
   );
 

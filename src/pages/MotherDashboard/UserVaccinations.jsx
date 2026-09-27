@@ -12,6 +12,7 @@ import VaccineDetailModal from '../../components/MotherDashboard/VaccineDetailMo
 import { useNavigate } from 'react-router-dom';
 import vaccinationsSilhouette from '../../assets/images/vaccinations-silhouette.png';
 import { useLanguage } from '../../context/LanguageContext';
+import { isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
 
 const UserVaccinations = () => {
     const navigate = useNavigate();
@@ -44,12 +45,18 @@ const UserVaccinations = () => {
                 
                 // Add children's vaccines
                 if (patient?.newborns && patient.newborns.length > 0) {
-                    patient.newborns.forEach(newborn => {
+                    const pregnancyByDeliveryId = new Map(
+                        (patient.pregnancyHistory || []).flatMap(pregnancy =>
+                            (pregnancy.deliveries || []).map(delivery => [delivery.id, pregnancy.pregnancyNumber])
+                        )
+                    );
+                    patient.newborns.filter(isNewbornVaccinationEligible).forEach(newborn => {
                         if (newborn.vaccines && newborn.vaccines.length > 0) {
                             allVaccines = allVaccines.concat(newborn.vaccines.map(v => ({
                                 ...v,
                                 personType: 'child',
-                                personName: newborn.baby_name || `Baby`
+                                personName: newborn.baby_name || 'Baby',
+                                pregnancyNumber: pregnancyByDeliveryId.get(newborn.delivery_id) || null
                             })));
                         }
                     });
@@ -151,14 +158,14 @@ const UserVaccinations = () => {
 
             <div className="uv-cards-grid">
                 {filteredVaccines.length > 0 ? (
-                    filteredVaccines.map(vaccine => {
+                    filteredVaccines.map((vaccine, index) => {
                         const status = vaccine.status || 'Unknown';
                         // Determine category based on person type: self = Maternal, child = Newborn
                         const category = vaccine.personType === 'self' ? 'Maternal' : 'Newborn';
                         // NOTES COLUMN IS THE VACCINE NAME - use it as primary display
                         const displayName = vaccine.notes || vaccine.vaccine_name || vaccine.name || 'Vaccine';
                         const desc = vaccine.description || '';
-                        const safeId = vaccine.id || `${displayName}-${Math.random().toString(36).slice(2,8)}`;
+                        const safeId = vaccine.id || `${displayName}-${index}`;
                         return (
                             <div 
                                 key={safeId} 
@@ -186,7 +193,10 @@ const UserVaccinations = () => {
                                     </p>
                                 )}
                                 {vaccine.personType === 'child' && (
-                                    <p className="uv-vaccine-person">{t('vac_for')} <strong>{vaccine.personName}</strong></p>
+                                    <p className="uv-vaccine-person">
+                                        {t('vac_for')} <strong>{vaccine.personName}</strong>
+                                        {vaccine.pregnancyNumber && <span> · Pregnancy #{vaccine.pregnancyNumber}</span>}
+                                    </p>
                                 )}
                                 <p className="uv-vaccine-desc">{desc}</p>
                                 <div className="uv-vaccine-schedule">

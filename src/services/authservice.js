@@ -70,7 +70,7 @@ export default class AuthService {
       throw new Error(DUPLICATE_EMAIL_MESSAGE);
     }
 
-    throw new Error('Unable to create account. Please try again.');
+    throw new Error(payload?.error || functionError?.message || 'Unable to create account. Please try again.');
   }
 
   async getUserTypeIdByRole(role) {
@@ -184,13 +184,6 @@ export default class AuthService {
 
       if (functionError) await this._throwAccountCreationError(functionError);
       if (!functionData?.userId) throw new Error('Patient account function did not return a user ID');
-
-      await this.ensurePublicUserRecord({
-        userId: functionData.userId,
-        email: normalizedEmail,
-        role,
-        password,
-      });
 
       return { id: functionData.userId };
     }

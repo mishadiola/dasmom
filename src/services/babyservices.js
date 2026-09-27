@@ -2,6 +2,7 @@ import supabase from '../config/supabaseclient';
 import AuthService from './authservice';
 import PatientService from './patientservice';
 import VaccinationService from './vaccinationservice';
+import { buildPregnancyHistory, getLatestPregnancyRecord, getPregnancyForDelivery } from '../utils/pregnancyUtils';
 
 class BabyService {
   constructor() {
@@ -230,6 +231,8 @@ class BabyService {
         .from('deliveries')
         .select(`
           id,
+          pregnancy_id,
+          attending_staff,
           delivery_date,
           delivery_time,
           delivery_type,
@@ -262,7 +265,8 @@ class BabyService {
             risk_level
           ),
           staff_profiles!deliveries_attending_staff_fkey (
-            full_name
+            id, full_name, station_ass,
+            stations:station_ass (station_name)
           )
         `)
         .order('delivery_date', { ascending: false })
@@ -340,6 +344,8 @@ class BabyService {
         );
         return {
           id: d.id,
+          pregnancyId: d.pregnancy_id || null,
+          attendingStaffId: d.attending_staff || null,
           patientId: motherId,
           patientName: `${d.patient_basic_info?.first_name || ''} ${d.patient_basic_info?.last_name || ''}`.trim(),
           stationId: d.patient_basic_info?.station_ass || null,
@@ -359,7 +365,8 @@ class BabyService {
           headCircumference: newborn?.head_circumference || null,
           apgar1: newborn?.apgar_1min || null,
           apgar5: newborn?.apgar_5min || null,
-          staff: staff?.full_name || 'Unassigned',
+          staff: staff?.full_name || (d.attending_staff ? d.attending_staff : 'Unassigned'),
+          staffStation: staff?.stations?.station_name || null,
           facility: d.facility || 'N/A',
           postpartumVisitDate: d.postpartum_visit_date || null,
           postpartumAttendedDate: d.postpartum_attended_date || null,
@@ -418,17 +425,17 @@ class BabyService {
     if (!createdBy) throw new Error('No logged-in user');
 
     if (deliveryData.outcome === 'Miscarriage') {
-      const { data: currentPregnancy, error: pregnancyError } = await supabase
+      const { data: pregnancyRows, error: pregnancyError } = await supabase
         .from('pregnancy_info')
         .select('*')
         .eq('patient_id', deliveryData.mother_id)
-        .eq('pregn_postp', 'Pregnant')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .order('created_at', { ascending: false });
 
       if (pregnancyError) throw pregnancyError;
-      if (!currentPregnancy) throw new Error('No pregnancy record found for this patient');
+      const currentPregnancy = getLatestPregnancyRecord(pregnancyRows || []);
+      if (String(currentPregnancy?.pregn_postp || '').toLowerCase() !== 'pregnant') {
+        throw new Error('The latest pregnancy record is not currently pregnant.');
+      }
 
       const miscarriageInfo = {
         outcome: 'Miscarriage',
@@ -478,6 +485,38 @@ class BabyService {
       };
     }
 
+    const attendingStaffId = deliveryData.attending_staff || deliveryData.attendingStaffId || null;
+    if (!attendingStaffId) throw new Error('Select the staff member who attended the delivery.');
+
+    const { data: pregnancyRows, error: pregnancyRowsError } = await supabase
+      .from('pregnancy_info')
+      .select('id, patient_id, pregn_postp, lmd, edd, pregnancy_type, place_of_delivery, gravida, para, miscarriage_info, created_at')
+      .eq('patient_id', deliveryData.mother_id)
+      .order('created_at', { ascending: false });
+    if (pregnancyRowsError) throw pregnancyRowsError;
+
+    let existingPregnancyId = deliveryData.pregnancy_id || null;
+    if (deliveryId && !existingPregnancyId) {
+      const { data: existingDelivery, error: existingDeliveryError } = await supabase
+        .from('deliveries')
+        .select('pregnancy_id')
+        .eq('id', deliveryId)
+        .maybeSingle();
+      if (existingDeliveryError) throw existingDeliveryError;
+      existingPregnancyId = existingDelivery?.pregnancy_id || null;
+    }
+
+    const deliveryPregnancy = getPregnancyForDelivery(
+      pregnancyRows || [],
+      deliveryData.delivery_date,
+      existingPregnancyId,
+      deliveryData.delivery_time
+    ) || (existingPregnancyId ? { id: existingPregnancyId } : null);
+    if (!deliveryPregnancy) {
+      throw new Error('Could not match this delivery to a pregnancy record. Verify the mother and pregnancy dates.');
+    }
+    const latestPregnancy = getLatestPregnancyRecord(pregnancyRows || []);
+
     const newbornArray = Array.isArray(newbornData) ? newbornData : [newbornData];
 
     const complications = Array.isArray(deliveryData.complications)
@@ -495,6 +534,7 @@ class BabyService {
 
     const deliveryPayload = {
       mother_id: deliveryData.mother_id,
+      pregnancy_id: deliveryPregnancy.id,
       delivery_date: deliveryData.delivery_date,
       delivery_time: deliveryData.delivery_time || '00:00',
       delivery_type: deliveryData.delivery_type,
@@ -502,7 +542,7 @@ class BabyService {
       gestational_age: deliveryData.gestational_age || null,
       risk_level: deliveryData.risk_level || 'Normal',
       complications,
-      attending_staff: deliveryData.attending_staff || null,
+      attending_staff: attendingStaffId,
       facility: deliveryData.facility || null,
       postpartum_visit_date: postpartumVisitDate,
       notes: deliveryData.notes || null,
@@ -595,24 +635,18 @@ class BabyService {
       console.log('✅ Inserted newborns with IDs:', newbornIds);
     }
 
-    // Only run pregnancy status updates for new deliveries (not edits)
-    if (!deliveryId) {
-      // Update pregnancy status to postpartum
-      const { data: currentPregnancy } = await supabase
-        .from('pregnancy_info')
-        .select('*')
-        .eq('patient_id', deliveryData.mother_id)
-        .eq('pregn_postp', 'Pregnant')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (currentPregnancy) {
+    // Transition only the current pregnancy; historical deliveries must not change current state.
+    if (
+      !deliveryId
+      && latestPregnancy?.id === deliveryPregnancy.id
+      && String(latestPregnancy.pregn_postp || '').toLowerCase() === 'pregnant'
+    ) {
+        const currentPregnancy = deliveryPregnancy;
         // Calculate new gravida and para values
         const newGravida = (currentPregnancy.gravida || 1) + 1;
         const newPara = (currentPregnancy.para || 0) + 1;
         
-        await supabase
+        const { error: postpartumInsertError } = await supabase
           .from('pregnancy_info')
           .insert({
             patient_id: deliveryData.mother_id,
@@ -625,27 +659,42 @@ class BabyService {
             gravida: newGravida,
             para: newPara
           });
+        if (postpartumInsertError) throw postpartumInsertError;
 
-        // Cancel any scheduled prenatal visits after the delivery date
-        const { data: futureVisits } = await supabase
+        // Reconcile only visits belonging to this delivery's pregnancy.
+        const { data: scheduledVisits, error: visitsError } = await supabase
           .from('prenatal_visits')
-          .select('id, visit_date, status')
+          .select('id, visit_date, status, next_appt_type, missed_reason')
           .eq('patient_id', deliveryData.mother_id)
           .eq('status', 'Scheduled');
-          
-        if (futureVisits && futureVisits.length > 0) {
-          const deliveryDateVal = new Date(deliveryData.delivery_date).setHours(0,0,0,0);
-          const staleVisitIds = futureVisits.filter(v => {
-             const vDate = new Date(v.visit_date).setHours(0,0,0,0);
-             return vDate > deliveryDateVal;
-          }).map(v => v.id);
+        if (visitsError) throw visitsError;
 
-          if (staleVisitIds.length > 0) {
-            await supabase
-              .from('prenatal_visits')
-              .update({ status: 'Cancelled' })
-              .in('id', staleVisitIds);
-            console.log(`✅ Cancelled ${staleVisitIds.length} stale prenatal visits`);
+        const deliveryPregnancyHistory = buildPregnancyHistory(
+          pregnancyRows || [],
+          scheduledVisits || [],
+          [{ ...deliveryPayload, id: delivery.id }]
+        );
+        const deliveryPregnancyGroup = deliveryPregnancyHistory.find(pregnancy =>
+          pregnancy.deliveries.some(record => record.id === delivery.id)
+        );
+        const deliveryDateValue = new Date(deliveryData.delivery_date).setHours(0, 0, 0, 0);
+        const staleVisitIds = (deliveryPregnancyGroup?.visits || [])
+          .filter(visit => {
+            if (!visit.visit_date || String(visit.next_appt_type || '').toLowerCase().includes('postpartum')) return false;
+            return new Date(visit.visit_date).setHours(0, 0, 0, 0) > deliveryDateValue;
+          })
+          .map(visit => visit.id);
+
+        if (staleVisitIds.length > 0) {
+          const cancellationReason = 'Cancelled because delivery occurred before the scheduled prenatal visit.';
+          const { error: cancellationError } = await supabase
+            .from('prenatal_visits')
+            .update({ status: 'Cancelled', missed_reason: cancellationReason })
+            .in('id', staleVisitIds);
+          if (cancellationError) {
+            console.error('Could not cancel scheduled visits after delivery:', cancellationError);
+          } else {
+            console.log(`✅ Cancelled ${staleVisitIds.length} prenatal visits after delivery`);
           }
         }
 
@@ -685,7 +734,6 @@ class BabyService {
         //   console.error('Warning: Failed to schedule postpartum maternal vaccinations:', vaccError);
         //   // Don't throw error - delivery should still succeed
         // }
-      }
     }
 
     // NOTE: Newborn vaccine scheduling is handled separately by VaccinationService.scheduleNewbornVaccinations()

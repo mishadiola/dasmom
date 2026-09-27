@@ -3,6 +3,7 @@ import AuthService from './authservice';
 import InventoryService from './inventoryservice';
 import VaccinationService from './vaccinationservice';
 import { isBatchExpired } from '../utils/inventoryUtils';
+import { buildPregnancyHistory, getLatestPregnancyRecord, getPregnancyStatus } from '../utils/pregnancyUtils';
 
 const inventoryService = new InventoryService();
 const TIME_SLOTS_8TO4 = [
@@ -187,14 +188,13 @@ export default class PatientService {
       if (err2) throw err2;
 
       const latestPregMap = new Map();
+      const pregnanciesByPatient = new Map();
       (pregnancies || []).forEach(pgi => {
         if (!pgi.patient_id) return;
-        const existing = latestPregMap.get(pgi.patient_id);
-        const currentTime = new Date(pgi.created_at).getTime() || 0;
-        const existingTime = existing ? new Date(existing.created_at).getTime() || 0 : 0;
-        if (!existing || currentTime > existingTime) {
-          latestPregMap.set(pgi.patient_id, pgi);
-        }
+        const patientPregnancies = pregnanciesByPatient.get(pgi.patient_id) || [];
+        patientPregnancies.push(pgi);
+        pregnanciesByPatient.set(pgi.patient_id, patientPregnancies);
+        latestPregMap.set(pgi.patient_id, getLatestPregnancyRecord(patientPregnancies));
       });
 
       // 3. Get prenatal visits and compute attended visit totals plus the next appointment reference.
@@ -270,7 +270,7 @@ export default class PatientService {
         }
 
         // Determine patient status
-        const pregnancyStatus = (pgi?.pregn_postp || '').toLowerCase();
+        const pregnancyStatus = getPregnancyStatus(pgi).toLowerCase();
         const edd = pgi?.edd ? new Date(pgi.edd) : null;
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -1143,6 +1143,9 @@ export default class PatientService {
     const staffSessionUser = sessionData?.session?.user;
     const createdBy = staffSessionUser?.id || null;
     if (!createdBy) throw new Error("No logged-in user");
+    if (patientData.pregnancyStatus === 'Postpartum' && patientData.birthDate && !patientData.attending_staff) {
+      throw new Error('Select the staff member who attended the delivery.');
+    }
 
     const currentUser = await authService.getAuthUser();
     const currentUserRole = (currentUser?.role || '').toLowerCase();
@@ -1216,8 +1219,10 @@ export default class PatientService {
       throw patientInsertError;
     }
 
+    const pregnancyInfoId = patientData.pregnancyStatus === 'Postpartum' ? crypto.randomUUID() : null;
     try {
-      const { error: pregnancyError } = await this.supabase.from('pregnancy_info').insert({
+      const pregnancyPayload = {
+        ...(pregnancyInfoId ? { id: pregnancyInfoId } : {}),
         patient_id: patientId,
         created_by: createdBy,
         pregn_postp: patientData.pregnancyStatus,
@@ -1227,14 +1232,17 @@ export default class PatientService {
         place_of_delivery: patientData.plannedDeliveryPlace,
         gravida: parseInt(patientData.gravida) || 1,
         para: parseInt(patientData.para) || 0
-      });
+      };
+      const { error: pregnancyError } = await this.supabase.from('pregnancy_info').insert(pregnancyPayload);
       if (pregnancyError) {
         console.error('Error inserting pregnancy_info:', pregnancyError);
+        if (patientData.pregnancyStatus === 'Postpartum') throw pregnancyError;
       } else {
         console.log('✅ Inserted pregnancy_info for patient:', patientId);
       }
     } catch (error) {
       console.error('Error inserting pregnancy_info:', error);
+      if (patientData.pregnancyStatus === 'Postpartum') throw error;
       // Don't throw - patient creation should still succeed
     }
 
@@ -1251,6 +1259,7 @@ export default class PatientService {
 
       const deliveryData = {
         mother_id: patientId,
+        pregnancy_id: pregnancyInfoId,
         delivery_date: patientData.birthDate,
         delivery_time: patientData.deliveryTime || '00:00',
         delivery_type: patientData.deliveryType || 'NSD',
@@ -1258,7 +1267,7 @@ export default class PatientService {
         gestational_age: null,
         risk_level: 'Normal',
         complications: [],
-        attending_staff: null,
+        attending_staff: patientData.attending_staff || null,
         facility: patientData.plannedDeliveryPlace || 'Hospital',
         postpartum_visit_date: postpartumVisitDate,
         notes: null
@@ -1276,26 +1285,23 @@ export default class PatientService {
         risk_level: 'Normal'
       };
 
-      try {
-        const result = await babyService.recordDelivery(deliveryData, newbornData);
-        console.log('✅ Created delivery and newborn records for postpartum patient:', result);
-        
+      const result = await babyService.recordDelivery(deliveryData, newbornData);
+      console.log('✅ Created delivery and newborn records for postpartum patient:', result);
+
+        try {
         // Schedule newborn vaccinations
-        const vaccService = new VaccinationService();
-        const newbornIds = result.newborn_ids || [];
-        
-        for (const newbornId of newbornIds) {
-          await vaccService.scheduleNewbornVaccinations(newbornId, patientData.birthDate, createdBy);
+          const vaccService = new VaccinationService();
+          const newbornIds = result.newborn_ids || [];
+
+          for (const newbornId of newbornIds) {
+            await vaccService.scheduleNewbornVaccinations(newbornId, patientData.birthDate, createdBy);
+          }
+
+          await vaccService.schedulePostpartumMaternalVaccinations(patientId, patientData.birthDate, createdBy);
+          console.log('✅ Scheduled vaccinations for postpartum mother and eligible newborns');
+        } catch (vaccinationError) {
+          console.error('Warning: Delivery was recorded, but vaccination scheduling failed:', vaccinationError);
         }
-        
-        // Schedule postpartum maternal vaccinations
-        await vaccService.schedulePostpartumMaternalVaccinations(patientId, patientData.birthDate, createdBy);
-        
-        console.log('✅ Scheduled vaccinations for postpartum mother and newborn');
-      } catch (error) {
-        console.error('Warning: Failed to create delivery/newborn records:', error);
-        // Don't throw - patient creation should still succeed
-      }
     }
 
     let safeSchedulePreview = Array.isArray(patientData.schedulePreview)
@@ -1953,8 +1959,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       .from('pregnancy_info')
       .select('*')
       .eq('patient_id', patientId)
-      .order('created_at', { ascending: false })
-      .limit(1);
+      .order('created_at', { ascending: false });
 
     const { data: pregnancyHistoryData } = await this.supabase
       .from('pregnancy_info')
@@ -1999,7 +2004,13 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     // Fetch deliveries for this patient (via mother_id relationship)
     const { data: deliveriesData } = await this.supabase
       .from('deliveries')
-      .select('*')
+      .select(`
+        *,
+        staff_profiles!deliveries_attending_staff_fkey (
+          id, full_name, station_ass,
+          stations:station_ass (station_name)
+        )
+      `)
       .eq('mother_id', patientId)
       .order('delivery_date', { ascending: false });
 
@@ -2016,26 +2027,6 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       `)
       .eq('mother_id', patientId)
       .order('created_at', { ascending: false });
-
-    // Reconcile and cancel stale prenatal visits for pregnancies that have already delivered
-    if (visitsData && deliveriesData && deliveriesData.length > 0) {
-      const latestDeliveryDate = new Date(deliveriesData[0].delivery_date).setHours(0,0,0,0);
-      const staleVisits = visitsData.filter(v => {
-        if (!v.visit_date || v.status === 'Cancelled' || v.status === 'Attended' || String(v.next_appt_type || '').toLowerCase().includes('postpartum')) return false;
-        const visitDate = new Date(v.visit_date).setHours(0,0,0,0);
-        return visitDate > latestDeliveryDate;
-      });
-
-      if (staleVisits.length > 0) {
-        console.log(`Cancelling ${staleVisits.length} stale prenatal visits for patient ${patientId} who has already delivered.`);
-        staleVisits.forEach(v => v.status = 'Cancelled'); // Optimistic local update
-        
-        // Background DB update
-        Promise.all(staleVisits.map(v => 
-          this.supabase.from('prenatal_visits').update({ status: 'Cancelled' }).eq('id', v.id)
-        )).catch(err => console.error('Failed to cancel stale prenatal visits:', err));
-      }
-    }
 
     const assignedStaffIds = [...new Set([
       patientData.retained_staff,
@@ -2062,7 +2053,50 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       });
     }
 
-    const preg = pregnancyData?.[0] || {};
+    const normalizedVisits = (visitsData || []).map(visit => {
+      const assignedStaffId = visit.assigned_staff || visit.retained_staff || patientData.retained_staff || null;
+      return {
+        ...visit,
+        assigned_staff: assignedStaffId,
+        status: normalizeVisitStatus(visit),
+        assigned_staff_name: assignedStaffById[assignedStaffId]?.name || (assignedStaffId || null),
+        assigned_staff_station: assignedStaffById[assignedStaffId]?.station || null
+      };
+    });
+
+    const normalizedDeliveries = (deliveriesData || []).map(d => {
+      const attendingProfile = Array.isArray(d.staff_profiles) ? d.staff_profiles[0] : d.staff_profiles;
+      const staffLookup = assignedStaffById[d.attending_staff];
+      return {
+        id: d.id,
+        mother_id: d.mother_id,
+        pregnancy_id: d.pregnancy_id || null,
+        attending_staff: d.attending_staff || null,
+        assigned_staff: d.attending_staff || null,
+        assigned_staff_name: attendingProfile?.full_name || staffLookup?.name || (d.attending_staff ? d.attending_staff : 'Not Assigned'),
+        assigned_staff_station: attendingProfile?.stations?.station_name || staffLookup?.station || null,
+        delivery_date: d.delivery_date,
+        delivery_time: d.delivery_time,
+        delivery_type: d.delivery_type,
+        delivery_mode: d.delivery_mode,
+        gestational_age: d.gestational_age,
+        risk_level: d.risk_level,
+        complications: d.complications,
+        facility: d.facility,
+        postpartum_visit_date: d.postpartum_visit_date,
+        postpartum_attended_date: d.postpartum_attended_date,
+        postpartum_remarks: d.postpartum_remarks
+      };
+    });
+
+    const pregnancyHistory = buildPregnancyHistory(
+      pregnancyHistoryData || [],
+      normalizedVisits,
+      normalizedDeliveries,
+      newbornsData || [],
+      vaccinesData || []
+    );
+    const preg = getLatestPregnancyRecord(pregnancyData || []) || {};
     const rawEmergencyContact = patientData.emergency_contact || {};
     const emergencyContact = {
       name: rawEmergencyContact.name || rawEmergencyContact.full_name || '',
@@ -2099,13 +2133,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       trimester: this.calculateTrimester(preg.lmd),
       weeks: this.calculateWeeks(preg.lmd),
 
-      visits: (visitsData || []).map(visit => ({
-        ...visit,
-        assigned_staff: visit.assigned_staff || visit.retained_staff || patientData.retained_staff || null,
-        status: normalizeVisitStatus(visit),
-        assigned_staff_name: assignedStaffById[visit.assigned_staff || visit.retained_staff || patientData.retained_staff]?.name || null,
-        assigned_staff_station: assignedStaffById[visit.assigned_staff || visit.retained_staff || patientData.retained_staff]?.station || null
-      })),
+      visits: normalizedVisits,
       vaccines: (vaccinesData || []).map(v => ({
         vaccine_name: v.vaccine_inventory?.vaccine_name || null,
         vaccine_inventory: v.vaccine_inventory || null,
@@ -2152,34 +2180,11 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           assigned_staff_station: assignedStaffById[v.assigned_staff || patientData.retained_staff]?.station || null
         }))
       })),
-      deliveries: (deliveriesData || []).map(d => ({
-        id: d.id,
-        mother_id: d.mother_id,
-        assigned_staff: d.attending_staff || patientData.retained_staff || null,
-        assigned_staff_name: assignedStaffById[d.attending_staff || patientData.retained_staff]?.name || null,
-        assigned_staff_station: assignedStaffById[d.attending_staff || patientData.retained_staff]?.station || null,
-        delivery_date: d.delivery_date,
-        delivery_type: d.delivery_type,
-        delivery_mode: d.delivery_mode,
-        gestational_age: d.gestational_age,
-        risk_level: d.risk_level,
-        complications: d.complications,
-        facility: d.facility,
-        postpartum_visit_date: d.postpartum_visit_date,
-        postpartum_attended_date: d.postpartum_attended_date,
-        postpartum_remarks: d.postpartum_remarks
-      })),
-      pregnancyHistory: (pregnancyHistoryData || []).map(p => ({
-        id: p.id,
-        pregn_postp: p.pregn_postp,
-        lmd: p.lmd,
-        edd: p.edd,
-        gravida: p.gravida,
-        para: p.para,
-        miscarriage_info: p.miscarriage_info,
-        created_at: p.created_at
-      })),
-      pregnancyStatus: preg.pregn_postp || 'Unknown'
+      deliveries: normalizedDeliveries,
+      pregnancyHistory,
+      currentPregnancy: pregnancyHistory.find(pregnancy => pregnancy.isCurrent) || null,
+      pregnancyRecord: preg,
+      pregnancyStatus: getPregnancyStatus(preg)
     };
   }
 

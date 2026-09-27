@@ -23,12 +23,7 @@ async function emailAlreadyRegistered(email: string) {
     .eq('email_address', email)
     .maybeSingle();
   if (userError) throw userError;
-  if (userRow?.id) return true;
-
-  const { data: authData, error: authError } = await admin.auth.admin.getUserByEmail(email);
-  if (authData?.user?.id) return true;
-  if (authError && authError.status !== 404) throw authError;
-  return false;
+  return Boolean(userRow?.id);
 }
 
 async function getCallerRole(request: Request) {
@@ -36,19 +31,38 @@ async function getCallerRole(request: Request) {
   if (!token) return null;
 
   const { data: authData, error: authError } = await admin.auth.getUser(token);
-  if (authError || !authData.user?.id) return null;
+  if (authError) {
+    console.error('[create-staff] caller Auth verification failed:', authError);
+    return null;
+  }
+  if (!authData.user?.id) return null;
 
   const { data: userRow, error: userError } = await admin
     .from('users')
-    .select('user_type:user_type(user_type)')
+    .select('usertype')
     .eq('id', authData.user.id)
     .maybeSingle();
 
-  if (userError) throw userError;
+  if (userError) {
+    console.error('[create-staff] caller public.users lookup failed:', userError);
+    throw userError;
+  }
+
+  if (!userRow?.usertype) return { id: authData.user.id, role: '' };
+
+  const { data: userTypeRow, error: userTypeError } = await admin
+    .from('user_type')
+    .select('user_type')
+    .eq('id', userRow.usertype)
+    .maybeSingle();
+  if (userTypeError) {
+    console.error('[create-staff] caller user_type lookup failed:', userTypeError);
+    throw userTypeError;
+  }
 
   return {
     id: authData.user.id,
-    role: String(userRow?.user_type?.user_type || '').trim().toLowerCase(),
+    role: String(userTypeRow?.user_type || '').trim().toLowerCase(),
   };
 }
 
@@ -57,13 +71,16 @@ Deno.serve(async (request) => {
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
   let createdUserId: string | null = null;
+  let currentStep = 'caller authorization';
 
   try {
+    console.log('[create-staff] Verifying caller authorization...');
     const caller = await getCallerRole(request);
     if (!caller || !['admin', 'cho personnel'].includes(caller.role)) {
       return json({ error: 'Staff authorization required' }, 401);
     }
 
+    currentStep = 'request validation';
     const body = await request.json();
     const email = String(body.email || '').trim().toLowerCase();
     const password = String(body.password || '');
@@ -83,10 +100,13 @@ Deno.serve(async (request) => {
       return json({ error: 'CHO Personnel can only create staff accounts' }, 403);
     }
 
+    currentStep = 'duplicate email check';
     if (await emailAlreadyRegistered(email)) {
-      return json({ error: 'An account with this email already exists.' }, 409);
+      return json({ code: 'EMAIL_ALREADY_EXISTS', error: DUPLICATE_EMAIL_MESSAGE }, 409);
     }
 
+    currentStep = 'Auth user creation';
+    console.log('[create-staff] Creating Auth user...');
     const { data: authData, error: authError } = await admin.auth.admin.createUser({
       email,
       password,
@@ -97,7 +117,10 @@ Deno.serve(async (request) => {
     if (authError) throw authError;
     createdUserId = authData.user?.id || null;
     if (!createdUserId) throw new Error('Failed to create staff auth user');
+    console.log('[create-staff] Auth user created');
 
+    currentStep = 'public.users creation';
+    console.log('[create-staff] Creating public.users record...');
     const { error: userError } = await admin.rpc('create_patient_user_record', {
       p_user_id: createdUserId,
       p_email: email,
@@ -106,7 +129,9 @@ Deno.serve(async (request) => {
     });
 
     if (userError) throw userError;
+  console.log('[create-staff] public.users record created');
 
+  currentStep = 'station lookup';
     let stationName = String(body.stationName || '').trim();
     if (!stationName && stationId) {
       const { data: station, error: stationError } = await admin
@@ -118,6 +143,8 @@ Deno.serve(async (request) => {
       stationName = station?.station_name || '';
     }
 
+    currentStep = 'Brevo email sending';
+    console.log('[create-staff] Sending Brevo email...');
     await sendBrevoEmail(email, 'Welcome to DASMOM', accountEmail({
       name: fullName,
       email,
@@ -126,9 +153,11 @@ Deno.serve(async (request) => {
       password,
       accountType: 'staff',
     }));
+    console.log('[create-staff] Brevo email sent');
 
     return json({ success: true, userId: createdUserId, message: 'Staff account created and welcome email sent' });
   } catch (error) {
+    console.error(`[create-staff] ${currentStep} failed:`, error);
     if (isDuplicateEmailError(error)) {
       return json({ code: 'EMAIL_ALREADY_EXISTS', error: DUPLICATE_EMAIL_MESSAGE }, 409);
     }

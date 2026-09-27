@@ -1,5 +1,6 @@
 import supabase from '../config/supabaseclient';
 import AuthService from './authservice';
+import { isNewbornVaccinationEligible } from '../utils/pregnancyUtils';
 
 class VaccinationService {
   constructor() {
@@ -182,6 +183,17 @@ class VaccinationService {
    */
   async scheduleNewbornVaccinations(newbornId, birthDate, createdBy) {
     try {
+      const { data: newborn, error: newbornError } = await this.supabase
+        .from('newborns')
+        .select('condition_at_birth')
+        .eq('id', newbornId)
+        .maybeSingle();
+
+      if (newbornError) throw newbornError;
+      if (!isNewbornVaccinationEligible(newborn)) {
+        return { success: true, count: 0, skipped: true };
+      }
+
       const vaccineSchedule = [
         // At Birth (0 months)
         { months: 0, vaccines: ['BCG Vaccine', 'Hepatitis B Vaccine'], doses: [1, 1] },

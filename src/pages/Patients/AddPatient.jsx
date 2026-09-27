@@ -177,6 +177,7 @@ const AddPatient = () => {
         plannedDeliveryPlace: 'Hospital',
         conditions: [], otherConditions: '', riskLevel: 'Low Risk',
         retained_staff: '',
+        attending_staff: '',
         scheduleTemplate: 'Standard Prenatal Schedule',
         bp: '', weight: '', height: '', bmi: '', temp: '', pulse: '', respRate: '', fundalHeight: '',
         fetalMovement: '', presentation: '', testsDone: '', visitNotes: '',
@@ -260,7 +261,7 @@ const AddPatient = () => {
                 setDoctorList([]);
                 setMidwifeList([]);
                 setRetainedStaffList([]);
-                setFormData(prev => ({ ...prev, retained_staff: '' }));
+                setFormData(prev => ({ ...prev, retained_staff: '', attending_staff: '' }));
                 return;
             }
 
@@ -272,7 +273,11 @@ const AddPatient = () => {
                 const retainedStaff = await patientService.getRetainedStaff(formData.station);
                 const staffList = Array.isArray(retainedStaff) ? retainedStaff : (retainedStaff ? [retainedStaff] : []);
                 setRetainedStaffList(staffList);
-                setFormData(prev => ({ ...prev, retained_staff: staffList.length > 0 ? staffList[0].id : '' }));
+                setFormData(prev => ({
+                    ...prev,
+                    retained_staff: staffList.length > 0 ? staffList[0].id : '',
+                    attending_staff: ''
+                }));
                 console.log(`✅ Staff filtered for ${formData.station}:`, { staffCount: staffAtStation.length });
             } catch (err) {
                 console.error(err);
@@ -914,6 +919,7 @@ const AddPatient = () => {
         } else if (activeTab === 'pregnancy') {
             const requiredPregnancy = ['gravida', 'para', 'lmp'];
             checkFields(requiredPregnancy);
+            if (formData.pregnancyStatus === 'Postpartum') checkFields(['attending_staff']);
             
             if (formData.pregnancyStatus === 'Pregnant' && formData.edd) {
                 const today = new Date();
@@ -1582,6 +1588,20 @@ const AddPatient = () => {
                                                 <option value="NSD">NSD (Normal)</option>
                                                 <option value="CS">CS (Cesarean)</option>
                                                 <option value="Breech">Breech</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Attending Staff <span className="req">*</span></label>
+                                            <select
+                                                name="attending_staff"
+                                                value={formData.attending_staff}
+                                                onChange={handleChange}
+                                                className={missingFields.includes('attending_staff') ? 'error-field' : ''}
+                                            >
+                                                <option value="">Select attending staff...</option>
+                                                {retainedStaffList.map(staff => (
+                                                    <option key={staff.id} value={staff.id}>{staff.full_name}</option>
+                                                ))}
                                             </select>
                                         </div>
                                         <div className="form-group">

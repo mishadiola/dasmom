@@ -18,7 +18,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import ExportModal from '../../components/ExportModal';
-import { formatTime12Hour } from '../../utils/pregnancyUtils';
+import { formatTime12Hour, isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
 import { useModal } from '../../context/ModalContext';
 import Legend from '../../components/Legend/Legend';
 import { formatMotherId } from '../../utils/displayIds';
@@ -1053,6 +1053,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
         if (sectionId === 'delivery') {
             if (!formData.deliveryDate) errors.push('Delivery Date');
             if (formData.pregnancyOutcome !== 'Miscarriage' && !formData.deliveryType) errors.push('Delivery Type');
+            if (formData.pregnancyOutcome !== 'Miscarriage' && !formData.attendingStaffId) errors.push('Attending Staff');
             if (!formData.pregnancyOutcome) errors.push('Pregnancy Outcome');
         }
         if (sectionId === 'baby' && formData.pregnancyOutcome !== 'Miscarriage') {
@@ -1452,6 +1453,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
         try {
             const deliveryData = {
                 mother_id: form.patientId,
+                pregnancy_id: editDelivery?.pregnancyId || null,
                 delivery_date: form.deliveryDate,
                 delivery_time: form.deliveryTime || '00:00',
                 delivery_type: form.deliveryType,
@@ -1489,18 +1491,27 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
             const result = await babyService.recordDelivery(deliveryData, newbornData, deliveryId);
             
             // Only schedule vaccinations for new deliveries (not edits)
-            if (!deliveryId && !result.miscarriage) {
+            const hasEligibleNewborn = newbornData.some(isNewbornVaccinationEligible);
+            if (!deliveryId && !result.miscarriage && hasEligibleNewborn) {
                 const vaccService = new VaccinationService();
                 const newbornIds = result.newborn_ids || [];
                 const createdBy = await new PatientService().getCurrentUserId();
                 
-                for (const newbornId of newbornIds) {
-                    await vaccService.scheduleNewbornVaccinations(newbornId, form.deliveryDate, createdBy);
+                for (const [index, newbornId] of newbornIds.entries()) {
+                    if (isNewbornVaccinationEligible(newbornData[index])) {
+                        await vaccService.scheduleNewbornVaccinations(newbornId, form.deliveryDate, createdBy);
+                    }
                 }
             }
             
             onSuccess();
-            setSaveSuccessMsg(result.miscarriage ? 'Miscarriage recorded successfully!' : deliveryId ? 'Delivery updated successfully!' : 'Delivery recorded and vaccinations scheduled successfully!');
+            setSaveSuccessMsg(result.miscarriage
+                ? 'Miscarriage recorded successfully!'
+                : deliveryId
+                    ? 'Delivery updated successfully!'
+                    : hasEligibleNewborn
+                        ? 'Delivery recorded and vaccinations scheduled for eligible newborns successfully!'
+                        : 'Delivery recorded successfully!');
             setTimeout(() => { setSaveSuccessMsg(''); onClose(); }, 1800);
         } catch (err) {
             console.error('Save failed:', err);
@@ -1629,7 +1640,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                                 </select>
                             </div>
                             <div className="form-group">
-                                <label>Attending Staff</label>
+                                <label>Attending Staff <span className="req">*</span></label>
                                 <select 
                                     value={form.attendingStaffId} 
                                     onChange={e => {
@@ -1638,6 +1649,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                                         updateForm('attendingStaffName', staff?.full_name || '');
                                     }}
                                     disabled={!form.station}
+                                    className={isFieldInvalid('Attending Staff', form.attendingStaffId) ? 'field-error' : ''}
                                 >
                                     <option value="">Select Staff</option>
                                     {filteredStaffList.map(s => (

@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/MyAppointments.css';
 import appointmentSilhouette from '../../assets/images/appointments-silhouette.png';
 import { useLanguage } from '../../context/LanguageContext';
+import { isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
 
 const toLocalDateStr = (d) => {
     const offset = d.getTimezoneOffset() * 60000;
@@ -52,7 +53,7 @@ const MyAppointments = () => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [calendarView, setCalendarView] = useState(window.innerWidth <= 768 ? 'list' : 'month'); // 'list', 'day', 'week', 'month'
     const [typeFilter, setTypeFilter] = useState('All'); // 'All', 'Prenatal', 'Vaccination', 'Postpartum'
-    const [statusFilter, setStatusFilter] = useState('Upcoming'); // 'Upcoming', 'Attended', 'Missed'
+    const [statusFilter, setStatusFilter] = useState('All'); // 'All', 'Upcoming', 'Attended', 'Missed'
     const [selectedAppt, setSelectedAppt] = useState(null);
     const { t } = useLanguage();
 
@@ -81,21 +82,30 @@ const MyAppointments = () => {
                     return;
                 }
 
-                const visitAppts = (patient.visits || [])
-                    .filter(v => v.visit_date)
-                    .map(v => ({
-                        id: v.id,
-                        date: v.visit_date,
-                        type: 'Prenatal',
-                        status: v.status || 'Scheduled',
+                const currentPregnancy = patient.currentPregnancy;
+                const currentStatus = String(patient.pregnancyRecord?.pregn_postp || patient.pregnancyRecord?.status || currentPregnancy?.status || patient.pregnancyStatus || '').toLowerCase();
+                const isPregnant = currentStatus === 'pregnant';
+                const isPostpartum = currentStatus === 'postpartum';
+                const visitAppts = (patient.pregnancyHistory || [])
+                    .flatMap(pregnancy => (pregnancy.visits || []).map(visit => ({ pregnancy, visit })))
+                    .filter(({ visit }) => visit.visit_date)
+                    .map(({ pregnancy, visit }) => ({
+                        id: visit.id,
+                        date: visit.visit_date,
+                        type: String(visit.next_appt_type || '').toLowerCase().includes('postpartum') ? 'Postpartum' : 'Prenatal',
+                        status: visit.status || 'Scheduled',
                         location: sanitizeUUID(patient.station, 'Health Station'),
-                        staffName: v.assigned_staff_name,
-                        staffStation: v.assigned_staff_station,
-                        notes: v.clinical_notes || '',
+                        staffName: visit.assigned_staff_name || visit.assigned_staff || null,
+                        staffStation: visit.assigned_staff_station,
+                        notes: visit.missed_reason || visit.clinical_notes || '',
+                        pregnancyNumber: pregnancy.pregnancyNumber,
                         color: 'green'
                     }));
+                const postpartumVisitDates = new Set(visitAppts
+                    .filter(appointment => appointment.type === 'Postpartum')
+                    .map(appointment => getDateOnly(appointment.date)));
 
-                const vacAppts = (patient.vaccines || [])
+                const maternalVaccines = (isPregnant ? currentPregnancy?.maternalVaccinations || [] : [])
                     .filter(v => v.scheduled_vaccination || v.vaccinated_date)
                     .map((v, idx) => ({
                         id: v.id || `vac-${idx}`,
@@ -110,8 +120,26 @@ const MyAppointments = () => {
                         color: 'yellow'
                     }));
 
-                const postpartumAppts = (patient.deliveries || [])
+                const newbornVaccines = (isPostpartum ? currentPregnancy?.newborns || [] : [])
+                    .filter(isNewbornVaccinationEligible)
+                    .flatMap(newborn => (newborn.vaccines || [])
+                        .filter(v => v.scheduled_vaccination || v.vaccinated_date)
+                        .map((v, idx) => ({
+                            id: v.id || `newborn-vac-${newborn.id}-${idx}`,
+                            date: v.scheduled_vaccination || v.vaccinated_date,
+                            time: '',
+                            type: `${newborn.baby_name || 'Newborn'} Vaccination`,
+                            status: v.status || 'Scheduled',
+                            location: sanitizeUUID(patient.station, 'Health Station'),
+                            staffName: v.assigned_staff_name,
+                            staffStation: v.assigned_staff_station,
+                            notes: sanitizeUUID(v.notes || v.vaccine_name, 'Vaccination'),
+                            color: 'yellow'
+                        })));
+
+                const postpartumAppts = (isPostpartum ? currentPregnancy?.deliveries || [] : [])
                     .filter(d => d.postpartum_visit_date || d.postpartum_attended_date)
+                    .filter(d => !postpartumVisitDates.has(getDateOnly(d.postpartum_visit_date || d.postpartum_attended_date)))
                     .map((d, idx) => {
                         const status = getPostpartumStatus(d);
                         const date = d.postpartum_attended_date || d.postpartum_visit_date;
@@ -136,7 +164,7 @@ const MyAppointments = () => {
                         };
                     });
 
-                const combined = [...visitAppts, ...vacAppts, ...postpartumAppts];
+                const combined = [...visitAppts, ...maternalVaccines, ...newbornVaccines, ...postpartumAppts];
                 setAppointmentsData(combined);
             } catch (err) {
                 console.error('Failed to load appointments:', err);
@@ -274,7 +302,7 @@ const MyAppointments = () => {
             </div>
             <div className="appt-main-info">
                 <div className="appt-title-row">
-                    <h3>{a.type === 'Vaccination' ? a.notes : `${a.type} ${t('appt_visit')}`}</h3>
+                    <h3>{a.type === 'Vaccination' ? a.notes : `${a.type} ${t('appt_visit')}${a.pregnancyNumber ? ` · Pregnancy #${a.pregnancyNumber}` : ''}`}</h3>
                     <span className={`status-badge ${a.status.toLowerCase()}`}>
                             {String(a.status || '').toLowerCase() === 'completed' || String(a.status || '').toLowerCase() === 'attended' ? <CheckCircle2 size={12} /> : <Clock size={12} />}
                             {a.status || 'Unknown'}
@@ -590,6 +618,12 @@ const MyAppointments = () => {
 
                 <div className="list-container">
                     <div className="list-filters">
+                        <button
+                            className={`filter-btn ${statusFilter === 'All' ? 'active' : ''}`}
+                            onClick={() => setStatusFilter('All')}
+                        >
+                            {t('appt_all')}
+                        </button>
                         <button 
                             className={`filter-btn ${statusFilter === 'Upcoming' ? 'active' : ''}`}
                             onClick={() => setStatusFilter('Upcoming')}
@@ -645,6 +679,12 @@ const MyAppointments = () => {
                                     <span style={{color: '#64748b', fontSize: '13px', fontWeight: 600}}>{t('appt_type')}</span>
                                     <span style={{fontWeight: 600}}>{selectedAppt.type}</span>
                                 </div>
+                                {selectedAppt.pregnancyNumber && (
+                                    <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                                        <span style={{color: '#64748b', fontSize: '13px', fontWeight: 600}}>Pregnancy</span>
+                                        <span style={{fontWeight: 600}}>#{selectedAppt.pregnancyNumber}</span>
+                                    </div>
+                                )}
                                 <div style={{display: 'flex', justifyContent: 'space-between'}}>
                                     <span style={{color: '#64748b', fontSize: '13px', fontWeight: 600}}>{t('appt_status')}</span>
                                     <span className={`status-badge ${selectedAppt.status.toLowerCase()}`}>{selectedAppt.status}</span>

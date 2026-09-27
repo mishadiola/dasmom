@@ -30,7 +30,7 @@ const MyVitals = () => {
                 if (!authUser?.id) return;
                 const patient = await patientService.getPatientById(authUser.id);
                 // Only include visits that have actual vital records (not pending/incomplete)
-                const visits = (patient?.visits || [])
+                const visits = (patient?.currentPregnancy?.visits || [])
                     .filter(v => v.visit_date && (v.weight_kg || (v.bp_systolic && v.bp_diastolic) || v.pulse_bpm || v.temp_c))
                     .map(v => ({
                         id: v.id,

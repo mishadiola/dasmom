@@ -12,7 +12,7 @@ import WelcomeMotherModal from '../../components/MotherDashboard/WelcomeMotherMo
 import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
 import pregnancySilhouette from '../../assets/images/pregnancy-silhouette.png';
-import { calculateEDD, calculateTimeRemaining, calculateGestationalAge, getTrimester } from '../../utils/pregnancyUtils';
+import { calculateEDD, calculateTimeRemaining, calculateGestationalAge, getTrimester, isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
 import { useLanguage } from '../../context/LanguageContext';
 
 const MotherDashboard = () => {
@@ -27,7 +27,7 @@ const MotherDashboard = () => {
         weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
     });
 
-    const [pregnancyData, setPregnancyData] = useState({ lmp: null, weeks: null, trimester: null });
+    const [pregnancyData, setPregnancyData] = useState({ lmp: null, weeks: null, trimester: null, status: 'Unknown', isPregnant: false, isPostpartum: false });
     const [appointments, setAppointments] = useState([]);
     const [healthRecords, setHealthRecords] = useState([]);
     const [postpartumVisit, setPostpartumVisit] = useState(null);
@@ -54,29 +54,47 @@ const MotherDashboard = () => {
 
                 const patient = await patientService.getPatientById(authUser.id);
                 if (patient) {
-                    if (patient.lmp) {
-                        const lmpDateStr = patient.lmp;
-                        const eddDate = calculateEDD(lmpDateStr);
-                        const gestAge = calculateGestationalAge(lmpDateStr);
-                        const timeRem = calculateTimeRemaining(eddDate);
-                        const trimesterStr = getTrimester(gestAge.weeks);
-                        
-                        setPregnancyData({ 
-                            lmp: patient.lmp, 
-                            edd: eddDate.toISOString().split('T')[0], 
-                            weeks: gestAge.weeks,
-                            daysUntilDue: timeRem.totalDays,
-                            trimester: trimesterStr,
-                            isPostpartum: patient.pregnancyStatus === 'Postpartum',
-                            deliveryDate: (patient.deliveries || [])[0]?.delivery_date || null
-                        });
+                    const currentPregnancy = patient.currentPregnancy;
+                    const currentPregnancyRecord = patient.pregnancyRecord || currentPregnancy;
+                    const status = String(currentPregnancyRecord?.pregn_postp || currentPregnancyRecord?.status || patient.pregnancyStatus || 'Unknown');
+                    const isPregnant = status.toLowerCase() === 'pregnant';
+                    const isPostpartum = status.toLowerCase() === 'postpartum';
+                    const lmpDateStr = isPregnant ? currentPregnancyRecord?.lmd : null;
+                    let gestAge = null;
+                    let eddDate = null;
+                    let timeRem = null;
+                    let trimesterStr = null;
+
+                    if (lmpDateStr) {
+                        eddDate = calculateEDD(lmpDateStr);
+                        gestAge = calculateGestationalAge(lmpDateStr);
+                        timeRem = calculateTimeRemaining(eddDate);
+                        trimesterStr = getTrimester(gestAge.weeks);
                     }
+                    const latestDelivery = currentPregnancy?.deliveries?.[0] || null;
+                    setPregnancyData({
+                        lmp: lmpDateStr,
+                        edd: eddDate ? eddDate.toISOString().split('T')[0] : isPregnant ? currentPregnancyRecord?.edd || null : null,
+                        weeks: gestAge?.weeks ?? null,
+                        daysUntilDue: timeRem?.totalDays,
+                        trimester: trimesterStr,
+                        status,
+                        isPregnant,
+                        isPostpartum,
+                        deliveryDate: latestDelivery?.delivery_date || null
+                    });
                     
-                    // map visits to appointment-like objects for display (next 3 upcoming)
-                    const now = new Date();
-                    
-                    let allAppts = (patient.visits || [])
-                        .filter(v => v.visit_date && new Date(v.visit_date) >= now && !['Cancelled', 'Missed', 'Attended', 'Completed'].includes(v.status))
+                    // Main dashboard appointments belong only to the current pregnancy.
+                    const todayStart = new Date();
+                    todayStart.setHours(0, 0, 0, 0);
+                    const currentVisits = currentPregnancy?.visits || [];
+                    let allAppts = isPregnant ? currentVisits
+                        .filter(v => {
+                            if (!v.visit_date || ['Cancelled', 'Missed', 'Attended', 'Completed'].includes(v.status)) return false;
+                            const visitDay = new Date(v.visit_date);
+                            visitDay.setHours(0, 0, 0, 0);
+                            return visitDay >= todayStart;
+                        })
                         .map(v => ({
                             id: v.id,
                             date: v.visit_date,
@@ -85,10 +103,34 @@ const MotherDashboard = () => {
                             staff: v.assigned_staff_name || 'Healthcare Worker',
                             status: v.status || 'Scheduled',
                             location: patient.station || ''
-                        }));
-                        
-                    if (patient.pregnancyStatus === 'Postpartum' && (patient.deliveries || []).length > 0) {
-                        const d = patient.deliveries[0];
+                        })) : [];
+
+                    if (isPregnant) {
+                        const scheduledDays = new Set(allAppts.map(appointment => String(appointment.date).split('T')[0]));
+                        const nextAppointmentSource = currentVisits
+                            .filter(visit => visit.status === 'Attended' && visit.next_appt_date)
+                            .filter(visit => {
+                                const nextDay = new Date(visit.next_appt_date);
+                                nextDay.setHours(0, 0, 0, 0);
+                                return nextDay >= todayStart && !scheduledDays.has(String(visit.next_appt_date).split('T')[0]);
+                            })
+                            .sort((left, right) => new Date(left.next_appt_date) - new Date(right.next_appt_date))[0];
+
+                        if (nextAppointmentSource) {
+                            allAppts.push({
+                                id: `next-${nextAppointmentSource.id}`,
+                                date: nextAppointmentSource.next_appt_date,
+                                time: '',
+                                type: nextAppointmentSource.next_appt_type || 'Prenatal Checkup',
+                                staff: nextAppointmentSource.assigned_staff_name || 'Healthcare Worker',
+                                status: 'Scheduled',
+                                location: patient.station || ''
+                            });
+                        }
+                    }
+
+                    if (isPostpartum && latestDelivery) {
+                        const d = latestDelivery;
                         if (d.postpartum_visit_date && new Date(d.postpartum_visit_date) >= now && !d.postpartum_attended_date) {
                             allAppts.push({
                                 id: `postpartum-${d.id}`,
@@ -100,6 +142,19 @@ const MotherDashboard = () => {
                                 location: patient.station || ''
                             });
                         }
+                        currentPregnancy?.newborns?.filter(isNewbornVaccinationEligible).forEach(newborn => {
+                            (newborn.vaccines || []).filter(v => v.scheduled_vaccination && new Date(v.scheduled_vaccination) >= now && !['Completed', 'Cancelled', 'Missed'].includes(v.status)).forEach(vaccine => {
+                                allAppts.push({
+                                    id: vaccine.id,
+                                    date: vaccine.scheduled_vaccination,
+                                    time: '',
+                                    type: `${newborn.baby_name || 'Newborn'} Vaccination`,
+                                    staff: vaccine.assigned_staff_name || 'Healthcare Worker',
+                                    status: vaccine.status || 'Scheduled',
+                                    location: patient.station || ''
+                                });
+                            });
+                        });
                     }
 
                     const appts = allAppts
@@ -108,7 +163,6 @@ const MotherDashboard = () => {
                         
                     setAppointments(appts);
 
-                    const latestDelivery = (patient.deliveries || [])[0];
                     if (latestDelivery?.postpartum_visit_date || latestDelivery?.postpartum_attended_date) {
                         const scheduledDate = String(latestDelivery.postpartum_visit_date || '').split('T')[0];
                         const attendedDate = latestDelivery.postpartum_attended_date || null;
@@ -127,7 +181,7 @@ const MotherDashboard = () => {
                     let bpVal = 'N/A';
                     let tempVal = 'N/A';
                     
-                    const latestVisit = (patient.visits || [])
+                    const latestVisit = currentVisits
                         .filter(v => v.visit_date && (v.weight_kg || (v.bp_systolic && v.bp_diastolic) || v.temp_c || v.temperature))
                         .sort((a, b) => new Date(b.visit_date) - new Date(a.visit_date))[0];
 
@@ -138,9 +192,9 @@ const MotherDashboard = () => {
                     }
 
                     const records = [
-                        { label: 'WEIGHT', value: weightVal, status: 'Normal', icon: Heart },
-                        { label: 'BP', value: bpVal, status: 'Normal', icon: Droplet },
-                        { label: 'TEMP', value: tempVal, status: 'Normal', icon: Thermometer }
+                        { label: 'WEIGHT', value: weightVal, status: weightVal === 'N/A' ? 'Not recorded' : 'Recorded', icon: Heart },
+                        { label: 'BP', value: bpVal, status: bpVal === 'N/A' ? 'Not recorded' : 'Recorded', icon: Droplet },
+                        { label: 'TEMP', value: tempVal, status: tempVal === 'N/A' ? 'Not recorded' : 'Recorded', icon: Thermometer }
                     ];
                     
                     setHealthRecords(records);
@@ -190,8 +244,10 @@ const MotherDashboard = () => {
                         <p className="page-subtitle">
                             {pregnancyData.isPostpartum ? (
                                 <>You're now in your postpartum recovery period.</>
+                            ) : pregnancyData.isPregnant ? (
+                                <>{t('dash_weeks_pregnant').replace('{weeks}', pregnancyData.weeks ?? '?')} {pregnancyData.daysUntilDue !== undefined && t('dash_baby_expected').replace('{days}', pregnancyData.daysUntilDue)}</>
                             ) : (
-                                <>{t('dash_weeks_pregnant').replace('{weeks}', pregnancyData.weeks || '?')} {pregnancyData.daysUntilDue !== undefined && t('dash_baby_expected').replace('{days}', pregnancyData.daysUntilDue)}</>
+                                <>Current pregnancy status: {pregnancyData.status}</>
                             )}
                         </p>
                         
@@ -199,11 +255,13 @@ const MotherDashboard = () => {
                             <div className="welcome-badge welcome-badge-light">
                                 <Calendar size={16} /> {today}
                             </div>
-                            {!pregnancyData.isPostpartum && (
+                            {pregnancyData.isPregnant ? (
                                 <div className="welcome-badge welcome-badge-mauve">
                                     <Baby size={16} /> {pregnancyData.trimester}
                                 </div>
-                            )}
+                            ) : pregnancyData.isPostpartum ? (
+                                <div className="welcome-badge welcome-badge-mauve">Postpartum</div>
+                            ) : null}
                         </div>
                     </div>
                 </div>
@@ -283,7 +341,7 @@ const MotherDashboard = () => {
                                             <p className="edd-subtitle">Day {Math.floor((new Date().setHours(0,0,0,0) - new Date(pregnancyData.deliveryDate).setHours(0,0,0,0)) / (1000 * 60 * 60 * 24)) + 1} of postpartum recovery</p>
                                         )}
                                     </>
-                                ) : (
+                                ) : pregnancyData.isPregnant ? (
                                     <>
                                         <h2 className="mother-card-title edd-title-small">{t('dash_expected_due')}</h2>
                                         {pregnancyData.edd ? (
@@ -296,6 +354,11 @@ const MotherDashboard = () => {
                                         {pregnancyData.weeks && (
                                             <p className="edd-subtitle">{t('dash_week').replace('{weeks}', pregnancyData.weeks)} {pregnancyData.daysUntilDue !== undefined ? `• ${t('dash_days_remaining').replace('{days}', pregnancyData.daysUntilDue)}` : ''}</p>
                                         )}
+                                    </>
+                                ) : (
+                                    <>
+                                        <h2 className="mother-card-title edd-title-small">{pregnancyData.status}</h2>
+                                        <h2 className="edd-display" style={{ opacity: 0.5 }}>No current due date</h2>
                                     </>
                                 )}
                             </div>
@@ -340,7 +403,7 @@ const MotherDashboard = () => {
                 </div>
 
                 {/* ── Row 3: Pregnancy Progress ── */}
-                {pregnancyData.lmp && !pregnancyData.isPostpartum && (
+                {pregnancyData.isPregnant && pregnancyData.lmp && (
                     <PregnancyProgressCard 
                         lmpDate={pregnancyData.lmp}
                         edd={pregnancyData.edd}

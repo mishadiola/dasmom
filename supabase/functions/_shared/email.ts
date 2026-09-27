@@ -7,10 +7,12 @@ const senderName = Deno.env.get('BREVO_SENDER_NAME') || 'DASMOM';
 export const DUPLICATE_EMAIL_MESSAGE = 'Email already exists. Please use a different email address.';
 
 export function isDuplicateEmailError(error: unknown) {
-  const candidate = error as { status?: number; code?: string; message?: string };
+  const candidate = error as { status?: number; code?: string; message?: string; constraint?: string };
   const message = String(candidate?.message || '').toLowerCase();
   return candidate?.code === 'email_exists'
     || candidate?.code === 'user_already_exists'
+    || candidate?.constraint === 'users_email_address_unique_idx'
+    || message.includes('users_email_address_unique_idx')
     || message.includes('already registered')
     || message.includes('already exists')
     || (message.includes('email') && message.includes('exist'));
