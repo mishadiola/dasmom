@@ -97,15 +97,21 @@ const Dashboard = () => {
             const [{ data: patientRows }, { data: newbornRows }, { count: apptToday }, { data: apptData }, { data: pregnancyData }] = await Promise.all([
                 supabase.from('patient_basic_info').select('id, emergency_contact'),
                 supabase.from('newborns').select('id, mother_id'),
-                supabase.from('prenatal_visits').select('id', { count: 'exact', head: true }).eq('visit_date', todayStr),
+                supabase.from('prenatal_visits').select('id', { count: 'exact', head: true })
+                    .eq('visit_date', todayStr)
+                    .neq('status', 'Cancelled')
+                    .neq('status', 'Missed'),
                 
                 // 🔥 NEW: Fetch full rich relational data for Today's Appointments table dynamic rendering
                 supabase.from('prenatal_visits').select(`
-                    id, visit_date, patient_id, created_at,
+                    id, visit_date, patient_id, created_at, status,
                     patient_basic_info!inner ( 
                         first_name, last_name, station_ass, stations:station_ass (station_name), date_of_birth
                     )
-                `).eq('visit_date', todayStr).order('created_at', { ascending: true }),
+                `).eq('visit_date', todayStr)
+                  .neq('status', 'Cancelled')
+                  .neq('status', 'Missed')
+                  .order('created_at', { ascending: true }),
                 
                 // Fetch pregnancy info separately to avoid nested relationship error, ordered by created_at to get latest first
                 supabase.from('pregnancy_info').select('patient_id, lmd, created_at').eq('pregn_postp', 'Pregnant').order('created_at', { ascending: false })

@@ -12,6 +12,7 @@ import '../../styles/pages/PatientProfile.css';
 import PatientService from '../../services/patientservice';
 import EditPatientModal from '../../components/Patient/EditPatientModal';
 import { formatMotherId } from '../../utils/displayIds';
+import PostpartumVisitModal from '../../components/PostpartumVisitModal';
 
 // Helper function for readable date formatting
 const formatReadableDate = (dateString) => {
@@ -75,6 +76,8 @@ const PatientProfile = () => {
     const [p, setP] = useState(null);
     const [loading, setLoading] = useState(true);
     const [editModalOpen, setEditModalOpen] = useState(false);
+
+    const [showPostpartumVisitModal, setShowPostpartumVisitModal] = useState(false);
 
     const handleBack = () => {
         if (from === 'high-risk') {
@@ -525,27 +528,56 @@ const PatientProfile = () => {
                 </div>
                 <div className="profile-header-right">
                     <div className="header-stats" style={{ display: 'flex', gap: '24px', alignItems: 'center', backgroundColor: '#f8f9fa', padding: '12px 24px', borderRadius: '12px', border: '1px solid #edf2f7', marginRight: '16px' }}>
-                        <div className="h-stat" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <span className="h-stat-label" style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Trimester</span>
-                            <span className="h-stat-val trimester-val" style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', margin: 0 }}>
-                                {p.trimester ? `${p.trimester}${p.trimester == 1 ? 'st' : p.trimester == 2 ? 'nd' : p.trimester == 3 ? 'rd' : 'th'} Trimester` : 'N/A'}
-                            </span>
-                        </div>
-                        <div style={{ width: '1px', height: '32px', backgroundColor: '#e2e8f0' }}></div>
-                        <div className="h-stat" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <span className="h-stat-label" style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Gestational Age</span>
-                            <span className="h-stat-val" style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', margin: 0 }}>{p.weeks || '0'} weeks</span>
-                        </div>
-                        <div style={{ width: '1px', height: '32px', backgroundColor: '#e2e8f0' }}></div>
-                        <div className="h-stat" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <span className="h-stat-label" style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Expected Due Date</span>
-                            <span className="h-stat-val" style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', margin: 0 }}>{formatReadableDate(p.edd) || 'TBD'}</span>
-                        </div>
+                        {p.pregnancyStatus === 'Postpartum' ? (
+                            <>
+                                <div className="h-stat" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <span className="h-stat-label" style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Status</span>
+                                    <span className="h-stat-val trimester-val" style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', margin: 0 }}>
+                                        Postpartum
+                                    </span>
+                                </div>
+                                <div style={{ width: '1px', height: '32px', backgroundColor: '#e2e8f0' }}></div>
+                                <div className="h-stat" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <span className="h-stat-label" style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Delivery Date</span>
+                                    <span className="h-stat-val" style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', margin: 0 }}>
+                                        {formatReadableDate(p.deliveries?.[0]?.delivery_date) || 'Unknown'}
+                                    </span>
+                                </div>
+                                <div style={{ width: '1px', height: '32px', backgroundColor: '#e2e8f0' }}></div>
+                                <div className="h-stat" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <span className="h-stat-label" style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Postpartum Day</span>
+                                    <span className="h-stat-val" style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', margin: 0 }}>
+                                        {p.deliveries?.[0]?.delivery_date ? `Day ${Math.floor((new Date().setHours(0,0,0,0) - new Date(p.deliveries[0].delivery_date).setHours(0,0,0,0)) / (1000 * 60 * 60 * 24)) + 1}` : 'N/A'}
+                                    </span>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="h-stat" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <span className="h-stat-label" style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Trimester</span>
+                                    <span className="h-stat-val trimester-val" style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', margin: 0 }}>
+                                        {p.trimester ? `${p.trimester}${p.trimester == 1 ? 'st' : p.trimester == 2 ? 'nd' : p.trimester == 3 ? 'rd' : 'th'} Trimester` : 'N/A'}
+                                    </span>
+                                </div>
+                                <div style={{ width: '1px', height: '32px', backgroundColor: '#e2e8f0' }}></div>
+                                <div className="h-stat" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <span className="h-stat-label" style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Gestational Age</span>
+                                    <span className="h-stat-val" style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', margin: 0 }}>{p.weeks || '0'} weeks</span>
+                                </div>
+                                <div style={{ width: '1px', height: '32px', backgroundColor: '#e2e8f0' }}></div>
+                                <div className="h-stat" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <span className="h-stat-label" style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>Expected Due Date</span>
+                                    <span className="h-stat-val" style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', margin: 0 }}>{formatReadableDate(p.edd) || 'TBD'}</span>
+                                </div>
+                            </>
+                        )}
                     </div>
                     <div className="header-actions">
                         <button className="btn btn-outline" title="Print Record" onClick={handlePrintProfile}><Printer size={16} /></button>
                         <button className="btn btn-outline" title="Edit Patient" onClick={handleEditPatient}><Edit size={16} /></button>
-                        <button className="btn btn-primary"><Edit size={16} /> Record Visit</button>
+                        <button className="btn btn-primary" onClick={() => p.pregnancyStatus === 'Postpartum' ? setShowPostpartumVisitModal(true) : navigate(`/dashboard/prenatal/add/${p.id}`)}>
+                            <Edit size={16} /> Record Visit
+                        </button>
                     </div>
                 </div>
             </div>
@@ -1340,6 +1372,21 @@ const PatientProfile = () => {
                     patient={p}
                     onClose={() => setEditModalOpen(false)}
                     onSave={handlePatientUpdate}
+                />
+            )}
+            {showPostpartumVisitModal && (
+                <PostpartumVisitModal
+                    mother={{ id: p.id, name: p.name, deliveries: p.deliveries }}
+                    onClose={() => setShowPostpartumVisitModal(false)}
+                    onSave={() => {
+                        setShowPostpartumVisitModal(false);
+                        const fetchPatient = async () => {
+                            const patientService = new PatientService();  
+                            const data = await patientService.getPatientById(p.id);  
+                            setP(data);
+                        };
+                        fetchPatient();
+                    }}
                 />
             )}
         </div>

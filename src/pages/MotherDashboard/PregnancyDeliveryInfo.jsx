@@ -27,34 +27,46 @@ const PregnancyDeliveryInfo = () => {
                     map[baby.delivery_id].push(baby);
                     return map;
                 }, {});
-                const deliveries = (patient?.deliveries || []).map(delivery => ({
-                    ...delivery,
-                    outcome: t('pdi_live_birth'),
-                    health_station: patient.station,
-                    healthcare_provider: t('pdi_healthcare_team'),
-                    baby: babiesByDelivery[delivery.id]?.[0] || null,
-                    baby_gender: babiesByDelivery[delivery.id]?.map(b => b.gender).join(', ') || t('pdi_not_recorded'),
-                    birth_weight: babiesByDelivery[delivery.id]?.[0]?.birth_weight ? `${babiesByDelivery[delivery.id][0].birth_weight} kg` : t('pdi_not_recorded'),
-                    status: babiesByDelivery[delivery.id]?.some(b => b.risk_level && b.risk_level !== 'Normal') ? t('pdi_needs_attention') : t('pdi_recorded'),
-                    notes: delivery.postpartum_remarks || ''
-                }));
-                const outcomes = (patient?.pregnancyHistory || [])
-                    .filter(pregnancy => pregnancy.miscarriage_info?.outcome || String(pregnancy.pregn_postp || '').toLowerCase() !== 'pregnant')
-                    .filter(pregnancy => !deliveries.some(delivery => delivery.delivery_date === pregnancy.created_at));
-                const unsuccessful = outcomes.map(pregnancy => ({
-                    id: `pregnancy-${pregnancy.id}`,
-                    delivery_date: pregnancy.created_at,
-                    outcome: pregnancy.miscarriage_info?.outcome || pregnancy.pregn_postp || t('pdi_outcome_recorded'),
-                    delivery_type: t('pdi_not_applicable'),
-                    health_station: patient.station,
-                    healthcare_provider: t('pdi_healthcare_team'),
-                    baby_gender: t('pdi_not_applicable'),
-                    birth_weight: t('pdi_not_applicable'),
-                    status: t('pdi_recorded'),
-                    complications: pregnancy.miscarriage_info?.reason || t('pdi_not_recorded'),
-                    notes: pregnancy.miscarriage_info?.notes || ''
-                }));
-                setPastPregnancies([...deliveries, ...unsuccessful].sort((a, b) => new Date(b.delivery_date) - new Date(a.delivery_date)));
+                const deliveries = (patient?.deliveries || []).map(delivery => {
+                    const babyList = babiesByDelivery[delivery.id] || [];
+                    const baby = babyList[0] || null;
+                    const babyGender = babyList.map(b => b.gender).filter(Boolean).join(', ') || 'Not Recorded';
+                    const birthWeight = baby?.birth_weight ? `${baby.birth_weight} kg` : 'Not Recorded';
+                    const outcomeVal = baby?.condition || (delivery.delivery_type === 'N/A - Not Applicable' ? 'Miscarriage' : 'Live Birth');
+                    const needsAttention = babyList.some(b => b.risk_level && b.risk_level !== 'Normal');
+
+                    return {
+                        ...delivery,
+                        outcome: outcomeVal,
+                        health_station: patient.station || 'Health Center',
+                        healthcare_provider: delivery.assigned_staff_name || 'Healthcare Team',
+                        baby,
+                        baby_gender: babyGender,
+                        birth_weight: birthWeight,
+                        status: needsAttention ? 'Needs Attention' : 'Recorded',
+                        delivery_type: delivery.delivery_type || 'Normal Spontaneous Delivery',
+                        notes: delivery.postpartum_remarks || ''
+                    };
+                });
+
+                // Only include miscarriages from pregnancyHistory that do NOT have a delivery record
+                const miscarriages = (patient?.pregnancyHistory || [])
+                    .filter(pregnancy => pregnancy.miscarriage_info?.outcome === 'Miscarriage')
+                    .map(pregnancy => ({
+                        id: `pregnancy-${pregnancy.id}`,
+                        delivery_date: pregnancy.miscarriage_info?.date || pregnancy.created_at,
+                        outcome: 'Miscarriage',
+                        delivery_type: 'Not Applicable',
+                        health_station: patient.station || 'Health Center',
+                        healthcare_provider: 'Healthcare Team',
+                        baby_gender: 'Not Applicable',
+                        birth_weight: 'Not Applicable',
+                        status: 'Recorded',
+                        complications: pregnancy.miscarriage_info?.suspected_cause || 'Not Recorded',
+                        notes: pregnancy.miscarriage_info?.notes || ''
+                    }));
+
+                setPastPregnancies([...deliveries, ...miscarriages].sort((a, b) => new Date(b.delivery_date) - new Date(a.delivery_date)));
             } catch (error) {
                 console.error('Failed to load pregnancy and delivery records:', error);
             } finally {

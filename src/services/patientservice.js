@@ -985,13 +985,9 @@ export default class PatientService {
       risk: visit.calculated_risk || 'Normal',
       riskFactors: visit.risk_factors || ''
     })).filter(visit => {
-      // Skip archived records by default unless the caller explicitly asks for them
       if (!includeArchived && archivedPatientIds.has(visit.patientId)) return false;
-      // Skip postpartum patients
-      if (deliveredPatients.has(visit.patientId)) return false;
-      // Skip patients who are no longer pregnant
-      const preg = latestPregMap.get(visit.patientId);
-      if (!preg || preg.pregn_postp?.toLowerCase() !== 'pregnant') return false;
+      // Filter out cancelled visits for the scheduling view
+      if (visit.status === 'Cancelled') return false;
       return true;
     });
   } catch (error) {
@@ -1036,7 +1032,7 @@ export default class PatientService {
     let query = this.supabase
       .from('prenatal_visits')
       .select(`
-        id, visit_date, next_appt_date, next_appt_type, patient_id, patient_basic_info!inner(first_name, last_name)
+        id, visit_date, next_appt_date, next_appt_type, patient_id, status, patient_basic_info!inner(first_name, last_name)
       `);
 
     if (role === 'staff' && currentUser?.id) {
@@ -1071,14 +1067,11 @@ export default class PatientService {
       patientId: appointment.patient_id,
       type: appointment.next_appt_type || 'Prenatal Checkup',
       risk: appointment.next_appt_type === 'Postpartum Visit' ? 'Postpartum' : 'Normal',
-      nextAppt: appointment.next_appt_date
+      nextAppt: appointment.next_appt_date,
+      status: appointment.status
     })).filter(appointment => {
       if (!includeArchived && archivedPatientIds.has(appointment.patientId)) return false;
-      // Skip postpartum patients
-      if (deliveredPatients.has(appointment.patientId)) return false;
-      // Skip patients who are no longer pregnant
-      const preg = latestPregMap.get(appointment.patientId);
-      if (!preg || preg.pregn_postp?.toLowerCase() !== 'pregnant') return false;
+      if (appointment.status === 'Cancelled') return false;
       return true;
     });
   } catch (error) {
@@ -2023,6 +2016,26 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       `)
       .eq('mother_id', patientId)
       .order('created_at', { ascending: false });
+
+    // Reconcile and cancel stale prenatal visits for pregnancies that have already delivered
+    if (visitsData && deliveriesData && deliveriesData.length > 0) {
+      const latestDeliveryDate = new Date(deliveriesData[0].delivery_date).setHours(0,0,0,0);
+      const staleVisits = visitsData.filter(v => {
+        if (!v.visit_date || v.status === 'Cancelled' || v.status === 'Attended' || String(v.next_appt_type || '').toLowerCase().includes('postpartum')) return false;
+        const visitDate = new Date(v.visit_date).setHours(0,0,0,0);
+        return visitDate > latestDeliveryDate;
+      });
+
+      if (staleVisits.length > 0) {
+        console.log(`Cancelling ${staleVisits.length} stale prenatal visits for patient ${patientId} who has already delivered.`);
+        staleVisits.forEach(v => v.status = 'Cancelled'); // Optimistic local update
+        
+        // Background DB update
+        Promise.all(staleVisits.map(v => 
+          this.supabase.from('prenatal_visits').update({ status: 'Cancelled' }).eq('id', v.id)
+        )).catch(err => console.error('Failed to cancel stale prenatal visits:', err));
+      }
+    }
 
     const assignedStaffIds = [...new Set([
       patientData.retained_staff,

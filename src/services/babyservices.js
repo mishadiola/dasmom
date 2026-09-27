@@ -626,6 +626,29 @@ class BabyService {
             para: newPara
           });
 
+        // Cancel any scheduled prenatal visits after the delivery date
+        const { data: futureVisits } = await supabase
+          .from('prenatal_visits')
+          .select('id, visit_date, status')
+          .eq('patient_id', deliveryData.mother_id)
+          .eq('status', 'Scheduled');
+          
+        if (futureVisits && futureVisits.length > 0) {
+          const deliveryDateVal = new Date(deliveryData.delivery_date).setHours(0,0,0,0);
+          const staleVisitIds = futureVisits.filter(v => {
+             const vDate = new Date(v.visit_date).setHours(0,0,0,0);
+             return vDate > deliveryDateVal;
+          }).map(v => v.id);
+
+          if (staleVisitIds.length > 0) {
+            await supabase
+              .from('prenatal_visits')
+              .update({ status: 'Cancelled' })
+              .in('id', staleVisitIds);
+            console.log(`✅ Cancelled ${staleVisitIds.length} stale prenatal visits`);
+          }
+        }
+
         // Schedule postpartum visit
         if (postpartumVisitDate) {
           const postpartumDate = new Date(postpartumVisitDate);
