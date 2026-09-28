@@ -8,6 +8,7 @@ import 'jspdf-autotable';
 import '../../styles/pages/PregnancyDeliveryInfo.css';
 import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
+import supabase from '../../config/supabaseclient';
 import deliverySilhouette from '../../assets/images/pregnancy-silhouette.png';
 import { useLanguage } from '../../context/LanguageContext';
 import { isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
@@ -20,10 +21,23 @@ const PregnancyDeliveryInfo = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        let channel = null;
         const loadRecords = async () => {
             try {
                 const user = await new AuthService().getAuthUser();
                 if (!user?.id) return;
+                if (!channel) {
+                    channel = supabase.channel(`mother-pregnancy-history-${user.id}`)
+                        .on('postgres_changes', {
+                            event: '*', schema: 'public', table: 'pregnancy_info',
+                            filter: `patient_id=eq.${user.id}`
+                        }, () => loadRecords())
+                        .on('postgres_changes', {
+                            event: '*', schema: 'public', table: 'deliveries',
+                            filter: `mother_id=eq.${user.id}`
+                        }, () => loadRecords())
+                        .subscribe();
+                }
                 const patient = await new PatientService().getPatientById(user.id);
                 setPastPregnancies(patient?.pregnancyHistory || []);
 
@@ -40,6 +54,9 @@ const PregnancyDeliveryInfo = () => {
             }
         };
         loadRecords();
+        return () => {
+            if (channel) supabase.removeChannel(channel);
+        };
     }, []);
 
     const formatDateBadge = (dateString) => {
@@ -249,7 +266,7 @@ const PregnancyDeliveryInfo = () => {
                         pastPregnancies.map((pregnancy) => {
                             const delivery = pregnancy.deliveries?.[0];
                             const outcome = pregnancy.miscarriage_info?.outcome
-                                || pregnancy.newborns?.map(newborn => newborn.condition).filter(Boolean).join(', ')
+                                || pregnancy.newborns?.map(newborn => newborn.condition_at_birth || newborn.condition).filter(Boolean).join(', ')
                                 || (delivery ? 'Outcome not recorded' : 'Not recorded');
                             const date = pregnancy.lmd || pregnancy.created_at;
                             return (
@@ -355,23 +372,55 @@ const PregnancyDeliveryInfo = () => {
                                         </div>
                                     )) : <p>No prenatal visits recorded.</p>}
                                 </div>
-                                {(selectedDelivery.deliveries || []).map(delivery => (
+                                {(selectedDelivery.deliveries || [])
+                                    .filter(delivery => selectedDelivery.pregnancyRecordIds?.includes(delivery.pregnancy_id))
+                                    .map(delivery => (
                                     <div className="pdi-modal-section" key={delivery.id}>
                                         <h3>Delivery · {delivery.delivery_date ? new Date(delivery.delivery_date).toLocaleDateString() : 'Date not recorded'}</h3>
+                                        <p>Time: {delivery.delivery_time || 'Not recorded'}</p>
                                         <p>Type: {delivery.delivery_type || 'Not recorded'} · Mode: {delivery.delivery_mode || 'Not recorded'}</p>
+                                        <p>Gestational age: {delivery.gestational_age || 'Not recorded'}</p>
+                                        <p>Risk level: {delivery.risk_level || 'Not recorded'}</p>
+                                        <p>Complications: {Array.isArray(delivery.complications)
+                                            ? delivery.complications.join(', ') || 'None recorded'
+                                            : typeof delivery.complications === 'object' && delivery.complications
+                                                ? JSON.stringify(delivery.complications)
+                                                : delivery.complications || 'None recorded'}</p>
                                         <p>Facility: {delivery.facility || 'Not recorded'}</p>
                                         <p>Attending health worker: {delivery.assigned_staff_name || 'Not assigned'}</p>
                                         {delivery.assigned_staff_station && <p>Health worker station: {delivery.assigned_staff_station}</p>}
+                                        <p>Pregnancy ID: {delivery.pregnancy_id}</p>
                                         {delivery.postpartum_visit_date && <p>Postpartum visit: {new Date(delivery.postpartum_visit_date).toLocaleDateString()}</p>}
                                         {delivery.postpartum_attended_date && <p>Postpartum attended: {new Date(delivery.postpartum_attended_date).toLocaleDateString()}</p>}
                                         {delivery.postpartum_remarks && <p>{typeof delivery.postpartum_remarks === 'string' ? delivery.postpartum_remarks : JSON.stringify(delivery.postpartum_remarks)}</p>}
+                                        {delivery.notes && <p>Notes: {delivery.notes}</p>}
                                     </div>
                                 ))}
                                 {(selectedDelivery.newborns || []).map(newborn => (
                                     <div className="pdi-modal-section" key={newborn.id}>
-                                        <h3>{newborn.baby_name || 'Newborn'} · {newborn.condition || 'Outcome not recorded'}</h3>
-                                        <p>{[newborn.gender, newborn.birth_weight ? `${newborn.birth_weight} kg` : null].filter(Boolean).join(' · ') || 'Birth details not recorded'}</p>
-                                        {isNewbornVaccinationEligible(newborn) && <p>Vaccination records: {newborn.vaccines?.length || 0}</p>}
+                                        <h3>{newborn.baby_name || 'Newborn'} · {newborn.condition_at_birth || newborn.condition || 'Outcome not recorded'}</h3>
+                                        <p>Birth date: {newborn.birth_date ? new Date(newborn.birth_date).toLocaleDateString() : 'Not recorded'}</p>
+                                        <p>Gender: {newborn.gender || 'Not recorded'}</p>
+                                        <p>Birth weight: {newborn.birth_weight != null ? `${newborn.birth_weight} kg` : 'Not recorded'}</p>
+                                        <p>Birth length: {newborn.birth_length != null ? `${newborn.birth_length} cm` : 'Not recorded'}</p>
+                                        <p>Head circumference: {newborn.head_circumference != null ? `${newborn.head_circumference} cm` : 'Not recorded'}</p>
+                                        <p>Condition at birth: {newborn.condition_at_birth || newborn.condition || 'Not recorded'}</p>
+                                        <p>Risk level: {newborn.risk_level || 'Not recorded'}</p>
+                                        <p>Apgar score: {newborn.apgar_1min ?? 'Not recorded'} at 1 minute · {newborn.apgar_5min ?? 'Not recorded'} at 5 minutes</p>
+                                        {isNewbornVaccinationEligible(newborn) && (
+                                            <div>
+                                                <p>Vaccination records ({newborn.vaccines?.length || 0})</p>
+                                                {newborn.vaccines?.map((vaccine, index) => (
+                                                    <p key={vaccine.id || index}>
+                                                        {vaccine.vaccine_name || vaccine.notes || 'Vaccination'}
+                                                        {vaccine.dose_number ? ` · Dose ${vaccine.dose_number}` : ''}
+                                                        {vaccine.status ? ` · ${vaccine.status}` : ''}
+                                                        {vaccine.vaccinated_date ? ` · Given ${new Date(vaccine.vaccinated_date).toLocaleDateString()}` : ''}
+                                                        {!vaccine.vaccinated_date && vaccine.scheduled_vaccination ? ` · Scheduled ${new Date(vaccine.scheduled_vaccination).toLocaleDateString()}` : ''}
+                                                    </p>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                                 {selectedDelivery.miscarriage_info && (

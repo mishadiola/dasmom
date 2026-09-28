@@ -29,6 +29,13 @@ const MotherLogin = () => {
             : authService.getRedirectRoute('mother');
     };
 
+    const prepareFirstLoginWelcome = async () => {
+        const { error } = await supabase.functions.invoke('mother-welcome', {
+            body: { action: 'prepare', email: email.trim().toLowerCase() },
+        });
+        if (error) console.error('Error preparing first-login welcome:', error);
+    };
+
     React.useEffect(() => {
         if (!isAuthLoading && user) {
             navigate(getPostLoginRoute(), { replace: true });
@@ -53,6 +60,7 @@ const MotherLogin = () => {
     setIsLoading(true);
 
     try {
+        await prepareFirstLoginWelcome();
         const user = await authService.login(email, password);
 
         if (!authService.accessCheck(user, 'mother')) {
@@ -85,6 +93,7 @@ const MotherLogin = () => {
 
         setIsLoading(true);
         try {
+            await prepareFirstLoginWelcome();
             await authService.signInWithGoogle(normalizedEmail, `${DASMOM_APP_URL}/mother-login`);
         } catch (error) {
             await customAlert({ title: t('login_error_title'), text: error.message || 'Google sign-in failed.', iconType: 'danger' });

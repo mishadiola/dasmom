@@ -713,6 +713,22 @@ export default class PatientService {
     return (count || 0) >= maxPerDay;
   }
 
+  async shiftPrenatalVisitsForInsertion(patientId, visits, insertionVisitNumber) {
+    const visitsToShift = (visits || [])
+      .filter(visit => visit.status === 'Scheduled' && Number(visit.visit_number) >= insertionVisitNumber)
+      .sort((left, right) => Number(right.visit_number) - Number(left.visit_number));
+
+    for (const visit of visitsToShift) {
+      const { error } = await this.supabase
+        .from('prenatal_visits')
+        .update({ visit_number: Number(visit.visit_number) + 1 })
+        .eq('id', visit.id)
+        .eq('patient_id', patientId);
+
+      if (error) throw error;
+    }
+  }
+
   async insertPrenatalSchedule(patientId, schedulePreview, createdBy, patientData = {}, maxPerDay = 35) {
     const validSchedule = Array.isArray(schedulePreview)
       ? schedulePreview
@@ -758,7 +774,7 @@ export default class PatientService {
     console.log('✅ Inserted prenatal schedule:', rows);
   }
 
-  async rebalancePrenatalSchedule(patientId, lmp, currentVisitNumber, attendedDate, createdBy, patientData = {}, maxPerDay = 35) {
+  async rebalancePrenatalSchedule(patientId, lmp, currentVisitNumber, attendedDate, createdBy, patientData = {}, maxPerDay = 35, pregnancyVisitIds = null, currentVisitId = null) {
     try {
       const lmpDate = new Date(lmp);
       if (Number.isNaN(lmpDate.getTime())) {
@@ -773,13 +789,18 @@ export default class PatientService {
         ? new Date(attendedDate).toISOString().split('T')[0]
         : new Date().toISOString().split('T')[0];
 
-      const { data: futureVisits, error: scheduledError } = await this.supabase
+      let futureVisitsQuery = this.supabase
         .from('prenatal_visits')
         .select('id, visit_number, visit_date')
         .eq('patient_id', patientId)
         .eq('status', 'Scheduled')
         .gt('visit_number', currentVisitNumber)
         .order('visit_number', { ascending: true });
+      if (Array.isArray(pregnancyVisitIds)) {
+        if (pregnancyVisitIds.length === 0) return;
+        futureVisitsQuery = futureVisitsQuery.in('id', pregnancyVisitIds);
+      }
+      const { data: futureVisits, error: scheduledError } = await futureVisitsQuery;
 
       if (scheduledError) throw scheduledError;
       const futureVisitNumbers = Array.isArray(futureVisits)
@@ -794,7 +815,9 @@ export default class PatientService {
       const schedule = [];
       const MIN_MONTHLY_INTERVAL = 28; // Changed from 7 to 28 days (monthly)
 
-      for (const visitNumber of futureVisitNumbers) {
+      for (let index = 0; index < futureVisitNumbers.length; index += 1) {
+        const visitNumber = futureVisitNumbers[index];
+        const futureVisit = futureVisits.find(visit => Number(visit.visit_number) === Number(visitNumber));
         const idealWeek = masterWeeks[visitNumber - 1] !== undefined
           ? masterWeeks[visitNumber - 1]
           : masterWeeks[masterWeeks.length - 1] + 4 * (visitNumber - masterWeeks.length);
@@ -835,6 +858,7 @@ export default class PatientService {
         const actualWeek = this.calculateWeeksAtDate(lmpDate, scheduledDateStr);
 
         schedule.push({
+          id: futureVisit.id,
           visitNumber,
           date: scheduledDateStr,
           week: actualWeek,
@@ -845,56 +869,56 @@ export default class PatientService {
         previousDate = scheduledDateStr;
       }
 
-      // Delete ONLY future scheduled visits (not attended ones)
-      const { error: deleteError } = await this.supabase
-        .from('prenatal_visits')
-        .delete()
-        .eq('patient_id', patientId)
-        .eq('status', 'Scheduled')
-        .gt('visit_number', currentVisitNumber);
+      const scheduledVisitIds = new Set(schedule.map(visit => visit.id));
+      const visitsBeyondEdd = (futureVisits || []).filter(visit => !scheduledVisitIds.has(visit.id));
+      for (const visit of visitsBeyondEdd) {
+        const { error: deleteError } = await this.supabase
+          .from('prenatal_visits')
+          .delete()
+          .eq('id', visit.id)
+          .eq('patient_id', patientId);
+        if (deleteError) throw deleteError;
+      }
 
-      if (deleteError) throw deleteError;
-
-      // Insert only the visits that can fit before EDD
       if (schedule.length > 0) {
-        const rowsToInsert = schedule.map((visit, index) => {
+        for (let index = 0; index < schedule.length; index += 1) {
+          const visit = schedule[index];
           const nextVisit = schedule[index + 1];
           const nextApptDate = nextVisit ? nextVisit.date : null;
 
-          return {
-            patient_id: patientId,
-            created_by: createdBy,
-            visit_date: visit.date,
-            visit_number: visit.visitNumber,
-            trimester: visit.trimester,
-            gestational_age: `${visit.week}w`,
-            next_appt_type: visit.type,
-            next_appt_date: nextApptDate,
-            status: 'Scheduled',
-            assigned_staff: patientData.retained_staff || null,
-            created_at: new Date().toISOString()
-          };
-        });
-
-        const { error: insertError } = await this.supabase.from('prenatal_visits').insert(rowsToInsert);
-        if (insertError) throw insertError;
-
-        // Update the current visit's next_appt_date to point to the first remaining scheduled visit
-        const firstNextDate = schedule[0].date;
-        await this.supabase
+          const { error: updateError } = await this.supabase
           .from('prenatal_visits')
-          .update({ next_appt_date: firstNextDate })
-          .eq('patient_id', patientId)
-          .eq('visit_number', currentVisitNumber);
+            .update({
+              visit_number: visit.visitNumber,
+              visit_date: visit.date,
+              trimester: visit.trimester,
+              gestational_age: `${visit.week}w`,
+              next_appt_type: visit.type,
+              next_appt_date: nextApptDate,
+              status: 'Scheduled',
+              assigned_staff: patientData.retained_staff || null
+            })
+            .eq('id', visit.id)
+            .eq('patient_id', patientId);
+          if (updateError) throw updateError;
+        }
+
+        const { error: currentVisitError } = await this.supabase
+          .from('prenatal_visits')
+          .update({ next_appt_date: schedule[0].date })
+          .eq(currentVisitId ? 'id' : 'patient_id', currentVisitId || patientId)
+          .eq(currentVisitId ? 'patient_id' : 'visit_number', currentVisitId ? patientId : currentVisitNumber);
+        if (currentVisitError) throw currentVisitError;
 
         console.log(`✅ Rebalanced prenatal schedule for patient ${patientId}, new schedule:`, schedule);
       } else {
         // No more visits can fit before EDD - update current visit to have no next appointment
-        await this.supabase
+        const { error: currentVisitError } = await this.supabase
           .from('prenatal_visits')
           .update({ next_appt_date: null })
-          .eq('patient_id', patientId)
-          .eq('visit_number', currentVisitNumber);
+          .eq(currentVisitId ? 'id' : 'patient_id', currentVisitId || patientId)
+          .eq(currentVisitId ? 'patient_id' : 'visit_number', currentVisitId ? patientId : currentVisitNumber);
+        if (currentVisitError) throw currentVisitError;
 
         console.log(`✅ No more visits can fit before EDD for patient ${patientId}`);
       }
@@ -1961,12 +1985,6 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       .eq('patient_id', patientId)
       .order('created_at', { ascending: false });
 
-    const { data: pregnancyHistoryData } = await this.supabase
-      .from('pregnancy_info')
-      .select('*')
-      .eq('patient_id', patientId)
-      .order('created_at', { ascending: false });
-
     // Fetch prenatal visits
     const { data: visitsData } = await this.supabase
       .from('prenatal_visits')
@@ -2082,6 +2100,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         gestational_age: d.gestational_age,
         risk_level: d.risk_level,
         complications: d.complications,
+        notes: d.notes,
         facility: d.facility,
         postpartum_visit_date: d.postpartum_visit_date,
         postpartum_attended_date: d.postpartum_attended_date,
@@ -2089,11 +2108,26 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       };
     });
 
+    const deliveryDateById = new Map(normalizedDeliveries.map(delivery => [delivery.id, delivery.delivery_date]));
+    const normalizedNewborns = (newbornsData || []).map(newborn => ({
+      ...newborn,
+      birth_date: newborn.birth_date || deliveryDateById.get(newborn.delivery_id) || null,
+      condition: newborn.condition_at_birth || newborn.condition || null,
+      vaccines: (newborn.vaccinations || []).map(vaccine => ({
+        ...vaccine,
+        vaccine_name: vaccine.vaccine_inventory?.vaccine_name || null,
+        vaccine_inventory: vaccine.vaccine_inventory || null,
+        assigned_staff: vaccine.assigned_staff || patientData.retained_staff || null,
+        assigned_staff_name: assignedStaffById[vaccine.assigned_staff || patientData.retained_staff]?.name || null,
+        assigned_staff_station: assignedStaffById[vaccine.assigned_staff || patientData.retained_staff]?.station || null
+      }))
+    }));
+
     const pregnancyHistory = buildPregnancyHistory(
-      pregnancyHistoryData || [],
+      pregnancyData || [],
       normalizedVisits,
       normalizedDeliveries,
-      newbornsData || [],
+      normalizedNewborns,
       vaccinesData || []
     );
     const preg = getLatestPregnancyRecord(pregnancyData || []) || {};
@@ -2156,30 +2190,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         status: s.status,
         notes: s.notes
       })),
-      newborns: (newbornsData || []).map(n => ({
-        id: n.id,
-        delivery_id: n.delivery_id,
-        baby_name: n.baby_name,
-        gender: n.gender,
-        birth_date: n.created_at ? new Date(n.created_at).toISOString().split('T')[0] : null,
-        birth_weight: n.birth_weight,
-        birth_length: n.birth_length,
-        condition: n.condition_at_birth,
-        vaccines: (n.vaccinations || []).map(v => ({
-          id: v.id,
-          vaccine_name: v.vaccine_inventory?.vaccine_name || null,
-          vaccine_inventory: v.vaccine_inventory || null,
-          notes: v.notes || '',
-          dose_number: v.dose_number,
-          vaccinated_date: v.vaccinated_date,
-          scheduled_vaccination: v.scheduled_vaccination,
-          status: v.status,
-          vaccinated_by: v.vaccinated_by,
-          assigned_staff: v.assigned_staff || patientData.retained_staff || null,
-          assigned_staff_name: assignedStaffById[v.assigned_staff || patientData.retained_staff]?.name || null,
-          assigned_staff_station: assignedStaffById[v.assigned_staff || patientData.retained_staff]?.station || null
-        }))
-      })),
+      newborns: normalizedNewborns,
       deliveries: normalizedDeliveries,
       pregnancyHistory,
       currentPregnancy: pregnancyHistory.find(pregnancy => pregnancy.isCurrent) || null,

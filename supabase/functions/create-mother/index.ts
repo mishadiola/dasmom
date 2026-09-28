@@ -138,6 +138,7 @@ Deno.serve(async (request: Request) => {
         password: String(body.password),
         email_confirm: true,
         user_metadata: { full_name: String(body.motherName) },
+        app_metadata: { mother_welcome_pending: true },
       });
       if (userError) throw userError;
       createdUserId = userData.user?.id || null;
