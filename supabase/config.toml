@@ -13,6 +13,9 @@ verify_jwt = false
 [functions.google-account-check]
 verify_jwt = false
 
+[functions.mother-welcome]
+verify_jwt = false
+
 [functions.password-reset]
 verify_jwt = false
 

@@ -11,6 +11,7 @@ import PregnancyProgressCard from '../../components/MotherDashboard/PregnancyPro
 import WelcomeMotherModal from '../../components/MotherDashboard/WelcomeMotherModal';
 import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
+import supabase from '../../config/supabaseclient';
 import pregnancySilhouette from '../../assets/images/pregnancy-silhouette.png';
 import { calculateEDD, calculateTimeRemaining, calculateGestationalAge, getTrimester, isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
 import { useLanguage } from '../../context/LanguageContext';
@@ -44,10 +45,12 @@ const MotherDashboard = () => {
                 if (!authUser?.id) return;
 
                 if (authUser.role === 'mother' || authUser.role === 'patient') {
-                    const onboardingKey = `dasmom_onboarding_completed_${authUser.id}`;
-                    const hasCompletedOnboarding = localStorage.getItem(onboardingKey) === 'true';
-                    if (!hasCompletedOnboarding) {
-                        localStorage.setItem(onboardingKey, 'true');
+                    const { data: welcomeData, error: welcomeError } = await supabase.functions.invoke('mother-welcome', {
+                        body: { action: 'claim' },
+                    });
+                    if (welcomeError) {
+                        console.error('Error checking first-login welcome status:', welcomeError);
+                    } else if (welcomeData?.showWelcome) {
                         setShowWelcome(true);
                     }
                 }
