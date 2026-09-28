@@ -149,7 +149,12 @@ export default function Login() {
     } 
     catch (err) {
       console.error(err);
-      setErrors(prev => ({ ...prev, general: err.message || 'Login failed' }));
+      const errMsg = (err.message || '').toLowerCase();
+      if (errMsg.includes('invalid') || errMsg.includes('credentials') || errMsg.includes('password') || errMsg.includes('incorrect')) {
+          setErrors(prev => ({ ...prev, password: 'Incorrect email or password. Please try again.' }));
+      } else {
+          setErrors(prev => ({ ...prev, password: 'Unable to sign in right now. Please try again.' }));
+      }
       setAttempts(prev => {
         const next = prev + 1;
         if (next >= MAX_ATTEMPTS) {
@@ -315,6 +320,7 @@ export default function Login() {
                                 onChange={(e) => {
                                     setEmail(e.target.value);
                                     if (errors.email) setErrors(p => ({ ...p, email: '' }));
+                                    if (errors.password) setErrors(p => ({ ...p, password: '' }));
                                 }}
                                 aria-invalid={!!errors.email}
                                 aria-describedby={errors.email ? 'email-error' : undefined}
@@ -359,7 +365,7 @@ export default function Login() {
                     </div>
 
                     <button type="submit" className={`login-btn${isLoading ? ' loading' : ''}`} disabled={isLoading || isLocked} aria-busy={isLoading}>
-                        {isLoading ? <Loader2 className="btn-spinner" size={20} aria-hidden="true" /> : isLocked ? `Locked · ${lockTimer}s` : 'Login'}
+                        {isLoading ? <><Loader2 className="btn-spinner" size={20} aria-hidden="true" /> Signing in...</> : isLocked ? `Locked · ${lockTimer}s` : 'Login'}
                     </button>
                 </form>
 

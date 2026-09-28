@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext, useMemo, useRef } from 'react';
+import { useSystemSettings } from '../../context/SystemSettingsContext';
 import useClickOutside from '../../hooks/useClickOutside';
 import {
   Search,
@@ -39,6 +40,8 @@ import ExportModal from '../../components/ExportModal';
 import { isBatchExpired, getInventoryStatus } from '../../utils/inventoryUtils';
 import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/Inventory.css';
+import { formatDate } from '../../utils/formatters';
+
 
 const inventoryService = new InventoryService();
 const patientService = new PatientService();
@@ -57,6 +60,7 @@ const formatReadableDate = (dateString) => {
 };
 
 const Inventory = () => {
+    const { settings } = useSystemSettings();
   const { alert: customAlert, confirm } = useModal();
   const { user } = useContext(AuthContext);
   const [userScope, setUserScope] = useState({ role: 'user', stationId: null, stationName: null, userId: user?.id || null });
@@ -70,7 +74,7 @@ const Inventory = () => {
   const [activeTab, setActiveTab] = useState('vaccines');
   const [mainTab, setMainTab] = useState('inventory');
   const [distPage, setDistPage] = useState(1);
-  const distItemsPerPage = 10;
+  const distItemsPerPage = settings?.tables?.rowsPerPage || 10;
   const [showStationInventory, setShowStationInventory] = useState(false);
   const [loading, setLoading] = useState(true);
   const [vaccines, setVaccines] = useState([]);
@@ -213,7 +217,7 @@ const Inventory = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedRow, setExpandedRow] = useState(null);
-  const itemsPerPage = 20;
+    const itemsPerPage = settings?.tables?.rowsPerPage || 10;
 
   const vaccineUnitOptions = ['vials', 'doses', 'ml'];
   const supplementUnitOptions = ['tablets', 'capsules', 'sachets', 'bottles'];
@@ -1823,11 +1827,11 @@ const Inventory = () => {
                                       <div><strong>Unit:</strong> {subItem.unit || 'N/A'}</div>
                                       <div><strong>Quantity:</strong> {subItem.quantity} / {subItem.max_stock} ({subPercentage}%)</div>
                                       <div><strong>Stock Status:</strong> <span className={`status-badge ${subStatus.class}`} style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '3px' }}>{subStatus.label}</span></div>
-                                      <div><strong>Expiration:</strong> {subItem.expiration_date ? new Date(subItem.expiration_date).toLocaleDateString() : 'N/A'}</div>
+                                      <div><strong>Expiration:</strong> {subItem.expiration_date ? formatDate(subItem.expiration_date) : 'N/A'}</div>
                                       {daysUntilExpiry !== null && (
                                         <div><strong>Days Until Expiry:</strong> {daysUntilExpiry < 0 ? `${Math.abs(daysUntilExpiry)} days overdue` : `${daysUntilExpiry} days`}</div>
                                       )}
-                                      <div><strong>Manufactured:</strong> {subItem.manufactured_date ? new Date(subItem.manufactured_date).toLocaleDateString() : 'N/A'}</div>
+                                      <div><strong>Manufactured:</strong> {subItem.manufactured_date ? formatDate(subItem.manufactured_date) : 'N/A'}</div>
                                     </div>
                                     <div style={{
                                       display: 'flex',
@@ -2256,7 +2260,7 @@ const Inventory = () => {
                     <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '600', textAlign: 'center', color: '#2c5282' }}>{group.totalQuantity}</td>
                     <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{group.unit}</td>
                     <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>{group.brand || 'N/A'}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>{group.expiration_date ? new Date(group.expiration_date).toLocaleDateString() : 'N/A'}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>{group.expiration_date ? formatDate(group.expiration_date) : 'N/A'}</td>
                   </tr>
 
                   {/* Child Rows (Batch Variants) */}
@@ -2272,7 +2276,7 @@ const Inventory = () => {
                       <td style={{ padding: '8px 16px', fontSize: '11px', color: '#666' }}>{variant.unit || 'N/A'}</td>
                       <td style={{ padding: '8px 16px', fontSize: '11px', color: '#666' }}>{variant.brand || 'N/A'}</td>
                       <td style={{ padding: '8px 16px', fontSize: '11px', color: '#999' }}>
-                        Updated: {variant.last_updated ? new Date(variant.last_updated).toLocaleDateString() : 'N/A'}
+                        Updated: {variant.last_updated ? formatDate(variant.last_updated) : 'N/A'}
                       </td>
                     </tr>
                   ))}

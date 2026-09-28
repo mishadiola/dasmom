@@ -1,7 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { 
     Mail, Lock, Eye, EyeOff, Loader2, Chrome,
-    Calendar, Activity, Heart, Baby, ArrowLeft, X
+    Calendar, Activity, Heart, Baby, ArrowLeft, X, AlertCircle
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import '../../styles/pages/MotherLogin.css';
@@ -39,6 +39,7 @@ const MotherLogin = () => {
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [errors, setErrors] = useState({ email: '', password: '' });
 
     const [resetModalOpen, setResetModalOpen] = useState(false);
 
@@ -64,7 +65,12 @@ const MotherLogin = () => {
         navigate(route);
 
     } catch (err) {
-        await customAlert({ title: t('login_error_title'), text: err.message, iconType: 'danger' });
+        const errMsg = (err.message || '').toLowerCase();
+        if (errMsg.includes('invalid') || errMsg.includes('credentials') || errMsg.includes('password') || errMsg.includes('incorrect')) {
+            setErrors(prev => ({ ...prev, password: 'Incorrect email or password. Please try again.' }));
+        } else {
+            setErrors(prev => ({ ...prev, password: 'Unable to sign in right now. Please try again.' }));
+        }
     } finally {
         setIsLoading(false);
     }
@@ -125,7 +131,11 @@ const MotherLogin = () => {
                                         className="ml-input" 
                                         placeholder={t('login_email_placeholder')}
                                         value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
+                                        onChange={(e) => {
+                                            setEmail(e.target.value);
+                                            if (errors.email) setErrors(p => ({ ...p, email: '' }));
+                                            if (errors.password) setErrors(p => ({ ...p, password: '' }));
+                                        }}
                                         required
                                     />
                                 </div>
@@ -133,14 +143,17 @@ const MotherLogin = () => {
 
                             <div className="ml-form-group">
                                 <label className="ml-label">{t('login_password_label')}</label>
-                                <div className="ml-input-wrapper">
+                                <div className="ml-input-wrapper" style={errors.password ? { borderColor: 'var(--color-danger)' } : {}}>
                                     <Lock size={18} className="ml-input-icon" />
                                     <input 
                                         type={showPassword ? "text" : "password"} 
                                         className="ml-input" 
                                         placeholder={t('login_password_placeholder')}
                                         value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
+                                        onChange={(e) => {
+                                            setPassword(e.target.value);
+                                            if (errors.password) setErrors(p => ({ ...p, password: '' }));
+                                        }}
                                         required
                                     />
                                     <button 
@@ -152,6 +165,7 @@ const MotherLogin = () => {
                                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                                     </button>
                                 </div>
+                                {errors.password && <p style={{ color: 'var(--color-danger)', fontSize: '0.8rem', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}><AlertCircle size={12} /> {errors.password}</p>}
                             </div>
 
                             <button type="submit" className="ml-submit-btn" disabled={isLoading}>

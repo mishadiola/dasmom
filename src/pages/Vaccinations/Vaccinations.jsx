@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSystemSettings } from '../../context/SystemSettingsContext';
 import useClickOutside from '../../hooks/useClickOutside';
 import PatientService from '../../services/patientservice';
 import BabyService from '../../services/babyservices';
@@ -921,18 +922,34 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                     </div>
                     {mode === 'vaccine' && pendingVaccines.length > 0 && (
                         <div className="pending-vaccines-section">
-                            <h3>Pending Scheduled Vaccines</h3>
+                            <h3 style={{ marginBottom: '4px' }}>Pending Scheduled Vaccines</h3>
                             <p className="pending-vaccines-note">Check any scheduled doses that were administered today to update their records.</p>
-                            {pendingVaccines.map(v => (
-                                <label key={v.id} className="pending-vaccine-item">
-                                    <input
-                                        type="checkbox"
-                                        checked={!!selectedVaccines[v.id]}
-                                        onChange={() => setSelectedVaccines(prev => ({ ...prev, [v.id]: !prev[v.id] }))}
-                                    />
-                                    {v.vaccine} (Dose {v.dose_number}) — {v.scheduled_vaccination}
-                                </label>
-                            ))}
+                            <div className="pending-vaccines-list">
+                                {pendingVaccines.map(v => {
+                                    const parts = v.vaccine.split(' - ');
+                                    const mainName = parts[0];
+                                    const desc = parts.length > 1 ? parts.slice(1).join(' - ') : '';
+                                    
+                                    return (
+                                        <label key={v.id} className={"pending-vaccine-card " + (selectedVaccines[v.id] ? 'selected' : '')}>
+                                            <input
+                                                type="checkbox"
+                                                checked={!!selectedVaccines[v.id]}
+                                                onChange={() => setSelectedVaccines(prev => ({ ...prev, [v.id]: !prev[v.id] }))}
+                                            />
+                                            <div className="pending-vaccine-details">
+                                                <div className="pending-vaccine-title">{mainName}</div>
+                                                <div className="pending-vaccine-desc">
+                                                    {desc ? desc + ' · ' : ''}Dose {v.dose_number}
+                                                </div>
+                                                <div className="pending-vaccine-date">
+                                                    Scheduled: {v.scheduled_vaccination}
+                                                </div>
+                                            </div>
+                                        </label>
+                                    );
+                                })}
+                            </div>
                         </div>
                     )}
                     {mode === 'vaccine' ? (
@@ -1119,6 +1136,9 @@ const Vaccinations = () => {
                 initialPatientName: location.state.patientName,
             });
             navigate(location.pathname, { replace: true, state: {} });
+        } else if (location.state?.openRecordVaccination) {
+            setRecordModal({ mode: 'vaccine' });
+            navigate(location.pathname, { replace: true, state: {} });
         }
     }, [location.state, location.pathname, navigate]);
     const [newbornVaccinationModal, setNewbornVaccinationModal] = useState(null);  // null | newborn object
@@ -1129,7 +1149,8 @@ const Vaccinations = () => {
 
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 10;
+    const { settings } = useSystemSettings();
+    const itemsPerPage = settings?.tables?.rowsPerPage || 10;
 
     // Reset pagination on filter changes
     useEffect(() => {

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 import { 
     Activity, Heart, Thermometer, Weight, TrendingUp, 
     Download, ArrowLeft, Filter, AlertCircle, 
@@ -15,6 +17,7 @@ const MyVitals = () => {
     const navigate = useNavigate();
     const [filterTrimester, setFilterTrimester] = useState('All');
     const [vitalsData, setVitalsData] = useState([]);
+    const [patientInfo, setPatientInfo] = useState({});
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('Current Health');
     const { t } = useLanguage();
@@ -46,6 +49,13 @@ const MyVitals = () => {
                     }))
                     .sort((a, b) => new Date(b.date) - new Date(a.date));
                 
+                const fullName = patient ? [patient.first_name, patient.middle_name, patient.last_name, patient.suffix].filter(Boolean).join(' ') : 'N/A';
+                setPatientInfo({
+                    name: fullName || 'N/A',
+                    id: patient?.patient_id || patient?.id || 'N/A',
+                    station: patient?.station || 'N/A'
+                });
+
                 const chronological = [...visits].reverse();
                 setVitalsData({ visits, chronological });
             } catch (err) {
@@ -61,7 +71,137 @@ const MyVitals = () => {
     const filteredVitals = filterTrimester === 'All' ? (vitalsData.visits || []) : (vitalsData.visits || []).filter(v => v.trimester === filterTrimester);
 
     const handleDownloadPDF = () => {
-        window.print();
+        const doc = new jsPDF('portrait');
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+        let y = 16;
+
+        // ── Header ──
+        doc.setFontSize(18);
+        doc.setTextColor(139, 90, 100); // DASMOM mauve
+        doc.text('DASMOM+', margin, y);
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text('City Health Office — Dasmariñas, Cavite', margin, y + 7);
+        y += 16;
+
+        // Divider
+        doc.setDrawColor(185, 129, 138);
+        doc.setLineWidth(0.5);
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 10;
+
+        // ── Report Title ──
+        doc.setFontSize(16);
+        doc.setTextColor(40);
+        doc.text('Vital Records Report', margin, y);
+        y += 10;
+
+        // ── Patient Info ──
+        doc.setFontSize(10);
+        doc.setTextColor(80);
+        const patientId = String(patientInfo.id || 'N/A').substring(0, 8).toUpperCase();
+        doc.text(`Patient Name: ${patientInfo.name || 'N/A'}`, margin, y);
+        doc.text(`Patient ID: ${patientId}`, pageWidth / 2, y);
+        y += 6;
+        doc.text(`Health Station: ${patientInfo.station || 'N/A'}`, margin, y);
+        doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, y);
+        y += 10;
+
+        // Divider
+        doc.setDrawColor(200);
+        doc.setLineWidth(0.3);
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 8;
+
+        // ── Current/Latest Vitals Summary ──
+        const latest = vitalsData.visits?.[0];
+        doc.setFontSize(13);
+        doc.setTextColor(40);
+        doc.text('Current / Latest Vital Signs', margin, y);
+        y += 8;
+
+        if (latest) {
+            doc.setFontSize(10);
+            doc.setTextColor(80);
+            const recordedDate = new Date(latest.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+            doc.text(`Recorded on: ${recordedDate}`, margin, y);
+            y += 8;
+
+            doc.autoTable({
+                startY: y,
+                head: [['Vital Sign', 'Value', 'Unit']],
+                body: [
+                    ['Weight', latest.weight || '--', 'kg'],
+                    ['Blood Pressure', latest.bp || '--', 'mmHg'],
+                    ['Heart Rate / Pulse', latest.pulse || '--', 'BPM'],
+                    ['Temperature', latest.temp || '--', '°C'],
+                ],
+                theme: 'grid',
+                styles: { fontSize: 10, cellPadding: 4 },
+                headStyles: { fillColor: [185, 129, 138], textColor: 255, fontStyle: 'bold' },
+                alternateRowStyles: { fillColor: [252, 249, 250] },
+                margin: { left: margin, right: margin },
+            });
+            y = doc.lastAutoTable.finalY + 12;
+        } else {
+            doc.setFontSize(10);
+            doc.setTextColor(120);
+            doc.text('No vital sign records available.', margin, y);
+            y += 12;
+        }
+
+        // ── Vitals History Table ──
+        const allVisits = vitalsData.visits || [];
+        if (allVisits.length > 0) {
+            doc.setFontSize(13);
+            doc.setTextColor(40);
+            doc.text('Vital Signs History', margin, y);
+            y += 8;
+
+            const historyBody = allVisits.map(v => [
+                new Date(v.date).toLocaleDateString('en-PH'),
+                v.weight ? `${v.weight} kg` : '--',
+                v.bp || '--',
+                v.pulse ? `${v.pulse} bpm` : '--',
+                v.temp ? `${v.temp}°C` : '--',
+                v.trimester || 'N/A',
+                v.notes || 'Routine checkup'
+            ]);
+
+            doc.autoTable({
+                startY: y,
+                head: [['Date', 'Weight', 'Blood Pressure', 'Pulse', 'Temperature', 'Trimester', 'Notes']],
+                body: historyBody,
+                theme: 'grid',
+                styles: { fontSize: 8, cellPadding: 3 },
+                headStyles: { fillColor: [185, 129, 138], textColor: 255, fontStyle: 'bold' },
+                alternateRowStyles: { fillColor: [252, 249, 250] },
+                margin: { left: margin, right: margin },
+                didDrawPage: (data) => {
+                    // Footer on each page
+                    const pageCount = doc.internal.getNumberOfPages();
+                    doc.setFontSize(8);
+                    doc.setTextColor(150);
+                    doc.text(
+                        `Page ${data.pageNumber} of ${pageCount}`,
+                        pageWidth / 2,
+                        doc.internal.pageSize.getHeight() - 10,
+                        { align: 'center' }
+                    );
+                    doc.text(
+                        'DASMOM+ — Confidential Patient Record',
+                        margin,
+                        doc.internal.pageSize.getHeight() - 10
+                    );
+                }
+            });
+        }
+
+        // ── Save ──
+        const dateStr = new Date().toISOString().split('T')[0];
+        const safeId = String(patientInfo.id || 'UNKNOWN').substring(0, 8).toUpperCase();
+        doc.save(`DASMOM_Vital_Records_${safeId}_${dateStr}.pdf`);
     };
 
     // Simple SVG Line Chart Component
@@ -174,9 +314,9 @@ const MyVitals = () => {
                         </h1>
                         <p className="page-subtitle">{t('vitals_subtitle')}</p>
                         
-                        <div className="vitals-hero-badges-row">
-                            <button className="vitals-badge-btn" onClick={handleDownloadPDF}>
-                                <Download size={16} /> {t('vitals_download')}
+                        <div className="mother-download-pdf-btn-wrapper">
+                            <button className="mother-download-pdf-btn" onClick={handleDownloadPDF}>
+                                <Download size={14} /> Download PDF
                             </button>
                         </div>
                     </div>

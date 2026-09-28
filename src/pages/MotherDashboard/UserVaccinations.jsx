@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 import { 
     Syringe, Search, Filter, Calendar, 
     CheckCircle2, Clock, AlertCircle, 
-    ChevronRight, Info, Download, Printer,
+    ChevronRight, Info, Download,
     HeartPulse, Baby, ArrowLeft, UserRound, MapPin
 } from 'lucide-react';
 import '../../styles/pages/UserVaccinations.css';
@@ -17,6 +19,7 @@ import { isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
 const UserVaccinations = () => {
     const navigate = useNavigate();
     const [vaccines, setVaccines] = useState([]);
+    const [patientInfo, setPatientInfo] = useState({});
     const [searchTerm, setSearchTerm] = useState('');
     const [filter, setFilter] = useState('All');
     const [selectedVaccine, setSelectedVaccine] = useState(null);
@@ -63,6 +66,13 @@ const UserVaccinations = () => {
                 }
                 
                 setVaccines(allVaccines);
+
+                const fullName = patient ? [patient.first_name, patient.middle_name, patient.last_name, patient.suffix].filter(Boolean).join(' ') : 'N/A';
+                setPatientInfo({
+                    name: fullName || 'N/A',
+                    id: patient?.patient_id || patient?.id || 'N/A',
+                    station: patient?.station || 'N/A'
+                });
             } catch (err) {
                 console.error('Failed to load vaccines:', err);
             }
@@ -91,6 +101,152 @@ const UserVaccinations = () => {
     const completedCount = vaccines.filter(v => (v.status || '').toString().toLowerCase() === 'completed').length;
     const totalCount = vaccines.length;
 
+    const handleDownloadPDF = () => {
+        const doc = new jsPDF('portrait');
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+        let y = 16;
+
+        // ── Header ──
+        doc.setFontSize(18);
+        doc.setTextColor(139, 90, 100);
+        doc.text('DASMOM+', margin, y);
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text('City Health Office — Dasmari\u00f1as, Cavite', margin, y + 7);
+        y += 16;
+
+        doc.setDrawColor(185, 129, 138);
+        doc.setLineWidth(0.5);
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 10;
+
+        // ── Report Title ──
+        doc.setFontSize(16);
+        doc.setTextColor(40);
+        doc.text('Vaccination Record', margin, y);
+        y += 10;
+
+        // ── Patient Info ──
+        doc.setFontSize(10);
+        doc.setTextColor(80);
+        const patientId = String(patientInfo.id || 'N/A').substring(0, 8).toUpperCase();
+        doc.text(`Patient Name: ${patientInfo.name || 'N/A'}`, margin, y);
+        doc.text(`Patient ID: ${patientId}`, pageWidth / 2, y);
+        y += 6;
+        doc.text(`Health Station: ${patientInfo.station || 'N/A'}`, margin, y);
+        doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, y);
+        y += 6;
+        doc.text(`Progress: ${completedCount} of ${totalCount} vaccinations completed`, margin, y);
+        y += 10;
+
+        doc.setDrawColor(200);
+        doc.setLineWidth(0.3);
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 8;
+
+        // ── Maternal Vaccinations ──
+        const maternalVaccines = vaccines.filter(v => v.personType === 'self');
+        const newbornVaccines = vaccines.filter(v => v.personType === 'child');
+
+        const buildVaccineRows = (list) => list.map(v => {
+            const displayName = v.notes || v.vaccine_name || v.name || 'Vaccine';
+            const scheduledDate = v.scheduled_vaccination
+                ? new Date(v.scheduled_vaccination).toLocaleDateString('en-PH')
+                : '--';
+            const administeredDate = v.vaccinated_date
+                ? new Date(v.vaccinated_date).toLocaleDateString('en-PH')
+                : '--';
+            return [
+                displayName,
+                v.dose_number ? `Dose ${v.dose_number}` : '--',
+                v.schedule || 'As advised',
+                scheduledDate,
+                administeredDate,
+                v.status || 'Pending'
+            ];
+        });
+
+        const tableHead = [['Vaccine', 'Dose', 'Recommended', 'Scheduled', 'Administered', 'Status']];
+        const tableStyles = {
+            theme: 'grid',
+            styles: { fontSize: 8, cellPadding: 3 },
+            headStyles: { fillColor: [185, 129, 138], textColor: 255, fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [252, 249, 250] },
+            margin: { left: margin, right: margin },
+            didDrawPage: (data) => {
+                const pageCount = doc.internal.getNumberOfPages();
+                doc.setFontSize(8);
+                doc.setTextColor(150);
+                doc.text(
+                    `Page ${data.pageNumber} of ${pageCount}`,
+                    pageWidth / 2,
+                    doc.internal.pageSize.getHeight() - 10,
+                    { align: 'center' }
+                );
+                doc.text(
+                    'DASMOM+ \u2014 Confidential Patient Record',
+                    margin,
+                    doc.internal.pageSize.getHeight() - 10
+                );
+            }
+        };
+
+        if (maternalVaccines.length > 0) {
+            doc.setFontSize(13);
+            doc.setTextColor(40);
+            doc.text('Maternal Vaccinations', margin, y);
+            y += 8;
+
+            doc.autoTable({
+                startY: y,
+                head: tableHead,
+                body: buildVaccineRows(maternalVaccines),
+                ...tableStyles,
+            });
+            y = doc.lastAutoTable.finalY + 12;
+        }
+
+        if (newbornVaccines.length > 0) {
+            // Group by baby name
+            const babyNames = [...new Set(newbornVaccines.map(v => v.personName))];
+
+            babyNames.forEach(babyName => {
+                const babyVaccines = newbornVaccines.filter(v => v.personName === babyName);
+
+                // Check if we need a new page
+                if (y > doc.internal.pageSize.getHeight() - 50) {
+                    doc.addPage();
+                    y = 20;
+                }
+
+                doc.setFontSize(13);
+                doc.setTextColor(40);
+                doc.text(`Newborn Vaccinations \u2014 ${babyName}`, margin, y);
+                y += 8;
+
+                doc.autoTable({
+                    startY: y,
+                    head: tableHead,
+                    body: buildVaccineRows(babyVaccines),
+                    ...tableStyles,
+                });
+                y = doc.lastAutoTable.finalY + 12;
+            });
+        }
+
+        if (maternalVaccines.length === 0 && newbornVaccines.length === 0) {
+            doc.setFontSize(10);
+            doc.setTextColor(120);
+            doc.text('No vaccination records available.', margin, y);
+        }
+
+        // ── Save ──
+        const dateStr = new Date().toISOString().split('T')[0];
+        const safeId = String(patientInfo.id || 'UNKNOWN').substring(0, 8).toUpperCase();
+        doc.save(`DASMOM_Vaccination_Record_${safeId}_${dateStr}.pdf`);
+    };
+
     return (
         <div className="user-vaccinations-page">
             <div className="page-header hero-header-with-img">
@@ -105,12 +261,9 @@ const UserVaccinations = () => {
                             <Syringe size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('vac_title')}
                         </h1>
                         <p className="page-subtitle">{t('vac_subtitle')}</p>
-                        <div className="hero-badges-row">
-                            <button className="vitals-badge-btn" title={t('vac_print')}>
-                                <Printer size={16} /> {t('vac_print')}
-                            </button>
-                            <button className="vitals-badge-btn" title={t('vac_download')}>
-                                <Download size={16} /> {t('vac_download')}
+                        <div className="mother-download-pdf-btn-wrapper">
+                            <button className="mother-download-pdf-btn" onClick={handleDownloadPDF} title={t('vac_download')}>
+                                <Download size={14} /> Download PDF
                             </button>
                         </div>
                     </div>

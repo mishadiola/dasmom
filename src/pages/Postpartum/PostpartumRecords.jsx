@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useSystemSettings } from '../../context/SystemSettingsContext';
 import useClickOutside from '../../hooks/useClickOutside';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -208,7 +209,8 @@ const PostpartumRecords = () => {
     const filterRowRef = useRef(null);
     useClickOutside(filterRowRef, () => setActivePopover(null));
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 10;
+    const { settings } = useSystemSettings();
+    const itemsPerPage = settings?.tables?.rowsPerPage || 10;
 
     useEffect(() => {
         const fetchStations = async () => {

@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { 
     Baby, Heart, ShieldCheck, ChevronRight, Calendar, 
-    MapPin, User, Stethoscope, Activity, X 
+    MapPin, User, Stethoscope, Activity, X, Download
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 import '../../styles/pages/PregnancyDeliveryInfo.css';
 import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
@@ -14,6 +16,7 @@ const PregnancyDeliveryInfo = () => {
     const { t } = useLanguage();
     const [selectedDelivery, setSelectedDelivery] = useState(null);
     const [pastPregnancies, setPastPregnancies] = useState([]);
+    const [patientInfo, setPatientInfo] = useState({});
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -23,6 +26,13 @@ const PregnancyDeliveryInfo = () => {
                 if (!user?.id) return;
                 const patient = await new PatientService().getPatientById(user.id);
                 setPastPregnancies(patient?.pregnancyHistory || []);
+
+                const fullName = patient ? [patient.first_name, patient.middle_name, patient.last_name, patient.suffix].filter(Boolean).join(' ') : 'N/A';
+                setPatientInfo({
+                    name: fullName || 'N/A',
+                    id: patient?.patient_id || patient?.id || 'N/A',
+                    station: patient?.station || 'N/A'
+                });
             } catch (error) {
                 console.error('Failed to load pregnancy and delivery records:', error);
             } finally {
@@ -39,6 +49,153 @@ const PregnancyDeliveryInfo = () => {
             day: date.getDate(),
             year: date.getFullYear()
         };
+    };
+
+    const handleDownloadPDF = () => {
+        const doc = new jsPDF('portrait');
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+        let y = 16;
+
+        // ── Header ──
+        doc.setFontSize(18);
+        doc.setTextColor(139, 90, 100);
+        doc.text('DASMOM+', margin, y);
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text('City Health Office — Dasmariñas, Cavite', margin, y + 7);
+        y += 16;
+
+        doc.setDrawColor(185, 129, 138);
+        doc.setLineWidth(0.5);
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 10;
+
+        // ── Report Title ──
+        doc.setFontSize(16);
+        doc.setTextColor(40);
+        doc.text('Pregnancy & Delivery Record', margin, y);
+        y += 10;
+
+        // ── Patient Info ──
+        doc.setFontSize(10);
+        doc.setTextColor(80);
+        const patientId = String(patientInfo.id || 'N/A').substring(0, 8).toUpperCase();
+        doc.text(`Patient Name: ${patientInfo.name || 'N/A'}`, margin, y);
+        doc.text(`Patient ID: ${patientId}`, pageWidth / 2, y);
+        y += 6;
+        doc.text(`Health Station: ${patientInfo.station || 'N/A'}`, margin, y);
+        doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, y);
+        y += 10;
+
+        doc.setDrawColor(200);
+        doc.setLineWidth(0.3);
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 8;
+
+        const tableStyles = {
+            theme: 'grid',
+            styles: { fontSize: 8, cellPadding: 3 },
+            headStyles: { fillColor: [185, 129, 138], textColor: 255, fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [252, 249, 250] },
+            margin: { left: margin, right: margin },
+            didDrawPage: (data) => {
+                const pageCount = doc.internal.getNumberOfPages();
+                doc.setFontSize(8);
+                doc.setTextColor(150);
+                doc.text(`Page ${data.pageNumber} of ${pageCount}`, pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
+                doc.text('DASMOM+ — Confidential Patient Record', margin, doc.internal.pageSize.getHeight() - 10);
+            }
+        };
+
+        if (pastPregnancies.length > 0) {
+            [...pastPregnancies].reverse().forEach(pregnancy => {
+                if (y > doc.internal.pageSize.getHeight() - 60) {
+                    doc.addPage();
+                    y = 20;
+                }
+
+                doc.setFontSize(13);
+                doc.setTextColor(40);
+                doc.text(`Pregnancy #${pregnancy.pregnancyNumber}${pregnancy.isCurrent ? ' (Current)' : ''}`, margin, y);
+                y += 8;
+                
+                doc.setFontSize(10);
+                doc.setTextColor(80);
+                const lmd = pregnancy.lmd || pregnancy.created_at;
+                const edd = pregnancy.edd;
+                doc.text(`Record Date: ${lmd ? new Date(lmd).toLocaleDateString() : 'N/A'}    |    EDD: ${edd ? new Date(edd).toLocaleDateString() : 'N/A'}`, margin, y);
+                y += 6;
+                doc.text(`Status: ${pregnancy.status || 'N/A'}    |    Gravida: ${pregnancy.gravida ?? 'N/A'}    |    Para: ${pregnancy.para ?? 'N/A'}`, margin, y);
+                y += 8;
+
+                if (pregnancy.deliveries && pregnancy.deliveries.length > 0) {
+                    const deliveryHead = [['Date', 'Type / Mode', 'Facility', 'Attended By', 'Gestational Age', 'Outcome']];
+                    const deliveryBody = pregnancy.deliveries.map(d => {
+                        const outcome = pregnancy.miscarriage_info?.outcome || (pregnancy.newborns && pregnancy.newborns.length > 0 ? pregnancy.newborns.map(n => n.condition).filter(Boolean).join(', ') : 'Not recorded');
+                        return [
+                            d.delivery_date ? new Date(d.delivery_date).toLocaleDateString() : 'N/A',
+                            `${d.delivery_type || 'N/A'} / ${d.delivery_mode || 'N/A'}`,
+                            d.facility || 'N/A',
+                            d.assigned_staff_name || 'N/A',
+                            d.gestational_age || 'N/A',
+                            outcome
+                        ];
+                    });
+                    
+                    doc.autoTable({
+                        startY: y,
+                        head: deliveryHead,
+                        body: deliveryBody,
+                        ...tableStyles,
+                    });
+                    y = doc.lastAutoTable.finalY + 8;
+                    
+                    // Complications & Postpartum
+                    const complications = pregnancy.deliveries.filter(d => d.complications).map(d => d.complications).join('; ');
+                    if (complications) {
+                        doc.setFontSize(9);
+                        doc.text(`Complications: ${complications}`, margin, y);
+                        y += 6;
+                    }
+                } else if (pregnancy.miscarriage_info) {
+                     doc.setFontSize(9);
+                     doc.text(`Outcome: ${pregnancy.miscarriage_info.outcome || 'N/A'}`, margin, y);
+                     y += 6;
+                     if (pregnancy.miscarriage_info.notes || pregnancy.miscarriage_info.suspected_cause) {
+                         doc.text(`Details: ${pregnancy.miscarriage_info.suspected_cause || pregnancy.miscarriage_info.notes}`, margin, y);
+                         y += 6;
+                     }
+                }
+
+                if (pregnancy.newborns && pregnancy.newborns.length > 0) {
+                    const newbornHead = [['Newborn Name', 'Gender', 'Birth Weight', 'Condition']];
+                    const newbornBody = pregnancy.newborns.map(n => [
+                        n.baby_name || 'N/A',
+                        n.gender || 'N/A',
+                        n.birth_weight ? `${n.birth_weight} kg` : 'N/A',
+                        n.condition || 'N/A'
+                    ]);
+                    
+                    doc.autoTable({
+                        startY: y,
+                        head: newbornHead,
+                        body: newbornBody,
+                        ...tableStyles,
+                    });
+                    y = doc.lastAutoTable.finalY + 12;
+                } else {
+                    y += 4;
+                }
+            });
+        } else {
+            doc.setFontSize(10);
+            doc.setTextColor(120);
+            doc.text('No pregnancy and delivery records available.', margin, y);
+        }
+
+        const dateStr = new Date().toISOString().split('T')[0];
+        doc.save(`DASMOM_Pregnancy_Delivery_Record_${patientId}_${dateStr}.pdf`);
     };
 
     return (
@@ -58,6 +215,11 @@ const PregnancyDeliveryInfo = () => {
                             <Baby size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('pdi_title')}
                         </h1>
                         <p className="page-subtitle">{t('pdi_subtitle')}</p>
+                        <div className="mother-download-pdf-btn-wrapper">
+                            <button className="mother-download-pdf-btn" onClick={handleDownloadPDF}>
+                                <Download size={14} /> Download PDF
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

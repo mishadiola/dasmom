@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSystemSettings } from '../../context/SystemSettingsContext';
 import useClickOutside from '../../hooks/useClickOutside';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -73,7 +74,8 @@ const HighRiskCases = () => {
   const filterRowRef = useRef(null);
   useClickOutside(filterRowRef, () => setActivePopover(null));
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 20;
+  const { settings } = useSystemSettings();
+    const itemsPerPage = settings?.tables?.rowsPerPage || 10;
 
   const service = useMemo(() => new PatientService(), []);
 

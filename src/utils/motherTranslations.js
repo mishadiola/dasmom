@@ -471,6 +471,26 @@ export const translations = {
         login_access_denied_title: 'Access Denied',
         login_access_denied_text: 'You do not have access as a mother.',
         login_error_title: 'Login Error',
+
+        // ═══════════════════════════════════════════════
+        // PREGNANCY TIPS ARTICLE DETAILS
+        // ═══════════════════════════════════════════════
+        tips_back: 'Back',
+        tips_save: 'Save',
+        tips_saved: 'Saved',
+        tips_quick_summary: 'Quick Summary',
+        tips_actions: 'Actions',
+        tips_save_later: 'Save for Later',
+        tips_saved_bookmarks: 'Saved to Bookmarks',
+        tips_share_article: 'Share Article',
+        tips_health_reminder: 'Health Reminder',
+        tips_health_reminder_desc: 'Always consult your healthcare provider before making any changes to your diet, exercise, or health routine during pregnancy.',
+        tips_not_found: 'Article Not Found',
+        tips_sources: 'Sources & References',
+        tips_sources_desc: 'This information is based on the following verified sources:',
+        tips_completed_read: 'You have completed reading this article.',
+        tips_also_like: 'You Might Also Like',
+        tips_read: 'Read Article',
     },
 
     fil: {
@@ -938,5 +958,25 @@ export const translations = {
         login_access_denied_title: 'Tinanggihan ang Access',
         login_access_denied_text: 'Wala kang access bilang isang ina.',
         login_error_title: 'Error sa Pag-login',
+
+        // ═══════════════════════════════════════════════
+        // PREGNANCY TIPS ARTICLE DETAILS
+        // ═══════════════════════════════════════════════
+        tips_back: 'Bumalik',
+        tips_save: 'I-save',
+        tips_saved: 'Na-save na',
+        tips_quick_summary: 'Buod',
+        tips_actions: 'Mga Aksyon',
+        tips_save_later: 'I-save para Mamaya',
+        tips_saved_bookmarks: 'Na-save sa Bookmarks',
+        tips_share_article: 'Ibahagi ang Artikulo',
+        tips_health_reminder: 'Paalala sa Kalusugan',
+        tips_health_reminder_desc: 'Palaging kumonsulta sa iyong doktor o health worker bago gumawa ng anumang pagbabago sa iyong diyeta, ehersisyo, o gawain para sa kalusugan habang buntis.',
+        tips_not_found: 'Hindi Nahanap ang Artikulo',
+        tips_sources: 'Mga Sanggunian',
+        tips_sources_desc: 'Ang impormasyong ito ay hango sa mga sumusunod na beripikadong sanggunian:',
+        tips_completed_read: 'Natapos mo nang basahin ang artikulong ito.',
+        tips_also_like: 'Maaari Mo Ring Magustuhan',
+        tips_read: 'Basahin ang Artikulo',
     }
 };

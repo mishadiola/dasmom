@@ -2,14 +2,16 @@ import React, { useState, useEffect } from 'react';
 import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
 import { 
-    Calendar as CalendarIcon, List, ChevronLeft, ChevronRight, 
-    Clock, ArrowLeft, Download, Printer, X,
+    Calendar as CalendarIcon, ChevronLeft, ChevronRight, 
+    Clock, ArrowLeft, Download, X,
     CheckCircle2, AlertCircle, CalendarDays, MapPin
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/MyAppointments.css';
 import appointmentSilhouette from '../../assets/images/appointments-silhouette.png';
 import { useLanguage } from '../../context/LanguageContext';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 import { isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
 
 const toLocalDateStr = (d) => {
@@ -51,11 +53,12 @@ const sanitizeUUID = (str, fallback) => {
 const MyAppointments = () => {
     const navigate = useNavigate();
     const [currentDate, setCurrentDate] = useState(new Date());
-    const [calendarView, setCalendarView] = useState(window.innerWidth <= 768 ? 'list' : 'month'); // 'list', 'day', 'week', 'month'
+    const [calendarView, setCalendarView] = useState('day'); // 'day', 'week', 'month'
     const [typeFilter, setTypeFilter] = useState('All'); // 'All', 'Prenatal', 'Vaccination', 'Postpartum'
     const [statusFilter, setStatusFilter] = useState('All'); // 'All', 'Upcoming', 'Attended', 'Missed'
     const [selectedAppt, setSelectedAppt] = useState(null);
     const { t } = useLanguage();
+    const [patientInfo, setPatientInfo] = useState({});
 
     const [appointmentsData, setAppointmentsData] = useState([]);
     
@@ -81,6 +84,13 @@ const MyAppointments = () => {
                     setAppointmentsData([]);
                     return;
                 }
+
+                const fullName = patient ? [patient.first_name, patient.middle_name, patient.last_name, patient.suffix].filter(Boolean).join(' ') : 'N/A';
+                setPatientInfo({
+                    name: fullName || 'N/A',
+                    id: patient?.patient_id || patient?.id || 'N/A',
+                    station: patient?.station || 'N/A'
+                });
 
                 const currentPregnancy = patient.currentPregnancy;
                 const currentStatus = String(patient.pregnancyRecord?.pregn_postp || patient.pregnancyRecord?.status || currentPregnancy?.status || patient.pregnancyStatus || '').toLowerCase();
@@ -249,6 +259,88 @@ const MyAppointments = () => {
         });
     };
 
+    const handleDownloadPDF = () => {
+        const doc = new jsPDF('portrait');
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+        let y = 16;
+
+        // ── Header ──
+        doc.setFontSize(18);
+        doc.setTextColor(139, 90, 100);
+        doc.text('DASMOM+', margin, y);
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text('City Health Office — Dasmariñas, Cavite', margin, y + 7);
+        y += 16;
+
+        doc.setDrawColor(185, 129, 138);
+        doc.setLineWidth(0.5);
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 10;
+
+        // ── Report Title ──
+        doc.setFontSize(16);
+        doc.setTextColor(40);
+        doc.text('Appointment Schedule', margin, y);
+        y += 10;
+
+        // ── Patient Info ──
+        doc.setFontSize(10);
+        doc.setTextColor(80);
+        const patientId = String(patientInfo.id || 'N/A').substring(0, 8).toUpperCase();
+        doc.text(`Patient Name: ${patientInfo.name || 'N/A'}`, margin, y);
+        doc.text(`Patient ID: ${patientId}`, pageWidth / 2, y);
+        y += 6;
+        doc.text(`Health Station: ${patientInfo.station || 'N/A'}`, margin, y);
+        doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, y);
+        y += 10;
+
+        doc.setDrawColor(200);
+        doc.setLineWidth(0.3);
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 8;
+
+        const allAppointments = [...appointmentsData].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        const tableHead = [['Date', 'Time', 'Type', 'Location / Station', 'Health Worker', 'Status']];
+        const tableBody = allAppointments.map(a => [
+            new Date(a.date).toLocaleDateString('en-PH'),
+            a.time || '--',
+            a.type,
+            a.location || '--',
+            a.staffName || '--',
+            a.status || 'Scheduled'
+        ]);
+
+        if (allAppointments.length > 0) {
+            doc.autoTable({
+                startY: y,
+                head: tableHead,
+                body: tableBody,
+                theme: 'grid',
+                styles: { fontSize: 8, cellPadding: 3 },
+                headStyles: { fillColor: [185, 129, 138], textColor: 255, fontStyle: 'bold' },
+                alternateRowStyles: { fillColor: [252, 249, 250] },
+                margin: { left: margin, right: margin },
+                didDrawPage: (data) => {
+                    const pageCount = doc.internal.getNumberOfPages();
+                    doc.setFontSize(8);
+                    doc.setTextColor(150);
+                    doc.text(`Page ${data.pageNumber} of ${pageCount}`, pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
+                    doc.text('DASMOM+ — Confidential Patient Record', margin, doc.internal.pageSize.getHeight() - 10);
+                }
+            });
+        } else {
+            doc.setFontSize(10);
+            doc.setTextColor(120);
+            doc.text('No appointments available.', margin, y);
+        }
+
+        const dateStr = new Date().toISOString().split('T')[0];
+        doc.save(`DASMOM_Appointments_${patientId}_${dateStr}.pdf`);
+    };
+
     const getAppointmentsForDay = (dateStr) => {
         let appointments = (appointmentsData || []).filter(a => {
             if (!a.date) return false;
@@ -297,7 +389,7 @@ const MyAppointments = () => {
     const renderApptListItem = (a) => (
         <div key={a.id} className="appt-list-item" onClick={() => setSelectedAppt(a)} style={{cursor: 'pointer'}}>
             <div className={`appt-date-box ${a.color}`}>
-                <span className="m">{new Date(a.date || a.visit_date || Date.now()).toLocaleString('default', { month: 'short' }).toUpperCase()}</span>
+                <span className="m">{new Date(a.date || a.visit_date || new Date().toISOString()).toLocaleString('default', { month: 'short' }).toUpperCase()}</span>
                 <span className="d">{(a.date || a.visit_date || '').split('-')[2] || ''}</span>
             </div>
             <div className="appt-main-info">
@@ -427,6 +519,11 @@ const MyAppointments = () => {
                             <CalendarIcon size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('appt_title')}
                         </h1>
                         <p className="page-subtitle">{t('appt_subtitle')}</p>
+                        <div className="mother-download-pdf-btn-wrapper">
+                            <button className="mother-download-pdf-btn" onClick={handleDownloadPDF}>
+                                <Download size={14} /> Download PDF
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -462,7 +559,7 @@ const MyAppointments = () => {
 
                 <div className="pv-calendar-section" style={{marginBottom: '32px'}}>
                     <div className="section-head-bar">
-                        <div className="date-nav" style={{ visibility: calendarView === 'list' ? 'hidden' : 'visible' }}>
+                        <div className="date-nav">
                             <button className="icon-btn-sm" onClick={handlePrev} title="Previous">
                                 <ChevronLeft size={16} />
                             </button>
@@ -473,7 +570,7 @@ const MyAppointments = () => {
                         </div>
                         <div className="cal-head-right">
                             <div className="view-toggles">
-                                {['list', 'day', 'week', 'month'].map(v => (
+                                {['day', 'week', 'month'].map(v => (
                                     <button
                                         key={v}
                                         className={`view-toggle-btn ${calendarView === v ? 'active' : ''}`}
@@ -482,7 +579,7 @@ const MyAppointments = () => {
                                             if (v === 'day') setCurrentDate(new Date());
                                         }}
                                     >
-                                        {v === 'list' ? t('appt_list') : v === 'day' ? t('appt_day') : v === 'week' ? t('appt_week') : t('appt_month')}
+                                        {v === 'day' ? t('appt_day') : v === 'week' ? t('appt_week') : t('appt_month')}
                                     </button>
                                 ))}
                             </div>
@@ -494,9 +591,8 @@ const MyAppointments = () => {
                         </div>
                     </div>
 
-                    {calendarView !== 'list' && (
-                        <div className="pv-grid-container">
-                        {calendarView === 'day' ? (
+                    <div className="pv-grid-container">
+                    {calendarView === 'day' ? (
                             <div className="day-view-container">
                                 {visibleDays.map(day => {
                                     const dayAppts = getAppointmentsForDay(day.date);
@@ -612,8 +708,7 @@ const MyAppointments = () => {
                             )
                         )}
                         </div>
-                    )}
-                </div>
+                    </div>
 
 
                 <div className="list-container">

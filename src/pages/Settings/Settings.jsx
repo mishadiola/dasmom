@@ -8,7 +8,8 @@ import {
     Plus, Search, Edit2, Archive, ArchiveRestore, RotateCcw, X, Eye, EyeOff,
     CheckCircle2, XCircle, AlertCircle, Bell,
     Monitor, ChevronDown, ToggleLeft, ToggleRight,
-    Key, Save, Mail, MapPin, Clock, LogOut, Lock, FileText, Trash2
+    Key, Save, Mail, MapPin, Clock, LogOut, Lock, FileText, Trash2,
+    Table, Globe, Download
 } from 'lucide-react';
 import '../../styles/pages/Settings.css';
 import { useModal } from '../../context/ModalContext';
@@ -17,6 +18,8 @@ import {
     resetSystemSettings,
     saveSystemSettings,
 } from '../../utils/systemSettings';
+import { useSystemSettings } from '../../context/SystemSettingsContext';
+import ResetPasswordModal from '../../components/ResetPasswordModal';
 
 /* ════════════════════════════
    MOCK DATA
@@ -763,6 +766,8 @@ const UserAccountsTab = () => {
         return matchS && matchR && matchSt;
     });
 
+    const hasActiveFilters = search !== '' || roleFilter !== 'All' || statusFilter !== 'Active';
+
     const handleModalSuccess = () => {
         fetchStaff();
     };
@@ -932,6 +937,18 @@ const UserAccountsTab = () => {
                         </div>
                     )}
                 </div>
+                {hasActiveFilters && (
+                    <button 
+                        className="clear-filters-btn" 
+                        onClick={() => {
+                            setSearch('');
+                            setRoleFilter('All');
+                            setStatusFilter('Active');
+                        }}
+                    >
+                        Clear
+                    </button>
+                )}
                 <button className="btn btn-primary" onClick={() => setShowModal(true)}><Plus size={15} /> Add Staff</button>
             </div>
 
@@ -1007,24 +1024,43 @@ const UserAccountsTab = () => {
    TAB 3: SYSTEM SETTINGS
 ════════════════════════════ */
 const SystemSettingsTab = () => {
-    const [notifs, setNotifs] = useState(() => getSystemSettings().notifications);
-    const [reports, setReports] = useState(() => getSystemSettings().reports);
+    const { settings: globalSettings, saveSystemSettings } = useSystemSettings();
+    const { confirm } = useModal();
+    const [localSettings, setLocalSettings] = useState(globalSettings);
     const [saved, setSaved] = useState(false);
 
-    const toggle = (setter, key) => setter(prev => ({ ...prev, [key]: !prev[key] }));
+    useEffect(() => {
+        setLocalSettings(globalSettings);
+    }, [globalSettings]);
+
+    const handleChange = (section, key, value) => {
+        setLocalSettings(prev => ({
+            ...prev,
+            [section]: {
+                ...prev[section],
+                [key]: value
+            }
+        }));
+    };
 
     const handleSave = () => {
-        saveSystemSettings({ notifications: notifs, reports });
+        saveSystemSettings(localSettings);
         setSaved(true);
         window.setTimeout(() => setSaved(false), 2500);
     };
 
     const handleReset = () => {
-        const defaults = resetSystemSettings();
-        setNotifs(defaults.notifications);
-        setReports(defaults.reports);
-        setSaved(true);
-        window.setTimeout(() => setSaved(false), 2500);
+        confirm({
+            title: 'Reset to Defaults',
+            text: 'Are you sure you want to reset all system settings to their default values?',
+            confirmText: 'Reset',
+            onConfirm: () => {
+                const defaults = resetSystemSettings();
+                setLocalSettings(defaults);
+                setSaved(true);
+                window.setTimeout(() => setSaved(false), 2500);
+            }
+        });
     };
 
     const ToggleSwitch = ({ value, onChange, label, desc }) => (
@@ -1046,50 +1082,63 @@ const SystemSettingsTab = () => {
     return (
         <div className="tab-content">
             <div className="settings-sections">
-                {/* Notifications */}
+                {/* Data & Tables */}
                 <div className="settings-section">
-                    <div className="section-header"><Bell size={16} /><h3>Notification Settings</h3></div>
-                    <ToggleSwitch
-                        value={notifs.highRiskEmail} label="High-Risk Case Alerts"
-                        desc="Send email when a new high-risk patient is flagged"
-                        onChange={() => toggle(setNotifs, 'highRiskEmail')}
-                    />
-                    <ToggleSwitch
-                        value={notifs.appointmentReminder} label="Appointment Reminders"
-                        desc="Notify staff of upcoming prenatal and postpartum visits"
-                        onChange={() => toggle(setNotifs, 'appointmentReminder')}
-                    />
-                    <ToggleSwitch
-                        value={notifs.lowStock} label="Low Stock Alerts"
-                        desc="Alert when vaccine or supplement stock falls below threshold"
-                        onChange={() => toggle(setNotifs, 'lowStock')}
-                    />
-                </div>
-
-                {/* Reports */}
-                <div className="settings-section">
-                    <div className="section-header"><FileText size={16} /><h3>Report Settings</h3></div>
+                    <div className="section-header"><Table size={16} /><h3>Data & Tables</h3></div>
                     <div className="setting-row">
                         <div className="setting-info">
-                            <span className="setting-label">Default Export Format</span>
-                            <span className="setting-desc">Choose format for all generated reports</span>
+                            <span className="setting-label">Default Rows Per Page</span>
+                            <span className="setting-desc">Number of items to show on paginated tables</span>
                         </div>
                         <div className="format-pills">
-                            {['PDF', 'Excel'].map(f => (
-                                <button key={f} className={`format-pill ${reports.format === f ? 'active' : ''}`} onClick={() => setReports(p => ({ ...p, format: f }))}>{f}</button>
+                            {[10, 25, 50].map(f => (
+                                <button key={f} className={`format-pill ${localSettings.tables.rowsPerPage === f ? 'active' : ''}`} onClick={() => handleChange('tables', 'rowsPerPage', f)}>{f}</button>
                             ))}
                         </div>
                     </div>
-                    <ToggleSwitch
-                        value={reports.includeStation} label="Include Station Summary"
-                        desc="Add station-level breakdown in reports"
-                        onChange={() => toggle(setReports, 'includeStation')}
-                    />
-                    <ToggleSwitch
-                        value={reports.includePatientSummary} label="Include Patient Summary"
-                        desc="Add individual patient summaries in reports"
-                        onChange={() => toggle(setReports, 'includePatientSummary')}
-                    />
+                    <div className="setting-row">
+                        <div className="setting-info">
+                            <span className="setting-label">Default Patient View</span>
+                            <span className="setting-desc">Initial status filter on Patient Profiles</span>
+                        </div>
+                        <div className="format-pills">
+                            {['Active Patients', 'All Patients'].map(f => (
+                                <button key={f} className={`format-pill ${localSettings.tables.defaultPatientView === f ? 'active' : ''}`} onClick={() => handleChange('tables', 'defaultPatientView', f)}>{f}</button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Date Format */}
+                <div className="settings-section">
+                    <div className="section-header"><Globe size={16} /><h3>Date Format</h3></div>
+                    <div className="setting-row">
+                        <div className="setting-info">
+                            <span className="setting-label">Date Format</span>
+                            <span className="setting-desc">How dates are displayed across the system</span>
+                        </div>
+                        <div className="format-pills">
+                            {['MM/DD/YYYY', 'DD/MM/YYYY'].map(f => (
+                                <button key={f} className={`format-pill ${localSettings.regional.dateFormat === f ? 'active' : ''}`} onClick={() => handleChange('regional', 'dateFormat', f)}>{f}</button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Export Preferences */}
+                <div className="settings-section">
+                    <div className="section-header"><Download size={16} /><h3>Export Preferences</h3></div>
+                    <div className="setting-row">
+                        <div className="setting-info">
+                            <span className="setting-label">Default Export Format</span>
+                            <span className="setting-desc">Choose default format for generated reports</span>
+                        </div>
+                        <div className="format-pills">
+                            {['PDF', 'Excel'].map(f => (
+                                <button key={f} className={`format-pill ${localSettings.export.defaultFormat === f ? 'active' : ''}`} onClick={() => handleChange('export', 'defaultFormat', f)}>{f}</button>
+                            ))}
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1117,9 +1166,8 @@ const ProfileTab = () => {
     // Profile Form
     const [profileForm, setProfileForm] = useState({ fullName: '', contactNo: '', station: '' });
     
-    // Password Form
-    const [pwdForm, setPwdForm] = useState({ new: '', confirm: '' });
-    const [showNew, setShowNew] = useState(false);
+    // Password Reset
+    const [resetModalOpen, setResetModalOpen] = useState(false);
     
 
     useEffect(() => {
@@ -1162,28 +1210,6 @@ const ProfileTab = () => {
         } catch (err) {
             console.error(err);
             showToast('Failed to update profile.', 'error');
-        } finally {
-            setUpdating(false);
-        }
-    };
-
-    const handleUpdatePassword = async (e) => {
-        e.preventDefault();
-        if (pwdForm.new !== pwdForm.confirm) {
-            return showToast('Passwords do not match.', 'error');
-        }
-        if (pwdForm.new.length < 8) {
-            return showToast('Password must be at least 8 characters.', 'error');
-        }
-
-        setUpdating(true);
-        try {
-            await authService.updatePassword(pwdForm.new);
-            showToast('Password updated successfully!');
-            setPwdForm({ new: '', confirm: '' });
-        } catch (err) {
-            console.error(err);
-            showToast('Failed to update password.', 'error');
         } finally {
             setUpdating(false);
         }
@@ -1274,40 +1300,24 @@ const ProfileTab = () => {
                         </button>
                     </form>
 
-                    {/* Change Password */}
-                    <form className="settings-section" onSubmit={handleUpdatePassword}>
-                        <div className="section-header"><Lock size={16} /><h3>Change Password</h3></div>
-                        <div className="form-grid-2">
-                            <div className="form-group form-group--full">
-                                <label>New Password</label>
-                                <div className="pwd-wrap">
-                                    <input 
-                                        type={showNew ? 'text' : 'password'} 
-                                        placeholder="Min. 8 characters" 
-                                        value={pwdForm.new}
-                                        onChange={e => setPwdForm(p => ({ ...p, new: e.target.value }))}
-                                        required
-                                    />
-                                    <button type="button" className="pwd-toggle" onClick={() => setShowNew(v => !v)}>
-                                        {showNew ? <EyeOff size={14} /> : <Eye size={14} />}
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="form-group form-group--full">
-                                <label>Confirm New Password</label>
-                                <input 
-                                    type="password" 
-                                    placeholder="Re-enter new password" 
-                                    value={pwdForm.confirm}
-                                    onChange={e => setPwdForm(p => ({ ...p, confirm: e.target.value }))}
-                                    required
-                                />
-                            </div>
+                    {/* Security */}
+                    <div className="settings-section">
+                        <div className="section-header"><Lock size={16} /><h3>Security</h3></div>
+                        <div style={{ padding: '8px 4px 16px' }}>
+                            <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: 'var(--color-text)' }}>Reset Password</h4>
+                            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+                                Reset your password securely through your registered email address.
+                            </p>
+                            <button 
+                                type="button" 
+                                className="btn btn-outline" 
+                                onClick={() => setResetModalOpen(true)}
+                                style={{ background: '#b9818a', color: 'white', borderColor: '#b9818a' }}
+                            >
+                                Reset Password
+                            </button>
                         </div>
-                        <button type="submit" className="btn btn-primary mt-action" disabled={updating}>
-                            <Key size={14} /> {updating ? 'Updating...' : 'Update Password'}
-                        </button>
-                    </form>
+                    </div>
 
                 </div>
             </div>
@@ -1318,6 +1328,12 @@ const ProfileTab = () => {
                     <span>{toast.message}</span>
                 </div>
             )}
+
+            <ResetPasswordModal 
+                isOpen={resetModalOpen} 
+                onClose={() => setResetModalOpen(false)}
+                initialEmail={user?.email || ''}
+            />
         </div>
     );
 };

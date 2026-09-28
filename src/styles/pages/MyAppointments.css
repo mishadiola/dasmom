@@ -247,6 +247,7 @@
     border-radius: 10px;
     padding: 3px;
     gap: 2px;
+    min-width: 240px;
 }
 
 .view-toggle-btn {
@@ -259,6 +260,7 @@
     color: var(--color-text-light);
     cursor: pointer;
     transition: all 0.18s ease;
+    flex: 1;
 }
 
 .view-toggle-btn.active {

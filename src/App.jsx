@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AuthProvider } from './context/AuthContext';
 import { ModalProvider } from './context/ModalContext';
 import { LanguageProvider } from './context/LanguageContext';
+import { SystemSettingsProvider } from './context/SystemSettingsContext';
 import ProtectedRoute from './routes/ProtectedRoute';
 
 import Landing from './pages/Landing/Landing';
@@ -60,6 +61,7 @@ function App() {
     <AuthProvider>
       <LanguageProvider>
       <ModalProvider>
+      <SystemSettingsProvider>
         <BrowserRouter>
           <AnalyticsTracker />
           <Routes>
@@ -127,6 +129,7 @@ function App() {
 
         </Routes>
         </BrowserRouter>
+      </SystemSettingsProvider>
         </ModalProvider>
       </LanguageProvider>
     </AuthProvider>

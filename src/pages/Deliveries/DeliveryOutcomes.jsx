@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import useClickOutside from '../../hooks/useClickOutside';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
     Search, Filter, Plus, X, Baby, Heart, AlertTriangle,
     CheckCircle2, Clock, AlertCircle, FileText, Download,
@@ -216,6 +216,16 @@ const DeliveryOutcomes = () => {
         loadData();
         loadConfigData();
     }, []);
+
+    const location = useLocation();
+    
+    useEffect(() => {
+        if (location.state?.openRecordDelivery) {
+            setShowModal(true);
+            // Clean up state so refresh doesn't reopen modal
+            navigate('.', { replace: true, state: {} });
+        }
+    }, [location.state, navigate]);
 
     const handleFilter = (key, value) => {
         setFilters(prev => ({ ...prev, [key]: value }));

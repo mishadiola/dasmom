@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, useContext } from 'react';
+import { useSystemSettings } from '../../context/SystemSettingsContext';
 import PatientService from '../../services/patientservice';
 import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/PrenatalVisits.css';
@@ -133,7 +134,8 @@ const PrenatalVisits = () => {
     const [filterStatus, setFilterStatus] = useState('All');
     const [archiveFilter, setArchiveFilter] = useState('active');
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 10;
+    const { settings } = useSystemSettings();
+    const itemsPerPage = settings?.tables?.rowsPerPage || 10;
     const [currentDate, setCurrentDate] = useState(new Date());
     const [toast, setToast] = useState(null);
     const [calendarView, setCalendarView] = useState('day');

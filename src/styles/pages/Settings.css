@@ -61,7 +61,7 @@
     border-radius: 14px;
     border: 1px solid #eef0f4;
     box-shadow: 0 2px 12px rgba(0,0,0,0.03);
-    overflow: hidden;
+    /* Removed overflow: hidden to prevent filter dropdown clipping */
 }
 
 .tab-content {

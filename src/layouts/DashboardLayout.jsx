@@ -61,7 +61,6 @@ const DashboardLayout = () => {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [sidebarMobile, setSidebarMobile] = useState(false);
     const [notifOpen, setNotifOpen] = useState(false);
-    const [notifFilter, setNotifFilter] = useState('active');
     const [notifications, setNotifications] = useState([]);
     const [notifCount, setNotifCount] = useState(0);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -363,7 +362,7 @@ const DashboardLayout = () => {
                         {(sidebarOpen || sidebarMobile) && (
                             <div className="sidebar-brand-text">
                                 <span className="sidebar-brand-name">DasMom<span>+</span></span>
-                                <span className="sidebar-brand-sub">Health System</span>
+                                <span className="sidebar-brand-sub">Maternal Health</span>
                             </div>
                         )}
                     </button>
@@ -487,18 +486,6 @@ const DashboardLayout = () => {
                                     <div className="notif-header">
                                         <h3>Notifications</h3>
                                         <div className="notif-header-actions">
-                                            <select 
-                                                className="notif-filter-select"
-                                                value={notifFilter}
-                                                onChange={(e) => setNotifFilter(e.target.value)}
-                                            >
-                                                <option value="active">Active</option>
-                                                <option value="resolved">Resolved</option>
-                                                <option value="all">All</option>
-                                                <option value="appointments">Appointments (Active)</option>
-                                                <option value="inventory">Inventory (Active)</option>
-                                                <option value="patients">Patients (Active)</option>
-                                            </select>
                                             <button onClick={() => setNotifOpen(false)} aria-label="Close">
                                                 <X size={15} />
                                             </button>
@@ -506,17 +493,12 @@ const DashboardLayout = () => {
                                     </div>
                                     <ul className="notif-list">
                                         {(() => {
-                                            const filteredNotifs = notifications.filter(n => {
-                                                if (notifFilter === 'active') return !n.isResolved;
-                                                if (notifFilter === 'resolved') return n.isResolved;
-                                                if (notifFilter === 'all') return true;
-                                                return n.category === notifFilter && !n.isResolved;
-                                            });
+                                            const filteredNotifs = notifications.filter(n => !n.isResolved);
 
                                             if (filteredNotifs.length === 0) {
                                                 return (
                                                     <li className="notif-empty" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                                                        <Check size={16} /> No {notifFilter === 'resolved' ? 'resolved' : 'active'} notifications
+                                                        <Check size={16} /> No new notifications
                                                     </li>
                                                 );
                                             }
@@ -592,10 +574,10 @@ const DashboardLayout = () => {
                                             <User size={15} /> {isUserView ? t('menu_view_account') : 'My Profile'}
                                         </button>
                                         <button className="user-menu-item" onClick={() => {
-                                            navigate(isUserView ? '/mother-home/user-settings' : '/dashboard/settings');
+                                            navigate(isUserView ? '/mother-home/user-settings' : '/dashboard/settings?tab=system');
                                             setUserMenuOpen(false);
                                         }}>
-                                            <Settings size={15} /> {isUserView ? t('menu_settings') : 'Settings'}
+                                            <Settings size={15} /> {isUserView ? t('menu_settings') : 'System Settings'}
                                         </button>
                                     </div>
                                     <div className="user-menu-footer">

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSystemSettings } from '../../context/SystemSettingsContext';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import {
@@ -243,7 +244,14 @@ const PatientsList = () => {
     const [availableStations, setAvailableStations] = useState([]);
 
     const [searchTerm, setSearchTerm] = useState('');
-    const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
+
+    const { settings } = useSystemSettings();
+    const itemsPerPage = settings?.tables?.rowsPerPage || 10;
+
+    const [archiveFilter, setArchiveFilter] = useState(() => {
+        const defaultView = settings?.tables?.defaultPatientView || 'Active Patients';
+        return defaultView === 'All Patients' ? 'all' : 'active';
+    });
     const [filters, setFilters] = useState({
         trimesters: [],
         risks: [],
@@ -296,7 +304,6 @@ const PatientsList = () => {
     }, [activePopover]);
 
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 10;
 
     const [vitalModalPatient, setVitalModalPatient] = useState(null);
     const [vitalToast, setVitalToast] = useState(false);

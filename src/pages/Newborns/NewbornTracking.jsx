@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import NewbornService from '../../services/newbornservice';
 import PatientService from '../../services/patientservice';
+import { useSystemSettings } from '../../context/SystemSettingsContext';
 import * as XLSX from 'xlsx';
 import ExportModal from '../../components/ExportModal';
 import '../../styles/components/SharedFilters.css';
@@ -200,7 +201,8 @@ const NewbornTracking = () => {
     const filterRowRef = useRef(null);
     useClickOutside(filterRowRef, () => setActivePopover(null));
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 10;
+    const { settings } = useSystemSettings();
+    const itemsPerPage = settings?.tables?.rowsPerPage || 10;
 
     // ── Baby Vaccination Calendar State ──
     const [vaccCalendarDate, setVaccCalendarDate] = useState(new Date());

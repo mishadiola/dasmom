@@ -351,8 +351,15 @@ const MotherDashboard = () => {
                                         ) : (
                                             <h2 className="edd-display" style={{ opacity: 0.5 }}>N/A</h2>
                                         )}
-                                        {pregnancyData.weeks && (
-                                            <p className="edd-subtitle">{t('dash_week').replace('{weeks}', pregnancyData.weeks)} {pregnancyData.daysUntilDue !== undefined ? `• ${t('dash_days_remaining').replace('{days}', pregnancyData.daysUntilDue)}` : ''}</p>
+                                        {pregnancyData.daysUntilDue !== undefined && pregnancyData.daysUntilDue !== null && (
+                                            <p className="edd-subtitle">
+                                                {pregnancyData.daysUntilDue > 1 
+                                                    ? `${pregnancyData.daysUntilDue} days remaining` 
+                                                    : pregnancyData.daysUntilDue === 1 
+                                                        ? '1 day remaining' 
+                                                        : 'Due today'
+                                                }
+                                            </p>
                                         )}
                                     </>
                                 ) : (

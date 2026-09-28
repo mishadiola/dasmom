@@ -9,6 +9,8 @@ import {
 import '../../styles/pages/AddPatient.css';
 import PatientService from "../../services/patientservice";
 import InventoryService from '../../services/inventoryservice';
+import { formatDate } from '../../utils/formatters';
+
 const patientService = new PatientService();
 const inventoryService = new InventoryService();
 const TABS = [
@@ -475,6 +477,25 @@ const AddPatient = () => {
             }
         }
 
+        if (name === 'emName') {
+            // Remove digits completely to prevent typing numbers
+            finalValue = finalValue.replace(/\d/g, '');
+
+            const namePattern = /^[A-Za-z\s'\.-]*$/;
+            if (finalValue && !namePattern.test(finalValue)) {
+                setNameValidationErrors(prev => ({
+                    ...prev,
+                    [name]: 'Please enter a valid contact person name. Numbers are not allowed.'
+                }));
+            } else {
+                setNameValidationErrors(prev => {
+                    const updated = { ...prev };
+                    delete updated[name];
+                    return updated;
+                });
+            }
+        }
+
         // Validate email field
         if (name === 'email') {
             // Allow only valid email characters: letters, numbers, dot, underscore, hyphen, @
@@ -672,6 +693,11 @@ const AddPatient = () => {
         if (formData.lastName && !namePattern.test(formData.lastName)) {
             nameErrors.lastName = 'Name fields must contain letters only and cannot include numbers.';
         }
+
+        const emNamePattern = /^[A-Za-z\s'\.-]*$/;
+        if (formData.emName && !emNamePattern.test(formData.emName)) {
+            nameErrors.emName = 'Please enter a valid contact person name. Numbers are not allowed.';
+        }
         
         if (Object.keys(nameErrors).length > 0) {
             setNameValidationErrors(nameErrors);
@@ -702,7 +728,7 @@ const AddPatient = () => {
             if (eddDate < today) {
                 setToast({ 
                     type: 'error', 
-                    message: `Cannot register patient with past due date. EDD (${eddDate.toLocaleDateString()}) is before today (${today.toLocaleDateString()}).` 
+                    message: `Cannot register patient with past due date. EDD (${formatDate(eddDate)}) is before today (${formatDate(today)}).` 
                 });
                 return;
             }
@@ -1363,8 +1389,13 @@ const AddPatient = () => {
                                         name="emName" 
                                         value={formData.emName} 
                                         onChange={handleChange} 
-                                        className={missingFields.includes('emName') ? 'error-field' : ''}
+                                        className={missingFields.includes('emName') || nameValidationErrors.emName ? 'error-field' : ''}
                                     />
+                                    {nameValidationErrors.emName && (
+                                        <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
+                                            {nameValidationErrors.emName}
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="form-group">
                                     <label>Relationship to Patient <span className="req">*</span></label>

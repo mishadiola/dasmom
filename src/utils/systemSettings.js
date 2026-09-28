@@ -1,16 +1,17 @@
 const STORAGE_KEY = 'dasmom.systemSettings';
 
 export const DEFAULT_SYSTEM_SETTINGS = {
-    notifications: {
-        highRiskEmail: true,
-        appointmentReminder: true,
-        lowStock: true,
+
+    tables: {
+        rowsPerPage: 10,
+        defaultPatientView: 'Active Patients',
     },
-    reports: {
-        format: 'PDF',
-        includeStation: true,
-        includePatientSummary: true,
+    regional: {
+        dateFormat: 'MM/DD/YYYY',
     },
+    export: {
+        defaultFormat: 'Excel',
+    }
 };
 
 const cloneDefaults = () => JSON.parse(JSON.stringify(DEFAULT_SYSTEM_SETTINGS));
@@ -21,15 +22,10 @@ export const getSystemSettings = () => {
     try {
         const stored = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || '{}');
         return {
-            notifications: {
-                ...DEFAULT_SYSTEM_SETTINGS.notifications,
-                ...(stored.notifications || {}),
-            },
-            reports: {
-                ...DEFAULT_SYSTEM_SETTINGS.reports,
-                ...(stored.reports || {}),
-                format: stored.reports?.format === 'Excel' ? 'Excel' : DEFAULT_SYSTEM_SETTINGS.reports.format,
-            },
+
+            tables: { ...DEFAULT_SYSTEM_SETTINGS.tables, ...(stored.tables || {}) },
+            regional: { ...DEFAULT_SYSTEM_SETTINGS.regional, ...(stored.regional || {}) },
+            export: { ...DEFAULT_SYSTEM_SETTINGS.export, ...(stored.export || {}) }
         };
     } catch (error) {
         console.warn('Unable to read system settings:', error);
@@ -39,14 +35,10 @@ export const getSystemSettings = () => {
 
 export const saveSystemSettings = (settings) => {
     const nextSettings = {
-        notifications: {
-            ...DEFAULT_SYSTEM_SETTINGS.notifications,
-            ...(settings?.notifications || {}),
-        },
-        reports: {
-            ...DEFAULT_SYSTEM_SETTINGS.reports,
-            ...(settings?.reports || {}),
-        },
+
+        tables: { ...DEFAULT_SYSTEM_SETTINGS.tables, ...(settings?.tables || {}) },
+        regional: { ...DEFAULT_SYSTEM_SETTINGS.regional, ...(settings?.regional || {}) },
+        export: { ...DEFAULT_SYSTEM_SETTINGS.export, ...(settings?.export || {}) }
     };
 
     if (typeof window !== 'undefined') {

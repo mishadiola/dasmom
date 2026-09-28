@@ -12,6 +12,8 @@ import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
 import supabase from '../../config/supabaseclient';
 import { AuthContext } from '../../context/AuthContext';
+import { formatDate } from '../../utils/formatters';
+
 const authService = new AuthService();
 
 
@@ -21,7 +23,7 @@ const authService = new AuthService();
 const STAT_META = [
     { id: 1, label: 'Active Pregnant Patients', key: 'totalPatients', trend: 'up', sub: 'currently registered in system', icon: HeartPulse, color: 'rose', path: '/dashboard/patients' },
     { id: 2, label: 'High-Risk Pregnancies',   key: 'highRisk',      trend: 'up', sub: 'marked high risk',    icon: AlertTriangle, color: 'orange', path: '/dashboard/high-risk' },
-    { id: 3, label: 'Delivery Outcomes',        key: 'newborns',      trend: 'up', sub: 'birth records',        icon: Baby, color: 'pink', path: '/dashboard/newborns' },
+    { id: 3, label: 'Newborn Records',        key: 'newborns',      trend: 'up', sub: 'birth outcomes',        icon: Baby, color: 'pink', path: '/dashboard/newborns' },
     { id: 4, label: 'Appointments Today',       key: 'apptToday',     trend: 'neutral', sub: 'scheduled today', icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal' },
 ];
 
@@ -398,8 +400,8 @@ const Dashboard = () => {
                             { label: 'Add Pregnancy', icon: Plus, color: 'rose', path: '/dashboard/patients/add' },
                             { label: 'View Schedules', icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal', state: { openBooking: true } },
                             { label: 'High Risk Patients', icon: AlertTriangle, color: 'blue', path: '/dashboard/high-risk' },
-                            { label: 'Log Delivery', icon: Baby, color: 'pink', path: '/dashboard/deliveries' },
-                            { label: 'Issue Vaccine', icon: Syringe, color: 'orange', path: '/dashboard/vaccinations' },
+                            { label: 'Log Delivery', icon: Baby, color: 'pink', path: '/dashboard/deliveries', state: { openRecordDelivery: true } },
+                            { label: 'Issue Vaccine', icon: Syringe, color: 'orange', path: '/dashboard/vaccinations', state: { openRecordVaccination: true } },
                             { label: 'Generate Report', icon: FileText, color: 'purple', path: '/dashboard/analytics' },
                         ].map(({ label, icon: Icon, color, path, state }) => (
                             <button key={label} className={`quick-btn quick-btn--${color}`} onClick={() => navigate(path, state ? { state } : undefined)}>
@@ -571,7 +573,7 @@ const Dashboard = () => {
                                                   ? `Expired ${Math.abs(v.days_until_expiry)} days ago` 
                                                   : v.days_until_expiry <= 30 
                                                     ? `Expires in ${v.days_until_expiry} days` 
-                                                    : `Expires: ${new Date(v.expiration_date).toLocaleDateString()}`}
+                                                    : `Expires: ${formatDate(v.expiration_date)}`}
                                             </div>
                                         )}
                                     </div>

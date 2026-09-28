@@ -884,7 +884,7 @@ const Analytics = () => {
     // ── Export Sheet Handler ──
     const handleExport = (exportConfig) => {
         const { format, dateRange, reportPeriodText } = exportConfig;
-        const reportSettings = exportConfig.reportSettings || getSystemSettings().reports;
+        const reportSettings = exportConfig.reportSettings || {};
         const data = getExportDataForDateRange(dateRange);
         
         const kpiOverview = [
