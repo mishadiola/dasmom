@@ -60,7 +60,7 @@ export const AuthProvider = ({ children }) => {
           setUser(null);
         }
       } finally {
-        if (isMounted) {
+        if (isMounted && requestId === initRequest) {
           setIsAuthLoading(false);
         }
       }
