@@ -3,7 +3,7 @@ import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
 import { 
     Calendar as CalendarIcon, ChevronLeft, ChevronRight, 
-    Clock, ArrowLeft, Download, X,
+    Clock, ArrowLeft, Download, X, Printer,
     CheckCircle2, AlertCircle, CalendarDays, MapPin
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
