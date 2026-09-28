@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useContext, useRef } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
     ArrowLeft, ArrowRight, ChevronRight, Save, X, Activity, Baby, HeartPulse,
@@ -54,6 +54,7 @@ const AddPrenatalVisit = () => {
     const [isFormInitialized, setIsFormInitialized] = useState(false);
     const saveInFlightRef = useRef(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [rebalanceRemainingSchedule, setRebalanceRemainingSchedule] = useState(false);
 
     // Fetch patient data
     useEffect(() => {
@@ -65,16 +66,12 @@ const AddPrenatalVisit = () => {
     // Set form data when patient loads
     useEffect(() => {
         if (patient && !isFormInitialized) {
-            const attendedCount = patient.visits?.filter(v => v.status === 'Attended').length || 0;
-            const scheduledVisits = (patient.visits || []).filter(v => v.status === 'Scheduled');
-            
-            // Find the most recent scheduled visit (highest visit_number) to record the current visit
-            // This is the visit where we'll input the records
-            const mostRecentScheduled = scheduledVisits.length > 0 
-                ? scheduledVisits.reduce((prev, current) => {
-                    return (parseInt(prev.visit_number) > parseInt(current.visit_number)) ? prev : current;
-                })
-                : null;
+            const pregnancyVisits = patient.currentPregnancy?.visits || [];
+            const scheduledVisits = pregnancyVisits
+                .filter(visit => visit.status === 'Scheduled')
+                .sort((left, right) => Number(left.visit_number) - Number(right.visit_number));
+            const nextScheduledVisit = scheduledVisits[0] || null;
+            const maxVisitNumber = pregnancyVisits.reduce((max, visit) => Math.max(max, Number(visit.visit_number) || 0), 0);
             
             setFormData(prev => ({
                 ...prev,
@@ -83,7 +80,7 @@ const AddPrenatalVisit = () => {
                 gestationalAge: patient.weeks ? `${patient.weeks}w` : '',
                 trimester: patient.trimester || '',
                 visitDate: new Date().toISOString().split('T')[0],
-                visitNumber: attendedCount + 1,
+                visitNumber: nextScheduledVisit?.visit_number || maxVisitNumber + 1,
                 attendingMidwife: user?.id || '',
                 healthFacility: patient.station || 'CHO 3 – Main Health Facility',
                 bpSystolic: '', bpDiastolic: '', weight: '', temp: '', pulse: '', rr: '',
@@ -93,7 +90,7 @@ const AddPrenatalVisit = () => {
                 calculatedRisk: patient.risk || 'Normal',
                 clinicalNotes: '', adviceGiven: '',
                 referred: false, referralReason: [], referralDate: '',
-                nextApptDate: (mostRecentScheduled?.visit_date) ? new Date(mostRecentScheduled.visit_date).toISOString().split('T')[0] : ''
+                nextApptDate: nextScheduledVisit?.visit_date ? String(nextScheduledVisit.visit_date).slice(0, 10) : ''
             }));
             setIsFormInitialized(true);
         }
@@ -265,47 +262,42 @@ const AddPrenatalVisit = () => {
             const createdBy = await patientService.getCurrentUserId();
             if (!createdBy) throw new Error('Not authenticated');
 
-            const { data: visits } = await patientService.supabase
+            const currentPregnancyVisits = patient.currentPregnancy?.visits || [];
+            const currentPregnancyVisitIds = currentPregnancyVisits.map(visit => visit.id).filter(Boolean);
+            const { data: allVisits, error: visitsError } = await patientService.supabase
                 .from('prenatal_visits')
                 .select('*')
                 .eq('patient_id', patientId)
                 .order('visit_date', { ascending: true });
+            if (visitsError) throw visitsError;
+            const currentPregnancyVisitIdSet = new Set(currentPregnancyVisitIds);
+            const visits = (allVisits || []).filter(visit => currentPregnancyVisitIdSet.has(visit.id));
 
-            // Find the maximum attended visit number
-            const attendedVisits = (visits || []).filter(v => v.status === 'Attended');
-            const maxAttendedNumber = attendedVisits.length > 0 ? Math.max(...attendedVisits.map(v => v.visit_number || 0)) : 0;
-            
-            // Get all scheduled visits sorted by visit_number
-            const scheduledVisits = (visits || []).filter(v => v.status === 'Scheduled').sort((a, b) => a.visit_number - b.visit_number);
-            
-            // Find the target visit to edit:
-            // 1. First, try to find a scheduled visit that matches the actual visit date
-            // 2. If not found, use the NEXT scheduled visit (lowest visit_number among scheduled)
-            // 3. If no scheduled visits, create a new one
-            let targetVisit = null;
+            const scheduledVisits = visits
+                .filter(visit => visit.status === 'Scheduled')
+                .sort((left, right) => Number(left.visit_number) - Number(right.visit_number));
             const visitDateStr = formData.visitDate;
-            
-            if (scheduledVisits.length > 0) {
-                // Try to find a scheduled visit that matches the actual visit date
-                const exactMatch = scheduledVisits.find(v => v.visit_date === visitDateStr);
-                if (exactMatch) {
-                    targetVisit = exactMatch;
-                } else {
-                    // Use the NEXT scheduled visit (lowest visit_number) - this is the one to update
-                    // This should be the first scheduled visit after the last attended visit
-                    targetVisit = scheduledVisits[0];
-                }
-            }
+            const exactMatch = scheduledVisits.find(visit => String(visit.visit_date).slice(0, 10) === visitDateStr);
+            const isOffSchedule = scheduledVisits.length > 0 && !exactMatch;
+            const targetVisit = exactMatch || scheduledVisits[0] || null;
+            const maxVisitNumber = visits.reduce((max, visit) => Math.max(max, Number(visit.visit_number) || 0), 0);
 
-            const rowVisitNumber = targetVisit ? targetVisit.visit_number : (maxAttendedNumber + 1);
+            const rowVisitNumber = targetVisit ? Number(targetVisit.visit_number) : maxVisitNumber + 1;
             const rowVisitDate = formData.visitDate;
-            const rowId = targetVisit ? targetVisit.id : null;
+            const rowId = exactMatch ? exactMatch.id : (isOffSchedule ? null : targetVisit?.id || null);
+
+            if (isOffSchedule) {
+                await patientService.shiftPrenatalVisitsForInsertion(
+                    patientId,
+                    visits,
+                    rowVisitNumber
+                );
+            }
 
             console.log('Target visit info:', { 
                 rowVisitNumber, 
                 rowVisitDate, 
                 rowId, 
-                maxAttendedNumber, 
                 scheduledCount: scheduledVisits.length,
                 scheduledVisits: scheduledVisits.map(v => ({ id: v.id, visit_number: v.visit_number, visit_date: v.visit_date, status: v.status }))
             });
@@ -342,37 +334,46 @@ const AddPrenatalVisit = () => {
                 calculated_risk: formData.calculatedRisk,
             };
 
+            let currentVisitId = rowId;
             if (rowId) {
                 // Update only the specific visit by ID
-                const { error: updateError } = await patientService.supabase
+                const { data: updatedVisit, error: updateError } = await patientService.supabase
                     .from('prenatal_visits')
                     .update(visitData)
                     .eq('id', rowId)
-                    .select();
+                    .select('id')
+                    .single();
                 
                 if (updateError) throw updateError;
+                currentVisitId = updatedVisit.id;
                 console.log(`Updated visit ${rowVisitNumber} with ID ${rowId}`);
             } else {
-                const { error: insertError } = await patientService.supabase
+                const { data: insertedVisit, error: insertError } = await patientService.supabase
                     .from('prenatal_visits')
                     .insert(visitData)
-                    .select();
+                    .select('id')
+                    .single();
                 
                 if (insertError) throw insertError;
+                currentVisitId = insertedVisit.id;
                 console.log(`Inserted new visit ${rowVisitNumber}`);
             }
 
-            await patientService.rebalancePrenatalSchedule(
-                patientId,
-                formData.lmp,
-                rowVisitNumber,
-                rowVisitDate,
-                createdBy,
-                { retained_staff: formData.attendingMidwife || null },
-                35
-            );
+            if (!isOffSchedule || rebalanceRemainingSchedule) {
+                await patientService.rebalancePrenatalSchedule(
+                    patientId,
+                    formData.lmp,
+                    rowVisitNumber,
+                    rowVisitDate,
+                    createdBy,
+                    { retained_staff: formData.attendingMidwife || null },
+                    35,
+                    [...currentPregnancyVisitIds, currentVisitId],
+                    currentVisitId
+                );
+            }
 
-            console.log(`✅ Patient ${patientId} visit ${rowVisitNumber} marked attended; remaining schedule rebalanced starting from ${rowVisitDate}.`);
+            console.log(`Patient ${patientId} visit ${rowVisitNumber} recorded${rebalanceRemainingSchedule ? '; remaining schedule rebalanced' : ''}.`);
 
             window.scrollTo(0, 0);
             setToast({ type: 'success', message: 'Prenatal visit successfully recorded!' });
@@ -388,6 +389,12 @@ const AddPrenatalVisit = () => {
 
     // Derived flags for UI
     const isHighBP = parseInt(formData.bpSystolic) >= 140 || parseInt(formData.bpDiastolic) >= 90;
+    const currentPregnancyVisits = patient?.currentPregnancy?.visits || [];
+    const scheduledPregnancyVisits = currentPregnancyVisits
+        .filter(visit => visit.status === 'Scheduled')
+        .sort((left, right) => Number(left.visit_number) - Number(right.visit_number));
+    const isOutsideScheduledDate = scheduledPregnancyVisits.length > 0
+        && !scheduledPregnancyVisits.some(visit => String(visit.visit_date).slice(0, 10) === formData.visitDate);
 
     if (!patient) {
         return <div className="loading">Loading patient data...</div>;
@@ -654,6 +661,23 @@ const AddPrenatalVisit = () => {
                             <label>Visit Number</label>
                             <input type="number" readOnly className="read-only" value={formData.visitNumber} />
                         </div>
+                        {isOutsideScheduledDate && (
+                            <div className="form-group mt-2">
+                                <label className="check-lbl">
+                                    <input
+                                        type="checkbox"
+                                        checked={rebalanceRemainingSchedule}
+                                        onChange={event => setRebalanceRemainingSchedule(event.target.checked)}
+                                    />
+                                    <span>Rebalance remaining schedule</span>
+                                </label>
+                                <small style={{ display: 'block', marginTop: '6px' }}>
+                                    {rebalanceRemainingSchedule
+                                        ? 'If enabled, the remaining prenatal schedule will be recalculated using the existing rebalance logic.'
+                                        : 'The existing scheduled dates will remain unchanged. This visit will be inserted into the sequence and the remaining visit numbers will shift forward.'}
+                                </small>
+                            </div>
+                        )}
                         <div className="form-group mt-2">
                             <label>Health Facility</label>
                             <select name="healthFacility" value={formData.healthFacility} onChange={handleChange}>
