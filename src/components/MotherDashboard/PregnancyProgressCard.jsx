@@ -14,6 +14,7 @@ import { useLanguage } from '../../context/LanguageContext';
 const PregnancyProgressCard = ({ lmpDate, weeks: propWeeks, trimester: propTrimester, edd: propEdd }) => {
     const { t } = useLanguage();
     const hasLmp = lmpDate && !Number.isNaN(new Date(lmpDate).getTime());
+    const hasPropEdd = propEdd && !Number.isNaN(new Date(propEdd).getTime());
 
     let edd = null;
     let gestAge = { weeks: propWeeks || 0, days: 0 };
@@ -23,7 +24,7 @@ const PregnancyProgressCard = ({ lmpDate, weeks: propWeeks, trimester: propTrime
     let milestone = getWeeklyMilestone(gestAge.weeks || 0);
 
     if (hasLmp) {
-        edd = calculateEDD(lmpDate);
+        edd = hasPropEdd ? new Date(propEdd) : calculateEDD(lmpDate);
         gestAge = calculateGestationalAge(lmpDate);
         timeRem = calculateTimeRemaining(edd);
         progress = calculateProgress(lmpDate);

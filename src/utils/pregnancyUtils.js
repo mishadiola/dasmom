@@ -111,6 +111,7 @@ export const buildPregnancyHistory = (records = [], visits = [], deliveries = []
         return {
             ...record,
             pregnancyNumber: index + 1,
+            pregnancyRecordIds: [...groupIds],
             isCurrent: group === currentGroup,
             status: getPregnancyStatus(record),
             visits: pregnancyVisits,

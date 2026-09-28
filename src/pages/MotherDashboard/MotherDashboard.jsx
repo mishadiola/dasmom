@@ -37,6 +37,8 @@ const MotherDashboard = () => {
     useEffect(() => {
         const auth = new AuthService();
         const patientService = new PatientService();
+        let channel = null;
+        let welcomeChecked = false;
 
         const load = async () => {
             setLoading(true);
@@ -44,7 +46,8 @@ const MotherDashboard = () => {
                 const authUser = await auth.getAuthUser();
                 if (!authUser?.id) return;
 
-                if (authUser.role === 'mother' || authUser.role === 'patient') {
+                if (!welcomeChecked && (authUser.role === 'mother' || authUser.role === 'patient')) {
+                    welcomeChecked = true;
                     const { data: welcomeData, error: welcomeError } = await supabase.functions.invoke('mother-welcome', {
                         body: { action: 'claim' },
                     });
@@ -55,29 +58,48 @@ const MotherDashboard = () => {
                     }
                 }
 
+                if (!channel) {
+                    channel = supabase.channel(`mother-dashboard-${authUser.id}`)
+                        .on('postgres_changes', {
+                            event: '*', schema: 'public', table: 'pregnancy_info',
+                            filter: `patient_id=eq.${authUser.id}`
+                        }, () => load())
+                        .on('postgres_changes', {
+                            event: '*', schema: 'public', table: 'deliveries',
+                            filter: `mother_id=eq.${authUser.id}`
+                        }, () => load())
+                        .subscribe();
+                }
+
                 const patient = await patientService.getPatientById(authUser.id);
                 if (patient) {
                     const currentPregnancy = patient.currentPregnancy;
-                    const currentPregnancyRecord = patient.pregnancyRecord || currentPregnancy;
+                    const currentPregnancyRecord = currentPregnancy || patient.pregnancyRecord;
                     const status = String(currentPregnancyRecord?.pregn_postp || currentPregnancyRecord?.status || patient.pregnancyStatus || 'Unknown');
                     const isPregnant = status.toLowerCase() === 'pregnant';
                     const isPostpartum = status.toLowerCase() === 'postpartum';
                     const lmpDateStr = isPregnant ? currentPregnancyRecord?.lmd : null;
                     let gestAge = null;
-                    let eddDate = null;
+                    let eddDate = isPregnant && currentPregnancyRecord?.edd
+                        ? new Date(currentPregnancyRecord.edd)
+                        : null;
                     let timeRem = null;
                     let trimesterStr = null;
 
                     if (lmpDateStr) {
-                        eddDate = calculateEDD(lmpDateStr);
+                        if (!eddDate || Number.isNaN(eddDate.getTime())) eddDate = calculateEDD(lmpDateStr);
                         gestAge = calculateGestationalAge(lmpDateStr);
                         timeRem = calculateTimeRemaining(eddDate);
                         trimesterStr = getTrimester(gestAge.weeks);
+                    } else if (eddDate && !Number.isNaN(eddDate.getTime())) {
+                        timeRem = calculateTimeRemaining(eddDate);
                     }
                     const latestDelivery = currentPregnancy?.deliveries?.[0] || null;
                     setPregnancyData({
                         lmp: lmpDateStr,
-                        edd: eddDate ? eddDate.toISOString().split('T')[0] : isPregnant ? currentPregnancyRecord?.edd || null : null,
+                        edd: isPregnant && eddDate && !Number.isNaN(eddDate.getTime())
+                            ? eddDate.toISOString().split('T')[0]
+                            : null,
                         weeks: gestAge?.weeks ?? null,
                         daysUntilDue: timeRem?.totalDays,
                         trimester: trimesterStr,
@@ -210,6 +232,9 @@ const MotherDashboard = () => {
         };
 
         load();
+        return () => {
+            if (channel) supabase.removeChannel(channel);
+        };
     }, []);
 
     const healthTips = [

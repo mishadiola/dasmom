@@ -1961,12 +1961,6 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       .eq('patient_id', patientId)
       .order('created_at', { ascending: false });
 
-    const { data: pregnancyHistoryData } = await this.supabase
-      .from('pregnancy_info')
-      .select('*')
-      .eq('patient_id', patientId)
-      .order('created_at', { ascending: false });
-
     // Fetch prenatal visits
     const { data: visitsData } = await this.supabase
       .from('prenatal_visits')
@@ -2082,6 +2076,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         gestational_age: d.gestational_age,
         risk_level: d.risk_level,
         complications: d.complications,
+        notes: d.notes,
         facility: d.facility,
         postpartum_visit_date: d.postpartum_visit_date,
         postpartum_attended_date: d.postpartum_attended_date,
@@ -2089,11 +2084,26 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       };
     });
 
+    const deliveryDateById = new Map(normalizedDeliveries.map(delivery => [delivery.id, delivery.delivery_date]));
+    const normalizedNewborns = (newbornsData || []).map(newborn => ({
+      ...newborn,
+      birth_date: newborn.birth_date || deliveryDateById.get(newborn.delivery_id) || null,
+      condition: newborn.condition_at_birth || newborn.condition || null,
+      vaccines: (newborn.vaccinations || []).map(vaccine => ({
+        ...vaccine,
+        vaccine_name: vaccine.vaccine_inventory?.vaccine_name || null,
+        vaccine_inventory: vaccine.vaccine_inventory || null,
+        assigned_staff: vaccine.assigned_staff || patientData.retained_staff || null,
+        assigned_staff_name: assignedStaffById[vaccine.assigned_staff || patientData.retained_staff]?.name || null,
+        assigned_staff_station: assignedStaffById[vaccine.assigned_staff || patientData.retained_staff]?.station || null
+      }))
+    }));
+
     const pregnancyHistory = buildPregnancyHistory(
-      pregnancyHistoryData || [],
+      pregnancyData || [],
       normalizedVisits,
       normalizedDeliveries,
-      newbornsData || [],
+      normalizedNewborns,
       vaccinesData || []
     );
     const preg = getLatestPregnancyRecord(pregnancyData || []) || {};
@@ -2156,30 +2166,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         status: s.status,
         notes: s.notes
       })),
-      newborns: (newbornsData || []).map(n => ({
-        id: n.id,
-        delivery_id: n.delivery_id,
-        baby_name: n.baby_name,
-        gender: n.gender,
-        birth_date: n.created_at ? new Date(n.created_at).toISOString().split('T')[0] : null,
-        birth_weight: n.birth_weight,
-        birth_length: n.birth_length,
-        condition: n.condition_at_birth,
-        vaccines: (n.vaccinations || []).map(v => ({
-          id: v.id,
-          vaccine_name: v.vaccine_inventory?.vaccine_name || null,
-          vaccine_inventory: v.vaccine_inventory || null,
-          notes: v.notes || '',
-          dose_number: v.dose_number,
-          vaccinated_date: v.vaccinated_date,
-          scheduled_vaccination: v.scheduled_vaccination,
-          status: v.status,
-          vaccinated_by: v.vaccinated_by,
-          assigned_staff: v.assigned_staff || patientData.retained_staff || null,
-          assigned_staff_name: assignedStaffById[v.assigned_staff || patientData.retained_staff]?.name || null,
-          assigned_staff_station: assignedStaffById[v.assigned_staff || patientData.retained_staff]?.station || null
-        }))
-      })),
+      newborns: normalizedNewborns,
       deliveries: normalizedDeliveries,
       pregnancyHistory,
       currentPregnancy: pregnancyHistory.find(pregnancy => pregnancy.isCurrent) || null,
