@@ -799,3 +799,15 @@
         align-items: stretch;
     }
 }
+
+/* Make entire High Risk table row clickable */
+.hr-clickable-row {
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.hr-clickable-row:hover,
+.hr-clickable-row:focus-within {
+    background: #f8f9fb;
+    outline: none;
+}

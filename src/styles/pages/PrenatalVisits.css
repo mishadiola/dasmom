@@ -1854,3 +1854,11 @@ padding-right: 16px;
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
 }
+/* Make Prenatal Visits table row clickable */
+.pv-clickable-row {
+    transition: background 0.15s ease;
+}
+
+.pv-clickable-row:hover {
+    background: #f8f9fb;
+}

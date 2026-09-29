@@ -601,13 +601,28 @@ const Dashboard = () => {
                                 </div>
                             ) : (
                                 <>
-                                    <div className="po-row po-row--total">
+                                    <div 
+                                        className="po-row po-row--total" 
+                                        onClick={() => navigate('/dashboard/patients')}
+                                        tabIndex={0}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/dashboard/patients'); }}
+                                        role="button"
+                                        aria-label="View Total Patients"
+                                    >
                                         <span className="po-count">{liveStats.totalPatients}</span>
                                         <span className="po-label">Total Patients</span>
                                     </div>
                                     <div className="po-divider" />
                                     {healthSnapshot.trimesterDist.map(t => (
-                                        <div key={t.label} className={`po-row po-row--${t.color}`}>
+                                        <div 
+                                            key={t.label} 
+                                            className={`po-row po-row--${t.color}`}
+                                            onClick={() => navigate(`/dashboard/patients?trimester=${t.label.charAt(0)}`)}
+                                            tabIndex={0}
+                                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/dashboard/patients?trimester=${t.label.charAt(0)}`); }}
+                                            role="button"
+                                            aria-label={`View ${t.label} patients`}
+                                        >
                                             <span className="po-count">{t.count}</span>
                                             <span className="po-label">{t.label}</span>
                                         </div>

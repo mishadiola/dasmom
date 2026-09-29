@@ -65,7 +65,9 @@ const PatientProfile = () => {
     const [searchParams] = useSearchParams();
     const from = searchParams.get('from') || 'patients';
 
-    const [activeTab, setActiveTab] = useState('info');
+    const [activeTab, setActiveTab] = useState(() => {
+        return searchParams.get('tab') || 'info';
+    });
     const [p, setP] = useState(null);
     const [loading, setLoading] = useState(true);
     const [editModalOpen, setEditModalOpen] = useState(false);

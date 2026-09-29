@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, useContext } from 'react';
+﻿import React, { useState, useRef, useEffect, useCallback, useMemo, useContext } from 'react';
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import PatientService from '../../services/patientservice';
 import '../../styles/components/SharedFilters.css';
@@ -316,7 +316,7 @@ const PrenatalVisits = () => {
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'prenatal_visits' },
                 () => {
-                    console.log('🔄 Detected new visits/appointments! Auto-refreshing calendar...');
+                    console.log('ðŸ”„ Detected new visits/appointments! Auto-refreshing calendar...');
                     fetchData();
                 }
             )
@@ -337,7 +337,7 @@ const PrenatalVisits = () => {
                     name: p.fullName || `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.name || p.id,
                     lmp: p.lmp || null,
                     edd: p.edd || null,
-                    pregnancyStatus: p.pregnancyStatus || ''
+                    pregnancyStatus: p.pregnancyStatus || '', riskLevel: p.risk || 'Unknown'
                 })));
             } catch (e) {
                 console.error('Failed to load patients for Add Visit modal:', e);
@@ -611,7 +611,7 @@ const PrenatalVisits = () => {
     const uniquePatients = Array.from(latestPatientVisitMap.values()).map((visit) => ({
       id: visit.patientId,
       name: visit.patientName,
-      risk: visit.risk || visit.calculated_risk || 'Normal',
+      risk: allPatients.find(p => p.id === visit.patientId)?.riskLevel || 'Unknown',
       nextVisit: (() => {
         const nextScheduled = filteredVisits.filter(v => v.patientId === visit.patientId && v.status === 'Scheduled' && v.visitDateOnly >= todayOnly).sort((a, b) => a.visitDateOnly.localeCompare(b.visitDateOnly))[0];
         return nextScheduled ? nextScheduled.visitDateOnly : 'No upcoming';
@@ -673,7 +673,7 @@ const PrenatalVisits = () => {
             id: v.id,
             patientId: v.patientId,
             patientName: v.patientName,
-            risk: v.risk || v.calculated_risk || 'Normal',
+            risk: allPatients.find(p => p.id === v.patientId)?.riskLevel || 'Unknown',
             vaccineName: v.vaccineName,
             doseText: v.doseText,
             visitDate: v.visitDateOnly || v.visitDate,
@@ -1186,7 +1186,7 @@ const PrenatalVisits = () => {
                             <tbody>
                                 {paginatedTabVisits.length > 0 ? (
                                     paginatedTabVisits.map((visit, idx) => (
-                                        <tr key={visit.id}>
+                                        <tr key={visit.id} className="pv-clickable-row" onClick={() => navigate(`/dashboard/patients/${visit.patientId}?tab=visits`)} style={{ cursor: 'pointer' }}>
                                             <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: '12.5px', width: '50px' }}>{tabStartIndex + idx + 1}</td>
                                             <td>
                                                 <div className="p-info">
@@ -1208,17 +1208,7 @@ const PrenatalVisits = () => {
                                                 </span>
                                             </td>
                                             <td className="text-right">
-                                                <div className="row-actions">
-                                                    <button className="action-btn-text action-btn-secondary" onClick={() => setSelectedVisit(visit)} title="View" style={{ padding: '6px 8px', minWidth: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                        <Eye size={14} />
-                                                    </button>
-                                                    <button className="action-btn-text action-btn-primary" onClick={() => navigate(`/dashboard/prenatal/add/${visit.patientId}`)} title="Record Prenatal Visit">
-                                                        <Plus size={14} /> Record
-                                                    </button>
-                                                    <button className="action-btn-text action-btn-accent" onClick={() => navigate(`/dashboard/patients/${visit.patientId}`)} title="View Patient Profile">
-                                                        <Users size={14} /> Profile
-                                                    </button>
-                                                </div>
+                                                <div className="row-actions" style={{ justifyContent: 'flex-end' }}><button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '13px' }} onClick={(e) => { e.stopPropagation(); setSelectedVisit({ ...visit, type: 'Prenatal' }); }} title="Manage Visit">Manage Visit</button></div>
                                             </td>
                                         </tr>
                                     ))

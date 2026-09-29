@@ -3,16 +3,18 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
     ArrowLeft, ArrowRight, ChevronRight, Save, X, Activity, Baby, HeartPulse,
     Thermometer, AlertTriangle, Calculator,
-    Stethoscope, FileText, CheckCircle2, XCircle, CalendarCheck
+    Stethoscope, FileText, CheckCircle2, XCircle, CalendarCheck, MapPin
 } from 'lucide-react';
 import PatientService from '../../services/patientservice';
 import { AuthContext } from '../../context/AuthContext';
+import { formatMotherId } from '../../utils/displayIds';
 import '../../styles/pages/AddPrenatalVisit.css';
+import '../../styles/pages/PatientProfile.css';
 
 const patientService = new PatientService();
 
 const MEDICAL_TESTS = ['Hemoglobin', 'Urinalysis', 'Blood Type', 'Ultrasound'];
-const RISK_FACTORS = ['Bleeding', 'Severe Headache', 'Swelling', 'High BP', 'Fever', 'Previous Complications'];
+const RISK_FACTORS = ['None', 'Bleeding', 'Severe Headache', 'Swelling', 'High BP', 'Fever', 'Other'];
 
 // Normal ranges for vital signs
 const VITAL_RANGES = {
@@ -31,6 +33,8 @@ const AddPrenatalVisit = () => {
     const [patient, setPatient] = useState(null);
     const [vitalWarnings, setVitalWarnings] = useState({});
     const [tempWarning, setTempWarning] = useState(null);
+    const [vitalsErrors, setVitalsErrors] = useState({});
+    const [dangerErrors, setDangerErrors] = useState({});
 
     // Form State - initialize with empty strings to avoid uncontrolled/controlled warnings
     const [formData, setFormData] = useState({
@@ -83,10 +87,10 @@ const AddPrenatalVisit = () => {
                 visitNumber: nextScheduledVisit?.visit_number || maxVisitNumber + 1,
                 attendingMidwife: user?.id || '',
                 healthFacility: patient.station || 'CHO 3 – Main Health Facility',
-                bpSystolic: '', bpDiastolic: '', weight: '', temp: '', pulse: '', rr: '',
+                healthFacility: patient.station || 'CHO 3 – Main Health Facility',
                 fundalHeight: '', fhr: '', fetalMovement: 'Normal', presentation: 'Cephalic',
                 testsDone: [], 
-                riskFactors: patient.medicalConditions || [],
+                riskFactors: ['None'], otherRiskFactor: '',
                 calculatedRisk: patient.risk || 'Normal',
                 clinicalNotes: '', adviceGiven: '',
                 referred: false, referralReason: [], referralDate: '',
@@ -183,6 +187,27 @@ const AddPrenatalVisit = () => {
             [name]: type === 'checkbox' ? checked : finalValue
         }));
 
+        setDangerErrors(prev => {
+            if (Object.keys(prev).length === 0) return prev;
+            const updated = { ...prev };
+            if (updated[name]) delete updated[name];
+            return updated;
+        });
+
+        setVitalsErrors(prev => {
+            if (Object.keys(prev).length === 0) return prev;
+            const updated = { ...prev };
+            if (name === 'bpSystolic' || name === 'bpDiastolic') {
+                const otherVal = name === 'bpSystolic' ? formData.bpDiastolic : formData.bpSystolic;
+                if (String(finalValue).trim() !== '' && String(otherVal).trim() !== '') {
+                    delete updated.bp;
+                }
+            } else if (updated[name] && String(finalValue).trim() !== '') {
+                delete updated[name];
+            }
+            return updated;
+        });
+
         // Check for abnormal vital sign values
         if (VITAL_RANGES[name] && value) {
             const numValue = parseFloat(value);
@@ -243,6 +268,64 @@ const AddPrenatalVisit = () => {
         }
     };
 
+    const handleNextFromVitals = () => {
+        const errors = {};
+        let firstErrorField = null;
+
+        const bpSys = String(formData.bpSystolic || '').trim();
+        const bpDia = String(formData.bpDiastolic || '').trim();
+        if (!bpSys || !bpDia) {
+            errors.bp = 'Blood pressure is required.';
+            if (!firstErrorField) firstErrorField = 'bpSystolic';
+        }
+        
+        if (!String(formData.weight || '').trim()) {
+            errors.weight = 'Weight is required.';
+            if (!firstErrorField) firstErrorField = 'weight';
+        }
+        
+        if (!String(formData.temp || '').trim()) {
+            errors.temp = 'Temperature is required.';
+            if (!firstErrorField) firstErrorField = 'temp';
+        }
+        
+        if (!String(formData.pulse || '').trim()) {
+            errors.pulse = 'Pulse is required.';
+            if (!firstErrorField) firstErrorField = 'pulse';
+        }
+
+        setVitalsErrors(errors);
+
+        if (Object.keys(errors).length > 0) {
+            const el = document.querySelector(`[name="${firstErrorField}"]`);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.focus();
+            }
+            return;
+        }
+
+        setActiveTab('fetal');
+    };
+
+    const handleRiskToggle = (factor) => {
+        setFormData(prev => {
+            let curr = [...(prev.riskFactors || [])];
+            if (factor === 'None') {
+                curr = ['None'];
+            } else {
+                curr = curr.filter(i => i !== 'None');
+                if (curr.includes(factor)) {
+                    curr = curr.filter(i => i !== factor);
+                    if (curr.length === 0) curr = ['None'];
+                } else {
+                    curr.push(factor);
+                }
+            }
+            return { ...prev, riskFactors: curr };
+        });
+    };
+
     const handleArrayToggle = (field, item) => {
         setFormData(prev => {
             const curr = prev[field];
@@ -255,6 +338,39 @@ const AddPrenatalVisit = () => {
 
     const handleSave = async (e) => {
         e.preventDefault();
+
+        // Validation for Danger Signs section
+        const hasRisk = formData.riskFactors && !formData.riskFactors.includes('None') && formData.riskFactors.length > 0;
+        const errors = {};
+        let firstErrorField = null;
+
+        if (hasRisk) {
+            if (!String(formData.clinicalNotes || '').trim()) {
+                errors.clinicalNotes = 'Clinical notes are required when a danger sign or risk factor is present.';
+                if (!firstErrorField) firstErrorField = 'clinicalNotes';
+            }
+            if (!String(formData.adviceGiven || '').trim()) {
+                errors.adviceGiven = 'Advice / instructions are required when a danger sign or risk factor is present.';
+                if (!firstErrorField) firstErrorField = 'adviceGiven';
+            }
+        }
+        
+        if (formData.riskFactors?.includes('Other') && !String(formData.otherRiskFactor || '').trim()) {
+            errors.otherRiskFactor = 'Please specify the other risk factor.';
+            if (!firstErrorField) firstErrorField = 'otherRiskFactor';
+        }
+
+        setDangerErrors(errors);
+
+        if (Object.keys(errors).length > 0) {
+            const el = document.querySelector([name="${firstErrorField}"]);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.focus();
+            }
+            return;
+        }
+
         if (isSaving || saveInFlightRef.current) return;
         saveInFlightRef.current = true;
         setIsSaving(true);
@@ -330,7 +446,9 @@ const AddPrenatalVisit = () => {
                 status: 'Attended',
                 attended_date: formData.visitDate || new Date().toISOString().split('T')[0],
                 assigned_staff: formData.attendingMidwife || null,
-                risk_factors: formData.riskFactors.length > 0 ? formData.riskFactors.join(', ') : null,
+                risk_factors: formData.riskFactors?.length > 0 
+                    ? formData.riskFactors.filter(f => f !== 'None').map(f => f === 'Other' ? formData.otherRiskFactor : f).join(', ') 
+                    : null,
                 calculated_risk: formData.calculatedRisk,
             };
 
@@ -410,12 +528,30 @@ const AddPrenatalVisit = () => {
             )}
 
             {/* Header */}
-            <div className="apv-header">
-                <div>
-                    <button className="back-link" onClick={() => navigate(-1)} type="button">
-                        <ArrowLeft size={16} /> Back to Visits
+            <div className="apv-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <button 
+                        onClick={() => navigate(-1)} 
+                        type="button"
+                        style={{ 
+                            background: 'none', 
+                            border: 'none', 
+                            color: 'var(--color-text-muted)', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '6px', 
+                            fontSize: '14px', 
+                            fontWeight: '600', 
+                            cursor: 'pointer',
+                            padding: 0
+                        }}
+                        onMouseOver={(e) => { e.currentTarget.style.color = 'var(--color-primary-accent)'; e.currentTarget.style.textDecoration = 'underline'; }}
+                        onMouseOut={(e) => { e.currentTarget.style.color = 'var(--color-text-muted)'; e.currentTarget.style.textDecoration = 'none'; }}
+                    >
+                        <ArrowLeft size={16} /> Back
                     </button>
-                    <h1 className="apv-title">Record Prenatal Visit</h1>
+                    <span style={{ color: '#cbd5e1', fontSize: '18px', margin: '0 4px', fontWeight: '300' }}>/</span>
+                    <h1 className="apv-title" style={{ margin: 0, fontSize: '24px', fontWeight: '800', color: 'var(--color-text)' }}>Record Prenatal Visit</h1>
                 </div>
                 <div className="apv-actions">
                     <button className="btn btn-outline" onClick={() => navigate(-1)} type="button">Cancel</button>
@@ -431,49 +567,60 @@ const AddPrenatalVisit = () => {
                 <div className="apv-main-col">
 
                     {/* SECTION 1: Patient Info */}
-                    <section className="apv-section sticky-patient-info" style={{ background: '#fff3cd', border: '1px solid #ffe69c', padding: '24px 32px' }}>
-                        <div className="pi-grid" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <div className="pi-main" style={{ color: 'var(--color-text)', flex: 1, borderRight: '1px solid rgba(0,0,0,0.08)', paddingRight: '24px' }}>
-                                <h2 style={{ color: 'var(--color-text)', marginBottom: '8px', fontSize: '24px', fontWeight: '700' }}>{formData.name}</h2>
-                                <span style={{ color: 'var(--color-text-muted)', fontWeight: '500', fontSize: '14px' }}>{formData.id}</span>
-                                <div style={{ color: 'var(--color-text-muted)', fontWeight: '500', fontSize: '14px', marginTop: '4px' }}>{formData.age} yrs · {formData.station}</div>
+                    <section className="apv-section sticky-patient-info" style={{ 
+                        background: '#ffffff', 
+                        border: '1px solid var(--color-border)', 
+                        padding: '24px 32px',
+                        borderRadius: '12px',
+                        boxShadow: '0 2px 12px rgba(0,0,0,0.03)',
+                        marginBottom: '24px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                            <div className="profile-avatar-lg">
+                                {formData.name ? formData.name.split(' ').map(n => n[0]).join('').substring(0, 2) : '??'}
                             </div>
-                            <div className="pi-stats" style={{ background: 'transparent', display: 'flex', gap: '32px', paddingLeft: '32px', flex: 2, justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                                    <small style={{ color: 'var(--color-text-muted)', fontWeight: '600', fontSize: '11px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Gestation</small>
-                                    <strong style={{ color: 'var(--color-text)', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        <CalendarCheck size={18} /> {formData.gestationalAge || '--'}
-                                    </strong>
+                            <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+                                    <h2 style={{ color: 'var(--color-text)', fontSize: '20px', fontWeight: '800', margin: 0, textTransform: 'uppercase' }}>
+                                        {formData.name}
+                                    </h2>
                                 </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                                    <small style={{ color: 'var(--color-text-muted)', fontWeight: '600', fontSize: '11px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Trimester</small>
-                                    <strong style={{ color: 'var(--color-text)', fontSize: '1.1rem', backgroundColor: '#fff', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #ffe69c' }}>
-                                        {formData.trimester || '--'}
-                                    </strong>
+                                <div style={{ color: 'var(--color-text-muted)', fontSize: '14px', fontWeight: '500' }}>
+                                    ID: {formatMotherId(formData.id)} · {formData.age} years old · <MapPin size={12} style={{ display: 'inline', marginLeft: '2px', marginRight: '2px' }} /> {formData.station}
                                 </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                                    <small style={{ color: 'var(--color-text-muted)', fontWeight: '600', fontSize: '11px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Gravida/Para</small>
-                                    <strong style={{ color: 'var(--color-text)', fontSize: '1.1rem', backgroundColor: '#fff', padding: '6px 16px', borderRadius: '20px', border: '1px solid #ffe69c' }}>
-                                        G{formData.gravida} P{formData.para}
-                                    </strong>
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', borderLeft: '1px solid rgba(0,0,0,0.08)', paddingLeft: '32px' }}>
-                                    <small style={{ color: 'var(--color-text-muted)', fontWeight: '600', fontSize: '11px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Risk Level</small>
-                                    <strong style={{ 
-                                        fontSize: '1.05rem', 
-                                        backgroundColor: formData.calculatedRisk === 'High Risk' ? '#fee2e2' : '#d1fae5', 
-                                        color: formData.calculatedRisk === 'High Risk' ? '#b91c1c' : '#065f46',
-                                        padding: '6px 16px', 
-                                        borderRadius: '20px',
-                                        display: 'flex', 
-                                        alignItems: 'center', 
-                                        gap: '6px',
-                                        border: formData.calculatedRisk === 'High Risk' ? '1px solid #fecaca' : '1px solid #a7f3d0'
-                                    }}>
-                                        {formData.calculatedRisk === 'High Risk' && <AlertTriangle size={16} />}
-                                        {formData.calculatedRisk}
-                                    </strong>
-                                </div>
+                            </div>
+                        </div>
+
+                        <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'center',
+                            backgroundColor: '#f8f9fb',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: '12px',
+                            padding: '12px 24px'
+                        }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingRight: '24px', borderRight: '1px solid var(--color-border)' }}>
+                                <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Gestation</span>
+                                <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--color-text)' }}>{formData.gestationalAge || '--'}</span>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '0 24px', borderRight: '1px solid var(--color-border)' }}>
+                                <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Trimester</span>
+                                <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--color-text)' }}>
+                                    {formData.trimester ? (formData.trimester === 1 ? '1st' : formData.trimester === 2 ? '2nd' : formData.trimester === 3 ? '3rd' : formData.trimester) + ' Trimester' : '--'}
+                                </span>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '0 24px', borderRight: '1px solid var(--color-border)' }}>
+                                <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Gravida / Para</span>
+                                <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--color-text)' }}>G{formData.gravida} P{formData.para}</span>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingLeft: '24px' }}>
+                                <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Risk Level</span>
+                                <span className={`risk-tag risk-${formData.calculatedRisk?.replace(' ', '-').toLowerCase() || 'normal'}`} style={{ margin: 0, display: 'inline-block', width: 'fit-content' }}>
+                                    {formData.calculatedRisk}
+                                </span>
                             </div>
                         </div>
                     </section>
@@ -503,27 +650,30 @@ const AddPrenatalVisit = () => {
 
                                 <div className="vitals-grid">
                                     <div className={`form-group bp-group ${isHighBP ? 'has-warning' : ''}`}>
-                                        <label>Blood Pressure
+                                        <label>Blood Pressure <span style={{ color: '#ef4444' }}>*</span>
                                             {isHighBP && <span className="inline-warn"><AlertTriangle size={12} /> High BP Alert</span>}
                                         </label>
-                                        <div className="bp-inputs">
+                                        <div className="bp-inputs" style={vitalsErrors.bp ? { border: '1px solid #ef4444', borderRadius: '8px' } : {}}>
                                             <input type="number" name="bpSystolic" value={formData.bpSystolic} onChange={handleChange} placeholder="Sys" required />
                                             <span>/</span>
                                             <input type="number" name="bpDiastolic" value={formData.bpDiastolic} onChange={handleChange} placeholder="Dia" required />
                                         </div>
+                                        {vitalsErrors.bp && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px' }}>{vitalsErrors.bp}</span>}
                                     </div>
 
                                     <div className="form-group">
-                                        <label>Weight (kg)</label>
+                                        <label>Weight (kg) <span style={{ color: '#ef4444' }}>*</span></label>
                                         <div className="input-with-icon">
-                                            <input type="number" step="0.1" name="weight" value={formData.weight} onChange={handleChange} required />
+                                            <input type="number" step="0.1" name="weight" value={formData.weight} onChange={handleChange} required style={vitalsErrors.weight ? { border: '1px solid #ef4444' } : {}} />
                                         </div>
+                                        {vitalsErrors.weight && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{vitalsErrors.weight}</span>}
                                     </div>
 
                                     <div className="form-group">
-                                        <label>Temp (°C)</label>
-                                        <input type="number" step="0.1" name="temp" value={formData.temp} onChange={handleChange} placeholder="ex: 36.5" required />
-                                        {tempWarning && (
+                                        <label>Temp (°C) <span style={{ color: '#ef4444' }}>*</span></label>
+                                        <input type="number" step="0.1" name="temp" value={formData.temp} onChange={handleChange} placeholder="ex: 36.5" required style={vitalsErrors.temp ? { border: '1px solid #ef4444' } : {}} />
+                                        {vitalsErrors.temp && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{vitalsErrors.temp}</span>}
+                                        {tempWarning && !vitalsErrors.temp && (
                                             <div className={`temp-warning temp-warning--${tempWarning.type}`}>
                                                 <AlertTriangle size={14} />
                                                 <span>{tempWarning.label} detected. Please double-check.</span>
@@ -532,9 +682,10 @@ const AddPrenatalVisit = () => {
                                     </div>
 
                                     <div className="form-group">
-                                        <label>Pulse (bpm)</label>
-                                        <input type="number" name="pulse" value={formData.pulse} onChange={handleChange} required />
-                                        {vitalWarnings.pulse && (
+                                        <label>Pulse (bpm) <span style={{ color: '#ef4444' }}>*</span></label>
+                                        <input type="number" name="pulse" value={formData.pulse} onChange={handleChange} required style={vitalsErrors.pulse ? { border: '1px solid #ef4444' } : {}} />
+                                        {vitalsErrors.pulse && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{vitalsErrors.pulse}</span>}
+                                        {vitalWarnings.pulse && !vitalsErrors.pulse && (
                                             <div className="vital-warning">
                                                 <AlertTriangle size={14} />
                                                 <span>Abnormal: {formData.pulse} bpm (Normal: 60-100 bpm)</span>
@@ -548,7 +699,7 @@ const AddPrenatalVisit = () => {
                                     </div>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
-                                    <button type="button" className="btn-next-tab" onClick={() => setActiveTab('fetal')} title="Next Section">
+                                    <button type="button" className="btn-next-tab" onClick={handleNextFromVitals} title="Next Section">
                                         <ArrowRight size={20} />
                                     </button>
                                 </div>
@@ -610,13 +761,31 @@ const AddPrenatalVisit = () => {
                                         <button
                                             type="button"
                                             key={factor}
-                                            className={`risk-btn ${formData.riskFactors.includes(factor) ? 'active' : ''}`}
-                                            onClick={() => handleArrayToggle('riskFactors', factor)}
+                                            className={`risk-btn ${formData.riskFactors?.includes(factor) ? 'active' : ''}`}
+                                            onClick={() => handleRiskToggle(factor)}
                                         >
                                             {factor}
                                         </button>
                                     ))}
                                 </div>
+                                {formData.riskFactors?.includes('Other') && (
+                                    <div className="form-group" style={{marginTop: '16px'}}>
+                                        <label>Other danger sign / risk factor <span className="req">*</span></label>
+                                        <input
+                                            type="text"
+                                            name="otherRiskFactor"
+                                            value={formData.otherRiskFactor || ''}
+                                            onChange={handleChange}
+                                            placeholder="Enter danger sign or risk factor..."
+                                            className={dangerErrors?.otherRiskFactor ? 'error-field' : ''}
+                                        />
+                                        {dangerErrors?.otherRiskFactor && (
+                                            <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
+                                                {dangerErrors.otherRiskFactor}
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
                             </section>
                         )}
                     </div>
@@ -626,20 +795,32 @@ const AddPrenatalVisit = () => {
                         <h3 className="section-head"><FileText size={18} /> Clinical Notes & Findings</h3>
                         <div className="notes-grid">
                             <div className="form-group">
-                                <label>Clinical Notes</label>
+                                <label>Clinical Notes {(!formData.riskFactors?.includes('None') && formData.riskFactors?.length > 0) && <span className="req">*</span>}</label>
                                 <textarea
                                     name="clinicalNotes" rows="3"
                                     value={formData.clinicalNotes} onChange={handleChange}
                                     placeholder="Enter physical exam findings, complaints..."
+                                    className={dangerErrors?.clinicalNotes ? 'error-field' : ''}
                                 />
+                                {dangerErrors?.clinicalNotes && (
+                                    <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
+                                        {dangerErrors.clinicalNotes}
+                                    </span>
+                                )}
                             </div>
                             <div className="form-group">
-                                <label>Advice / Instructions Given</label>
+                                <label>Advice / Instructions Given {(!formData.riskFactors?.includes('None') && formData.riskFactors?.length > 0) && <span className="req">*</span>}</label>
                                 <textarea
                                     name="adviceGiven" rows="3"
                                     value={formData.adviceGiven} onChange={handleChange}
                                     placeholder="Dietary advice, rest required..."
+                                    className={dangerErrors?.adviceGiven ? 'error-field' : ''}
                                 />
+                                {dangerErrors?.adviceGiven && (
+                                    <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
+                                        {dangerErrors.adviceGiven}
+                                    </span>
+                                )}
                             </div>
                         </div>
                     </section>
@@ -662,19 +843,18 @@ const AddPrenatalVisit = () => {
                             <input type="number" readOnly className="read-only" value={formData.visitNumber} />
                         </div>
                         {isOutsideScheduledDate && (
-                            <div className="form-group mt-2">
-                                <label className="check-lbl">
+                            <div className="form-group mt-2" style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '8px', cursor: 'pointer', fontWeight: '500', color: 'var(--color-text)', margin: 0 }}>
                                     <input
                                         type="checkbox"
                                         checked={rebalanceRemainingSchedule}
                                         onChange={event => setRebalanceRemainingSchedule(event.target.checked)}
+                                        style={{ margin: 0, cursor: 'pointer', width: '16px', height: '16px', flexShrink: 0 }}
                                     />
-                                    <span>Rebalance remaining schedule</span>
+                                    <span style={{ fontSize: '13px', whiteSpace: 'nowrap' }}>Adjust Remaining Visits</span>
                                 </label>
-                                <small style={{ display: 'block', marginTop: '6px' }}>
-                                    {rebalanceRemainingSchedule
-                                        ? 'If enabled, the remaining prenatal schedule will be recalculated using the existing rebalance logic.'
-                                        : 'The existing scheduled dates will remain unchanged. This visit will be inserted into the sequence and the remaining visit numbers will shift forward.'}
+                                <small style={{ display: 'block', color: 'var(--color-text-muted)', lineHeight: '1.4' }}>
+                                    Automatically adjust the dates and visit numbers of the remaining scheduled prenatal visits based on this visit.
                                 </small>
                             </div>
                         )}

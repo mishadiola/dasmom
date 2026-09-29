@@ -328,7 +328,12 @@ export default function Login() {
                                 required
                             />
                         </div>
-                        {errors.email && <p className="field-error" id="email-error" role="alert"><AlertCircle size={12} aria-hidden="true" />{errors.email}</p>}
+                        {errors.email && (
+                            <p id="email-error" role="alert" style={{ display: 'flex', alignItems: 'flex-start', gap: '5px', fontSize: '12px', fontWeight: 500, color: '#dc2626', marginTop: '4px', lineHeight: 1.3, margin: '4px 0 0 0' }}>
+                                <AlertCircle size={14} aria-hidden="true" style={{ flexShrink: 0, marginTop: '1px', color: '#dc2626' }} />
+                                <span>{errors.email}</span>
+                            </p>
+                        )}
                     </div>
 
                     {/* Password */}
@@ -356,7 +361,12 @@ export default function Login() {
                                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                             </button>
                         </div>
-                        {errors.password && <p className="field-error" id="pwd-error" role="alert"><AlertCircle size={12} aria-hidden="true" />{errors.password}</p>}
+                        {errors.password && (
+                            <p id="pwd-error" role="alert" style={{ display: 'flex', alignItems: 'flex-start', gap: '5px', fontSize: '12px', fontWeight: 500, color: '#dc2626', marginTop: '4px', lineHeight: 1.3, margin: '4px 0 0 0' }}>
+                                <AlertCircle size={14} aria-hidden="true" style={{ flexShrink: 0, marginTop: '1px', color: '#dc2626' }} />
+                                <span>{errors.password}</span>
+                            </p>
+                        )}
                     </div>
 
                     {/* Extras */}

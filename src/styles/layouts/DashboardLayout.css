@@ -1005,6 +1005,36 @@
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
+/* Clickable card enhancements */
+.stat-card--clickable {
+    cursor: pointer;
+    user-select: none;
+    outline: none;
+    transition: transform 0.22s ease, box-shadow 0.22s ease, outline 0.15s ease;
+}
+
+.stat-card--clickable:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+}
+
+.stat-card--clickable:active {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.10);
+}
+
+.stat-card--clickable:focus-visible {
+    outline: 2px solid #7c5a6d;
+    outline-offset: 3px;
+}
+
+.stat-card--clickable.stat-card--active {
+    outline: 2.5px solid #7c5a6d;
+    outline-offset: 2px;
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(124, 90, 109, 0.18);
+}
+
 .stat-top {
     display: flex;
     align-items: center;

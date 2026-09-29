@@ -545,22 +545,19 @@ const HighRiskCases = () => {
                     <th>Due Date</th>
                     <th>BP</th>
                     <th>Next Visit</th>
-                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedPatients.length > 0 ? (
                     paginatedPatients.map((p, index) => (
-                      <tr key={p.id} className={getRowClass(p)}>
+                      <tr key={p.id} className={getRowClass(p) + " hr-clickable-row"} onClick={() => navigate(`/dashboard/patients/${p.id}?from=high-risk&tab=history`)}>
                         <td className="row-number-cell">
                           {startIndex + index + 1}
                         </td>
                         <td>
                           <div
                             className="patient-cell"
-                            onClick={() => navigate(`/dashboard/patients/${p.id}?from=high-risk`)}
-                            style={{ cursor: 'pointer' }}
-                          >
+                            >
                             <div className="patient-avatar">
                               {(p.name || '')
                                 .split(' ')
@@ -613,22 +610,11 @@ const HighRiskCases = () => {
                             {p.nextVisit || 'Initial'}
                           </span>
                         </td>
-                        <td>
-                          <div className="action-buttons">
-                            <button
-                              className="action-btn view-btn"
-                              title="View Profile"
-                              onClick={() => navigate(`/dashboard/patients/${p.id}?from=high-risk`)}
-                            >
-                              <Eye size={14} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                        </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="8" className="hr-empty">
+                      <td colSpan="7" className="hr-empty">
                         <AlertTriangle size={28} />
                         <p>No high‑risk patients found matching your criteria.</p>
                       </td>

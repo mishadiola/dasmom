@@ -23,6 +23,36 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
     const [errors, setErrors] = useState({});
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [availableStations, setAvailableStations] = useState([]);
+
+    useEffect(() => {
+        const loadStations = async () => {
+            try {
+                const patientService = new PatientService();
+                const stations = await patientService.getAvailableStations();
+                setAvailableStations(stations);
+            } catch (err) {
+                console.error(err);
+            }
+        };
+        loadStations();
+    }, []);
+
+    const formatStationName = (station) => {
+        if (!station) return '';
+        const stationMap = {
+            'cho iii': 'City Health Office 3',
+            'cho 3': 'City Health Office 3',
+            'cho3': 'City Health Office 3',
+            'salawag': 'Salawag',
+        };
+        const lowerStation = station.toLowerCase().trim();
+        if (stationMap[lowerStation]) return stationMap[lowerStation];
+        return station
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join(' ');
+    };
 
     const calculateAge = (dob) => {
         if (!dob) return '';
@@ -50,7 +80,7 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
                 dateOfBirth: patient.dob || '',
                 age: patient.age || calculateAge(patient.dob),
                 civilStatus: patient.civilStatus || '',
-                bloodType: patient.bloodType || '',
+                bloodType: patient.bloodType || 'Unknown / Not Yet Determined',
                 philhealth: patient.philhealth || '',
                 phone: patient.phone || '',
                 address: patient.address || '',
@@ -294,6 +324,7 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
                                         onChange={handleChange}
                                     >
                                         <option value="">Select</option>
+                                        <option value="Unknown / Not Yet Determined">Unknown / Not Yet Determined</option>
                                         <option value="A+">A+</option>
                                         <option value="A-">A-</option>
                                         <option value="B+">B+</option>
@@ -354,14 +385,17 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
                                 </div>
                                 <div className="form-group">
                                     <label>Station *</label>
-                                    <input
-                                        type="text"
+                                    <select
                                         name="station"
                                         value={formData.station}
                                         onChange={handleChange}
-                                        placeholder="Barangay"
                                         className={errors.station ? 'error' : ''}
-                                    />
+                                    >
+                                        <option value="">Select Station</option>
+                                        {availableStations.map(bgy => (
+                                            <option key={bgy} value={bgy}>{formatStationName(bgy)}</option>
+                                        ))}
+                                    </select>
                                     {errors.station && <span className="error-text">{errors.station}</span>}
                                 </div>
                                 <div className="form-group">
@@ -369,9 +403,10 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
                                     <input
                                         type="text"
                                         name="municipality"
-                                        value={formData.municipality}
-                                        onChange={handleChange}
-                                        placeholder="City/Municipality"
+                                        value={formData.municipality || 'Dasmariñas'}
+                                        readOnly
+                                        disabled
+                                        style={{ backgroundColor: '#f8f9fa', color: '#495057', cursor: 'not-allowed' }}
                                     />
                                 </div>
                             </div>
@@ -395,13 +430,19 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
                                 </div>
                                 <div className="form-group">
                                     <label>Relationship</label>
-                                    <input
-                                        type="text"
+                                    <select
                                         name="emergencyContactRelationship"
                                         value={formData.emergencyContactRelationship}
                                         onChange={handleChange}
-                                        placeholder="e.g., Spouse, Parent"
-                                    />
+                                    >
+                                        <option value="">Select Relationship</option>
+                                        <option value="Spouse">Spouse</option>
+                                        <option value="Partner">Partner</option>
+                                        <option value="Parent">Parent</option>
+                                        <option value="Sibling">Sibling</option>
+                                        <option value="Guardian">Guardian</option>
+                                        <option value="Other">Other</option>
+                                    </select>
                                 </div>
                                 <div className="form-group full-width">
                                     <label>Phone Number</label>

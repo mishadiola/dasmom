@@ -749,7 +749,7 @@ const AddPatient = () => {
 
         let requiredPregnancy = ['gravida', 'para', 'lmp'];
 
-        const requiredVitals = ['weight', 'height', 'bp'];
+        const requiredVitals = ['weight', 'height', 'bp', 'temp', 'pulse', 'bloodType'];
 
         const isEmptyValue = (value) => value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
 
@@ -959,7 +959,7 @@ const AddPatient = () => {
         } else if (activeTab === 'medical') {
             // No strict required fields in medical
         } else if (activeTab === 'prenatal') {
-            const requiredVitals = ['weight', 'height', 'bp'];
+            const requiredVitals = ['weight', 'height', 'bp', 'temp', 'pulse', 'bloodType'];
             checkFields(requiredVitals);
         }
 
@@ -2051,6 +2051,77 @@ const AddPatient = () => {
                             )}
                             <div className="form-grid-3">
                                 <div className="form-group">
+                                    <label>Temperature (°C) <span className="req">*</span></label>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        name="temp"
+                                        value={formData.temp}
+                                        onChange={handleChange}
+                                        placeholder="ex: 36.5"
+                                        className={missingFields.includes('temp') ? 'error-field' : ''}
+                                    />
+                                    {missingFields.includes('temp') && (
+                                        <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
+                                            Temperature is required.
+                                        </span>
+                                    )}
+                                    {tempWarning && !missingFields.includes('temp') && (
+                                        <div className={`temp-warning temp-warning--${tempWarning.type}`}>
+                                            <AlertTriangle size={14} />
+                                            <span>{tempWarning.label} detected. Please double-check.</span>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="form-group">
+                                    <label>Pulse (bpm) <span className="req">*</span></label>
+                                    <input
+                                        type="number"
+                                        name="pulse"
+                                        value={formData.pulse}
+                                        onChange={handleChange}
+                                        className={missingFields.includes('pulse') ? 'error-field' : ''}
+                                    />
+                                    {missingFields.includes('pulse') && (
+                                        <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
+                                            Pulse is required.
+                                        </span>
+                                    )}
+                                    {vitalWarnings.pulse && !missingFields.includes('pulse') && (
+                                        <div className="vital-warning">
+                                            <AlertTriangle size={14} />
+                                            <span>Abnormal: {formData.pulse} bpm (Normal: 60-100 bpm)</span>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="form-group">
+                                    <label>Blood Type <span className="req">*</span></label>
+                                    <select 
+                                        name="bloodType" 
+                                        value={formData.bloodType} 
+                                        onChange={handleChange}
+                                        className={missingFields.includes('bloodType') ? 'error-field' : ''}
+                                    >
+                                        <option value="">Select Blood Type</option>
+                                        <option value="A+">A+</option>
+                                        <option value="A-">A−</option>
+                                        <option value="B+">B+</option>
+                                        <option value="B-">B−</option>
+                                        <option value="AB+">AB+</option>
+                                        <option value="AB-">AB−</option>
+                                        <option value="O+">O+</option>
+                                        <option value="O-">O−</option>
+                                        <option value="Unknown">Unknown / Not yet determined</option>
+                                    </select>
+                                    {missingFields.includes('bloodType') && (
+                                        <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
+                                            Blood type is required.
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="form-grid-3">
+                                <div className="form-group">
                                     <label>Fetal Heart Rate (bpm)</label>
                                     <input 
                                         type="number" 
@@ -2078,55 +2149,6 @@ const AddPatient = () => {
                                         <div className="vital-warning">
                                             <AlertTriangle size={14} />
                                             <span>Abnormal: {formData.hgb} g/dL (Normal: 11-13 g/dL)</span>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="form-group">
-                                    <label>Blood Type</label>
-                                    <select name="bloodType" value={formData.bloodType} onChange={handleChange}>
-                                        <option value="">Select Blood Type</option>
-                                        <option value="A+">A+</option>
-                                        <option value="A-">A−</option>
-                                        <option value="B+">B+</option>
-                                        <option value="B-">B−</option>
-                                        <option value="AB+">AB+</option>
-                                        <option value="AB-">AB−</option>
-                                        <option value="O+">O+</option>
-                                        <option value="O-">O−</option>
-                                        <option value="Unknown">Unknown / Not yet determined</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div className="form-grid-3">
-                                <div className="form-group">
-                                    <label>Temperature (°C)</label>
-                                    <input
-                                        type="number"
-                                        step="0.1"
-                                        name="temp"
-                                        value={formData.temp}
-                                        onChange={handleChange}
-                                        placeholder="ex: 36.5"
-                                    />
-                                    {tempWarning && (
-                                        <div className={`temp-warning temp-warning--${tempWarning.type}`}>
-                                            <AlertTriangle size={14} />
-                                            <span>{tempWarning.label} detected. Please double-check.</span>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="form-group">
-                                    <label>Pulse (bpm)</label>
-                                    <input
-                                        type="number"
-                                        name="pulse"
-                                        value={formData.pulse}
-                                        onChange={handleChange}
-                                    />
-                                    {vitalWarnings.pulse && (
-                                        <div className="vital-warning">
-                                            <AlertTriangle size={14} />
-                                            <span>Abnormal: {formData.pulse} bpm (Normal: 60-100 bpm)</span>
                                         </div>
                                     )}
                                 </div>

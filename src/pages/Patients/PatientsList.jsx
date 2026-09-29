@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSystemSettings } from '../../context/SystemSettingsContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import {
     Search, Filter, Plus, ChevronLeft, ChevronRight, ChevronDown, Check,
@@ -238,6 +238,10 @@ const RecordVitalsModal = ({ patient, onSave, onClose, supplements }) => {
 
 const PatientsList = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    const searchParams = new URLSearchParams(location.search);
+    const initialTrimester = searchParams.get('trimester');
+    
     const { alert: customAlert, confirm } = useModal();
 
     const [patients, setPatients] = useState([]);
@@ -253,7 +257,7 @@ const PatientsList = () => {
         return defaultView === 'All Patients' ? 'all' : 'active';
     });
     const [filters, setFilters] = useState({
-        trimesters: [],
+        trimesters: initialTrimester ? [initialTrimester] : [],
         risks: [],
         stations: [],
         patientType: 'All',
@@ -477,6 +481,8 @@ const PatientsList = () => {
         setSearchTerm('');
         setCurrentPage(1);
         setActivePopover(null);
+        // Clear query parameters from URL so a fresh reload doesn't re-apply the cleared filter
+        if (searchParams.has('trimester')) navigate('/dashboard/patients', { replace: true });
     };
 
     const dateFilterLabel = dateFilter === 'this_month' ? 'This Month' : dateFilter === 'this_year' ? 'This Year' : dateFilter === 'custom' ? 'Custom' : 'All';
@@ -718,23 +724,28 @@ const PatientsList = () => {
                         )}
                     </div>
 
-                    {/* Location Popover */}
+                    {/* Station Popover */}
                     <div className="filter-dropdown-container">
                         <button 
                             className={`filter-btn ${filters.stations.length > 0 ? 'active-filter' : ''}`}
                             onClick={() => {
-                                setActivePopover(activePopover === 'location' ? null : 'location');
+                                setActivePopover(activePopover === 'station' ? null : 'station');
                                 setStationSearch('');
                             }}
                             style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                         >
                             <MapPin size={14} className="filter-btn-icon" /> 
-                            <span>Location</span>
-                            {filters.stations.length > 0 && <span className="filter-badge">{filters.stations.length}</span>}
+                            <span>
+                                {filters.stations.length === 0 
+                                    ? 'All Stations' 
+                                    : filters.stations.length === 1 
+                                        ? filters.stations[0] 
+                                        : `${filters.stations.length} Stations`}
+                            </span>
                             <ChevronDown size={14} className="filter-btn-icon" />
                         </button>
                         
-                        {activePopover === 'location' && (
+                        {activePopover === 'station' && (
                             <div className="filter-popover">
                                 <div className="popover-title">Station</div>
                                 <input 
@@ -932,7 +943,17 @@ const PatientsList = () => {
                                 paginatedPatients.map((p, index) => (
                                     <tr key={p.id} className="table-row">
                                         <td className="cell-number">{(currentPage - 1) * itemsPerPage + index + 1}</td>
-                                        <td className="cell-id">{getShortPatientId(p.id)}</td>
+                                        <td className="cell-id">
+                                            <span 
+                                                onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/${p.id}?from=patients`); }}
+                                                style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+                                                onMouseOver={(e) => { e.target.style.color = '#b9818a'; e.target.style.textDecoration = 'underline'; }}
+                                                onMouseOut={(e) => { e.target.style.color = ''; e.target.style.textDecoration = 'none'; }}
+                                                title="View Patient Profile"
+                                            >
+                                                {getShortPatientId(p.id)}
+                                            </span>
+                                        </td>
 
                                         <td>
                                             <div className="cell-name-wrap" onClick = {() => navigate(`/dashboard/patients/${p.id}?from=patients`)}>
@@ -957,7 +978,14 @@ const PatientsList = () => {
 
                                         <td>
                                             <div>
-                                                <span className={`risk-badge ${getRiskClass(p.risk)}`}>
+                                                <span 
+                                                    className={`risk-badge ${getRiskClass(p.risk)}`}
+                                                    onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/${p.id}?from=patients&tab=history`); }}
+                                                    style={{ cursor: 'pointer', transition: 'opacity 0.2s' }}
+                                                    onMouseOver={(e) => { e.target.style.opacity = '0.75'; }}
+                                                    onMouseOut={(e) => { e.target.style.opacity = '1'; }}
+                                                    title="View Medical History"
+                                                >
                                                     {formatRiskDisplay(p.risk)}
                                                 </span>
                                                 {(p.riskFactors || []).filter(f => f && f.toLowerCase() !== 'none').length > 0 && (
@@ -968,7 +996,21 @@ const PatientsList = () => {
                                             </div>
                                         </td>
 
-                                        <td className="cell-bold">{p.totalVisits ?? 0}</td>
+                                        <td className="cell-bold">
+                                            {(p.totalVisits ?? 0) > 0 ? (
+                                                <span 
+                                                    className="patient-visits-link"
+                                                    onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/${p.id}?from=patients&tab=visits`); }}
+                                                    style={{ cursor: 'pointer', color: 'var(--color-rose)', textDecoration: 'none' }}
+                                                    onMouseOver={(e) => e.target.style.textDecoration = 'underline'}
+                                                    onMouseOut={(e) => e.target.style.textDecoration = 'none'}
+                                                >
+                                                    {p.totalVisits}
+                                                </span>
+                                            ) : (
+                                                p.totalVisits ?? 0
+                                            )}
+                                        </td>
 
                                         <td>
                                             <div className="cell-appt">
@@ -983,32 +1025,42 @@ const PatientsList = () => {
 
                                         <td>
                                             <div className="actions-group">
-                                                <button type="button" className="action-btn view-btn" data-tooltip="View Profile" onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/${p.id}?from=patients`); }}>
-                                                    <Eye size={16} />
-                                                </button>
+                                                <div className="action-tooltip-wrap" data-tooltip="View Profile">
+                                                    <button type="button" className="action-btn view-btn" onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/${p.id}?from=patients`); }}>
+                                                        <Eye size={16} />
+                                                    </button>
+                                                </div>
 
-                                                <button type="button" className="action-btn vitals-btn" data-tooltip="Record Vitals" onClick={(e) => { e.stopPropagation(); openVitalsModal(p.id); }} disabled={modalLoading.vitals}>
-                                                    <Activity size={16} />
-                                                </button>
+                                                <div className="action-tooltip-wrap" data-tooltip="Record Vitals">
+                                                    <button type="button" className="action-btn vitals-btn" onClick={(e) => { e.stopPropagation(); openVitalsModal(p.id); }} disabled={modalLoading.vitals}>
+                                                        <Activity size={16} />
+                                                    </button>
+                                                </div>
 
-                                                <button type="button" className="action-btn edit-btn" data-tooltip="Edit Patient" onClick={(e) => { e.stopPropagation(); openEditModal(p.id); }} disabled={modalLoading.edit}>
-                                                    <Edit size={16} />
-                                                </button>
+                                                <div className="action-tooltip-wrap" data-tooltip="Edit Patient">
+                                                    <button type="button" className="action-btn edit-btn" onClick={(e) => { e.stopPropagation(); openEditModal(p.id); }} disabled={modalLoading.edit}>
+                                                        <Edit size={16} />
+                                                    </button>
+                                                </div>
 
                                                 {(p.archiveStatus || 'active') === 'archived' ? (
-                                                    <button type="button" className="action-btn restore-btn" data-tooltip="Restore Patient" onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleRestore(p.id);
-                                                    }}>
-                                                        <ArchiveRestore size={16} />
-                                                    </button>
+                                                    <div className="action-tooltip-wrap" data-tooltip="Restore Patient">
+                                                        <button type="button" className="action-btn restore-btn" onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleRestore(p.id);
+                                                        }}>
+                                                            <ArchiveRestore size={16} />
+                                                        </button>
+                                                    </div>
                                                 ) : (
-                                                    <button type="button" className="action-btn archive-btn" data-tooltip="Archive Patient" onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleArchive(p.id);
-                                                    }}>
-                                                        <Archive size={16} />
-                                                    </button>
+                                                    <div className="action-tooltip-wrap" data-tooltip="Archive Patient">
+                                                        <button type="button" className="action-btn archive-btn" onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleArchive(p.id);
+                                                        }}>
+                                                            <Archive size={16} />
+                                                        </button>
+                                                    </div>
                                                 )}
                                             </div>
                                         </td>

@@ -2016,8 +2016,6 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       .eq('patient_id', patientId)
       .order('created_at', { ascending: false });
 
-    // Find latest attended visit
-    const latestAttendedVisit = visitsData?.find(v => v.status === 'Attended') || null;
 
     // Fetch deliveries for this patient (via mother_id relationship)
     const { data: deliveriesData } = await this.supabase
@@ -2071,16 +2069,27 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       });
     }
 
+    const preg = getLatestPregnancyRecord(pregnancyData || []) || {};
+
     const normalizedVisits = (visitsData || []).map(visit => {
       const assignedStaffId = visit.assigned_staff || visit.retained_staff || patientData.retained_staff || null;
+      
+      // Calculate dynamic risk factors exactly like getAllPatients does
+      const riskAssessment = this.getPregnancyRisk(patientData, preg, visit);
+      
       return {
         ...visit,
+        calculated_risk: riskAssessment.riskLevel,
+        risk_factors: riskAssessment.riskFactors.join(', '),
         assigned_staff: assignedStaffId,
         status: normalizeVisitStatus(visit),
         assigned_staff_name: assignedStaffById[assignedStaffId]?.name || (assignedStaffId || null),
         assigned_staff_station: assignedStaffById[assignedStaffId]?.station || null
       };
     });
+
+    // Find latest attended visit with the updated dynamic risk calculations
+    const latestAttendedVisit = normalizedVisits.find(v => v.status === 'Attended') || null;
 
     const normalizedDeliveries = (deliveriesData || []).map(d => {
       const attendingProfile = Array.isArray(d.staff_profiles) ? d.staff_profiles[0] : d.staff_profiles;
@@ -2130,7 +2139,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       normalizedNewborns,
       vaccinesData || []
     );
-    const preg = getLatestPregnancyRecord(pregnancyData || []) || {};
+    // preg is already defined earlier
     const rawEmergencyContact = patientData.emergency_contact || {};
     const emergencyContact = {
       name: rawEmergencyContact.name || rawEmergencyContact.full_name || '',

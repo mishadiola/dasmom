@@ -1226,12 +1226,18 @@
     background: #fafafa;
     border: 1px solid #eef0f4;
     transition: all 0.15s ease;
+    cursor: pointer;
 }
 
 .po-row:hover {
     background: #f4f6f9;
     transform: translateY(-1px);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.po-row:focus-visible {
+    outline: 2px solid var(--color-rose);
+    outline-offset: 2px;
 }
 
 .po-row--total {

@@ -11,23 +11,29 @@
     margin: 0 auto;
 }
 
-.back-btn {
+.profile-page .back-btn {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     background: transparent;
     border: none;
     color: var(--color-text-muted);
     font-size: 13.5px;
     font-weight: 600;
     cursor: pointer;
-    padding: 0;
+    padding: 6px 10px;
+    border-radius: 6px;
     width: fit-content;
-    transition: color 0.15s ease;
+    height: auto;
+    margin-left: -10px; /* offset the padding to align perfectly with content below */
+    transition: all 0.2s ease;
 }
 
-.back-btn:hover {
+.profile-page .back-btn:hover {
     color: var(--color-rose);
+    background: rgba(185, 129, 138, 0.08);
+    transform: none;
+    box-shadow: none;
 }
 
 /* ══════════════════════════════════════════
@@ -645,6 +651,22 @@
     padding: 2px 8px;
     border-radius: 4px;
 }
+
+.timeline-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.timeline-tag {
+    font-size: 12px;
+    font-weight: 600;
+    color: #5d6778;
+    background: #f1f4f8;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
 
 .timeline-badge-next {
     display: inline-flex;

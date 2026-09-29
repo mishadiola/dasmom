@@ -89,9 +89,11 @@ const DeliveryOutcomes = () => {
     const [customDateFrom, setCustomDateFrom] = useState('');
     const [customDateTo, setCustomDateTo] = useState('');
     const [dateFilterError, setDateFilterError] = useState('');
+    const [cardFilter, setCardFilter] = useState(null); // null | 'total' | 'type' | 'complications' | 'highrisk'
+    const tableRef = useRef(null);
     const dateFilterLabel = dateFilter === 'this_month' ? 'This Month' : dateFilter === 'this_year' ? 'This Year' : dateFilter === 'custom' ? 'Custom' : 'All';
 
-    const hasActiveFilters = filters.type !== 'All' || filters.outcome !== 'All' || filters.complication !== 'All' || filters.station !== 'All' || searchTerm !== '' || dateFilter !== 'all';
+    const hasActiveFilters = filters.type !== 'All' || filters.outcome !== 'All' || filters.complication !== 'All' || filters.station !== 'All' || searchTerm !== '' || dateFilter !== 'all' || cardFilter !== null;
 
     const clearFilters = () => {
         setFilters({ ...filters, type: 'All', outcome: 'All', complication: 'All', station: 'All' });
@@ -100,6 +102,7 @@ const DeliveryOutcomes = () => {
         setCustomDateFrom('');
         setCustomDateTo('');
         setDateFilterError('');
+        setCardFilter(null);
         setActivePopover(null);
     };
 
@@ -380,7 +383,16 @@ const DeliveryOutcomes = () => {
                     }
                 }
 
-                return matchSearch && matchType && matchOutcome && matchComp && matchStation && matchDate;
+                // Card filter
+                let matchCard = true;
+                if (cardFilter === 'complications') {
+                    matchCard = d.complications && d.complications !== 'None';
+                } else if (cardFilter === 'highrisk') {
+                    matchCard = d.riskLevel === 'High Risk' || d.riskLevel === 'High';
+                }
+                // 'total' and 'type' show all records (type just focuses attention, no exclusion)
+
+                return matchSearch && matchType && matchOutcome && matchComp && matchStation && matchDate && matchCard;
             })
             .sort((a, b) => {
                 const field = sortField;
@@ -390,7 +402,7 @@ const DeliveryOutcomes = () => {
                     ? String(va).localeCompare(String(vb))
                     : String(vb).localeCompare(String(va));
             });
-    }, [currentData, searchTerm, filters, sortField, sortAsc, dateFilter, customDateFrom, customDateTo]);
+    }, [currentData, searchTerm, filters, sortField, sortAsc, dateFilter, customDateFrom, customDateTo, cardFilter]);
 
     const getRowClass = (d) => {
         if (d.riskLevel?.includes('High') || (d.complications && d.complications !== 'None')) 
@@ -592,20 +604,48 @@ const DeliveryOutcomes = () => {
 
             {/* Stats Cards */}
             <div className="do-stats-grid">
-                {displayStats.map((s, i) => (
-                    <div key={i} className={`stat-card stat-card--${s.color}`}>
-                        <div className="stat-top">
-                            <div className={`stat-icon stat-icon--${s.color}`}>
-                                <Baby size={20} />
+                {displayStats.map((s, i) => {
+                    const cardKeys = ['total', 'type', 'complications', 'highrisk'];
+                    const key = cardKeys[i];
+                    const isActive = cardFilter === key;
+                    return (
+                        <div
+                            key={i}
+                            className={`stat-card stat-card--${s.color} stat-card--clickable${isActive ? ' stat-card--active' : ''}`}
+                            role="button"
+                            tabIndex={0}
+                            aria-pressed={isActive}
+                            onClick={() => {
+                                const nextVal = isActive ? null : key;
+                                setCardFilter(nextVal);
+                                if (nextVal && tableRef.current) {
+                                    setTimeout(() => tableRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+                                }
+                            }}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    const nextVal = isActive ? null : key;
+                                    setCardFilter(nextVal);
+                                    if (nextVal && tableRef.current) {
+                                        setTimeout(() => tableRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+                                    }
+                                }
+                            }}
+                        >
+                            <div className="stat-top">
+                                <div className={`stat-icon stat-icon--${s.color}`}>
+                                    <Baby size={20} />
+                                </div>
+                            </div>
+                            <div className="stat-value">{s.value}</div>
+                            <div className="stat-label">{s.label}</div>
+                            <div className="stat-period" style={{ fontSize: '11.5px', color: '#64748b', marginTop: '6px', fontWeight: 500 }}>
+                                {activePeriodText}
                             </div>
                         </div>
-                        <div className="stat-value">{s.value}</div>
-                        <div className="stat-label">{s.label}</div>
-                        <div className="stat-period" style={{ fontSize: '11.5px', color: '#64748b', marginTop: '6px', fontWeight: 500 }}>
-                            {activePeriodText}
-                        </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
 
             <AddDeliveryModal
@@ -830,7 +870,7 @@ const DeliveryOutcomes = () => {
             </div>
 
             {}
-            <div className="do-main-layout">
+            <div className="do-main-layout" ref={tableRef}>
                 <div className="do-table-col">
                     <div className="do-card">
                         <div className="do-card-head">
