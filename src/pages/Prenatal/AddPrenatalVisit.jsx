@@ -392,7 +392,7 @@ const AddPrenatalVisit = () => {
         setDangerErrors(errors);
 
         if (Object.keys(errors).length > 0) {
-            const el = document.querySelector([name="${firstErrorField}"]);
+            const el = document.getElementsByName(firstErrorField)[0];
             if (el) {
                 el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 el.focus();
