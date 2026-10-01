@@ -12,7 +12,7 @@ class BabyService {
 
   async getCurrentUserAccess() {
     const currentUser = await this.authService.getAuthUser();
-    let role = String(currentUser?.role || '').toLowerCase();
+    let role = String(currentUser?.role || '').toLowerCase().replace(/_/g, ' ').trim();
     let stationId = null;
 
     if (!role && currentUser?.id) {
@@ -28,7 +28,7 @@ class BabyService {
           .select('user_type')
           .eq('id', userRow.usertype)
           .maybeSingle();
-        role = String(typeRow?.user_type || '').toLowerCase();
+        role = String(typeRow?.user_type || '').toLowerCase().replace(/_/g, ' ').trim();
       }
     }
 
@@ -232,6 +232,7 @@ class BabyService {
         .select(`
           id,
           pregnancy_id,
+          station_ass,
           attending_staff,
           delivery_date,
           delivery_time,
@@ -240,12 +241,12 @@ class BabyService {
           gestational_age,
           risk_level,
           complications,
-          facility,
           postpartum_visit_date,
           postpartum_attended_date,
           postpartum_remarks,
           notes,
           created_at,
+          stations:station_ass (station_name),
           patient_basic_info!deliveries_mother_id_fkey (
             id,
             first_name,
@@ -299,8 +300,7 @@ class BabyService {
       const filtered = (data || []).filter(d => {
         if (role === 'admin') return true;
         if (['cho personnel', 'staff'].includes(role)) {
-          const motherStation = d.patient_basic_info?.station_ass || d.patient_basic_info?.stations?.station_name;
-          return motherStation && stationId && motherStation === stationId;
+          return d.station_ass && stationId && d.station_ass === stationId;
         }
         return false;
       });
@@ -316,7 +316,7 @@ class BabyService {
       const motherIds = [...new Set(filtered.map(delivery => delivery.patient_basic_info?.id).filter(Boolean))];
       const [{ data: mothers }, { data: pregnancies }, { data: visits }] = await Promise.all([
         supabase.from('patient_basic_info').select('id, date_of_birth').in('id', motherIds),
-        supabase.from('pregnancy_info').select('id, patient_id, pregnancy_type, gravida, created_at').in('patient_id', motherIds).order('created_at', { ascending: false }),
+        supabase.from('pregnancy_info').select('id, patient_id, pregnancy_type, gravida, place_of_delivery, created_at').in('patient_id', motherIds).order('created_at', { ascending: false }),
         supabase.from('prenatal_visits').select('patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm').in('patient_id', motherIds).eq('status', 'Attended').order('visit_date', { ascending: false })
       ]);
       const motherMap = new Map((mothers || []).map(mother => [mother.id, mother]));
@@ -353,8 +353,8 @@ class BabyService {
           attendingStaffId: d.attending_staff || null,
           patientId: motherId,
           patientName: `${d.patient_basic_info?.first_name || ''} ${d.patient_basic_info?.last_name || ''}`.trim(),
-          stationId: d.patient_basic_info?.station_ass || null,
-          station: d.patient_basic_info?.stations?.station_name || d.patient_basic_info?.station_ass || 'Unassigned',
+          stationId: d.station_ass || null,
+          station: d.stations?.station_name || 'Unassigned',
           deliveryDate: d.delivery_date,
           deliveryTime: d.delivery_time,
           deliveryType: d.delivery_type,
@@ -372,7 +372,7 @@ class BabyService {
           apgar5: newborn?.apgar_5min || null,
           staff: staff?.full_name || (d.attending_staff ? d.attending_staff : 'Unassigned'),
           staffStation: staff?.stations?.station_name || null,
-          facility: d.facility || 'N/A',
+          facility: matchedPregnancy?.place_of_delivery || 'N/A',
           postpartumVisitDate: d.postpartum_visit_date || null,
           postpartumAttendedDate: d.postpartum_attended_date || null,
           postpartumRemarks: d.postpartum_remarks || null,
@@ -428,6 +428,11 @@ class BabyService {
   async recordDelivery(deliveryData, newbornData, deliveryId = null) {
     const createdBy = await this.getCurrentUserId();
     if (!createdBy) throw new Error('No logged-in user');
+    const { role, stationId: currentStationId } = await this.getCurrentUserAccess();
+    const deliveryStationId = role === 'admin'
+      ? deliveryData.station_ass || currentStationId
+      : currentStationId;
+    if (!deliveryStationId) throw new Error('Your account must have an assigned station to record a delivery.');
 
     if (deliveryData.outcome === 'Miscarriage') {
       const { data: pregnancyRows, error: pregnancyError } = await supabase
@@ -539,6 +544,7 @@ class BabyService {
 
     const deliveryPayload = {
       mother_id: deliveryData.mother_id,
+      station_ass: deliveryStationId,
       pregnancy_id: deliveryPregnancy.id,
       delivery_date: deliveryData.delivery_date,
       delivery_time: deliveryData.delivery_time || '00:00',
@@ -548,7 +554,6 @@ class BabyService {
       risk_level: deliveryData.risk_level || 'Normal',
       complications,
       attending_staff: attendingStaffId,
-      facility: deliveryData.facility || null,
       postpartum_visit_date: postpartumVisitDate,
       notes: deliveryData.notes || null,
       created_by: createdBy
@@ -707,6 +712,13 @@ class BabyService {
         if (postpartumVisitDate) {
           const postpartumDate = new Date(postpartumVisitDate);
           if (!Number.isNaN(postpartumDate.getTime())) {
+            const { data: motherStation, error: motherStationError } = await supabase
+              .from('patient_basic_info')
+              .select('station_ass')
+              .eq('id', deliveryData.mother_id)
+              .single();
+            if (motherStationError) throw motherStationError;
+
             await supabase.from('prenatal_visits').insert({
               patient_id: deliveryData.mother_id,
               created_by: createdBy,
@@ -717,7 +729,9 @@ class BabyService {
               next_appt_date: null,
               next_appt_type: 'Postpartum Visit',
               status: 'Scheduled',
-              assigned_staff: deliveryData.attending_staff || null,
+              assigned_staff: null,
+              assigned_station: motherStation.station_ass,
+              station_ass: null,
               clinical_notes: 'Scheduled postpartum follow-up after delivery (within 48 hours)',
               created_at: new Date().toISOString()
             });
@@ -805,7 +819,7 @@ class BabyService {
         return ['All Stations', ...new Set(names)];
     } catch (error) {
         console.error('Error loading stations:', error);
-        return ['All Stations', 'Main Clinic'];
+        return ['All Stations'];
     }
   }
 
@@ -842,12 +856,12 @@ class BabyService {
    */
   async getPostpartumRecords() {
     try {
-        const { role, stationId } = await this.getCurrentUserAccess();
         const { data: deliveries, error } = await supabase
             .from('deliveries')
             .select(`
                 id, 
                 mother_id, 
+              station_ass,
                 delivery_date, 
                 delivery_type, 
                 complications, 
@@ -855,6 +869,7 @@ class BabyService {
                 postpartum_attended_date,
                 postpartum_remarks,
                 notes,
+                stations:station_ass (station_name),
                 patient_basic_info!deliveries_mother_id_fkey (
                     id, first_name, last_name, station_ass,
                     stations:station_ass (station_name)
@@ -867,13 +882,7 @@ class BabyService {
 
         if (error) throw error;
 
-        const filtered = (deliveries || []).filter(d => {
-            if (role === 'admin') return true;
-            if (['cho personnel', 'staff'].includes(role)) {
-                return d.patient_basic_info?.station_ass && stationId && d.patient_basic_info.station_ass === stationId;
-            }
-            return false;
-        });
+        const filtered = deliveries || [];
 
         const motherIds = [...new Set(filtered.map(d => d.mother_id))];
         const { data: pregInfo } = await supabase
@@ -940,8 +949,8 @@ class BabyService {
                 id: d.id,
                 patientId: mother?.id || '',
                 name: `${mother?.first_name || ''} ${mother?.last_name || ''}`.trim(),
-                stationId: mother?.station_ass || null,
-                station: mother?.stations?.station_name || mother?.station_ass || 'Unassigned',
+                stationId: d.station_ass || null,
+                station: d.stations?.station_name || 'Unassigned',
                 deliveryDate: d.delivery_date,
                 deliveryType: d.delivery_type || 'NSD',
                 daysPostpartum: daysPP,

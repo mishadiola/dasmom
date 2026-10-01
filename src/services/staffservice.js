@@ -71,13 +71,15 @@ export default class StaffService {
 
     async getAllStaff() {
     try {
-      const [{ data: staffRows, error: staffError }, { data: userRows }, { data: userTypeRows }] = await Promise.all([
+      const [
+        { data: staffRows, error: staffError },
+        { data: directoryRows, error: directoryError }
+      ] = await Promise.all([
         this.supabase
           .from('staff_profiles')
           .select(`
             id,
             full_name,
-            employee_id,
             station_ass,
             stations:station_ass (
               station_name
@@ -85,27 +87,18 @@ export default class StaffService {
             created_at
           `)
           .order('created_at', { ascending: false }),
-        this.supabase
-          .from('users')
-          .select('id, email_address, usertype, is_archived, is_deactivated'),
-        this.supabase
-          .from('user_type')
-          .select('id, user_type')
+        this.supabase.rpc('get_staff_directory')
       ]);
 
       if (staffError) throw staffError;
+      if (directoryError) throw directoryError;
 
-      const userMap = new Map((userRows || []).map(user => [user.id, user]));
-      const userTypeMap = new Map((userTypeRows || []).map(type => [type.id, type.user_type]));
+      const directoryMap = new Map((directoryRows || []).map(user => [user.id, user]));
 
       const mapped = (staffRows || []).map(staff => {
-        const user = userMap.get(staff.id);
-        const roleName = userTypeMap.get(user?.usertype) || 'Staff';
+        const user = directoryMap.get(staff.id);
+        const roleName = user?.user_type || 'Staff';
         const email = user?.email_address || staff?.email_address || 'N/A';
-
-        if (!user?.email_address && !staff?.email_address) {
-          console.warn('Staff profile missing public users email', { staffId: staff.id, profile: staff.full_name, userRow: user || null });
-        }
 
         return {
           id: staff.id,
@@ -113,7 +106,7 @@ export default class StaffService {
           email: typeof email === 'string' && email.trim() ? email.trim() : 'N/A',
           role: this.formatRoleLabel(roleName),
           station: staff.stations?.station_name || 'No Assignment',
-          employeeId: staff.employee_id,
+          employeeId: null,
           status: user?.is_deactivated ? 'Deactivated' : 'Active',
           archiveStatus: user?.is_archived ? 'archived' : 'active',
           lastLogin: 'N/A',
@@ -398,27 +391,31 @@ export default class StaffService {
         callerRole = (caller.role || 'user').toLowerCase();
       }
 
-      console.debug('addStaff called by:', { callerId: caller.id, callerRole });
+      callerRole = callerRole.replace(/_/g, ' ').trim();
+      if (callerRole === 'station staff') callerRole = 'staff';
+      const targetRole = String(role).toLowerCase().replace(/_/g, ' ').trim();
+      console.debug('addStaff called by:', { callerId: caller.id, callerRole, targetRole });
 
-      if (!['admin', 'cho personnel'].includes(callerRole)) {
+      if (!['admin', 'cho personnel', 'staff'].includes(callerRole)) {
         throw new Error('Insufficient permissions to add staff');
       }
+      if (callerRole === 'staff' && targetRole !== 'staff') {
+        throw new Error('Staff can only add Staff accounts.');
+      }
+      if (callerRole === 'cho personnel' && !['staff', 'cho personnel'].includes(targetRole)) {
+        throw new Error('CHO Personnel can only add Staff or CHO Personnel accounts.');
+      }
 
-      // If caller is cho personnel, they can only add limited roles and must assign to their station
       let stationId = null;
-      if (callerRole === 'cho personnel') {
-        const allowed = ['staff', 'patient', 'mother'];
-        if (!allowed.includes(role.toLowerCase())) {
-          throw new Error('CHO Personnel can only add staff or patient accounts');
-        }
+      if (callerRole !== 'admin') {
         const { data: callerProfile } = await this.supabase
           .from('staff_profiles')
           .select('station_ass')
           .eq('id', caller.id)
           .maybeSingle();
         stationId = callerProfile?.station_ass || null;
+        if (!stationId) throw new Error('Your account must have an assigned station.');
       } else {
-        // admin may specify station
         stationId = station && station.trim()
           ? await authService.getOrCreateStationId(station.trim())
           : null;
@@ -427,7 +424,7 @@ export default class StaffService {
       const authUser = await authService.createUserAccount({
         email,
         password,
-        role,
+        role: targetRole,
         stationId,
         stationName: station || '',
         metadata: {
@@ -530,27 +527,31 @@ export default class StaffService {
    */
   async getStaffById(staffId) {
     try {
-      const { data, error } = await this.supabase
+      const [{ data, error }, { data: directoryRows, error: directoryError }] = await Promise.all([
+        this.supabase
         .from('staff_profiles')
         .select(`
           *,
-          station_ass,
           stations:station_ass (
             station_name
-          ),
-          users (
-            email_address,
-            user_type (
-              user_type
-            )
           )
         `)
         .eq('id', staffId)
-        .single();
+        .single(),
+        this.supabase.rpc('get_staff_directory')
+      ]);
 
       if (error) throw error;
+      if (directoryError) throw directoryError;
+      const directoryUser = (directoryRows || []).find(user => user.id === staffId);
 
-      return this.mapStaffData(data);
+      return this.mapStaffData({
+        ...data,
+        email_address: directoryUser?.email_address,
+        user_type: directoryUser?.user_type,
+        is_archived: directoryUser?.is_archived,
+        is_deactivated: directoryUser?.is_deactivated,
+      });
     } catch (error) {
       console.error('❌ getStaffById:', error);
       return null;

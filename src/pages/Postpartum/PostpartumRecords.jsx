@@ -31,6 +31,7 @@ const DetailModal = ({ mother, onClose }) => {
     const babyService = new BabyService();
     const [detail, setDetail] = useState({
         deliveryFacility: 'N/A',
+        deliveryStation: 'N/A',
         attendingStaff: 'N/A',
         deliveryComplications: mother.complications || 'None',
         birthWeight: 'N/A',
@@ -50,16 +51,18 @@ const DetailModal = ({ mother, onClose }) => {
                     .from('deliveries')
                     .select(`
                         id,
+                        station_ass,
+                        stations:station_ass (station_name),
                         delivery_date,
                         delivery_type,
                         complications,
-                        facility,
                         postpartum_visit_date,
                         postpartum_attended_date,
                         postpartum_remarks,
+                        pregnancy_info!deliveries_pregnancy_id_fkey (place_of_delivery),
                         staff_profiles!deliveries_attending_staff_fkey (full_name),
                         newborns (birth_weight, condition_at_birth),
-                        patient_basic_info (barangay, province)
+                        patient_basic_info (municipality, province)
                     `)
                     .eq('id', mother.id)
                     .single();
@@ -69,7 +72,8 @@ const DetailModal = ({ mother, onClose }) => {
 
                 const updatedDetail = {
                     ...detail,
-                    deliveryFacility: deliveries?.patient_basic_info?.barangay || deliveries?.facility || 'N/A',
+                    deliveryFacility: deliveries?.pregnancy_info?.place_of_delivery || deliveries?.patient_basic_info?.municipality || 'N/A',
+                    deliveryStation: deliveries?.stations?.station_name || 'N/A',
                     attendingStaff: deliveries?.staff_profiles?.full_name || 'N/A',
                     birthWeight: deliveries?.newborns?.[0]?.birth_weight ? `${deliveries.newborns[0].birth_weight} kg` : 'N/A',
                     deliveryComplications: mother.complications || 'None',
@@ -121,6 +125,7 @@ const DetailModal = ({ mother, onClose }) => {
                         <div className="detail-grid">
                             <div className="detail-item"><span>Delivery Date</span><strong>{mother.deliveryDate}</strong></div>
                             <div className="detail-item"><span>Facility (Barangay)</span><strong>{detail.deliveryFacility}</strong></div>
+                            <div className="detail-item"><span>Delivery Station</span><strong>{detail.deliveryStation}</strong></div>
                             <div className="detail-item"><span>Delivery Type</span><strong>{mother.deliveryType}</strong></div>
                             <div className="detail-item"><span>Attending Staff</span><strong>{detail.attendingStaff}</strong></div>
                             <div className="detail-item"><span>Complications During Delivery</span><strong>{detail.deliveryComplications}</strong></div>

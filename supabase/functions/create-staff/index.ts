@@ -21,8 +21,19 @@ async function emailAlreadyRegistered(email: string) {
     .from('users')
     .select('id')
     .eq('email_address', email)
+    .limit(1)
     .maybeSingle();
-  if (userError) throw userError;
+  if (userError) {
+    console.error('[create-staff] EMAIL CHECK DATABASE ERROR:', {
+      message: userError.message,
+      details: userError.details,
+      hint: userError.hint,
+      code: userError.code,
+    });
+    throw userError;
+  }
+
+  console.log('[create-staff] Email check result:', { exists: Boolean(userRow?.id) });
   return Boolean(userRow?.id);
 }
 
@@ -60,9 +71,10 @@ async function getCallerRole(request: Request) {
     throw userTypeError;
   }
 
+  const role = String(userTypeRow?.user_type || '').trim().toLowerCase().replace(/_/g, ' ');
   return {
     id: authData.user.id,
-    role: String(userTypeRow?.user_type || '').trim().toLowerCase(),
+    role: role === 'station staff' ? 'staff' : role,
   };
 }
 
@@ -76,7 +88,7 @@ Deno.serve(async (request) => {
   try {
     console.log('[create-staff] Verifying caller authorization...');
     const caller = await getCallerRole(request);
-    if (!caller || !['admin', 'cho personnel'].includes(caller.role)) {
+    if (!caller || !['admin', 'cho personnel', 'staff'].includes(caller.role)) {
       return json({ error: 'Staff authorization required' }, 401);
     }
 
@@ -96,8 +108,28 @@ Deno.serve(async (request) => {
       return json({ error: 'Invalid staff role' }, 400);
     }
 
-    if (caller.role === 'cho personnel' && role !== 'staff') {
-      return json({ error: 'CHO Personnel can only create staff accounts' }, 403);
+    if (caller.role === 'staff' && role !== 'staff') {
+      return json({ error: 'Staff can only create Staff accounts' }, 403);
+    }
+    if (caller.role === 'cho personnel' && !['staff', 'cho personnel'].includes(role)) {
+      return json({ error: 'CHO Personnel can only create Staff or CHO Personnel accounts' }, 403);
+    }
+
+    let effectiveStationId = stationId;
+    if (caller.role !== 'admin') {
+      const { data: callerProfile, error: callerProfileError } = await admin
+        .from('staff_profiles')
+        .select('station_ass')
+        .eq('id', caller.id)
+        .maybeSingle();
+      if (callerProfileError) throw callerProfileError;
+      if (!callerProfile?.station_ass) {
+        return json({ error: 'Your account must have an assigned station' }, 403);
+      }
+      if (stationId && stationId !== callerProfile.station_ass) {
+        return json({ error: 'You can only add staff to your own station' }, 403);
+      }
+      effectiveStationId = callerProfile.station_ass;
     }
 
     currentStep = 'duplicate email check';
@@ -132,12 +164,12 @@ Deno.serve(async (request) => {
   console.log('[create-staff] public.users record created');
 
   currentStep = 'station lookup';
-    let stationName = String(body.stationName || '').trim();
-    if (!stationName && stationId) {
+    let stationName = caller.role === 'admin' ? String(body.stationName || '').trim() : '';
+    if (!stationName && effectiveStationId) {
       const { data: station, error: stationError } = await admin
         .from('stations')
         .select('station_name')
-        .eq('id', stationId)
+        .eq('id', effectiveStationId)
         .maybeSingle();
       if (stationError) throw stationError;
       stationName = station?.station_name || '';

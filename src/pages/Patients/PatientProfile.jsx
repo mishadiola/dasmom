@@ -11,6 +11,7 @@ import {
 import '../../styles/pages/PatientProfile.css';
 import PatientService from '../../services/patientservice';
 import EditPatientModal from '../../components/Patient/EditPatientModal';
+import PatientStaffAssignment from '../../components/Patient/PatientStaffAssignment';
 import { formatMotherId } from '../../utils/displayIds';
 import PostpartumVisitModal from '../../components/PostpartumVisitModal';
 import { formatDate } from '../../utils/formatters';
@@ -69,6 +70,7 @@ const PatientProfile = () => {
         return searchParams.get('tab') || 'info';
     });
     const [p, setP] = useState(null);
+    const [assignmentAccess, setAssignmentAccess] = useState({ role: '', stationId: null });
     const [loading, setLoading] = useState(true);
     const [editModalOpen, setEditModalOpen] = useState(false);
 
@@ -88,6 +90,7 @@ const PatientProfile = () => {
                 const patientService = new PatientService();  
                 const data = await patientService.getPatientById(id);  
                 setP(data);
+                setAssignmentAccess(await patientService.getCurrentUserAccess());
             } catch (err) {
                 console.error(err);
             } finally {
@@ -497,6 +500,8 @@ const PatientProfile = () => {
             </div>
         </div>
     );
+
+    const currentScheduledAssignment = p.visits?.find(visit => visit.status === 'Scheduled' && visit.assigned_staff);
 
     return (
         <div className="profile-page animate-fade">
@@ -954,6 +959,19 @@ const PatientProfile = () => {
                     <div className="timeline-card animate-fade">
                         <div className="timeline-header">
                             <h3 className="info-card-title">Prenatal Visits Timeline</h3>
+                            <PatientStaffAssignment
+                                patientId={p.id}
+                                patientStationId={p.station_ass}
+                                assignedStaffId={currentScheduledAssignment?.assigned_staff || null}
+                                assignedStaffName={currentScheduledAssignment?.assigned_staff_name}
+                                role={assignmentAccess.role}
+                                onAssigned={({ id: assignedStaffId, name }) => setP(previous => ({
+                                    ...previous,
+                                    visits: previous.visits.map(visit => visit.status === 'Scheduled'
+                                        ? { ...visit, assigned_staff: assignedStaffId, assigned_staff_name: name }
+                                        : visit)
+                                }))}
+                            />
                             <button className="btn btn-sm btn-outline" onClick={handlePrintVisits}><Printer size={12} /> Print Schedule</button>
                         </div>
                         <div className="timeline-list">
@@ -991,6 +1009,12 @@ const PatientProfile = () => {
                                                         <span className="timeline-type">Visit #{v.visit_number}</span>
                                                         <span className="timeline-tag">{getOrdinalSuffix(v.trimester)} Trim.</span>
                                                     </div>
+                                                </div>
+                                                <div className="timeline-status">
+                                                    Assigned Staff: {v.assigned_staff_name || 'Unassigned'}
+                                                    {' · '}Performed By: {v.performed_by_name || (v.status === 'Attended' ? 'Not recorded' : 'Pending')}
+                                                    {' · '}Assigned Station: {v.assigned_station_name || 'Unassigned'}
+                                                    {' · '}Visit Station: {v.visit_station_name || 'Not recorded'}
                                                 </div>
                                                 {v.status === 'Attended' && (
                                                     <div className="timeline-vitals-grid">
@@ -1167,6 +1191,7 @@ const PatientProfile = () => {
                                                 <th style={{ padding: '0 16px 16px 0', fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid #f1f5f9' }}>Supplement</th>
                                                 <th style={{ padding: '0 16px 16px 16px', fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid #f1f5f9' }}>Dosage</th>
                                                 <th style={{ padding: '0 16px 16px 16px', fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid #f1f5f9' }}>Start Date</th>
+                                                <th style={{ padding: '0 16px 16px 16px', fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid #f1f5f9' }}>Administered By / Station</th>
                                                 <th style={{ padding: '0 0 16px 16px', fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid #f1f5f9', textAlign: 'right' }}>Status</th>
                                             </tr>
                                         </thead>
@@ -1175,11 +1200,16 @@ const PatientProfile = () => {
                                                 const status = s.status || 'Ongoing';
                                                 const statusColor = status === 'Completed' ? '#059669' : '#0284c7';
                                                 const statusBg = status === 'Completed' ? '#d1fae5' : '#e0f2fe';
+                                                const administeringWorker = s.administered_by_name || (s.administered_by ? 'Worker at service station' : 'Not recorded');
                                                 return (
                                                     <tr key={i} style={{ borderBottom: '1px solid #f8fafc' }}>
                                                         <td style={{ padding: '20px 16px 20px 0', fontSize: '14px', color: '#0f172a', fontWeight: '600', maxWidth: '180px', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.4' }}>{s.supplement_name}</td>
                                                         <td style={{ padding: '20px 16px', fontSize: '14px', color: '#475569', fontWeight: '500' }}>{s.dosage}</td>
                                                         <td style={{ padding: '20px 16px', fontSize: '14px', color: '#475569', fontWeight: '500' }}>{s.start_date}</td>
+                                                        <td style={{ padding: '20px 16px', fontSize: '13px', color: '#475569', fontWeight: '500' }}>
+                                                            <div>{administeringWorker}</div>
+                                                            {s.service_station_name && <div>Station: {s.service_station_name}</div>}
+                                                        </td>
                                                         <td style={{ padding: '20px 0 20px 16px', textAlign: 'right' }}>
                                                             <span style={{ display: 'inline-block', padding: '6px 14px', borderRadius: '24px', fontSize: '12px', fontWeight: '700', backgroundColor: statusBg, color: statusColor, letterSpacing: '0.3px' }}>{status}</span>
                                                         </td>
@@ -1224,7 +1254,7 @@ const PatientProfile = () => {
                                 {p.deliveries && p.deliveries.length > 0 ? (
                                     p.deliveries.map((delivery, i) => (
                                         <div key={i} style={{ marginBottom: i === p.deliveries.length - 1 ? 0 : '20px' }}>
-                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0' }}>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0' }}>
                                                 <div style={{ padding: '0 12px 0 0' }}>
                                                     <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Delivery Date</label>
                                                     <p style={{ fontWeight: '600', color: '#1e293b', margin: 0, fontSize: '14px', lineHeight: '1.3' }}>{delivery.delivery_date || 'N/A'}</p>
@@ -1244,6 +1274,10 @@ const PatientProfile = () => {
                                                 <div style={{ padding: '0 12px' }}>
                                                     <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Risk Level</label>
                                                     <p style={{ fontWeight: '600', color: '#1e293b', margin: 0, fontSize: '14px', lineHeight: '1.3' }}>{(delivery.risk_level || 'Normal').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}</p>
+                                                </div>
+                                                <div style={{ padding: '0 0 0 12px' }}>
+                                                    <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Delivery Station</label>
+                                                    <p style={{ fontWeight: '600', color: '#1e293b', margin: 0, fontSize: '14px', lineHeight: '1.3' }}>{delivery.station || 'Unassigned'}</p>
                                                 </div>
                                                 <div style={{ padding: '0 0 0 12px' }}>
                                                     <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Facility</label>

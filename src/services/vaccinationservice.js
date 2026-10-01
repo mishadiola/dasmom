@@ -297,6 +297,14 @@ class VaccinationService {
     try {
       const currentUser = await this.getCurrentUserId();
       if (!currentUser) throw new Error('No logged-in user');
+      const { data: userProfile, error: profileError } = await this.supabase
+        .from('staff_profiles')
+        .select('station_ass')
+        .eq('id', currentUser)
+        .maybeSingle();
+      if (profileError) throw profileError;
+      const performingStationId = userProfile?.station_ass;
+      if (!performingStationId) throw new Error('Your account must have an assigned service station.');
 
       const { vaccineId, vaccineName, doseNumber, date, staff, notes, remarks, lmpDate } = vaccineData;
 
@@ -326,6 +334,7 @@ class VaccinationService {
             vaccine_inventory_id: vaccInv.id,
             vaccinated_date: date,
             status: 'Completed',
+            station_ass: performingStationId,
             created_by: currentUser,
             vaccinated_by: currentUser,
             assigned_staff: assignedStaff,
@@ -345,6 +354,7 @@ class VaccinationService {
           vaccinated_date: date,
           scheduled_vaccination: date,
           status: 'Completed',
+          station_ass: performingStationId,
           created_by: currentUser,
           vaccinated_by: currentUser,
           assigned_staff: assignedStaff,

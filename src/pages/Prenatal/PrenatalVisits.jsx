@@ -146,7 +146,6 @@ const PrenatalVisits = () => {
     const exportMenuRef = useRef(null);
 
     // -- Derived Data --
-    const [appointments, setAppointments] = useState([]);
     const [vaccinationsTable, setVaccinationsTable] = useState([]);
     const [postpartumTable, setPostpartumTable] = useState([]);
     const [visitsTable, setVisitsTable] = useState([]);
@@ -156,6 +155,8 @@ const PrenatalVisits = () => {
     const [visitCategoryTab, setVisitCategoryTab] = useState('upcoming'); // 'upcoming' | 'missed' | 'completed'
     const [selectedVaccinePatientId, setSelectedVaccinePatientId] = useState('');
     const [patientVaccinations, setPatientVaccinations] = useState([]);
+    const [visitAccess, setVisitAccess] = useState(null);
+    const [assignmentStaff, setAssignmentStaff] = useState([]);
 
     // Add Visit modal states
     const [showAddVisitModal, setShowAddVisitModal] = useState(false);
@@ -174,6 +175,33 @@ const PrenatalVisits = () => {
     });
 
     const patientService = useMemo(() => new PatientService(), []);
+
+    useEffect(() => {
+        let active = true;
+        const loadAssignmentOptions = async () => {
+            try {
+                const access = await patientService.getCurrentUserAccess();
+                if (!active) return;
+                setVisitAccess(access);
+                if (access.role === 'staff') {
+                    const staff = await patientService.getAssignableStaffByStationId(access.stationId);
+                    if (active) setAssignmentStaff(staff);
+                    return;
+                }
+                if (!['cho personnel', 'admin'].includes(access.role)) return;
+                const { data, error } = await patientService.supabase
+                    .from('staff_profiles')
+                    .select('id, full_name, station_ass')
+                    .order('full_name');
+                if (error) throw error;
+                if (active) setAssignmentStaff(data || []);
+            } catch (error) {
+                console.error('Could not load prenatal assignment options:', error);
+            }
+        };
+        loadAssignmentOptions();
+        return () => { active = false; };
+    }, [patientService]);
 
     const getVisibleDays = (date, view) => {
         const d = new Date(date);
@@ -224,12 +252,8 @@ const PrenatalVisits = () => {
             const archivedIds = await patientService.getArchivedPatientIds();
             setArchivedPatientIds(archivedIds);
 
-            const startDate = vDays[0].date;
-            const endDate = vDays[vDays.length - 1].date;
-
-            const [visitsData, apptsData, vaccData] = await Promise.all([
+            const [visitsData, vaccData] = await Promise.all([
                 patientService.getPrenatalVisits({ includeArchived: true }),
-                patientService.getAppointments(startDate, endDate, calendarView, { includeArchived: true }),
                 patientService.supabase
                     .from('vaccinations')
                     .select(`
@@ -239,6 +263,7 @@ const PrenatalVisits = () => {
                         status,
                         vaccinated_date,
                         scheduled_vaccination,
+                        assigned_staff,
                         notes,
                         created_at,
                         vaccine_inventory (vaccine_name),
@@ -247,6 +272,14 @@ const PrenatalVisits = () => {
                     .not('patient_id', 'is', null)
                     .order('scheduled_vaccination', { ascending: true, nullsFirst: false })
             ]);
+
+            const vaccineRows = (vaccData && vaccData.data) || [];
+            const vaccineStaffIds = [...new Set(vaccineRows.map(row => row.assigned_staff).filter(Boolean))];
+            const { data: vaccineStaffProfiles, error: vaccineStaffError } = vaccineStaffIds.length
+                ? await patientService.supabase.from('staff_profiles').select('id, full_name').in('id', vaccineStaffIds)
+                : { data: [], error: null };
+            if (vaccineStaffError) throw vaccineStaffError;
+            const vaccineStaffNames = Object.fromEntries((vaccineStaffProfiles || []).map(profile => [profile.id, profile.full_name]));
 
             const processedVisits = (visitsData || []).map(v => ({
                 ...v,
@@ -268,6 +301,8 @@ const PrenatalVisits = () => {
                     id: v.id,
                     patientId: v.patient_id,
                     patientName: patientName || v.patient_id,
+                    assignedStaffId: v.assigned_staff || null,
+                    assignedStaff: vaccineStaffNames[v.assigned_staff] || null,
                     vaccineName,
                     doseText: v.dose_number ? `Dose ${v.dose_number}` : '',
                     visitDate: dateStr,
@@ -281,7 +316,6 @@ const PrenatalVisits = () => {
             });
 
             setVisitsTable(processedVisits);
-            setAppointments(apptsData || []);
             setVaccinationsTable(processedVaccs);
 
         } catch (error) {
@@ -302,6 +336,19 @@ const PrenatalVisits = () => {
         } catch (error) {
             console.error('Error updating visit:', error);
             setToast('Failed to update visit status.');
+            setTimeout(() => setToast(null), 3000);
+        }
+    };
+
+    const handleReassignVisit = async (visitId, assignedStaffId) => {
+        try {
+            await patientService.reassignPrenatalVisit(visitId, assignedStaffId);
+            await fetchData();
+            setToast('Visit assignment updated.');
+            setTimeout(() => setToast(null), 3000);
+        } catch (error) {
+            console.error('Error assigning prenatal visit:', error);
+            setToast(error.message || 'Could not update visit assignment.');
             setTimeout(() => setToast(null), 3000);
         }
     };
@@ -360,9 +407,10 @@ const PrenatalVisits = () => {
 
         const loadPostpartumFollowUps = async () => {
             try {
-                const { data, error } = await patientService.supabase
-                    .from('deliveries')
-                    .select(`
+                const [{ data, error }, { data: postpartumVisits, error: postpartumVisitsError }] = await Promise.all([
+                    patientService.supabase
+                        .from('deliveries')
+                        .select(`
                         id,
                         mother_id,
                         delivery_date,
@@ -371,15 +419,34 @@ const PrenatalVisits = () => {
                         postpartum_remarks,
                         patient_basic_info!deliveries_mother_id_fkey (id, first_name, last_name)
                     `)
-                    .not('postpartum_visit_date', 'is', null)
-                    .order('postpartum_visit_date', { ascending: false });
+                        .not('postpartum_visit_date', 'is', null)
+                        .order('postpartum_visit_date', { ascending: false }),
+                    patientService.supabase
+                        .from('prenatal_visits')
+                        .select('patient_id, visit_date, assigned_staff')
+                        .eq('next_appt_type', 'Postpartum Visit')
+                ]);
 
                 if (error) throw error;
+                if (postpartumVisitsError) throw postpartumVisitsError;
+
+                const postpartumVisitByKey = new Map((postpartumVisits || []).map(visit => [
+                    `${visit.patient_id}:${String(visit.visit_date).slice(0, 10)}`,
+                    visit
+                ]));
+                const postpartumStaffIds = [...new Set((postpartumVisits || []).map(visit => visit.assigned_staff).filter(Boolean))];
+                const { data: postpartumStaffProfiles, error: postpartumStaffError } = postpartumStaffIds.length
+                    ? await patientService.supabase.from('staff_profiles').select('id, full_name').in('id', postpartumStaffIds)
+                    : { data: [], error: null };
+                if (postpartumStaffError) throw postpartumStaffError;
+                const postpartumStaffNames = Object.fromEntries((postpartumStaffProfiles || []).map(profile => [profile.id, profile.full_name]));
 
                 const rows = (data || []).map(d => {
                     const attendedDate = d.postpartum_attended_date || null;
                     const scheduledDate = d.postpartum_visit_date || d.delivery_date || '';
                     const dateStr = attendedDate || scheduledDate;
+                    const scheduledVisit = postpartumVisitByKey.get(`${d.mother_id}:${String(scheduledDate).slice(0, 10)}`);
+                    const assignedStaffId = scheduledVisit?.assigned_staff || null;
                     const patientName = d.patient_basic_info
                         ? `${d.patient_basic_info.first_name || ''} ${d.patient_basic_info.last_name || ''}`.trim()
                         : d.mother_id;
@@ -390,6 +457,8 @@ const PrenatalVisits = () => {
                         patientName: patientName || d.mother_id,
                         vaccineName: 'Postpartum Follow-up',
                         doseText: '',
+                        assignedStaffId,
+                        assignedStaff: postpartumStaffNames[assignedStaffId] || null,
                         visitDate: dateStr,
                         visitDateOnly: dateStr,
                         status: attendedDate
@@ -401,7 +470,7 @@ const PrenatalVisits = () => {
                         vaccinatedDate: null,
                         scheduledVaccination: dateStr,
                         notes: 'Postpartum follow-up',
-                        raw: d
+                        raw: { ...d, assigned_staff: assignedStaffId }
                     };
                 });
 
@@ -674,6 +743,11 @@ const PrenatalVisits = () => {
             patientId: v.patientId,
             patientName: v.patientName,
             risk: allPatients.find(p => p.id === v.patientId)?.riskLevel || 'Unknown',
+            assignedStaffId: v.assignedStaffId || null,
+            assignedStaff: v.assignedStaff || null,
+            assignedStationId: v.assignedStationId || null,
+            assignedStation: v.assignedStation || null,
+            visitStation: v.visitStation || null,
             vaccineName: v.vaccineName,
             doseText: v.doseText,
             visitDate: v.visitDateOnly || v.visitDate,
@@ -782,8 +856,9 @@ const PrenatalVisits = () => {
             "Visit Type": (v.type || v.visitType || visitTypeTab).toUpperCase(),
             "Scheduled Date": formatReadableDate(v.visitDate || v.date) || v.visitDate || v.date || 'N/A',
             "Scheduled Time": v.visitTime || v.time || 'N/A',
-            "Station": v.raw?.patient_basic_info?.stations?.station_name || v.station || 'N/A',
-            "Assigned Staff": v.assignedStaff || 'N/A',
+            "Assigned Station": v.assignedStation || 'N/A',
+            "Visit Station": v.visitStation || v.station || 'N/A',
+            "Assigned Staff": v.assignedStaff || 'Unassigned',
             "Status": v.status || 'N/A'
         }));
     };
@@ -967,7 +1042,6 @@ const PrenatalVisits = () => {
                                     : visitTypeTab === 'postpartum'
                                         ? postpartumTable.filter(v => v.visitDateOnly === day.date)
                                         : visitsTable.filter(v => v.visitDateOnly === day.date);
-                                const dayAppts = visitTypeTab === 'prenatal' ? appointments.filter(a => a.date === day.date) : [];
                                 const dayManual = visitTypeTab === 'prenatal' ? manualVisits.filter(v => v.visit_date === day.date) : [];
 
                                 return (
@@ -978,41 +1052,27 @@ const PrenatalVisits = () => {
                                                 {day.date === TODAY && <span className="today-badge">TODAY</span>}
                                             </h3>
                                             <span className="day-schedule-count">
-                                                {dayItems.length + dayAppts.length + dayManual.length} schedule{dayItems.length + dayAppts.length + dayManual.length !== 1 ? 's' : ''}
+                                                {dayItems.length + dayManual.length} schedule{dayItems.length + dayManual.length !== 1 ? 's' : ''}
                                             </span>
                                         </div>
                                         <div className="day-schedule-list">
-                                            {dayItems.length > 0 ? (
-                                                dayItems.map(item => (
-                                                    <div 
-                                                        key={item.id} 
-                                                        className={`schedule-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
-                                                        onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit({ ...item, type: visitTypeTab === 'vaccination' ? 'Vaccination' : 'Prenatal' }); }}
-                                                    >
-                                                        <div className="schedule-details">
-                                                            <span className="schedule-patient">{item.patientName}</span>
-                                                            <span className="schedule-id">{visitTypeTab === 'vaccination' ? item.vaccineName : visitTypeTab === 'postpartum' ? 'Postpartum Follow-up' : formatMotherId(item.patientId)}</span>
-                                                        </div>
-                                                        <span className={`schedule-status status-${(item.status || 'scheduled').toLowerCase()}`}>
-                                                            {item.status || 'Scheduled'}
-                                                        </span>
+                                            {dayItems.map(item => (
+                                                <div
+                                                    key={item.id}
+                                                    className={`schedule-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
+                                                    onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit({ ...item, type: visitTypeTab === 'vaccination' ? 'Vaccination' : 'Prenatal' }); }}
+                                                >
+                                                    <div className="schedule-details">
+                                                        <span className="schedule-patient">{item.patientName}</span>
+                                                        <span className="schedule-id">{visitTypeTab === 'vaccination' ? item.vaccineName : visitTypeTab === 'postpartum' ? 'Postpartum Follow-up' : formatMotherId(item.patientId)}</span>
+                                                        <span className="schedule-id">Assigned: {item.assignedStaff || 'Unassigned'}</span>
                                                     </div>
-                                                ))
-                                            ) : dayAppts.length > 0 ? (
-                                                dayAppts.map((a, idx) => (
-                                                    <div key={`appt-${idx}`} className={`schedule-item status-${a.status?.toLowerCase() || 'scheduled'}`}>
-                                                        <div className="schedule-details">
-                                                            <span className="schedule-patient">{a.patientName || 'Appointment'}</span>
-                                                            <span className="schedule-id">{formatMotherId(a.patientId)}</span>
-                                                        </div>
-                                                        <span className={`schedule-status status-${a.status?.toLowerCase() || 'scheduled'}`}>
-                                                            {a.status || 'Scheduled'}
-                                                        </span>
-                                                    </div>
-                                                ))
-                                            ) : (
-                                                <div className="no-schedules">No schedules for this day</div>
-                                            )}
+                                                    <span className={`schedule-status status-${(item.status || 'scheduled').toLowerCase()}`}>
+                                                        {item.status || 'Scheduled'}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                            {dayItems.length === 0 && dayManual.length === 0 && <div className="no-schedules">No schedules for this day</div>}
                                             {dayManual.map(mv => (
                                                 <div key={mv.id} className={`schedule-item manual-visit-item manual-${mv.visit_type}`}>
                                                     <div className="schedule-details">
@@ -1056,6 +1116,7 @@ const PrenatalVisits = () => {
                                                         >
                                                             <span className="visit-patient">{item.patientName}</span>
                                                             <span className="visit-status">{visitTypeTab === 'vaccination' ? item.vaccineName : visitTypeTab === 'postpartum' ? 'Postpartum' : (item.status || 'Scheduled')}</span>
+                                                            <span className="visit-status">Assigned: {item.assignedStaff || 'Unassigned'}</span>
                                                         </div>
                                                     ))}
                                                     {dayManual.map(mv => (
@@ -1103,6 +1164,7 @@ const PrenatalVisits = () => {
                                                                 >
                                                                     <span className="visit-patient">{item.patientName}</span>
                                                                     <span className="visit-status">{visitTypeTab === 'vaccination' ? item.vaccineName : visitTypeTab === 'postpartum' ? 'Postpartum' : (item.status || 'Scheduled')}</span>
+                                                                    <span className="visit-status">Assigned: {item.assignedStaff || 'Unassigned'}</span>
                                                                 </div>
                                                             ))}
                                                             {dayManual.map(mv => (
@@ -1179,6 +1241,7 @@ const PrenatalVisits = () => {
                                     <th>Patient Name</th>
                                     <th>Risk Level</th>
                                     <th>Date</th>
+                                    <th>Assigned Staff</th>
                                     <th>Status</th>
                                     <th className="text-right">Actions</th>
                                 </tr>
@@ -1192,6 +1255,13 @@ const PrenatalVisits = () => {
                                                 <div className="p-info">
                                                     <span className="p-name">{visit.patientName}</span>
                                                     <span className="p-id">{formatMotherId(visit.patientId)}</span>
+                                                    <span className="p-id">Assigned: {visit.assignedStaff || 'Unassigned'}</span>
+                                                    {(visit.assignedStation || visit.visitStation) && (
+                                                        <span className="p-id">
+                                                            Station: {visit.assignedStation || 'Unassigned'}
+                                                            {visit.visitStation && visit.visitStation !== visit.assignedStation ? ` · Visit: ${visit.visitStation}` : ''}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </td>
                                             <td>
@@ -1201,6 +1271,41 @@ const PrenatalVisits = () => {
                                             </td>
                                             <td>
                                                 <span className="visit-date">{formatReadableDate(visit.visitDate)}</span>
+                                            </td>
+                                            <td onClick={event => event.stopPropagation()}>
+                                                {visit.status === 'Scheduled'
+                                                    && (visitAccess?.role === 'admin'
+                                                        || (['cho personnel', 'staff'].includes(visitAccess?.role)
+                                                            && visit.assignedStationId === visitAccess.stationId
+                                                            && (visitAccess.role === 'cho personnel' || !visit.assignedStaffId))) ? (
+                                                    <select
+                                                        value={visit.assignedStaffId || ''}
+                                                        onChange={event => handleReassignVisit(visit.id, event.target.value)}
+                                                        onMouseDown={event => event.stopPropagation()}
+                                                        aria-label={`Assigned staff for visit ${visit.visitNumber || ''}`}
+                                                    >
+                                                        <option value="" disabled={visitAccess.role === 'staff'}>Unassigned</option>
+                                                        {visit.assignedStaffId && !assignmentStaff.some(staff =>
+                                                            staff.id === visit.assignedStaffId
+                                                            && (visitAccess.role === 'admin' || staff.station_ass === visitAccess.stationId)
+                                                        ) && (
+                                                            <option value={visit.assignedStaffId} disabled>{visit.assignedStaff} (other station)</option>
+                                                        )}
+                                                        {assignmentStaff
+                                                            .filter(staff => visitAccess.role === 'admin' || staff.station_ass === visitAccess.stationId)
+                                                            .map(staff => <option key={staff.id} value={staff.id}>{staff.full_name}</option>)}
+                                                    </select>
+                                                ) : (
+                                                    <div className="p-info">
+                                                        <span className="p-id">Assigned: {visit.assignedStaff || 'Unassigned'}</span>
+                                                    </div>
+                                                )}
+                                                {(visit.assignedStation || visit.visitStation) && (
+                                                    <span className="p-id">
+                                                        {visit.assignedStation || 'Unassigned'}
+                                                        {visit.visitStation && visit.visitStation !== visit.assignedStation ? ` · Visit: ${visit.visitStation}` : ''}
+                                                    </span>
+                                                )}
                                             </td>
                                             <td>
                                                 <span className={`status-badge status-${visit.status?.toLowerCase() || 'scheduled'}`}>
@@ -1214,7 +1319,7 @@ const PrenatalVisits = () => {
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan="6" className="empty-tab-state">
+                                        <td colSpan="7" className="empty-tab-state">
                                             {visitCategoryTab === 'upcoming' && (
                                                 <div className="empty-state-content">
                                                     <CalendarCheck size={32} />
@@ -1248,6 +1353,7 @@ const PrenatalVisits = () => {
                                     <th>Patient Name</th>
                                     <th>Vaccine</th>
                                     <th>Scheduled Date &amp; Time</th>
+                                    <th>Assigned Staff</th>
                                     <th>Status</th>
                                     <th className="text-right">Actions</th>
                                 </tr>
@@ -1272,6 +1378,7 @@ const PrenatalVisits = () => {
                                             <td>
                                                 <span className="visit-date">{formatReadableDate(vacc.visitDate)}</span>
                                             </td>
+                                            <td>{vacc.assignedStaff || 'Unassigned'}</td>
                                             <td>
                                                 <span className={`status-badge status-${vacc.status?.toLowerCase() || 'scheduled'}`}>
                                                     {vacc.status}
@@ -1294,7 +1401,7 @@ const PrenatalVisits = () => {
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan="6" className="empty-tab-state">
+                                        <td colSpan="7" className="empty-tab-state">
                                             {visitCategoryTab === 'upcoming' && (
                                                 <div className="empty-state-content">
                                                     <CalendarCheck size={32} />
@@ -1328,6 +1435,7 @@ const PrenatalVisits = () => {
                                     <th>Patient Name</th>
                                     <th>Follow-up</th>
                                     <th>Date &amp; Time</th>
+                                    <th>Assigned Staff</th>
                                     <th>Status</th>
                                     <th className="text-right">Actions</th>
                                 </tr>
@@ -1352,6 +1460,7 @@ const PrenatalVisits = () => {
                                             <td>
                                                 <span className="visit-date">{formatReadableDate(visit.visitDate)}</span>
                                             </td>
+                                            <td>{visit.assignedStaff || 'Unassigned'}</td>
                                             <td>
                                                 <span className={`status-badge status-${visit.status?.toLowerCase() || 'scheduled'}`}>
                                                     {visit.status}
@@ -1374,7 +1483,7 @@ const PrenatalVisits = () => {
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan="6" className="empty-tab-state">
+                                        <td colSpan="7" className="empty-tab-state">
                                             {visitCategoryTab === 'upcoming' && (
                                                 <div className="empty-state-content">
                                                     <CalendarCheck size={32} />

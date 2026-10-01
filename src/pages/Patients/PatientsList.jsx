@@ -12,6 +12,7 @@ import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/PatientsList.css';
 import PatientService from '../../services/patientservice';
 import EditPatientModal from '../../components/Patient/EditPatientModal';
+import PatientStaffAssignment from '../../components/Patient/PatientStaffAssignment';
 import { useModal } from '../../context/ModalContext';
 import Legend from '../../components/Legend/Legend';
 import { formatMotherId } from '../../utils/displayIds';
@@ -246,6 +247,7 @@ const PatientsList = () => {
 
     const [patients, setPatients] = useState([]);
     const [availableStations, setAvailableStations] = useState([]);
+    const [assignmentAccess, setAssignmentAccess] = useState({ role: '', stationId: null });
 
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -260,6 +262,7 @@ const PatientsList = () => {
         trimesters: initialTrimester ? [initialTrimester] : [],
         risks: [],
         stations: [],
+        assignmentStatus: 'All',
         patientType: 'All',
         sortBy: 'newest'
     });
@@ -351,6 +354,7 @@ const PatientsList = () => {
             const patientService = new PatientService();  
             const data = await patientService.getAllPatients({ includeArchived: true });
             setPatients(data || []);
+            setAssignmentAccess(await patientService.getCurrentUserAccess());
         } catch (err) {
             console.error(err);
         }
@@ -399,6 +403,8 @@ const PatientsList = () => {
         const matchesRisk = filters.risks.length === 0 || filters.risks.includes(derivedRisk);
         const matchesType = filters.patientType === 'All' || (p.patientType || p.type) === filters.patientType;
         const matchesStation = filters.stations.length === 0 || filters.stations.includes(p.station);
+        const matchesAssignment = filters.assignmentStatus === 'All'
+            || (filters.assignmentStatus === 'Unassigned' ? !p.assignedStaffId : Boolean(p.assignedStaffId));
         
         const isArchived = (p.archiveStatus || 'active') === 'archived';
         const matchesArchive = archiveFilter === 'all'
@@ -427,7 +433,7 @@ const PatientsList = () => {
             }
         }
 
-        return matchesSearch && matchesTri && matchesRisk && matchesType && matchesStation && matchesArchive && matchesDate;
+        return matchesSearch && matchesTri && matchesRisk && matchesType && matchesStation && matchesAssignment && matchesArchive && matchesDate;
     });
 
     const sortedPatients = [...filteredPatients].sort((a, b) => {
@@ -472,7 +478,7 @@ const PatientsList = () => {
     };
 
     const clearFilters = () => {
-        setFilters({ trimesters: [], risks: [], stations: [], patientType: 'All', sortBy: 'newest' });
+        setFilters({ trimesters: [], risks: [], stations: [], assignmentStatus: 'All', patientType: 'All', sortBy: 'newest' });
         setArchiveFilter('active');
         setDateFilter('all');
         setCustomDateFrom('');
@@ -685,6 +691,18 @@ const PatientsList = () => {
                 {/* Row 2: Filters */}
                 <div className="shared-filters-row">
                     <span className="filters-label"><Filter size={13} /> Filters:</span>
+                    <label className="patient-assignment-filter">
+                        <span>Health worker</span>
+                        <select
+                            value={filters.assignmentStatus}
+                            onChange={event => setFilters(previous => ({ ...previous, assignmentStatus: event.target.value }))}
+                            aria-label="Filter by health worker assignment"
+                        >
+                            <option value="All">All</option>
+                            <option value="Unassigned">Unassigned</option>
+                            <option value="Assigned">Assigned</option>
+                        </select>
+                    </label>
                     
                     {/* Pregnancy Details Popover */}
                     <div className="filter-dropdown-container">
@@ -963,6 +981,16 @@ const PatientsList = () => {
                                                 <div>
                                                     <span className="patient-name-link">{p.name}</span>
                                                     <span className="patient-status-note">{(p.archiveStatus || 'active') === 'archived' ? 'Archived' : 'Active'}</span>
+                                                    <PatientStaffAssignment
+                                                        patientId={p.id}
+                                                        patientStationId={p.stationId}
+                                                        assignedStaffId={p.assignedStaffId}
+                                                        role={assignmentAccess.role}
+                                                        viewerStationId={assignmentAccess.stationId}
+                                                        onAssigned={({ id: assignedStaffId }) => setPatients(previous => previous.map(patient =>
+                                                            patient.id === p.id ? { ...patient, assignedStaffId } : patient
+                                                        ))}
+                                                    />
                                                 </div>
                                             </div>
                                         </td>

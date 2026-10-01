@@ -174,7 +174,7 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
                             <div className="sv-field">
                                 <label className="sv-label">Location / Facility</label>
                                 <div className="sv-value">
-                                    <MapPin size={16} /> {patientStation || visit.location || 'CHO 3'}
+                                    <MapPin size={16} /> {patientStation || visit.location || 'Station not assigned'}
                                 </div>
                             </div>
                             <div className="sv-field">

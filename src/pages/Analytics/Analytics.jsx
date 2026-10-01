@@ -52,16 +52,7 @@ class AnalyticsErrorBoundary extends React.Component {
 /* ════════════════════════════════════════════════════════════════
    STATIONS AND DEFINITIONS
    ════════════════════════════════════════════════════════════════ */
-const STATIONS = [
-    'All Stations',
-    'Dasma 1',
-    'Dasma 2',
-    'Dasma 3',
-    'Dasma 4',
-    'Salawag',
-    'Armstrong',
-    'City Health Office 3'
-];
+const ALL_STATIONS = 'All Stations';
 
 const DATE_RANGES = [
     { value: 'monthly', label: 'Monthly' },
@@ -83,22 +74,14 @@ const RISK_LEVELS = [
     { value: 'High', label: 'High Risk' }
 ];
 
-// Helper to normalize Supabase barangay string to our exact station list
-const normalizeStation = (barangay) => {
-    if (!barangay) return 'Dasma 1';
-    const s = barangay.toLowerCase();
-    if (s.includes('dasma 1') || s.includes('poblacion')) return 'Dasma 1';
-    if (s.includes('dasma 2') || s.includes('sta. cruz')) return 'Dasma 2';
-    if (s.includes('dasma 3') || s.includes('san jose')) return 'Dasma 3';
-    if (s.includes('dasma 4') || s.includes('bagong')) return 'Dasma 4';
-    if (s.includes('salawag') || s.includes('maliwanag')) return 'Salawag';
-    if (s.includes('armstrong') || s.includes('mabini')) return 'Armstrong';
-    if (s.includes('city health') || s.includes('cho') || s.includes('daan') || s.includes('health office')) return 'City Health Office 3';
-    
-    // Deterministic hashing fallback so the user always sees a consistent station mapping
-    const index = Math.abs(barangay.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % (STATIONS.length - 1);
-    return STATIONS[index + 1]; // Skip 'All Stations'
-};
+const normalizeStation = stationName => stationName || 'Unassigned';
+const createStationMetrics = (includePostpartum = false) => ({
+    patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0,
+    deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0,
+    normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0,
+    compOther: 0, recNormal: 0, recObs: 0, recComp: 0,
+    ...(includePostpartum ? { ppEligible: 0, ppCompleted: 0 } : {})
+});
 
 const formatPercentChange = (current, previous) => {
     if (!previous) return current ? '+100.0%' : '+0.0%';
@@ -140,8 +123,13 @@ const Analytics = () => {
         pregnancies: [],
         visits: [],
         deliveries: [],
-        vaccinations: []
+        vaccinations: [],
+        stations: []
     });
+    const stationOptions = useMemo(() => [
+        ALL_STATIONS,
+        ...new Set((dbData.stations || []).map(station => station.station_name).filter(Boolean))
+    ], [dbData.stations]);
 
     // ── Hover Tooltip State ──
     const [hoveredDot, setHoveredDot] = useState(null);
@@ -154,7 +142,7 @@ const Analytics = () => {
         let isMounted = true;
         let pollingTimer = null;
         let hasLoadedOnce = false;
-        const realtimeTables = ['patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'deliveries', 'vaccinations', 'newborns'];
+        const realtimeTables = ['patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'deliveries', 'vaccinations', 'newborns', 'stations'];
 
         const startPollingFallback = (fetchData) => {
             if (pollingTimer || !isMounted) return;
@@ -176,14 +164,16 @@ const Analytics = () => {
                     { data: visits },
                     { data: deliveries },
                     { data: vaccinations },
-                    { data: newborns }
+                    { data: newborns },
+                    { data: stations }
                 ] = await Promise.all([
                     supabase.from('patient_basic_info').select('id, first_name, last_name, station_ass, stations:station_ass(station_name), date_of_birth, created_at'),
                     supabase.from('pregnancy_info').select('patient_id, pregn_postp, pregnancy_type, lmd, edd, gravida, para, miscarriage_info, created_at'),
                     supabase.from('prenatal_visits').select('id, patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm, next_appt_date, next_appt_type'),
-                    supabase.from('deliveries').select('id, mother_id, delivery_date, delivery_type, complications, risk_level'),
+                    supabase.from('deliveries').select('id, mother_id, station_ass, stations:station_ass(station_name), delivery_date, delivery_type, complications, risk_level'),
                     supabase.from('vaccinations').select('id, patient_id, newborn_id, status, dose_number, scheduled_vaccination, vaccinated_date'),
-                    supabase.from('newborns').select('id, mother_id, delivery_id')
+                    supabase.from('newborns').select('id, mother_id, delivery_id'),
+                    supabase.from('stations').select('id, station_name').order('station_name')
                 ]);
 
                 if (isMounted) setDbData({
@@ -192,7 +182,8 @@ const Analytics = () => {
                     visits: visits || [],
                     deliveries: deliveries || [],
                     vaccinations: vaccinations || [],
-                    newborns: newborns || []
+                    newborns: newborns || [],
+                    stations: stations || []
                 });
                 hasLoadedOnce = true;
             } catch (error) {
@@ -228,15 +219,8 @@ const Analytics = () => {
     // Processes Supabase DB data depending on active filters
     const dashboardMetrics = useMemo(() => {
         // 1. Compile Live Data from Supabase
-        const liveAgg = {
-            'Dasma 1': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 },
-            'Dasma 2': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 },
-            'Dasma 3': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 },
-            'Dasma 4': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 },
-            'Salawag': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 },
-            'Armstrong': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 },
-            'City Health Office 3': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0 }
-        };
+        const stationNames = [...new Set([...(dbData.stations || []).map(station => station.station_name), 'Unassigned'])];
+        const liveAgg = Object.fromEntries(stationNames.map(station => [station, createStationMetrics(true)]));
 
         const now = new Date();
         const isWithinDateRange = (dateString) => {
@@ -348,9 +332,9 @@ const Analytics = () => {
 
         // Loop deliveries
         dbData.deliveries.forEach(d => {
-            const pat = dbData.patients.find(p => p.id === d.mother_id);
-            const station = normalizeStation(pat?.stations?.station_name || pat?.barangay);
+            const station = normalizeStation(d.stations?.station_name);
             if (!isWithinDateRange(d.delivery_date)) return;
+            if (!liveAgg[station]) return;
 
             liveAgg[station].deliveries++;
 
@@ -370,7 +354,7 @@ const Analytics = () => {
             const deliveryDate = new Date(delivery.delivery_date);
             if (Number.isNaN(deliveryDate.getTime()) || deliveryDate > now || !isWithinDateRange(delivery.delivery_date)) return;
             const mother = dbData.patients.find(patient => patient.id === delivery.mother_id);
-            const station = normalizeStation(mother?.stations?.station_name);
+            const station = normalizeStation(delivery.stations?.station_name);
             if (!postpartumByStation[station]) postpartumByStation[station] = { eligible: 0, completed: 0 };
             postpartumByStation[station].eligible++;
             const endDate = new Date(deliveryDate);
@@ -401,8 +385,7 @@ const Analytics = () => {
         });
 
         const mergedStations = {};
-        STATIONS.forEach(st => {
-            if (st === 'All Stations') return;
+        stationNames.forEach(st => {
             const live = liveAgg[st];
             mergedStations[st] = {
                 name: st,
@@ -715,15 +698,8 @@ const Analytics = () => {
 
     // ── Export Data Aggregation ──
     const getExportDataForDateRange = (dateRange) => {
-        const liveAgg = {
-            'Dasma 1': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0, ppEligible: 0, ppCompleted: 0 },
-            'Dasma 2': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0, ppEligible: 0, ppCompleted: 0 },
-            'Dasma 3': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0, ppEligible: 0, ppCompleted: 0 },
-            'Dasma 4': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0, ppEligible: 0, ppCompleted: 0 },
-            'Salawag': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0, ppEligible: 0, ppCompleted: 0 },
-            'Armstrong': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0, ppEligible: 0, ppCompleted: 0 },
-            'City Health Office 3': { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0, ppEligible: 0, ppCompleted: 0 }
-        };
+        const stationNames = [...new Set([...(dbData.stations || []).map(station => station.station_name), 'Unassigned'])];
+        const liveAgg = Object.fromEntries(stationNames.map(station => [station, createStationMetrics(true)]));
 
         const isWithinExportDateRange = (dateString) => {
             if (!dateString) return true;
@@ -805,8 +781,7 @@ const Analytics = () => {
         });
 
         dbData.deliveries.forEach(d => {
-            const pat = dbData.patients.find(p => p.id === d.mother_id);
-            const station = normalizeStation(pat?.stations?.station_name || pat?.barangay);
+            const station = normalizeStation(d.stations?.station_name);
             if (!liveAgg[station]) return;
             if (!isWithinExportDateRange(d.delivery_date)) return;
 
@@ -834,8 +809,7 @@ const Analytics = () => {
         });
 
         const mergedStations = {};
-        STATIONS.forEach(st => {
-            if (st === 'All Stations') return;
+        stationNames.forEach(st => {
             const live = liveAgg[st];
             mergedStations[st] = {
                 name: st,
@@ -845,7 +819,7 @@ const Analytics = () => {
         });
         
         let totals = { patients: 0, highRisk: 0, moderateRisk: 0, lowRisk: 0, teenage: 0, advancedAge: 0, deliveries: 0, completedVacc: 0, totalVacc: 0, compliancePP: 0, missedAppt: 0, normalDel: 0, assistedDel: 0, csDel: 0, compHemorr: 0, compHyper: 0, compInfect: 0, compOther: 0, recNormal: 0, recObs: 0, recComp: 0, ppEligible: 0, ppCompleted: 0 };
-        const relevantStations = (filters.station && filters.station !== 'All Stations') ? [filters.station] : STATIONS.filter(s => s !== 'All Stations');
+        const relevantStations = (filters.station && filters.station !== ALL_STATIONS) ? [filters.station] : stationNames;
         relevantStations.forEach(st => {
             if (mergedStations[st]) {
                 const s = mergedStations[st];
@@ -1062,7 +1036,7 @@ const Analytics = () => {
         if (station === 'All Stations') {
             return {
                 concern: "High-risk pregnancies increased by 12% this quarter across all sectors.",
-                action: "Prioritize monitoring, mobile ultrasound outreach, and midwife deployments in Salawag station."
+                action: "Prioritize monitoring and outreach in stations with elevated risk and missed visits."
             };
         }
         const stData = dashboardMetrics[station];
@@ -1246,7 +1220,7 @@ const Analytics = () => {
                                 value={filters.station} 
                                 onChange={e => setFilters(prev => ({ ...prev, station: e.target.value }))}
                             >
-                                {STATIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                                {stationOptions.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                         </div>
                     </div>

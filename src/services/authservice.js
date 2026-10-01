@@ -4,6 +4,7 @@ import { getRoleConfig } from '../config/roleConfig';
 import { DASMOM_APP_URL } from '../config/appConfig';
 
 const DUPLICATE_EMAIL_MESSAGE = 'Email already exists. Please use a different email address.';
+const normalizeRoleName = role => String(role || '').trim().toLowerCase().replace(/_/g, ' ');
 
 export default class AuthService {
   constructor() {
@@ -74,7 +75,7 @@ export default class AuthService {
   }
 
   async getUserTypeIdByRole(role) {
-    const normalizedRole = String(role || '').trim().toLowerCase();
+    const normalizedRole = normalizeRoleName(role);
     if (!normalizedRole) {
       throw new Error('Role is required');
     }
@@ -87,7 +88,7 @@ export default class AuthService {
     if (error) throw error;
 
     const userType = (data || []).find(
-      item => item.user_type?.toLowerCase().trim() === normalizedRole
+      item => normalizeRoleName(item.user_type) === normalizedRole
     );
 
     if (userType?.id) return userType.id;
@@ -104,7 +105,7 @@ export default class AuthService {
 
   async ensurePublicUserRecord({ userId, email, role, password = null }) {
     const normalizedEmail = (email || '').trim().toLowerCase();
-    const normalizedRole = String(role || '').trim().toLowerCase();
+    const normalizedRole = normalizeRoleName(role);
 
     if (!userId) throw new Error('User ID is required');
 
@@ -157,7 +158,7 @@ export default class AuthService {
       throw new Error('Email is required');
     }
 
-    const normalizedRole = String(role || '').trim().toLowerCase();
+    const normalizedRole = normalizeRoleName(role);
     // Provide a default password for mothers/patients when not supplied
     if (!password && (normalizedRole === 'patient' || normalizedRole === 'mother')) {
       password = 'mother123!';
@@ -281,7 +282,7 @@ export default class AuthService {
           5000
         );
         if (typeError) console.error('Error fetching user_type:', typeError);
-        if (typeData && typeData.user_type) role = typeData.user_type.toLowerCase();
+        if (typeData && typeData.user_type) role = normalizeRoleName(typeData.user_type);
       } catch (err) {
         console.error('user_type lookup timed out:', err);
       }
@@ -408,7 +409,7 @@ export default class AuthService {
         5000
       );
       const typeData = typeRes.data || typeRes;
-      if (typeData?.user_type) role = typeData.user_type.toLowerCase();
+      if (typeData?.user_type) role = normalizeRoleName(typeData.user_type);
     } catch (err) {
       console.error('user_type lookup timed out or failed:', err);
     }

@@ -24,6 +24,7 @@ import * as XLSX from 'xlsx';
 import ExportModal from '../../components/ExportModal';
 import Legend from '../../components/Legend/Legend';
 import PatientService from '../../services/patientservice';
+import PatientStaffAssignment from '../../components/Patient/PatientStaffAssignment';
 import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/HighRiskCases.css';
 
@@ -55,9 +56,11 @@ const HighRiskCases = () => {
   const [filterRiskLevel, setFilterRiskLevel] = useState('All');
   const [filterTrimester, setFilterTrimester] = useState('All');
   const [filterDateRange, setFilterDateRange] = useState('All');
+  const [filterAssignment, setFilterAssignment] = useState('All');
   const [availableStations, setAvailableStations] = useState([]);
+  const [assignmentAccess, setAssignmentAccess] = useState({ role: '', stationId: null });
 
-  const hasActiveFilters = filterStation !== 'All' || filterType !== 'All' || filterRiskLevel !== 'All' || filterTrimester !== 'All' || filterDateRange !== 'All' || searchTerm !== '';
+  const hasActiveFilters = filterStation !== 'All' || filterType !== 'All' || filterRiskLevel !== 'All' || filterTrimester !== 'All' || filterDateRange !== 'All' || filterAssignment !== 'All' || searchTerm !== '';
 
   const clearFilters = () => {
       setFilterStation('All');
@@ -65,6 +68,7 @@ const HighRiskCases = () => {
       setFilterRiskLevel('All');
       setFilterTrimester('All');
       setFilterDateRange('All');
+      setFilterAssignment('All');
       setSearchTerm('');
       setActivePopover(null);
       setCurrentPage(1);
@@ -95,127 +99,24 @@ const HighRiskCases = () => {
     try {
       setLoading(true);
 
-      const [statsData, patientsData] = await Promise.all([
+      const [statsData, patientsData, access] = await Promise.all([
         service.getHighRiskStats(),
         service.getHighRiskPatients(),
+        service.getCurrentUserAccess(),
       ]);
+      setAssignmentAccess(access);
 
       const enriched = (patientsData || [])
-        .map((p) => {
-          const preg = p.pregnancy_info || {};
-          const lmp = p.lmd;
-          const weeks = p.weeks || 0;
-          const edd = p.edd;
-
-          // Calculate age and check for age-based risk
-          const age = p.date_of_birth ? service.calculateAge(p.date_of_birth) : null;
-          const ageNum = age && age !== 'N/A' ? parseInt(age) : null;
-          const isAgeHighRisk = ageNum !== null && (ageNum < 18 || ageNum > 35);
-
-          const bp = p.bpSystolic && p.bpDiastolic
-            ? `${p.bpSystolic}/${p.bpDiastolic}`
-            : null;
-            
-          const nextApptDate = p.next_appt_date || null;
-
-          // Check for multiple births (high-risk indicator)
-          const isMultipleBirth = p.isMultipleBirth || false;
-
-          // Check Blood Pressure for high-risk (hypertension or hypotension)
-          const isBPHighRisk = p.isBPHighRisk;
-          
-          const bpStatus = p.bpStatus;
-
-          // Standardize individual risk factors
-          const formatRiskFactor = (factor) => {
-            const f = factor.trim();
-            if (!f) return '';
-            
-            const lower = f.toLowerCase();
-            // Specific string mappings
-            if (lower === 'high bp') return 'High Blood Pressure';
-            if (lower === 'twins pregnancy') return 'Twins Pregnancy';
-            if (lower === 'abnormal fetal heart rate') return 'Abnormal Fetal Heart Rate';
-            if (lower === 'overweight bmi') return 'Overweight BMI';
-            if (lower === 'anemia') return 'Anemia';
-            if (lower === 'fever') return 'Fever';
-            
-            // Keep age formatting exactly as it comes from the DB (e.g. "Age 17 (Teenage)")
-            if (lower.startsWith('age ')) return f;
-            
-            // Title case fallback for standard conditions like Diabetes, Asthma
-            return f.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
-          };
-
-          // Build risk factors array
-          let riskFactors = [];
-          if (p.condition && p.condition !== 'High‑risk pregnancy') {
-            riskFactors = p.condition.split(',').map(f => formatRiskFactor(f)).filter(Boolean);
-          }
-
-          let isHighRisk = p.riskLevel === 'High Risk';
-
-          if (isAgeHighRisk) {
-            isHighRisk = true;
-            // Removed frontend fallback "Age <18 or >35" to rely on the database-generated age string
-          }
-
-          // Add multiple births to condition if applicable
-          if (isMultipleBirth) {
-            riskFactors.push(`${formatRiskFactor(p.pregnancyType || 'Twins')} Pregnancy`);
-            isHighRisk = true;
-          }
-
-          // Add BP status if high-risk
-          if (bpStatus) {
-            riskFactors.push(formatRiskFactor(bpStatus));
-            isHighRisk = true;
-          }
-
-          // Clean up the conditions using a Set to prevent duplicates
-          let uniqueFactors = [...new Set(riskFactors)];
-
-          // Remove 'None' if there are other genuine conditions
-          if (uniqueFactors.length > 1) {
-            uniqueFactors = uniqueFactors.filter(f => f.toLowerCase() !== 'none');
-          }
-
-          // Build comprehensive condition string with high-risk indicators
-          let conditionDisplay = uniqueFactors.length > 0 ? uniqueFactors.join(', ') : 'None';
-
-          // Add BMI status if weight is available
-          // Note: height would need to be fetched separately
-          if (p.weight_kg) {
-            // Store weight info for potential future BMI checks
-            // When height data is available, BMI can be calculated and checked
-          }
-
-          return {
-            id: p.id,
-            name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unnamed Patient',
-            first_name: p.first_name,
-            last_name: p.last_name,
-            station: p.station || p.barangay || p.municipality || 'Unassigned',
-            age: ageNum,
-            riskLevel: isHighRisk ? 'High Risk' : (p.riskLevel || 'High Risk'),
-            condition: conditionDisplay,
-            gravida: p.gravida || 0,
-            lmd: lmp || '',
-            edd: edd || null,
-            bp,
-            bpSystolic: p.bpSystolic,
-            bpDiastolic: p.bpDiastolic,
-            isBPHighRisk,
-            bpStatus,
-            weight_kg: p.weight_kg,
-            pregnancyType: p.pregnancyType || 'Singleton',
-            isMultipleBirth,
-            nextVisit: p.nextVisit,
-            weeks,
-            created_at: p.created_at,
-            pregnancyStatus: p.pregn_postp || 'Pregnant', // Include pregnancy status for filtering
-          };
-        })
+        .map((p) => ({
+          ...p,
+          name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unnamed Patient',
+          station: p.station || p.barangay || p.municipality || 'Unassigned',
+          condition: p.condition || 'None',
+          gravida: p.gravida || 0,
+          pregnancyType: p.pregnancyType || 'Singleton',
+          weeks: p.weeks || 0,
+          pregnancyStatus: p.pregn_postp || 'Pregnant',
+        }))
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
       const uniquePatients = Array.from(new Map(enriched.map((item) => [item.id, item])).values());
@@ -262,6 +163,8 @@ const HighRiskCases = () => {
       (p.name || '').toLowerCase().includes(search) ||
       (p.id || '').toLowerCase().includes(search);
     const matchesStation = filterStation === 'All' || p.station === filterStation;
+    const matchesAssignment = filterAssignment === 'All'
+      || (filterAssignment === 'Unassigned' ? !p.assignedStaffId : Boolean(p.assignedStaffId));
     const matchesType = filterType === 'All' || (p.type || 'Mother') === filterType;
     
     // Risk Level Filter
@@ -299,7 +202,7 @@ const HighRiskCases = () => {
       }
     }
     
-    return matchesSearch && matchesStation && matchesType && matchesRiskLevel && matchesTrimester && matchesDateRange && matchesPostpartum;
+    return matchesSearch && matchesStation && matchesAssignment && matchesType && matchesRiskLevel && matchesTrimester && matchesDateRange && matchesPostpartum;
   });
 
   const totalPages = Math.ceil(filteredPatients.length / itemsPerPage);
@@ -449,6 +352,18 @@ const HighRiskCases = () => {
           <span className="filters-label">
             <Filter size={13} /> Filters:
           </span>
+          <label className="patient-assignment-filter">
+            <span>Health worker</span>
+            <select
+              value={filterAssignment}
+              onChange={event => { setFilterAssignment(event.target.value); setCurrentPage(1); }}
+              aria-label="Filter by health worker assignment"
+            >
+              <option value="All">All</option>
+              <option value="Unassigned">Unassigned</option>
+              <option value="Assigned">Assigned</option>
+            </select>
+          </label>
           
           {/* Station Filter */}
           <div className="filter-dropdown-container">
@@ -567,6 +482,16 @@ const HighRiskCases = () => {
                             </div>
                             <div>
                               <p className="patient-name patient-name-link" style={{ margin: 0 }}>{p.name}</p>
+                              <PatientStaffAssignment
+                                patientId={p.id}
+                                patientStationId={p.stationId}
+                                assignedStaffId={p.assignedStaffId}
+                                role={assignmentAccess.role}
+                                viewerStationId={assignmentAccess.stationId}
+                                onAssigned={({ id: assignedStaffId }) => setPatients(previous => previous.map(patient =>
+                                  patient.id === p.id ? { ...patient, assignedStaffId } : patient
+                                ))}
+                              />
                             </div>
                           </div>
                         </td>

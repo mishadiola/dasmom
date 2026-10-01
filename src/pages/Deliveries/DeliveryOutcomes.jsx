@@ -1041,6 +1041,8 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
     const [loading, setLoading] = useState(false);
     const [searchResults, setSearchResults] = useState([]);
     const [localStaff, setLocalStaff] = useState(staffList);
+    const [stationRows, setStationRows] = useState([]);
+    const [userAccess, setUserAccess] = useState(null);
     const [staffLoading, setStaffLoading] = useState(true);
     const [validationErrors, setValidationErrors] = useState([]);
     const [touchedFields, setTouchedFields] = useState(new Set());
@@ -1049,6 +1051,8 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
         patientName: '',
         station: '',
         stationId: '',
+        visitStationId: '',
+        visitStation: '',
         gestationalAge: '',
         riskLevel: '',
         pregnancyType: '',
@@ -1097,6 +1101,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
         }
         if (sectionId === 'delivery') {
             if (!formData.deliveryDate) errors.push('Delivery Date');
+            if (!formData.visitStationId) errors.push('Delivery Station');
             if (formData.pregnancyOutcome !== 'Miscarriage' && !formData.deliveryType) errors.push('Delivery Type');
             if (formData.pregnancyOutcome !== 'Miscarriage' && !formData.attendingStaffId) errors.push('Attending Staff');
             if (!formData.pregnancyOutcome) errors.push('Pregnancy Outcome');
@@ -1183,42 +1188,49 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
         return !value || (typeof value === 'string' && !value.trim());
     };
      useEffect(() => {
-        const loadStaff = async () => {
+        const loadConfiguration = async () => {
             setStaffLoading(true);
             try {
-                const { data, error } = await supabase
-                    .from('staff_profiles')
-                    .select('id, full_name, station_ass, stations:station_ass (station_name)')
-                    .order('full_name');
-                
-                if (error) throw error;
-                console.log('✅ Staff loaded:', data?.length || 0);
-                setLocalStaff(data || []);
-            } catch (err) {
-                console.error('❌ Staff load failed:', err);
-                setLocalStaff([
-                    { id: 'demo1', full_name: 'Midwife Elena P.', role: 'Midwife', stations: { station_name: 'Brgy Poblacion' } },
-                    { id: 'demo2', full_name: 'Dr. Reyes (OB)', role: 'Doctor', stations: { station_name: 'Main Clinic' } }
+                const [access, stationResult, staffResult] = await Promise.all([
+                    babyService.getCurrentUserAccess(),
+                    supabase.from('stations').select('id, station_name').order('station_name'),
+                    supabase.from('staff_profiles').select('id, full_name, station_ass, stations:station_ass (station_name)').order('full_name')
                 ]);
+                if (stationResult.error) throw stationResult.error;
+                if (staffResult.error) throw staffResult.error;
+                setUserAccess(access);
+                setStationRows(stationResult.data || []);
+                setLocalStaff(staffResult.data || []);
+            } catch (err) {
+                console.error('Delivery configuration load failed:', err);
+                setLocalStaff([]);
             } finally {
                 setStaffLoading(false);
             }
         };
 
         if (show) {
-            loadStaff();
+            loadConfiguration();
         }
     }, [show]);
     const filteredStaffList = useMemo(() => {
-        if (!form.stationId) return [];
+        if (!form.visitStationId) return [];
 
         const sourceStaff = localStaff.length ? localStaff : staffList;
-        return sourceStaff.filter(staff => staff.station_ass === form.stationId);
-    }, [form.stationId, localStaff, staffList]);
+        return sourceStaff.filter(staff => {
+            if (staff.station_ass !== form.visitStationId) return false;
+            if (userAccess?.role === 'staff') return staff.id === userAccess.currentUser?.id;
+            if (userAccess?.role === 'cho personnel') return staff.station_ass === userAccess.stationId;
+            return true;
+        });
+    }, [form.visitStationId, localStaff, staffList, userAccess]);
 
     const updateForm = (key, value) => {
         setForm(prev => {
             const next = { ...prev, [key]: value };
+            if (key === 'visitStationId') {
+                next.visitStation = stationRows.find(station => station.id === value)?.station_name || '';
+            }
             
             // Logic for Pregnancy Outcome
             if (key === 'pregnancyOutcome') {
@@ -1316,6 +1328,8 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                 patientName: editDelivery.patientName || '',
                 station: editDelivery.station || '',
                 stationId: editDelivery.stationId || '',
+                visitStationId: editDelivery.stationId || '',
+                visitStation: editDelivery.station || '',
                 gestationalAge: editDelivery.gestationalAge || '',
                 riskLevel: editDelivery.riskLevel || '',
                 pregnancyType: editDelivery.pregnancyType || '',
@@ -1354,6 +1368,8 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                 patientName: '',
                 station: '',
                 stationId: '',
+                visitStationId: userAccess?.stationId || '',
+                visitStation: stationRows.find(station => station.id === userAccess?.stationId)?.station_name || '',
                 gestationalAge: '',
                 riskLevel: '',
                 pregnancyType: '',
@@ -1389,7 +1405,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
             setTouchedFields(new Set());
             setSaveSuccessMsg('');
         }
-    }, [editDelivery, show]);
+    }, [editDelivery, show, userAccess, stationRows]);
     const handleSearch = async (query) => {
         try {
             const pregnantMothers = await babyService.searchPregnantMothers(query);
@@ -1407,6 +1423,8 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
             patientName: patient.name,
             station: patient.station,
             stationId: patient.stationId || '',
+            visitStationId: userAccess?.role === 'admin' ? patient.stationId || '' : userAccess?.stationId || patient.stationId || '',
+            visitStation: stationRows.find(station => station.id === (userAccess?.role === 'admin' ? patient.stationId : userAccess?.stationId))?.station_name || '',
             facility: prev.facility,
             riskLevel: patient.riskLevel,
             pregnancyType: patient.pregnancyType || 'Singleton',
@@ -1498,6 +1516,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
         try {
             const deliveryData = {
                 mother_id: form.patientId,
+                station_ass: form.visitStationId,
                 pregnancy_id: editDelivery?.pregnancyId || null,
                 delivery_date: form.deliveryDate,
                 delivery_time: form.deliveryTime || '00:00',
@@ -1693,7 +1712,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                                         updateForm('attendingStaffId', e.target.value);
                                         updateForm('attendingStaffName', staff?.full_name || '');
                                     }}
-                                    disabled={!form.station}
+                                    disabled={!form.visitStationId || staffLoading}
                                     className={isFieldInvalid('Attending Staff', form.attendingStaffId) ? 'field-error' : ''}
                                 >
                                     <option value="">Select Staff</option>
@@ -1707,6 +1726,19 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                             <div className="form-group">
                                 <label>Mother&apos;s Station</label>
                                 <input value={form.station} readOnly className="readonly-field" />
+                            </div>
+                            <div className="form-group">
+                                <label>Delivery Station <span className="req">*</span></label>
+                                {userAccess?.role === 'admin' ? (
+                                    <select value={form.visitStationId} onChange={e => updateForm('visitStationId', e.target.value)} required>
+                                        <option value="">Select station</option>
+                                        {stationRows.map(station => (
+                                            <option key={station.id} value={station.id}>{station.station_name}</option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <input value={form.visitStation || 'Station not assigned'} readOnly className="readonly-field" />
+                                )}
                             </div>
                             <div className="form-group">
                                 <label>Place of Delivery</label>

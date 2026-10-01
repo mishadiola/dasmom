@@ -167,11 +167,14 @@ const formatRoleLabel = (role) => {
 
 const AddUserModal = ({ onClose, onSuccess }) => {
     const { user } = useContext(AuthContext);
-    const isStationStaff = user && normalizeRoleValue(user.role) === 'staff';
+    const callerRole = normalizeRoleValue(user?.role);
+    const isStationStaff = callerRole === 'staff';
+    const isStationCho = callerRole === 'cho personnel';
+    const isStationBound = isStationStaff || isStationCho;
 
     const staffService = new StaffService();
     const [showPwd, setShowPwd] = useState(false);
-    const [form, setForm] = useState({ name: '', email: '', password: '', role: isStationStaff ? 'staff' : 'staff', station: isStationStaff ? (user.station || '') : '' });
+    const [form, setForm] = useState({ name: '', email: '', password: '', role: 'staff', station: isStationBound ? (user?.station || '') : '' });
     const [stations, setStations] = useState([]);
     const [roles, setRoles] = useState([]);
     const [showStationDropdown, setShowStationDropdown] = useState(false);
@@ -198,12 +201,17 @@ const AddUserModal = ({ onClose, onSuccess }) => {
         const fetchRoles = async () => {
             try {
                 const roleList = await staffService.getAllUserRoles();
-                setRoles(roleList);
+                const permittedRoles = callerRole === 'staff'
+                    ? roleList.filter(role => normalizeRoleValue(role.value) === 'staff')
+                    : callerRole === 'cho personnel'
+                        ? roleList.filter(role => ['staff', 'cho personnel'].includes(normalizeRoleValue(role.value)))
+                        : roleList;
+                setRoles(permittedRoles);
                 setForm(prev => ({
                     ...prev,
-                    role: prev.role && roleList.some(role => role.value === normalizeRoleValue(prev.role))
+                    role: prev.role && permittedRoles.some(role => normalizeRoleValue(role.value) === normalizeRoleValue(prev.role))
                         ? prev.role
-                        : (roleList[0]?.value || 'staff')
+                        : (permittedRoles[0]?.value || 'staff')
                 }));
             } catch (err) {
                 console.error('Failed to fetch roles:', err);
@@ -242,8 +250,8 @@ const AddUserModal = ({ onClose, onSuccess }) => {
                 fullName: form.name,
                 email: form.email,
                 password: form.password,
-                role: isStationStaff ? 'staff' : form.role,
-                station: isStationStaff ? user.station : (form.station || null),
+                role: isStationBound ? (isStationStaff ? 'staff' : form.role) : form.role,
+                station: isStationBound ? user?.station : (form.station || null),
             });
             setError('');
             onSuccess?.();
@@ -283,7 +291,7 @@ const AddUserModal = ({ onClose, onSuccess }) => {
                         <div className="form-group">
                             <label>Role <span className="req">*</span></label>
                             {isStationStaff ? (
-                                <input type="text" value="Station Staff" readOnly disabled style={{ backgroundColor: '#f5f5f5', color: '#666', border: '1px solid #eef0f4', padding: '10px 14px', borderRadius: '8px', fontSize: '14px', width: '100%' }} />
+                                <input type="text" value={formatRoleLabel(form.role)} readOnly disabled style={{ backgroundColor: '#f5f5f5', color: '#666', border: '1px solid #eef0f4', padding: '10px 14px', borderRadius: '8px', fontSize: '14px', width: '100%' }} />
                             ) : (
                                 <select value={normalizeRoleValue(form.role)} onChange={e => update('role', e.target.value)}>
                                     {roles.length > 0 ? roles.map(role => (
@@ -300,7 +308,7 @@ const AddUserModal = ({ onClose, onSuccess }) => {
                         </div>
                         <div className="form-group form-group--full">
                             <label>Assign Station / Barangay</label>
-                            {isStationStaff ? (
+                            {isStationBound ? (
                                 <input type="text" value={formatStationName(user.station)} readOnly disabled style={{ backgroundColor: '#f5f5f5', color: '#666', border: '1px solid #eef0f4', padding: '10px 14px', borderRadius: '8px', fontSize: '14px', width: '100%' }} />
                             ) : (
                                 <>

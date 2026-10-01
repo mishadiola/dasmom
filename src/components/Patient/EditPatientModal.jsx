@@ -23,6 +23,7 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
     const [errors, setErrors] = useState({});
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [successMessage, setSuccessMessage] = useState('');
     const [availableStations, setAvailableStations] = useState([]);
 
     useEffect(() => {
@@ -40,14 +41,6 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
 
     const formatStationName = (station) => {
         if (!station) return '';
-        const stationMap = {
-            'cho iii': 'City Health Office 3',
-            'cho 3': 'City Health Office 3',
-            'cho3': 'City Health Office 3',
-            'salawag': 'Salawag',
-        };
-        const lowerStation = station.toLowerCase().trim();
-        if (stationMap[lowerStation]) return stationMap[lowerStation];
         return station
             .split(' ')
             .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
@@ -184,7 +177,17 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
                 emergency_contact_phone: formData.emergencyContactPhone
             };
 
-            await patientService.updatePatient(patient.id, updatedData);
+            const savedPatient = await patientService.updatePatient(patient.id, updatedData);
+
+            if (savedPatient.profileUpdateSkipped) {
+                if (onSave) onSave({ ...patient, station: formData.station });
+                setSuccessMessage('The station was updated. Other profile changes were not saved because they require edit permission at the patient\'s current station.');
+                setSuccess(true);
+                setTimeout(() => onClose(), 2500);
+                return;
+            }
+
+            setSuccessMessage('The patient information has been saved to the database.');
             
             setSuccess(true);
             
@@ -241,7 +244,7 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
                             <Save size={32} />
                         </div>
                         <h3>Patient Updated Successfully!</h3>
-                        <p>The patient information has been saved to the database.</p>
+                        <p>{successMessage}</p>
                     </div>
                 ) : (
                     <form className="edit-patient-modal-body" onSubmit={handleSubmit}>

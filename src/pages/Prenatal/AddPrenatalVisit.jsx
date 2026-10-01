@@ -55,10 +55,25 @@ const AddPrenatalVisit = () => {
 
     const [midwives, setMidwives] = useState([]);
     const [midwivesLoading, setMidwivesLoading] = useState(false);
+    const [userAccess, setUserAccess] = useState(null);
+    const [stationOptions, setStationOptions] = useState([]);
     const [isFormInitialized, setIsFormInitialized] = useState(false);
     const saveInFlightRef = useRef(false);
     const [isSaving, setIsSaving] = useState(false);
     const [rebalanceRemainingSchedule, setRebalanceRemainingSchedule] = useState(false);
+
+    useEffect(() => {
+        let active = true;
+        Promise.all([
+            patientService.getCurrentUserAccess(),
+            patientService.supabase.from('stations').select('id, station_name').order('station_name')
+        ]).then(([access, result]) => {
+            if (!active) return;
+            setUserAccess(access);
+            setStationOptions(result.data || []);
+        }).catch(error => console.error('Failed to load visit permissions:', error));
+        return () => { active = false; };
+    }, [user?.id]);
 
     // Fetch patient data
     useEffect(() => {
@@ -69,10 +84,10 @@ const AddPrenatalVisit = () => {
 
     // Set form data when patient loads
     useEffect(() => {
-        if (patient && !isFormInitialized) {
+        if (patient && userAccess && !isFormInitialized) {
             const pregnancyVisits = patient.currentPregnancy?.visits || [];
             const scheduledVisits = pregnancyVisits
-                .filter(visit => visit.status === 'Scheduled')
+                .filter(visit => ['Scheduled', 'Missed'].includes(visit.status))
                 .sort((left, right) => Number(left.visit_number) - Number(right.visit_number));
             const nextScheduledVisit = scheduledVisits[0] || null;
             const maxVisitNumber = pregnancyVisits.reduce((max, visit) => Math.max(max, Number(visit.visit_number) || 0), 0);
@@ -85,20 +100,23 @@ const AddPrenatalVisit = () => {
                 trimester: patient.trimester || '',
                 visitDate: new Date().toISOString().split('T')[0],
                 visitNumber: nextScheduledVisit?.visit_number || maxVisitNumber + 1,
-                attendingMidwife: user?.id || '',
-                healthFacility: patient.station || 'CHO 3 – Main Health Facility',
-                healthFacility: patient.station || 'CHO 3 – Main Health Facility',
+                attendingMidwife: nextScheduledVisit?.assigned_staff || '',
+                healthFacility: userAccess.role === 'admin'
+                    ? patient.station || ''
+                    : stationOptions.find(station => station.id === userAccess.stationId)?.station_name || '',
                 fundalHeight: '', fhr: '', fetalMovement: 'Normal', presentation: 'Cephalic',
                 testsDone: [], 
                 riskFactors: ['None'], otherRiskFactor: '',
                 calculatedRisk: patient.risk || 'Normal',
                 clinicalNotes: '', adviceGiven: '',
                 referred: false, referralReason: [], referralDate: '',
-                nextApptDate: nextScheduledVisit?.visit_date ? String(nextScheduledVisit.visit_date).slice(0, 10) : ''
+                nextApptDate: nextScheduledVisit?.next_appt_date
+                    ? String(nextScheduledVisit.next_appt_date).slice(0, 10)
+                    : ''
             }));
             setIsFormInitialized(true);
         }
-    }, [patient, isFormInitialized, user]);
+    }, [patient, isFormInitialized, user, userAccess, stationOptions]);
 
     // Smart Calculators: EDD, GA, Trimester
     useEffect(() => {
@@ -132,37 +150,35 @@ const AddPrenatalVisit = () => {
 
     // Smart Calculator: Risk Level & BP warning trigger
     useEffect(() => {
-        let isHighRisk = false;
-
-        // Risk factor checkboxes
-        if (formData.riskFactors && formData.riskFactors.length > 0) isHighRisk = true;
-
-        // BP check
-        const sys = parseInt(formData.bpSystolic);
-        const dia = parseInt(formData.bpDiastolic);
-        if (sys >= 140 || dia >= 90) {
-            isHighRisk = true;
-            if (!formData.riskFactors.includes('High BP')) {
-                // Auto add to factors if actual numbers are high
-                setFormData(prev => ({ ...prev, riskFactors: [...prev.riskFactors, 'High BP'] }));
+        const heightCm = [...(patient?.currentPregnancy?.visits || [])]
+            .sort((a, b) => new Date(b.visit_date) - new Date(a.visit_date))
+            .find(visit => Number(visit.height_cm) > 0)?.height_cm;
+        const riskAssessment = patientService.getPregnancyRisk(
+            patient || {},
+            patient?.currentPregnancy || {},
+            {
+                risk_factors: (formData.riskFactors || []).filter(factor => factor !== 'None').join(', '),
+                bp_systolic: formData.bpSystolic,
+                bp_diastolic: formData.bpDiastolic,
+                weight_kg: formData.weight,
+                height_cm: heightCm,
+                temp_c: formData.temp,
+                pulse_bpm: formData.pulse,
+                resp_rate_cpm: formData.rr,
+                fhr_bpm: formData.fhr,
             }
-        }
-
-        // Base risk inheritance
-        if (patient && patient.risk === 'High Risk') isHighRisk = true;
-
+        );
         setFormData(prev => ({
             ...prev,
-            calculatedRisk: isHighRisk ? 'High Risk' : (prev.riskFactors && prev.riskFactors.length) ? 'Monitor' : 'Normal'
+            calculatedRisk: riskAssessment.riskLevel
         }));
+    }, [formData.riskFactors, formData.bpSystolic, formData.bpDiastolic, formData.weight, formData.temp, formData.pulse, formData.rr, formData.fhr, patient]);
 
-    }, [formData.riskFactors, formData.bpSystolic, formData.bpDiastolic, patient]);
-
-    // Fetch midwives based on station
+    // CHO/admin assignment choices are constrained by the caller's station and selected facility.
     useEffect(() => {
-        if (formData.station) {
+        if (formData.healthFacility && userAccess?.role !== 'staff') {
             setMidwivesLoading(true);
-            patientService.getDoctorsByStation(formData.station).then(data => {
+            patientService.getDoctorsByStation(formData.healthFacility).then(data => {
                 setMidwives(data || []);
                 setMidwivesLoading(false);
             }).catch(err => {
@@ -174,7 +190,20 @@ const AddPrenatalVisit = () => {
             setMidwives([]);
             setMidwivesLoading(false);
         }
-    }, [formData.station]);
+    }, [formData.healthFacility, userAccess?.role]);
+
+    useEffect(() => {
+        const selectedSchedule = (patient?.currentPregnancy?.visits || []).find(visit =>
+            ['Scheduled', 'Missed'].includes(visit.status)
+            && Number(visit.visit_number) === Number(formData.visitNumber)
+        );
+        if (selectedSchedule) {
+            setFormData(prev => ({
+                ...prev,
+                nextApptDate: String(selectedSchedule.next_appt_date || '').slice(0, 10)
+            }));
+        }
+    }, [patient, formData.visitNumber]);
 
     // Handlers
     const handleChange = (e) => {
@@ -390,25 +419,20 @@ const AddPrenatalVisit = () => {
             const visits = (allVisits || []).filter(visit => currentPregnancyVisitIdSet.has(visit.id));
 
             const scheduledVisits = visits
-                .filter(visit => visit.status === 'Scheduled')
+                .filter(visit => ['Scheduled', 'Missed'].includes(visit.status))
                 .sort((left, right) => Number(left.visit_number) - Number(right.visit_number));
             const visitDateStr = formData.visitDate;
             const exactMatch = scheduledVisits.find(visit => String(visit.visit_date).slice(0, 10) === visitDateStr);
-            const isOffSchedule = scheduledVisits.length > 0 && !exactMatch;
-            const targetVisit = exactMatch || scheduledVisits[0] || null;
+            const targetVisit = scheduledVisits.find(visit => Number(visit.visit_number) === Number(formData.visitNumber))
+                || exactMatch
+                || scheduledVisits[0]
+                || null;
+            const isOffSchedule = Boolean(targetVisit && String(targetVisit.visit_date).slice(0, 10) !== visitDateStr);
             const maxVisitNumber = visits.reduce((max, visit) => Math.max(max, Number(visit.visit_number) || 0), 0);
 
             const rowVisitNumber = targetVisit ? Number(targetVisit.visit_number) : maxVisitNumber + 1;
             const rowVisitDate = formData.visitDate;
-            const rowId = exactMatch ? exactMatch.id : (isOffSchedule ? null : targetVisit?.id || null);
-
-            if (isOffSchedule) {
-                await patientService.shiftPrenatalVisitsForInsertion(
-                    patientId,
-                    visits,
-                    rowVisitNumber
-                );
-            }
+            const rowId = targetVisit?.id || null;
 
             console.log('Target visit info:', { 
                 rowVisitNumber, 
@@ -445,30 +469,44 @@ const AddPrenatalVisit = () => {
                 next_appt_type: null,
                 status: 'Attended',
                 attended_date: formData.visitDate || new Date().toISOString().split('T')[0],
-                assigned_staff: formData.attendingMidwife || null,
                 risk_factors: formData.riskFactors?.length > 0 
                     ? formData.riskFactors.filter(f => f !== 'None').map(f => f === 'Other' ? formData.otherRiskFactor : f).join(', ') 
                     : null,
                 calculated_risk: formData.calculatedRisk,
             };
+            const latestRecordedHeight = [...(patient.currentPregnancy?.visits || [])]
+                .sort((a, b) => new Date(b.visit_date) - new Date(a.visit_date))
+                .find(visit => Number(visit.height_cm) > 0)?.height_cm;
+            const riskAssessment = patientService.getPregnancyRisk(
+                patient,
+                patient.currentPregnancy || {},
+                { ...visitData, height_cm: latestRecordedHeight }
+            );
+            visitData.calculated_risk = riskAssessment.riskLevel;
+            visitData.risk_factors = riskAssessment.riskFactors.join(', ') || null;
+
+            const actualStationId = userAccess.role === 'admin'
+                ? await patientService.getStationIdByName(formData.healthFacility)
+                : userAccess.stationId;
+            if (!actualStationId) throw new Error('Select a valid visit station.');
 
             let currentVisitId = rowId;
             if (rowId) {
-                // Update only the specific visit by ID
-                const { data: updatedVisit, error: updateError } = await patientService.supabase
-                    .from('prenatal_visits')
-                    .update(visitData)
-                    .eq('id', rowId)
-                    .select('id')
-                    .single();
-                
-                if (updateError) throw updateError;
-                currentVisitId = updatedVisit.id;
+                await patientService.completePrenatalVisit(rowId, visitData, actualStationId);
                 console.log(`Updated visit ${rowVisitNumber} with ID ${rowId}`);
             } else {
+                const assignedStationId = patient.stationId || actualStationId;
                 const { data: insertedVisit, error: insertError } = await patientService.supabase
                     .from('prenatal_visits')
-                    .insert(visitData)
+                    .insert({
+                        ...visitData,
+                        assigned_staff: (patient.currentPregnancy?.visits || [])
+                            .find(visit => visit.status === 'Scheduled' && visit.assigned_staff)
+                            ?.assigned_staff || null,
+                        assigned_station: assignedStationId,
+                        station_ass: actualStationId,
+                        performed_by: user?.id
+                    })
                     .select('id')
                     .single();
                 
@@ -477,14 +515,14 @@ const AddPrenatalVisit = () => {
                 console.log(`Inserted new visit ${rowVisitNumber}`);
             }
 
-            if (!isOffSchedule || rebalanceRemainingSchedule) {
+            if (isOffSchedule && rebalanceRemainingSchedule) {
                 await patientService.rebalancePrenatalSchedule(
                     patientId,
                     formData.lmp,
                     rowVisitNumber,
                     rowVisitDate,
                     createdBy,
-                    { retained_staff: formData.attendingMidwife || null },
+                    {},
                     35,
                     [...currentPregnancyVisitIds, currentVisitId],
                     currentVisitId
@@ -507,12 +545,18 @@ const AddPrenatalVisit = () => {
 
     // Derived flags for UI
     const isHighBP = parseInt(formData.bpSystolic) >= 140 || parseInt(formData.bpDiastolic) >= 90;
+    const scheduledVisitToRecord = (patient?.currentPregnancy?.visits || []).find(visit =>
+        Number(visit.visit_number) === Number(formData.visitNumber)
+        && ['Scheduled', 'Missed'].includes(visit.status)
+    );
     const currentPregnancyVisits = patient?.currentPregnancy?.visits || [];
     const scheduledPregnancyVisits = currentPregnancyVisits
-        .filter(visit => visit.status === 'Scheduled')
+        .filter(visit => ['Scheduled', 'Missed'].includes(visit.status))
         .sort((left, right) => Number(left.visit_number) - Number(right.visit_number));
-    const isOutsideScheduledDate = scheduledPregnancyVisits.length > 0
-        && !scheduledPregnancyVisits.some(visit => String(visit.visit_date).slice(0, 10) === formData.visitDate);
+    const isOutsideScheduledDate = Boolean(
+        scheduledVisitToRecord
+        && String(scheduledVisitToRecord.visit_date).slice(0, 10) !== formData.visitDate
+    );
 
     if (!patient) {
         return <div className="loading">Loading patient data...</div>;
@@ -840,7 +884,17 @@ const AddPrenatalVisit = () => {
                         </div>
                         <div className="form-group mt-2">
                             <label>Visit Number</label>
-                            <input type="number" readOnly className="read-only" value={formData.visitNumber} />
+                            {scheduledPregnancyVisits.length > 0 ? (
+                                <select name="visitNumber" value={formData.visitNumber} onChange={handleChange}>
+                                    {scheduledPregnancyVisits.map(visit => (
+                                        <option key={visit.id} value={visit.visit_number}>
+                                            Visit {visit.visit_number} · {String(visit.visit_date).slice(0, 10)}
+                                        </option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <input type="number" readOnly className="read-only" value={formData.visitNumber} />
+                            )}
                         </div>
                         {isOutsideScheduledDate && (
                             <div className="form-group mt-2" style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -859,26 +913,44 @@ const AddPrenatalVisit = () => {
                             </div>
                         )}
                         <div className="form-group mt-2">
-                            <label>Health Facility</label>
-                            <select name="healthFacility" value={formData.healthFacility} onChange={handleChange}>
-                                {patient?.station && patient.station !== 'CHO 3 – Main Health Facility' && (
-                                    <option value={patient.station}>{patient.station}</option>
-                                )}
-                                <option value="CHO 3 – Main Health Facility">CHO 3 – Main Health Facility</option>
-                            </select>
+                            <label>Visit Station</label>
+                            {userAccess?.role === 'admin' ? (
+                                <select name="healthFacility" value={formData.healthFacility} onChange={handleChange}>
+                                    <option value="">Select station</option>
+                                    {stationOptions.map(station => (
+                                        <option key={station.id} value={station.station_name}>{station.station_name}</option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <input value={formData.healthFacility || 'Station not assigned'} readOnly className="read-only" />
+                            )}
                         </div>
                         <div className="form-group mt-2">
-                            <label>Attending Midwife / Doctor</label>
-                            <select name="attendingMidwife" value={formData.attendingMidwife} onChange={handleChange}>
-                                <option value="">Select Midwife</option>
-                                {midwivesLoading ? (
-                                    <option disabled>Loading...</option>
-                                ) : (
-                                    midwives.map(midwife => (
-                                        <option key={midwife.id} value={midwife.id}>{midwife.full_name}</option>
-                                    ))
-                                )}
-                            </select>
+                            <label>Assigned Staff</label>
+                            {userAccess?.role === 'staff' || (scheduledVisitToRecord && scheduledVisitToRecord.assigned_staff) ? (
+                                <input
+                                    value={userAccess?.role === 'staff'
+                                        ? scheduledVisitToRecord?.assigned_staff_name || (patient?.stationId === userAccess.stationId ? user?.fullName : 'Not assigned')
+                                        : scheduledVisitToRecord?.assigned_staff_name || 'Not assigned'}
+                                    readOnly
+                                    className="read-only"
+                                />
+                            ) : (
+                                <select name="attendingMidwife" value={formData.attendingMidwife} onChange={handleChange}>
+                                    <option value="">No staff assigned</option>
+                                    {midwivesLoading ? (
+                                        <option disabled>Loading...</option>
+                                    ) : (
+                                        midwives.map(midwife => (
+                                            <option key={midwife.id} value={midwife.id}>{midwife.full_name}</option>
+                                        ))
+                                    )}
+                                </select>
+                            )}
+                        </div>
+                        <div className="form-group mt-2">
+                            <label>Performed By</label>
+                            <input value={user?.fullName || user?.displayName || 'Current user'} readOnly className="read-only" />
                         </div>
                     </div>
 

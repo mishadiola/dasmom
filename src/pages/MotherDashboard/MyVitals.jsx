@@ -32,22 +32,40 @@ const MyVitals = () => {
                 const authUser = await auth.getAuthUser();
                 if (!authUser?.id) return;
                 const patient = await patientService.getPatientById(authUser.id);
+                const latestRecordedHeight = [...(patient?.currentPregnancy?.visits || [])]
+                    .sort((a, b) => new Date(b.visit_date) - new Date(a.visit_date))
+                    .find(v => Number(v.height_cm) > 0)?.height_cm;
                 // Only include visits that have actual vital records (not pending/incomplete)
                 const visits = (patient?.currentPregnancy?.visits || [])
-                    .filter(v => v.visit_date && (v.weight_kg || (v.bp_systolic && v.bp_diastolic) || v.pulse_bpm || v.temp_c))
+                    .filter(v => v.visit_date && (v.weight_kg || (v.bp_systolic && v.bp_diastolic) || v.pulse_bpm || v.temp_c || v.resp_rate_cpm || v.fhr_bpm))
                     .map(v => ({
                         id: v.id,
                         date: v.visit_date,
                         weight: v.weight_kg,
+                        height: v.height_cm || latestRecordedHeight,
                         bp: v.bp_systolic && v.bp_diastolic ? `${v.bp_systolic}/${v.bp_diastolic}` : null,
                         bp_systolic: v.bp_systolic,
                         bp_diastolic: v.bp_diastolic,
                         pulse: v.pulse_bpm,
                         temp: v.temp_c,
                         notes: v.clinical_notes || '',
+                        risk_factors: v.risk_factors,
                         trimester: v.trimester ? `Trimester ${v.trimester}` : patient?.trimester || 'N/A'
                     }))
                     .sort((a, b) => new Date(b.date) - new Date(a.date));
+                const latestVisit = visits[0];
+                const riskAssessment = latestVisit
+                    ? patientService.getPregnancyRisk(patient, patient?.currentPregnancy || {}, {
+                        ...latestVisit,
+                        weight_kg: latestVisit.weight,
+                        height_cm: latestVisit.height,
+                        bp_systolic: latestVisit.bp_systolic,
+                        bp_diastolic: latestVisit.bp_diastolic,
+                        temp_c: latestVisit.temp,
+                        pulse_bpm: latestVisit.pulse,
+                        risk_factors: latestVisit.risk_factors
+                    })
+                    : null;
                 
                 const fullName = patient ? [patient.first_name, patient.middle_name, patient.last_name, patient.suffix].filter(Boolean).join(' ') : 'N/A';
                 setPatientInfo({
@@ -57,7 +75,7 @@ const MyVitals = () => {
                 });
 
                 const chronological = [...visits].reverse();
-                setVitalsData({ visits, chronological });
+                setVitalsData({ visits, chronological, riskAssessment });
             } catch (err) {
                 console.error('Failed to load vitals:', err);
             } finally {
@@ -69,6 +87,35 @@ const MyVitals = () => {
 
     const CURRENT_VITALS = vitalsData.visits?.[0] || {};
     const filteredVitals = filterTrimester === 'All' ? (vitalsData.visits || []) : (vitalsData.visits || []).filter(v => v.trimester === filterTrimester);
+    const currentWeight = Number(CURRENT_VITALS.weight);
+    const currentHeight = Number(CURRENT_VITALS.height);
+    const currentBmi = currentWeight > 0 && currentHeight > 0
+        ? currentWeight / ((currentHeight / 100) ** 2)
+        : null;
+    const weightStatus = currentBmi === null
+        ? (CURRENT_VITALS.weight ? 'Under observation' : 'No record')
+        : currentBmi < 18.5 ? 'Underweight'
+            : currentBmi < 25 ? 'Normal'
+                : currentBmi < 30 ? 'Overweight' : 'Obese';
+    const bpStatus = CURRENT_VITALS.bp_systolic && CURRENT_VITALS.bp_diastolic
+        ? (Number(CURRENT_VITALS.bp_systolic) >= 140 || Number(CURRENT_VITALS.bp_diastolic) >= 90
+            || Number(CURRENT_VITALS.bp_systolic) < 90 || Number(CURRENT_VITALS.bp_diastolic) < 60
+            ? 'Abnormal' : 'Normal')
+        : 'Under observation';
+    const pulseValue = Number(CURRENT_VITALS.pulse);
+    const pulseStatus = CURRENT_VITALS.pulse
+        ? (pulseValue < 60 || pulseValue > 100 ? 'Abnormal' : 'Normal')
+        : 'Under observation';
+    const temperatureValue = Number(CURRENT_VITALS.temp);
+    const temperatureStatus = CURRENT_VITALS.temp
+        ? (temperatureValue < 35.1 || temperatureValue > 37.5 ? 'Abnormal' : 'Normal')
+        : 'Under observation';
+    const currentRiskFactors = vitalsData.riskAssessment?.riskFactors || [];
+    const getStatusClass = status => status === 'Normal'
+        ? 'v-summary-card--green'
+        : ['Under observation', 'No record'].includes(status)
+            ? 'v-summary-card--yellow'
+            : 'v-summary-card--red';
 
     const handleDownloadPDF = () => {
         const doc = new jsPDF('portrait');
@@ -349,10 +396,10 @@ const MyVitals = () => {
                                 )}
                             </div>
                             <div className="vitals-summary-grid">
-                                <div className="v-summary-card v-summary-card--green">
+                                <div className={`v-summary-card ${getStatusClass(weightStatus)}`}>
                                     <div className="v-card-top">
                                         <div className="v-icon-wrap"><Weight size={20} /></div>
-                                        <span className="v-status">{t('vitals_normal')}</span>
+                                        <span className="v-status">{weightStatus}</span>
                                     </div>
                                     <div className="v-value-wrap">
                                         <span className="v-value">{CURRENT_VITALS.weight || '--'}</span>
@@ -361,10 +408,10 @@ const MyVitals = () => {
                                     <p className="v-label">{t('vitals_current_weight')}</p>
                                 </div>
 
-                                <div className="v-summary-card v-summary-card--yellow">
+                                <div className={`v-summary-card ${getStatusClass(bpStatus)}`}>
                                     <div className="v-card-top">
                                         <div className="v-icon-wrap"><Activity size={20} /></div>
-                                        <span className="v-status">{t('vitals_monitor')}</span>
+                                        <span className="v-status">{bpStatus}</span>
                                     </div>
                                     <div className="v-value-wrap">
                                         <span className="v-value">{CURRENT_VITALS.bp || '--'}</span>
@@ -373,10 +420,10 @@ const MyVitals = () => {
                                     <p className="v-label">{t('vitals_blood_pressure')}</p>
                                 </div>
 
-                                <div className="v-summary-card v-summary-card--pink">
+                                <div className={`v-summary-card ${getStatusClass(pulseStatus)}`}>
                                     <div className="v-card-top">
                                         <div className="v-icon-wrap"><Heart size={20} /></div>
-                                        <span className="v-status">{t('vitals_normal')}</span>
+                                        <span className="v-status">{pulseStatus}</span>
                                     </div>
                                     <div className="v-value-wrap">
                                         <span className="v-value">{CURRENT_VITALS.pulse || '--'}</span>
@@ -385,10 +432,10 @@ const MyVitals = () => {
                                     <p className="v-label">{t('vitals_heart_rate')}</p>
                                 </div>
 
-                                <div className="v-summary-card v-summary-card--green">
+                                <div className={`v-summary-card ${getStatusClass(temperatureStatus)}`}>
                                     <div className="v-card-top">
                                         <div className="v-icon-wrap"><Thermometer size={20} /></div>
-                                        <span className="v-status">{t('vitals_normal')}</span>
+                                        <span className="v-status">{temperatureStatus}</span>
                                     </div>
                                     <div className="v-value-wrap">
                                         <span className="v-value">{CURRENT_VITALS.temp || '--'}</span>
@@ -407,20 +454,23 @@ const MyVitals = () => {
                         <div className="vitals-observations-card">
                             <h2 className="section-title">{t('vitals_observations')}</h2>
                             <div className="vitals-alerts">
-                                <div className="v-alert-banner v-alert-banner--warning">
-                                    <AlertCircle size={20} />
-                                    <div className="v-alert-text">
-                                        <h4>{t('vitals_high_bp_title')}</h4>
-                                        <p>{t('vitals_high_bp_text')}</p>
+                                {currentRiskFactors.length > 0 ? currentRiskFactors.map((factor, index) => (
+                                    <div key={`${factor}-${index}`} className="v-alert-banner v-alert-banner--warning">
+                                        <AlertCircle size={20} />
+                                        <div className="v-alert-text">
+                                            <h4>{factor}</h4>
+                                            <p>Identified from your latest recorded visit.</p>
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="v-alert-banner v-alert-banner--success">
-                                    <CheckCircle2 size={20} />
-                                    <div className="v-alert-text">
-                                        <h4>{t('vitals_steady_weight_title')}</h4>
-                                        <p>{t('vitals_steady_weight_text')}</p>
+                                )) : (
+                                    <div className="v-alert-banner v-alert-banner--success">
+                                        <CheckCircle2 size={20} />
+                                        <div className="v-alert-text">
+                                            <h4>{t('vitals_steady_weight_title')}</h4>
+                                            <p>No current high-risk vital findings were identified.</p>
+                                        </div>
                                     </div>
-                                </div>
+                                )}
                             </div>
                         </div>
                     </>

@@ -34,8 +34,6 @@ const SUPPLEMENT_TYPES = [
   'Calcium', 'Zinc', 'Iodine', 'Vitamin B Complex', 'Omega-3'
 ];
 
-const STAFF_LIST = ['Nurse Ana', 'Nurse Bea', 'Midwife Elena', 'Midwife Ana', 'Dr. Reyes (OB)'];
-
 const formatReadableDate = (dateString) => {
     if (!dateString) return dateString;
     const date = new Date(dateString);
@@ -319,7 +317,7 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                 setSelectedPatient(null);
                 setPendingVaccines([]);
                 setSelectedVaccines({});
-                setStaffList(STAFF_LIST);
+                setStaffList([]);
                 setSuggestions([]);
                 setShowSuggestions(false);
                 setPatientStationId(null);
@@ -405,7 +403,8 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
 
                 const { stationId } = await resolvePatientStation(patientId, form.patientType, stationHint);
                 console.log('🏢 Final resolved station ID:', stationId, 'hint:', stationHint);
-                setPatientStationId(stationId);
+                const access = await patientService.getCurrentUserAccess();
+                setPatientStationId(access.stationId || stationId);
 
                 if (barangay) {
                     const { data: staffData, error: staffError } = await supabase
@@ -536,6 +535,9 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
 
             const currentUser = await patientService.getCurrentUserId();
             if (!currentUser) throw new Error('No logged-in user');
+            const access = await patientService.getCurrentUserAccess();
+            const performingStationId = access.stationId || patientStationId;
+            if (!performingStationId) throw new Error('Your account must have an assigned service station.');
             const vaccinationService = new VaccinationService();
             const assignedStaff = form.patientType === 'Mother'
                 ? await vaccinationService.getAssignedStaffForPatient(patientId)
@@ -593,6 +595,7 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                         const updateData = {
                             vaccinated_date: form.date,
                             status: 'Completed',
+                            station_ass: performingStationId,
                             vaccinated_by: currentUser,
                             remarks: form.remarks || null
                         };
@@ -601,7 +604,11 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                             updateData.vaccine_inventory_id = vaccineInvId;
                         }
 
-                        await supabase.from('vaccinations').update(updateData).eq('id', scheduledId);
+                        const { error: updateError } = await supabase
+                            .from('vaccinations')
+                            .update(updateData)
+                            .eq('id', scheduledId);
+                        if (updateError) throw updateError;
 
                         if (vaccineInvId) {
                             const { data: vaccInv } = await supabase
@@ -670,6 +677,7 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                         const vaccinationRecord = {
                             vaccinated_date: form.date,
                             status: 'Completed',
+                            station_ass: performingStationId,
                             created_by: currentUser,
                             vaccinated_by: currentUser,
                             assigned_staff: assignedStaff,
@@ -763,6 +771,7 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                         vaccinated_date: form.date,
                         scheduled_vaccination: form.date,
                         status: 'Completed',
+                        station_ass: performingStationId,
                         created_by: currentUser,
                         vaccinated_by: currentUser,
                         assigned_staff: assignedStaff,
@@ -771,7 +780,8 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
 
                     if (vaccInv) {
                         vaccinationRecord.vaccine_inventory_id = vaccInv.id;
-                        await supabase.from('vaccinations').insert([vaccinationRecord]);
+                        const { error: insertError } = await supabase.from('vaccinations').insert([vaccinationRecord]);
+                        if (insertError) throw insertError;
 
                         if (vaccInv.quantity > 0) {
                             await supabase
@@ -799,7 +809,8 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                         }
                     } else {
                         console.log(`⚠️ Vaccine not in inventory, creating manual record for: ${form.vaccine}`);
-                        await supabase.from('vaccinations').insert([vaccinationRecord]);
+                        const { error: insertError } = await supabase.from('vaccinations').insert([vaccinationRecord]);
+                        if (insertError) throw insertError;
                     }
 
                     if (form.patientType === 'Mother' && isPregnant) {
@@ -835,7 +846,9 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                     dosage: form.dose,
                     start_date: form.date,
                     end_date: form.date,
-                    created_by: currentUser
+                    created_by: currentUser,
+                    administered_by: currentUser,
+                    station_ass: performingStationId
                 };
 
                 // If supplement found in inventory, link it and decrement
@@ -855,7 +868,8 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                     console.log(`⚠️ Supplement not in inventory, creating manual record for: ${form.supplement}`);
                 }
 
-                await supabase.from('supplements').insert([supplementRecord]);
+                const { error: supplementError } = await supabase.from('supplements').insert([supplementRecord]);
+                if (supplementError) throw supplementError;
             }
 
             if (onSave) {
@@ -1354,6 +1368,8 @@ const Vaccinations = () => {
                     expirationStatus: expStatus.status,
                     expirationClass: expStatus.class,
                     staff: staffMap.get(record.created_by) || 'Unknown',
+                    administeredBy: staffMap.get(record.administered_by) || staffMap.get(record.created_by) || 'Unknown',
+                    serviceStationId: record.station_ass || null,
                     notes: record.notes,
                     status: record.status
                 };

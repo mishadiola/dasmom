@@ -386,6 +386,7 @@ const PregnancyDeliveryInfo = () => {
                                             : typeof delivery.complications === 'object' && delivery.complications
                                                 ? JSON.stringify(delivery.complications)
                                                 : delivery.complications || 'None recorded'}</p>
+                                            <p>Delivery station: {delivery.station || 'Not recorded'}</p>
                                         <p>Facility: {delivery.facility || 'Not recorded'}</p>
                                         <p>Attending health worker: {delivery.assigned_staff_name || 'Not assigned'}</p>
                                         {delivery.assigned_staff_station && <p>Health worker station: {delivery.assigned_staff_station}</p>}

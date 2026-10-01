@@ -144,7 +144,9 @@ const DashboardLayout = () => {
                         id,
                         patient_id,
                         visit_date,
-                        patient_basic_info (first_name, last_name, barangay)
+                        station_ass,
+                        stations:station_ass (station_name),
+                        patient_basic_info (first_name, last_name)
                     `)
                     .eq('visit_date', today)
                     .limit(5);
@@ -155,7 +157,7 @@ const DashboardLayout = () => {
                         notifList.push({
                             category: 'appointments',
                             type: 'info',
-                            text: `Prenatal visit scheduled today for ${patient?.first_name} ${patient?.last_name}`,
+                            text: `Prenatal visit scheduled today for ${patient?.first_name} ${patient?.last_name} · ${appt.stations?.station_name || 'Station not assigned'}`,
                             time: 'Today',
                             targetPath: '/dashboard/prenatal',
                             targetState: { highlightVisitId: appt.id, patientId: appt.patient_id }
@@ -170,10 +172,12 @@ const DashboardLayout = () => {
                         id,
                         patient_id,
                         visit_date,
+                        station_ass,
+                        stations:station_ass (station_name),
                         patient_basic_info (first_name, last_name)
                     `)
                     .lt('visit_date', today)
-                    .eq('status', 'Upcoming')
+                    .in('status', ['Missed', 'Scheduled'])
                     .limit(3);
 
                 if (missedAppts && missedAppts.length > 0) {
@@ -182,10 +186,10 @@ const DashboardLayout = () => {
                         notifList.push({
                             category: 'appointments',
                             type: 'warning',
-                            text: `${patient?.first_name} ${patient?.last_name} missed prenatal visit`,
+                            text: `${patient?.first_name} ${patient?.last_name} missed prenatal visit · ${appt.stations?.station_name || 'Station not assigned'}`,
                             time: 'Missed',
                             targetPath: '/dashboard/prenatal',
-                            targetState: { highlightVisitId: appt.id, patientId: appt.patient_id, filterStatus: 'Upcoming' }
+                            targetState: { highlightVisitId: appt.id, patientId: appt.patient_id, filterStatus: 'Missed' }
                         });
                     });
                 }
@@ -223,7 +227,7 @@ const DashboardLayout = () => {
                         id,
                         patient_id,
                         calculated_risk,
-                        patient_basic_info (first_name, last_name, barangay)
+                        patient_basic_info (first_name, last_name, station_ass, stations:station_ass (station_name))
                     `)
                     .neq('calculated_risk', 'Normal')
                     .not('calculated_risk', 'is', null)
@@ -235,7 +239,7 @@ const DashboardLayout = () => {
                             category: 'patients',
                             type: 'alert',
                             text: `${patient.patient_basic_info.first_name} ${patient.patient_basic_info.last_name} - ${patient.calculated_risk}`,
-                            time: patient.patient_basic_info.barangay,
+                            time: patient.patient_basic_info.stations?.station_name || 'Station not assigned',
                             targetPath: '/dashboard/patients',
                             targetState: { highlightPatientId: patient.patient_id }
                         });

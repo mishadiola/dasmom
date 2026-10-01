@@ -1,0 +1,77 @@
+.patient-staff-assignment {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.patient-staff-assignment__assigned,
+.patient-staff-assignment__unassigned {
+  color: var(--color-text-muted, #64748b);
+}
+
+.patient-staff-assignment__button,
+.patient-staff-assignment__form button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid var(--color-border, #d8dee8);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--color-text, #263238);
+  cursor: pointer;
+  font: inherit;
+}
+
+.patient-staff-assignment__form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.patient-staff-assignment__form select {
+  min-height: 30px;
+  max-width: 180px;
+  padding: 4px 7px;
+  border: 1px solid var(--color-border, #d8dee8);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--color-text, #263238);
+  font: inherit;
+}
+
+.patient-staff-assignment__form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.patient-staff-assignment__form .patient-staff-assignment__cancel {
+  background: transparent;
+}
+
+.patient-staff-assignment__error {
+  flex-basis: 100%;
+  color: #b42318;
+}
+
+.patient-assignment-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--color-text-muted, #64748b);
+  font-size: 12px;
+}
+
+.patient-assignment-filter select {
+  min-height: 34px;
+  padding: 5px 28px 5px 9px;
+  border: 1px solid var(--color-border, #d8dee8);
+  border-radius: 4px;
+  background-color: #fff;
+  color: var(--color-text, #263238);
+  font: inherit;
+}

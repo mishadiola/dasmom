@@ -55,7 +55,7 @@ export default class PatientService {
 
   async getCurrentUserAccess() {
     const currentUser = await authService.getAuthUser();
-    let role = (currentUser?.role || '').toLowerCase();
+    let role = String(currentUser?.role || '').toLowerCase().replace(/_/g, ' ').trim();
     let stationId = null;
 
     if (!role && currentUser?.id) {
@@ -71,9 +71,11 @@ export default class PatientService {
           .select('user_type')
           .eq('id', userRow.usertype)
           .maybeSingle();
-        role = (userTypeRow?.user_type || '').toLowerCase();
+        role = String(userTypeRow?.user_type || '').toLowerCase().replace(/_/g, ' ').trim();
       }
     }
+
+    if (role === 'station staff') role = 'staff';
 
     if (role === 'cho personnel' || role === 'staff') {
       const { data } = await this.supabase
@@ -211,17 +213,11 @@ export default class PatientService {
 
   async getAllPatients({ includeArchived = false } = {}) {
     try {
-      const { role, stationId } = await this.getCurrentUserAccess();
       const archivedPatientIds = await this.getArchivedPatientIds();
 
       let patientsQuery = this.supabase
         .from('patient_basic_info')
         .select('id, first_name, last_name, station_ass, municipality, date_of_birth, created_at, emergency_contact, stations:station_ass (station_name)');
-
-      if (role === 'cho personnel' || role === 'staff') {
-        if (!stationId) return [];
-        patientsQuery = patientsQuery.eq('station_ass', stationId);
-      }
 
       const { data: patients, error: err1 } = await patientsQuery.order('created_at', { ascending: false });
 
@@ -246,15 +242,23 @@ export default class PatientService {
       // 3. Get prenatal visits and compute attended visit totals plus the next appointment reference.
       const { data: visits, error: err3 } = await this.supabase
         .from('prenatal_visits')
-        .select('patient_id, visit_date, next_appt_date, status, risk_factors, calculated_risk, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm')
+        .select('patient_id, assigned_staff, visit_date, next_appt_date, status, risk_factors, calculated_risk, bp_systolic, bp_diastolic, weight_kg, height_cm, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm')
         .order('visit_date', { ascending: false });
       if (err3) throw err3;
 
       const nextApptMap = new Map();
       const attendedCountMap = new Map();
       const latestAttendedVisitMap = new Map();
+      const heightByPatientMap = new Map();
+      const assignedStaffMap = new Map();
       (visits || []).forEach(v => {
         if (!v.patient_id) return;
+        if (Number(v.height_cm) > 0 && !heightByPatientMap.has(v.patient_id)) {
+          heightByPatientMap.set(v.patient_id, v.height_cm);
+        }
+        if (v.status === 'Scheduled' && v.assigned_staff && !assignedStaffMap.has(v.patient_id)) {
+          assignedStaffMap.set(v.patient_id, v.assigned_staff);
+        }
         if (v.status === 'Attended') {
           const count = attendedCountMap.get(v.patient_id) || 0;
           attendedCountMap.set(v.patient_id, count + 1);
@@ -299,7 +303,11 @@ export default class PatientService {
         const trimester = lmp ? this.getTrimesterFromWeek(weeks) : 0;
 
         const latestVisit = latestAttendedVisitMap.get(p.id);
-        const riskAssessment = this.getPregnancyRisk(p, pgi || {}, latestVisit);
+        const riskAssessment = this.getPregnancyRisk(
+          { ...p, height_cm: p.height_cm || heightByPatientMap.get(p.id) },
+          pgi || {},
+          latestVisit
+        );
         const risk = riskAssessment.riskLevel;
         const riskFactors = riskAssessment.riskFactors;
 
@@ -352,8 +360,10 @@ export default class PatientService {
 
         return {
           id: p.id,
+          stationId: p.station_ass,
           name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown Patient',
           station: p.stations?.station_name || p.municipality || 'N/A',
+          assignedStaffId: assignedStaffMap.get(p.id) || null,
           age: p.date_of_birth
             ? Math.floor((new Date() - new Date(p.date_of_birth)) / (365.25 * 24 * 60 * 60 * 1000))
             : null,
@@ -498,8 +508,21 @@ export default class PatientService {
     if (riskTextLower.includes('anemia') || riskTextLower.includes('anaemia')) addFactor('Anemia');
     if (riskTextLower.includes('previous c-section') || riskTextLower.includes('c-section')) addFactor('Previous C-section');
 
+    const transientRiskPattern = /^(age\b|gravida\b|multiple pregnancy$|hypertension \(high\)$|hypotension \(low\)$|high bp$|overweight bmi$|underweight bmi$|obese bmi$|fever$|hypothermia$|abnormal (pulse|respiratory rate|fetal heart rate)$)/i;
+    (patient.medicalConditions || []).forEach(condition => {
+      const value = String(condition || '').trim();
+      if (value && !transientRiskPattern.test(value)) addFactor(value);
+    });
+
     if (this.isBPHighRisk(visit?.bp_systolic, visit?.bp_diastolic)) {
       addFactor(this.getBPStatus(visit?.bp_systolic, visit?.bp_diastolic));
+    }
+
+    const weight = Number(visit?.weight_kg);
+    const height = Number(visit?.height_cm || patient.height_cm);
+    if (weight > 0 && height > 0) {
+      const bmiCategory = this.calculateBMICategory(weight, height);
+      if (this.isBMIHighRisk(bmiCategory)) addFactor(`${bmiCategory} BMI`);
     }
 
     const hasValue = (val) => val !== null && val !== undefined && String(val).trim() !== '';
@@ -552,6 +575,8 @@ export default class PatientService {
         isHigh = true; 
       }
     }
+
+    if (factors.length >= 2) isHigh = true;
     
     let riskLevel = 'Low Risk';
     if (isHigh) riskLevel = 'High Risk';
@@ -588,17 +613,10 @@ export default class PatientService {
     const term = (query || '').trim();
     if (!term || term.length < 2) return [];
 
-    const { role, stationId } = await this.getCurrentUserAccess();
     const archivedPatientIds = await this.getArchivedPatientIds();
     const safeTerm = term.trim().replace(/%/g, '\\%');
 
-    const applyStationFilter = (baseQuery) => {
-      if (role === 'cho personnel' || role === 'staff') {
-        if (!stationId) return null;
-        return baseQuery.eq('station_ass', stationId);
-      }
-      return baseQuery;
-    };
+    const applyStationFilter = baseQuery => baseQuery;
 
     // Search by first_name
     const firstNameQuery = applyStationFilter(this.supabase
@@ -784,6 +802,13 @@ export default class PatientService {
 
     if (validSchedule.length === 0) return;
 
+    const { data: patientRecord, error: patientError } = await this.supabase
+      .from('patient_basic_info')
+      .select('station_ass')
+      .eq('id', patientId)
+      .single();
+    if (patientError) throw patientError;
+
     // Check for daily capacity before inserting (auto-schedule uses 30 slots/day)
     for (const visit of validSchedule) {
       const isFull = await this.checkScheduleOverlap(visit.date, patientId, maxPerDay);
@@ -808,6 +833,8 @@ export default class PatientService {
         next_appt_date: nextApptDate,  // Points to next visit in schedule or null for last visit
         status: 'Scheduled',
         assigned_staff: patientData.retained_staff || null,
+        assigned_station: patientRecord.station_ass,
+        station_ass: null,
         created_at: new Date().toISOString()
       };
     });
@@ -915,59 +942,18 @@ export default class PatientService {
         previousDate = scheduledDateStr;
       }
 
-      const scheduledVisitIds = new Set(schedule.map(visit => visit.id));
-      const visitsBeyondEdd = (futureVisits || []).filter(visit => !scheduledVisitIds.has(visit.id));
-      for (const visit of visitsBeyondEdd) {
-        const { error: deleteError } = await this.supabase
-          .from('prenatal_visits')
-          .delete()
-          .eq('id', visit.id)
-          .eq('patient_id', patientId);
-        if (deleteError) throw deleteError;
-      }
+      const updates = schedule.map((visit, index) => ({
+        ...visit,
+        nextApptDate: schedule[index + 1]?.date || null
+      }));
+      const { error: rebalanceError } = await this.supabase.rpc('rebalance_prenatal_visits', {
+        p_current_visit_id: currentVisitId,
+        p_schedule: updates,
+        p_future_visit_ids: (futureVisits || []).map(visit => visit.id)
+      });
+      if (rebalanceError) throw rebalanceError;
 
-      if (schedule.length > 0) {
-        for (let index = 0; index < schedule.length; index += 1) {
-          const visit = schedule[index];
-          const nextVisit = schedule[index + 1];
-          const nextApptDate = nextVisit ? nextVisit.date : null;
-
-          const { error: updateError } = await this.supabase
-          .from('prenatal_visits')
-            .update({
-              visit_number: visit.visitNumber,
-              visit_date: visit.date,
-              trimester: visit.trimester,
-              gestational_age: `${visit.week}w`,
-              next_appt_type: visit.type,
-              next_appt_date: nextApptDate,
-              status: 'Scheduled',
-              assigned_staff: patientData.retained_staff || null
-            })
-            .eq('id', visit.id)
-            .eq('patient_id', patientId);
-          if (updateError) throw updateError;
-        }
-
-        const { error: currentVisitError } = await this.supabase
-          .from('prenatal_visits')
-          .update({ next_appt_date: schedule[0].date })
-          .eq(currentVisitId ? 'id' : 'patient_id', currentVisitId || patientId)
-          .eq(currentVisitId ? 'patient_id' : 'visit_number', currentVisitId ? patientId : currentVisitNumber);
-        if (currentVisitError) throw currentVisitError;
-
-        console.log(`✅ Rebalanced prenatal schedule for patient ${patientId}, new schedule:`, schedule);
-      } else {
-        // No more visits can fit before EDD - update current visit to have no next appointment
-        const { error: currentVisitError } = await this.supabase
-          .from('prenatal_visits')
-          .update({ next_appt_date: null })
-          .eq(currentVisitId ? 'id' : 'patient_id', currentVisitId || patientId)
-          .eq(currentVisitId ? 'patient_id' : 'visit_number', currentVisitId ? patientId : currentVisitNumber);
-        if (currentVisitError) throw currentVisitError;
-
-        console.log(`✅ No more visits can fit before EDD for patient ${patientId}`);
-      }
+      console.log(`✅ Rebalanced prenatal schedule for patient ${patientId}, new schedule:`, updates);
     } catch (err) {
       console.error('Error rebalancing prenatal schedule:', err);
       throw err;
@@ -976,7 +962,6 @@ export default class PatientService {
 
   async getPrenatalVisits({ includeArchived = false } = {}) {
   try {
-    const { role, currentUser } = await this.getCurrentUserAccess();
     const archivedPatientIds = includeArchived ? new Set() : await this.getArchivedPatientIds();
 
     // Get all deliveries to identify postpartum patients
@@ -1006,7 +991,7 @@ export default class PatientService {
       }
     });
 
-    let visitsQuery = this.supabase
+    const { data, error } = await this.supabase
       .from('prenatal_visits')
       .select(`
         id, 
@@ -1019,25 +1004,48 @@ export default class PatientService {
         patient_id, 
         status,
         next_appt_date,
+        next_appt_type,
         visit_number,
         trimester,
+        assigned_staff,
+        performed_by,
+        assigned_station,
+        station_ass,
         calculated_risk,
         risk_factors,
         patient_basic_info!inner(first_name, last_name, middle_name)
-      `);
-
-    if (role === 'staff' && currentUser?.id) {
-      visitsQuery = visitsQuery.eq('assigned_staff', currentUser.id);
-    }
-
-    const { data, error } = await visitsQuery
-      .order('visit_date', { ascending: false })
-      .limit(100);
+      `)
+      .order('visit_date', { ascending: false });
 
     if (error) throw error;
 
+    const assignedStaffByPatient = new Map();
+    (data || []).forEach(visit => {
+      if (visit.status === 'Scheduled' && visit.assigned_staff && !assignedStaffByPatient.has(visit.patient_id)) {
+        assignedStaffByPatient.set(visit.patient_id, visit.assigned_staff);
+      }
+    });
+
+    const staffIds = [...new Set((data || []).flatMap(visit => [visit.assigned_staff, visit.performed_by]).filter(Boolean))];
+    const stationIds = [...new Set((data || []).flatMap(visit => [visit.assigned_station, visit.station_ass]).filter(Boolean))];
+    const [{ data: profiles }, { data: stations }] = await Promise.all([
+      staffIds.length
+        ? this.supabase.from('staff_profiles').select('id, full_name').in('id', staffIds)
+        : Promise.resolve({ data: [] }),
+      stationIds.length
+        ? this.supabase.from('stations').select('id, station_name').in('id', stationIds)
+        : Promise.resolve({ data: [] })
+    ]);
+    const staffNameById = Object.fromEntries((profiles || []).map(profile => [profile.id, profile.full_name]));
+    const stationNameById = Object.fromEntries((stations || []).map(station => [station.id, station.station_name]));
+
     // Filter out postpartum patients
-    return (data || []).map(visit => ({
+    return (data || []).map(visit => {
+      const assignedStaffId = visit.assigned_staff
+        || (visit.status === 'Scheduled' ? assignedStaffByPatient.get(visit.patient_id) : null)
+        || null;
+
+      return {
       id: visit.id,
       visit_date: visit.visit_date,
       visitDate: visit.visit_date,
@@ -1049,15 +1057,25 @@ export default class PatientService {
       bp: visit.bp_systolic && visit.bp_diastolic ? `${visit.bp_systolic}/${visit.bp_diastolic}` : 'N/A',
       weight: visit.weight_kg ? `${visit.weight_kg}kg` : 'N/A',
       status: normalizeVisitStatus(visit),
+      type: visit.next_appt_type || '',
       nextApptDate: visit.next_appt_date,
       visitNumber: visit.visit_number,
+      assignedStaffId,
+      assignedStaff: staffNameById[assignedStaffId] || assignedStaffId,
+      performedBy: staffNameById[visit.performed_by] || visit.performed_by || null,
+      assignedStationId: visit.assigned_station,
+      visitStationId: visit.station_ass,
+      assignedStation: stationNameById[visit.assigned_station] || null,
+      visitStation: stationNameById[visit.station_ass] || null,
       trimester: visit.trimester,
       risk: visit.calculated_risk || 'Normal',
       riskFactors: visit.risk_factors || ''
-    })).filter(visit => {
+      };
+    }).filter(visit => {
       if (!includeArchived && archivedPatientIds.has(visit.patientId)) return false;
       // Filter out cancelled visits for the scheduling view
       if (visit.status === 'Cancelled') return false;
+      if (visit.type.toLowerCase().includes('postpartum')) return false;
       return true;
     });
   } catch (error) {
@@ -1069,7 +1087,6 @@ export default class PatientService {
   async getAppointments(startDate, endDate, view = 'day', options = {}) {
   try {
     const { includeArchived = false } = options;
-    const { role, currentUser } = await this.getCurrentUserAccess();
     const archivedPatientIds = includeArchived ? new Set() : await this.getArchivedPatientIds();
 
     // Get all deliveries to identify postpartum patients
@@ -1104,10 +1121,6 @@ export default class PatientService {
       .select(`
         id, visit_date, next_appt_date, next_appt_type, patient_id, status, patient_basic_info!inner(first_name, last_name)
       `);
-
-    if (role === 'staff' && currentUser?.id) {
-      query = query.eq('assigned_staff', currentUser.id);
-    }
 
     const isValidDate = (value) => {
       return typeof value === 'string' && value.trim().length > 0 && !Number.isNaN(new Date(value).getTime());
@@ -1152,6 +1165,9 @@ export default class PatientService {
 
   async updatePrenatalVisitStatus(visitId, updates) {
     const payload = { ...updates };
+    if (payload.status === 'Attended') {
+      return this.completePrenatalVisit(visitId, payload);
+    }
     if (payload.status === 'Attended' && !payload.attended_date) {
       payload.attended_date = new Date().toISOString().split('T')[0];
     }
@@ -1182,9 +1198,7 @@ export default class PatientService {
   }
 
   async resolveAssignedStaff({ requestedStaffId, currentUserId, role, stationId }) {
-    const assignedStaffId = role === 'staff'
-      ? currentUserId
-      : (requestedStaffId || (role === 'cho personnel' ? currentUserId : null));
+    const assignedStaffId = requestedStaffId || null;
 
     if (!assignedStaffId) return null;
 
@@ -1197,12 +1211,8 @@ export default class PatientService {
     if (error) throw error;
     if (!staffProfile) throw new Error('The selected assigned staff member was not found.');
 
-    if (role === 'cho personnel' && staffProfile.station_ass !== stationId) {
-      throw new Error('CHO personnel can only assign patients to staff in their own station.');
-    }
-
-    if (role === 'staff' && assignedStaffId !== currentUserId) {
-      throw new Error('Staff users can only assign patients to themselves.');
+    if (staffProfile.station_ass !== stationId) {
+      throw new Error('The selected healthcare worker must belong to the patient\'s assigned station.');
     }
 
     return staffProfile.id;
@@ -1218,10 +1228,11 @@ export default class PatientService {
     }
 
     const currentUser = await authService.getAuthUser();
-    const currentUserRole = (currentUser?.role || '').toLowerCase();
+    const normalizedRole = String(currentUser?.role || '').toLowerCase().replace(/_/g, ' ').trim();
+    const currentUserRole = normalizedRole === 'station staff' ? 'staff' : normalizedRole;
     const enforceCurrentStation = currentUserRole === 'staff' || currentUserRole === 'cho personnel';
 
-    let stationId = null;
+    let ownStationId = null;
     if (enforceCurrentStation) {
       const { data: currentStaffProfile } = await this.supabase
         .from('staff_profiles')
@@ -1229,17 +1240,22 @@ export default class PatientService {
         .eq('id', currentUser.id)
         .maybeSingle();
 
-      stationId = currentStaffProfile?.station_ass || null;
-    } else if (patientData.station) {
-      stationId = await authService.getOrCreateStationId(patientData.station);
+      ownStationId = currentStaffProfile?.station_ass || null;
     }
 
-    const assignedStaff = await this.resolveAssignedStaff({
-      requestedStaffId: patientData.retained_staff,
-      currentUserId: createdBy,
-      role: currentUserRole,
-      stationId
-    });
+    if (!patientData.station) throw new Error('Select the patient\'s assigned station.');
+    const stationId = await authService.getOrCreateStationId(patientData.station);
+    if (!stationId) throw new Error('Select a valid patient station.');
+    const mayAssignAtSelectedStation = currentUserRole === 'admin' || stationId === ownStationId;
+
+    const assignedStaff = currentUserRole === 'admin' || stationId === ownStationId
+      ? await this.resolveAssignedStaff({
+          requestedStaffId: mayAssignAtSelectedStation ? patientData.retained_staff : null,
+          currentUserId: createdBy,
+          role: currentUserRole,
+          stationId: ownStationId || stationId
+        })
+      : null;
 
     const authUser = await authService.createUserAccount({
       email: patientData.email,
@@ -1412,6 +1428,21 @@ export default class PatientService {
       const nextApptDate = nextScheduledVisit ? nextScheduledVisit.date : null;
       
       const bpMatch = patientData.bp ? patientData.bp.match(/^(\d+)[/\\s](\d+)$/) : null;
+      const registrationRisk = this.getPregnancyRisk(
+        { date_of_birth: patientData.dob, height_cm: patientData.height },
+        { gravida: patientData.gravida, pregnancy_type: patientData.pregnancyType },
+        {
+          risk_factors: patientData.riskFactors,
+          bp_systolic: bpMatch ? Number(bpMatch[1]) : null,
+          bp_diastolic: bpMatch ? Number(bpMatch[2]) : null,
+          weight_kg: patientData.weight,
+          height_cm: patientData.height,
+          temp_c: patientData.temp,
+          pulse_bpm: patientData.pulse,
+          resp_rate_cpm: patientData.respRate,
+          fhr_bpm: patientData.fhr,
+        }
+      );
       
       // Use today's date as the actual visit date (when patient came in)
       const actualVisitDate = today;
@@ -1444,8 +1475,11 @@ export default class PatientService {
         status: 'Attended',
         attended_date: new Date().toISOString(),
         assigned_staff: assignedStaff,
-        calculated_risk: patientData.riskLevel || 'Normal',
-        risk_factors: patientData.riskFactors || null,
+        assigned_station: stationId,
+        station_ass: ownStationId,
+        performed_by: createdBy,
+        calculated_risk: registrationRisk.riskLevel,
+        risk_factors: registrationRisk.riskFactors.join(', ') || null,
         created_by: createdBy
       };
 
@@ -1492,6 +1526,12 @@ async smartSemesterScheduling({ patientId, lmp, createdBy, maxPerDay = 35, retai
 
   const today = new Date().toISOString().split('T')[0];
   const todayDate = new Date(today);
+  const { data: patientRecord, error: patientError } = await this.supabase
+    .from('patient_basic_info')
+    .select('station_ass')
+    .eq('id', patientId)
+    .single();
+  if (patientError) throw patientError;
   
   // Calculate current gestational age in weeks
   const diffTime = todayDate - lmpDate;
@@ -1529,7 +1569,7 @@ async smartSemesterScheduling({ patientId, lmp, createdBy, maxPerDay = 35, retai
       const nextOffset = semester.visits[index + 1];
       const nextDateStr = nextOffset !== undefined ? this.addWeeksToDate(lmpDate, semester.startWeek + nextOffset) : null;
 
-      await this.supabase.from('prenatal_visits').insert({
+      const { error: insertError } = await this.supabase.from('prenatal_visits').insert({
         patient_id: patientId,
         visit_date: visitDateStr,
         visit_number: visitNumber++,
@@ -1539,8 +1579,11 @@ async smartSemesterScheduling({ patientId, lmp, createdBy, maxPerDay = 35, retai
         next_appt_type: `${semester.name} Checkup`,
         status: 'Scheduled',
         assigned_staff: retained_staff,
+        assigned_station: patientRecord.station_ass,
+        station_ass: null,
         created_by: createdBy
       });
+      if (insertError) throw insertError;
 
       console.log(`✅ Scheduled: ${visitDateStr} (Week ${actualWeek}) → Next: ${nextDateStr}`);
     }
@@ -1656,18 +1699,6 @@ async getSlotCount(dateStr, timeSlot) {
   async getHighRiskStats({ includeArchived = false } = {}) {
     try {
       const archivedPatientIds = includeArchived ? new Set() : await this.getArchivedPatientIds();
-      const { role, stationId } = await this.getCurrentUserAccess();
-      const stationPatientIds = new Set();
-
-      if (['cho personnel', 'staff'].includes(role)) {
-        if (!stationId) return { highRiskCount: 0 };
-        const { data: patientRows } = await this.supabase
-          .from('patient_basic_info')
-          .select('id')
-          .eq('station_ass', stationId);
-        (patientRows || []).forEach((row) => stationPatientIds.add(row.id));
-      }
-
       const { data: deliveries } = await this.supabase
         .from('deliveries')
         .select('mother_id');
@@ -1679,7 +1710,7 @@ async getSlotCount(dateStr, timeSlot) {
 
       const { data: visits, error } = await this.supabase
         .from('prenatal_visits')
-        .select('patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm')
+        .select('patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, weight_kg, height_cm, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm')
         .eq('status', 'Attended')
         .order('visit_date', { ascending: false });
 
@@ -1695,7 +1726,6 @@ async getSlotCount(dateStr, timeSlot) {
       const latestPregMap = new Map();
       (pregnancies || []).forEach(p => {
         if (!p.patient_id) return;
-        if (stationPatientIds.size > 0 && !stationPatientIds.has(p.patient_id)) return;
         const existing = latestPregMap.get(p.patient_id);
         const currentTime = new Date(p.created_at).getTime() || 0;
         const existingTime = existing ? new Date(existing.created_at).getTime() || 0 : 0;
@@ -1705,9 +1735,12 @@ async getSlotCount(dateStr, timeSlot) {
       });
 
       const latestVisitMap = new Map();
+      const heightByPatientMap = new Map();
       (visits || []).forEach(v => {
         if (!v.patient_id) return;
-        if (stationPatientIds.size > 0 && !stationPatientIds.has(v.patient_id)) return;
+        if (Number(v.height_cm) > 0 && !heightByPatientMap.has(v.patient_id)) {
+          heightByPatientMap.set(v.patient_id, v.height_cm);
+        }
         if (!includeArchived && archivedPatientIds.has(v.patient_id)) return;
         if (deliveredPatients.has(v.patient_id)) return;
         const preg = latestPregMap.get(v.patient_id);
@@ -1730,7 +1763,10 @@ async getSlotCount(dateStr, timeSlot) {
         if (!includeArchived && archivedPatientIds.has(patientId)) return false;
         if (deliveredPatients.has(patientId)) return false;
         return this.getPregnancyRisk(
-          patientMap.get(patientId),
+          {
+            ...patientMap.get(patientId),
+            height_cm: patientMap.get(patientId)?.height_cm || heightByPatientMap.get(patientId),
+          },
           pregnancy,
           latestVisitMap.get(patientId) || null
         ).isHighRisk;
@@ -1746,18 +1782,6 @@ async getSlotCount(dateStr, timeSlot) {
 async getHighRiskPatients({ includeArchived = false } = {}) {
   try {
     const archivedPatientIds = includeArchived ? new Set() : await this.getArchivedPatientIds();
-    const { role, stationId } = await this.getCurrentUserAccess();
-    const stationPatientIds = new Set();
-
-    if (['cho personnel', 'staff'].includes(role)) {
-      if (!stationId) return [];
-      const { data: patientRows } = await this.supabase
-        .from('patient_basic_info')
-        .select('id')
-        .eq('station_ass', stationId);
-      (patientRows || []).forEach((row) => stationPatientIds.add(row.id));
-    }
-
     const { data: deliveries } = await this.supabase
       .from('deliveries')
       .select('mother_id')
@@ -1776,7 +1800,6 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     const latestPregMap = new Map();
     (pregnancies || []).forEach(p => {
       if (!p.patient_id) return;
-      if (stationPatientIds.size > 0 && !stationPatientIds.has(p.patient_id)) return;
       const existing = latestPregMap.get(p.patient_id);
       const currentTime = new Date(p.created_at).getTime() || 0;
       const existingTime = existing ? new Date(existing.created_at).getTime() || 0 : 0;
@@ -1797,9 +1820,11 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         pulse_bpm,
         resp_rate_cpm,
         fhr_bpm,
+        assigned_staff,
         next_appt_date,
         next_appt_type,
         weight_kg,
+        height_cm,
         calculated_risk,
         risk_factors,
         gestational_age,
@@ -1818,10 +1843,20 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
     if (error) throw error;
 
+    const assignedStaffByPatient = new Map();
+    const heightByPatientMap = new Map();
+    (data || []).forEach((visit) => {
+      if (Number(visit.height_cm) > 0 && !heightByPatientMap.has(visit.patient_id)) {
+        heightByPatientMap.set(visit.patient_id, visit.height_cm);
+      }
+      if (visit.status === 'Scheduled' && visit.assigned_staff && !assignedStaffByPatient.has(visit.patient_id)) {
+        assignedStaffByPatient.set(visit.patient_id, visit.assigned_staff);
+      }
+    });
+
     const latestAttendedByPatient = new Map();
     (data || []).forEach((visit) => {
       if (!visit.patient_id || visit.status !== 'Attended') return;
-      if (stationPatientIds.size > 0 && !stationPatientIds.has(visit.patient_id)) return;
       if (!includeArchived && archivedPatientIds.has(visit.patient_id)) return;
       if (deliveredPatients.has(visit.patient_id)) return;
       const preg = latestPregMap.get(visit.patient_id);
@@ -1833,7 +1868,10 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     });
 
     return Array.from(latestAttendedByPatient.values()).map((visit) => {
-      const patient = visit.patient_basic_info || {};
+      const patient = {
+        ...(visit.patient_basic_info || {}),
+        height_cm: visit.patient_basic_info?.height_cm || heightByPatientMap.get(visit.patient_id),
+      };
       const pregnancy = latestPregMap.get(visit.patient_id) || {};
       const riskAssessment = this.getPregnancyRisk(patient, pregnancy, visit);
       const ageNum = riskAssessment.age;
@@ -1855,6 +1893,8 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
       return {
         id: patient.id || visit.patient_id,
+        stationId: patient.station_ass,
+        assignedStaffId: assignedStaffByPatient.get(visit.patient_id) || null,
         first_name: patient.first_name,
         last_name: patient.last_name,
         station: patient.stations?.station_name || patient.municipality || 'Unknown',
@@ -1876,6 +1916,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           ? this.getBPStatus(visit.bp_systolic, visit.bp_diastolic)
           : null,
         weight_kg: visit.weight_kg || null,
+        height_cm: visit.height_cm || null,
         pregnancyType: riskAssessment.pregnancyType,
         isMultipleBirth: riskAssessment.pregnancyType.toLowerCase() !== 'singleton',
         nextVisit: visit.next_appt_date
@@ -1999,8 +2040,6 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
   }
 
   async getPatientById(patientId) {
-    const { role, stationId } = await this.getCurrentUserAccess();
-
     // Fetch patient basic info
     const { data: patientData } = await this.supabase
       .from('patient_basic_info')
@@ -2017,12 +2056,6 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       .maybeSingle();
 
     if (userError) throw userError;
-
-    if (role === 'cho personnel' || role === 'staff') {
-      if (!stationId || patientData.station_ass !== stationId) {
-        return null;
-      }
-    }
 
     // Fetch pregnancy info
     const { data: pregnancyData } = await this.supabase
@@ -2068,6 +2101,8 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       .from('deliveries')
       .select(`
         *,
+        stations:station_ass (station_name),
+        pregnancy_info!deliveries_pregnancy_id_fkey (place_of_delivery),
         staff_profiles!deliveries_attending_staff_fkey (
           id, full_name, station_ass,
           stations:station_ass (station_name)
@@ -2092,8 +2127,9 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
     const assignedStaffIds = [...new Set([
       patientData.retained_staff,
-      ...(visitsData || []).flatMap(visit => [visit.assigned_staff, visit.retained_staff]),
-      ...(vaccinesData || []).map(vaccine => vaccine.assigned_staff),
+    ...(visitsData || []).flatMap(visit => [visit.assigned_staff, visit.performed_by, visit.retained_staff]),
+      ...(vaccinesData || []).flatMap(vaccine => [vaccine.assigned_staff, vaccine.vaccinated_by]),
+      ...(supplementsData || []).flatMap(supplement => [supplement.administered_by, supplement.created_by]),
       ...(newbornsData || []).flatMap(newborn => (newborn.vaccinations || []).map(vaccine => vaccine.assigned_staff)),
       ...(deliveriesData || []).map(delivery => delivery.attending_staff || delivery.assigned_staff)
     ].filter(Boolean))];
@@ -2102,7 +2138,8 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     if (assignedStaffIds.length > 0) {
       const { data: staffProfiles, error: staffError } = await this.supabase
         .from('staff_profiles')
-        .select('id, full_name, station_ass, stations:station_ass (station_name)');
+        .select('id, full_name, station_ass, stations:station_ass (station_name)')
+        .in('id', assignedStaffIds);
 
       if (staffError) throw staffError;
       (staffProfiles || []).forEach(profile => {
@@ -2116,12 +2153,28 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     }
 
     const preg = getLatestPregnancyRecord(pregnancyData || []) || {};
+    const latestRecordedHeight = (visitsData || []).find(visit => Number(visit.height_cm) > 0)?.height_cm;
+    const riskPatient = {
+      ...patientData,
+      height_cm: patientData.height_cm || latestRecordedHeight,
+    };
+
+    const stationIds = [...new Set([
+      ...(visitsData || []).flatMap(visit => [visit.assigned_station, visit.station_ass]),
+      ...(vaccinesData || []).map(vaccine => vaccine.station_ass),
+      ...(supplementsData || []).map(supplement => supplement.station_ass),
+      ...(deliveriesData || []).map(delivery => delivery.station_ass)
+    ].filter(Boolean))];
+    const { data: visitStations } = stationIds.length
+      ? await this.supabase.from('stations').select('id, station_name').in('id', stationIds)
+      : { data: [] };
+    const stationNameById = Object.fromEntries((visitStations || []).map(station => [station.id, station.station_name]));
 
     const normalizedVisits = (visitsData || []).map(visit => {
       const assignedStaffId = visit.assigned_staff || visit.retained_staff || patientData.retained_staff || null;
       
       // Calculate dynamic risk factors exactly like getAllPatients does
-      const riskAssessment = this.getPregnancyRisk(patientData, preg, visit);
+      const riskAssessment = this.getPregnancyRisk(riskPatient, preg, visit);
       
       return {
         ...visit,
@@ -2130,7 +2183,10 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         assigned_staff: assignedStaffId,
         status: normalizeVisitStatus(visit),
         assigned_staff_name: assignedStaffById[assignedStaffId]?.name || (assignedStaffId || null),
-        assigned_staff_station: assignedStaffById[assignedStaffId]?.station || null
+        assigned_staff_station: assignedStaffById[assignedStaffId]?.station || null,
+        performed_by_name: assignedStaffById[visit.performed_by]?.name || null,
+        assigned_station_name: stationNameById[visit.assigned_station] || null,
+        visit_station_name: stationNameById[visit.station_ass] || null
       };
     });
 
@@ -2146,6 +2202,8 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         pregnancy_id: d.pregnancy_id || null,
         attending_staff: d.attending_staff || null,
         assigned_staff: d.attending_staff || null,
+        station_ass: d.station_ass || null,
+        station: d.stations?.station_name || 'Unassigned',
         assigned_staff_name: attendingProfile?.full_name || staffLookup?.name || (d.attending_staff ? d.attending_staff : 'Not Assigned'),
         assigned_staff_station: attendingProfile?.stations?.station_name || staffLookup?.station || null,
         delivery_date: d.delivery_date,
@@ -2156,7 +2214,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         risk_level: d.risk_level,
         complications: d.complications,
         notes: d.notes,
-        facility: d.facility,
+        facility: d.pregnancy_info?.place_of_delivery || null,
         postpartum_visit_date: d.postpartum_visit_date,
         postpartum_attended_date: d.postpartum_attended_date,
         postpartum_remarks: d.postpartum_remarks
@@ -2174,7 +2232,8 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         vaccine_inventory: vaccine.vaccine_inventory || null,
         assigned_staff: vaccine.assigned_staff || patientData.retained_staff || null,
         assigned_staff_name: assignedStaffById[vaccine.assigned_staff || patientData.retained_staff]?.name || null,
-        assigned_staff_station: assignedStaffById[vaccine.assigned_staff || patientData.retained_staff]?.station || null
+        assigned_staff_station: assignedStaffById[vaccine.assigned_staff || patientData.retained_staff]?.station || null,
+        vaccinated_by_name: assignedStaffById[vaccine.vaccinated_by]?.name || null
       }))
     }));
 
@@ -2204,7 +2263,9 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       email: userData?.email_address || null,
       name: `${patientData.first_name || ''} ${patientData.last_name || ''}`.trim(),
       age: this.calculateAge(patientData.date_of_birth),
-        station: patientData.stations?.station_name || 'N/A',
+      station: patientData.stations?.station_name || 'N/A',
+      stationId: patientData.station_ass || null,
+      height_cm: riskPatient.height_cm || null,
       phone: patientData.contact_no || 'N/A',
       address: patientData.house_no,
       dob: patientData.date_of_birth,
@@ -2224,6 +2285,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
       visits: normalizedVisits,
       vaccines: (vaccinesData || []).map(v => ({
+        id: v.id,
         vaccine_name: v.vaccine_inventory?.vaccine_name || null,
         vaccine_inventory: v.vaccine_inventory || null,
         notes: v.notes || '',
@@ -2233,17 +2295,25 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         status: v.status,
         remarks: v.remarks,
         vaccinated_by: v.vaccinated_by,
+        vaccinated_by_name: assignedStaffById[v.vaccinated_by]?.name || null,
         assigned_staff: v.assigned_staff || patientData.retained_staff || null,
         assigned_staff_name: assignedStaffById[v.assigned_staff || patientData.retained_staff]?.name || null,
-        assigned_staff_station: assignedStaffById[v.assigned_staff || patientData.retained_staff]?.station || null
+        assigned_staff_station: assignedStaffById[v.assigned_staff || patientData.retained_staff]?.station || null,
+        station_ass: v.station_ass || null,
+        service_station_name: stationNameById[v.station_ass] || null
       })),
       supplements: (supplementsData || []).map(s => ({
+        id: s.id,
         supplement_name: s.supplement_inventory?.supplement_name || 'Unknown',
         dosage: s.dosage,
         start_date: s.start_date,
         end_date: s.end_date,
         status: s.status,
-        notes: s.notes
+        notes: s.notes,
+        administered_by: s.administered_by || s.created_by || null,
+        administered_by_name: assignedStaffById[s.administered_by || s.created_by]?.name || null,
+        station_ass: s.station_ass || null,
+        service_station_name: stationNameById[s.station_ass] || null
       })),
       newborns: normalizedNewborns,
       deliveries: normalizedDeliveries,
@@ -2257,34 +2327,69 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
   async updatePatient(patientId, updateData) {
     try {
       const stationId = updateData.station
-        ? await authService.getOrCreateStationId(updateData.station)
+        ? await this.getStationIdByName(updateData.station)
         : null;
+      if (updateData.station && !stationId) throw new Error('Select a valid station.');
 
-      const { data, error } = await this.supabase
+      const { data: currentPatient, error: currentPatientError } = await this.supabase
         .from('patient_basic_info')
-        .update({
-          first_name: updateData.first_name,
-          last_name: updateData.last_name,
-          date_of_birth: updateData.date_of_birth,
-          civil_status: updateData.civil_status,
-          blood_type: updateData.blood_type || updateData.bloodtype || null,
-          philhealthnumber: updateData.philhealth,
-          contact_no: updateData.phone,
-          house_no: updateData.address,
-          station_ass: stationId,
-          municipality: updateData.municipality,
-          emergency_contact: {
-            name: updateData.emergency_contact_name,
-            relationship: updateData.emergency_contact_relationship,
-            phone: updateData.emergency_contact_phone
-          }
-        })
+        .select('station_ass, first_name, last_name, date_of_birth, civil_status, blood_type, philhealthnumber, contact_no, house_no, municipality, emergency_contact')
         .eq('id', patientId)
-        .select()
         .single();
+      if (currentPatientError) throw currentPatientError;
 
-      if (error) throw error;
-      return data;
+      const profilePayload = {
+        first_name: updateData.first_name,
+        last_name: updateData.last_name,
+        date_of_birth: updateData.date_of_birth,
+        civil_status: updateData.civil_status,
+        blood_type: updateData.blood_type || updateData.bloodtype || null,
+        philhealthnumber: updateData.philhealth,
+        contact_no: updateData.phone,
+        house_no: updateData.address,
+        municipality: updateData.municipality,
+        emergency_contact: {
+          name: updateData.emergency_contact_name,
+          relationship: updateData.emergency_contact_relationship,
+          phone: updateData.emergency_contact_phone
+        }
+      };
+      const profileChanged = Object.entries(profilePayload).some(([key, value]) =>
+        JSON.stringify(currentPatient[key] ?? null) !== JSON.stringify(value ?? null)
+      );
+      const stationChanged = stationId && stationId !== currentPatient.station_ass;
+      let data = currentPatient;
+      let profileUpdateSkipped = false;
+
+      if (profileChanged) {
+        const { data: updatedPatient, error } = await this.supabase
+          .from('patient_basic_info')
+          .update(profilePayload)
+          .eq('id', patientId)
+          .select()
+          .single();
+
+        if (error) {
+          if (!stationChanged) throw error;
+          profileUpdateSkipped = true;
+        } else {
+          data = updatedPatient;
+        }
+      }
+
+      if (stationChanged) {
+        const { error: stationError } = await this.supabase.rpc('set_patient_station', {
+          p_patient_id: patientId,
+          p_station_id: stationId
+        });
+        if (stationError) throw stationError;
+      }
+
+      return {
+        ...data,
+        station_ass: stationId || currentPatient.station_ass,
+        profileUpdateSkipped
+      };
     } catch (error) {
       console.error('Error updating patient:', error);
       throw error;
@@ -2295,7 +2400,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     try {
       const resolvedCreatedBy = createdBy || (await this.getCurrentUserId());
       const currentUser = await authService.getAuthUser();
-      const currentUserRole = (currentUser?.role || '').toLowerCase();
+      const currentUserRole = String(currentUser?.role || '').toLowerCase().replace(/_/g, ' ').trim();
       const { data: patientProfile, error: patientProfileError } = await this.supabase
         .from('patient_basic_info')
         .select('station_ass')
@@ -2304,12 +2409,17 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
       if (patientProfileError) throw patientProfileError;
 
-      const assignedStaff = await this.resolveAssignedStaff({
-        requestedStaffId: patientData.retained_staff,
-        currentUserId: resolvedCreatedBy,
-        role: currentUserRole,
-        stationId: patientProfile?.station_ass || null
-      });
+      const { stationId: currentStationId } = await this.getCurrentUserAccess();
+      const canAssignAtPatientStation = currentUserRole === 'admin'
+        || currentStationId === patientProfile?.station_ass;
+      const assignedStaff = canAssignAtPatientStation
+        ? await this.resolveAssignedStaff({
+            requestedStaffId: patientData.retained_staff,
+            currentUserId: resolvedCreatedBy,
+            role: currentUserRole,
+            stationId: currentStationId || patientProfile?.station_ass || null
+          })
+        : null;
 
       const { data: latestPregnancy, error: latestErr } = await this.supabase
         .from('pregnancy_info')
@@ -2386,6 +2496,9 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         status: 'Attended',
         attended_date: new Date().toISOString(),
         assigned_staff: assignedStaff,
+        assigned_station: patientProfile?.station_ass || null,
+        station_ass: currentStationId || null,
+        performed_by: resolvedCreatedBy,
         calculated_risk: patientData.riskLevel || 'Normal',
         risk_factors: patientData.riskFactors || null,
         created_by: resolvedCreatedBy
@@ -2451,6 +2564,63 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     return [...new Set(data?.map(s => s.station_name) || [])];
   }
 
+  async completePrenatalVisit(visitId, payload, actualStationId = null) {
+    const { data, error } = await this.supabase.rpc('complete_prenatal_visit', {
+      p_visit_id: visitId,
+      p_payload: payload,
+      p_actual_station: actualStationId
+    });
+    if (error) throw error;
+    return data;
+  }
+
+  async reassignPrenatalVisit(visitId, assignedStaffId) {
+    const { role, stationId, currentUser } = await this.getCurrentUserAccess();
+    if (!['staff', 'cho personnel', 'admin'].includes(role)) {
+      throw new Error('Only station staff, CHO personnel, or admins can assign visits.');
+    }
+
+    let assignedStationId = role === 'admin' ? null : stationId;
+    if (assignedStaffId) {
+      const { data: profile, error: profileError } = await this.supabase
+        .from('staff_profiles')
+        .select('station_ass')
+        .eq('id', assignedStaffId)
+        .single();
+      if (profileError) throw profileError;
+      if (role !== 'admin' && profile.station_ass !== stationId) {
+        throw new Error('You can assign only staff from your own station.');
+      }
+      assignedStationId = profile.station_ass;
+    }
+
+    const { data, error } = await this.supabase.rpc('assign_prenatal_visit', {
+      p_visit_id: visitId,
+      p_assigned_staff: assignedStaffId || null,
+      p_assigned_station: assignedStationId
+    });
+    if (error) throw error;
+    return data;
+  }
+
+  async getAssignableStaffByStationId(stationId) {
+    if (!stationId) return [];
+    const { data, error } = await this.supabase.rpc('get_assignable_staff', {
+      p_station_id: stationId
+    });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async assignPatientPrenatalStaff(patientId, assignedStaffId) {
+    const { data, error } = await this.supabase.rpc('assign_patient_prenatal_staff', {
+      p_patient_id: patientId,
+      p_assigned_staff: assignedStaffId
+    });
+    if (error) throw error;
+    return data;
+  }
+
   normalizeStationName(stationName) {
     return String(stationName || '')
       .toLowerCase()
@@ -2504,26 +2674,10 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
     try {
       const stationId = await this.getStationIdByName(normalized);
-
-      let query = this.supabase
-        .from('staff_profiles')
-        .select(`
-          id,
-          full_name,
-          station_ass,
-          stations:station_ass (
-            station_name
-          )
-        `)
-        .order('full_name');
-
-      if (stationId) {
-        query = query.eq('station_ass', stationId);
-      } else {
-        query = query.ilike('stations.station_name', `%${normalized}%`);
-      }
-
-      const { data, error } = await query;
+      if (!stationId) return [];
+      const { data, error } = await this.supabase.rpc('get_assignable_staff', {
+        p_station_id: stationId
+      });
       if (error) throw error;
       return data || [];
     } catch (error) {
@@ -2678,6 +2832,8 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           end_date,
           status,
           created_by,
+          administered_by,
+          station_ass,
           notes,
           created_at
         `)
@@ -2803,60 +2959,31 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
   async recordVitals(patientId, vitals, supplements) {
     const createdBy = await this.getCurrentUserId();
     if (!createdBy) throw new Error('No logged-in user');
+    const [patientContext, access] = await Promise.all([
+      this.getPatientById(patientId),
+      this.getCurrentUserAccess()
+    ]);
+    if (!patientContext) throw new Error('Patient not found');
+    const latestRecordedHeight = [...(patientContext.visits || [])]
+      .sort((left, right) => new Date(right.visit_date) - new Date(left.visit_date))
+      .find(visit => Number(visit.height_cm) > 0)?.height_cm;
+    const assignedStaff = (patientContext.visits || [])
+      .find(visit => visit.status === 'Scheduled' && visit.assigned_staff)?.assigned_staff
+      || (patientContext.visits || []).find(visit => visit.assigned_staff)?.assigned_staff
+      || null;
+    const serviceStation = access.stationId || vitals.station_ass || patientContext.station_ass;
+    if (!serviceStation) throw new Error('Select a valid service station.');
 
     console.log('Recording vitals for patient', patientId, 'vitals:', vitals, 'supplements:', supplements);
 
-    // Calculate risk factors and risk level
-    const riskFactors = [];
-    let calculatedRisk = 'Normal';
-
-    // Check blood pressure risks
-    if (vitals.bpSystolic && vitals.bpDiastolic) {
-      const systolic = parseInt(vitals.bpSystolic);
-      const diastolic = parseInt(vitals.bpDiastolic);
-      
-      if (systolic >= 140 || diastolic >= 90) {
-        riskFactors.push('Hypertension');
-        calculatedRisk = 'High';
-      } else if (systolic < 90 || diastolic < 60) {
-        riskFactors.push('Hypotension');
-        calculatedRisk = 'High';
-      }
-    }
-
-    // Check temperature risks
-    if (vitals.temp) {
-      const temp = parseFloat(vitals.temp);
-      if (temp < 35.1) {
-        riskFactors.push('Hypothermia');
-        calculatedRisk = 'High';
-      } else if (temp > 37.5) {
-        riskFactors.push('Fever');
-        calculatedRisk = 'High';
-      }
-    }
-
-    // Check fetal heart rate risks
-    if (vitals.fhr) {
-      const fhr = parseInt(vitals.fhr);
-      if (fhr < 110 || fhr > 160) {
-        riskFactors.push('Abnormal Fetal Heart Rate');
-        calculatedRisk = 'High';
-      }
-    }
-
-    // Check if risk is still Normal and set to Low if any minor issues
-    if (calculatedRisk === 'Normal' && riskFactors.length === 0) {
-      calculatedRisk = 'Low'; // Default to Low risk if no issues found
-    }
-
     // Check if visit exists for this date
-    const { data: existingVisit } = await this.supabase
+    const { data: existingVisit, error: existingVisitError } = await this.supabase
       .from('prenatal_visits')
-      .select('id')
+      .select('id, status, visit_number')
       .eq('patient_id', patientId)
       .eq('visit_date', vitals.date)
       .maybeSingle();
+    if (existingVisitError) throw existingVisitError;
 
     const visitData = {
       patient_id: patientId,
@@ -2873,22 +3000,47 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       fetal_movement: vitals.fetalMovement || null,
       presentation: vitals.presentation || null,
       clinical_notes: vitals.notes || null,
-      calculated_risk: calculatedRisk,
-      risk_factors: riskFactors.join(', ') || null,
-      status: 'Attended',
+      height_cm: vitals.height ? parseFloat(vitals.height) : latestRecordedHeight || null,
       attended_date: new Date().toISOString(),
+      status: 'Attended',
     };
+    const riskAssessment = this.getPregnancyRisk(
+      { ...patientContext, height_cm: visitData.height_cm || patientContext.height_cm || latestRecordedHeight },
+      patientContext.currentPregnancy || patientContext.pregnancyRecord || {},
+      {
+        ...visitData,
+        risk_factors: vitals.riskFactors || patientContext.medicalConditions?.join(', ') || null,
+      }
+    );
+    visitData.calculated_risk = riskAssessment.riskLevel;
+    visitData.risk_factors = riskAssessment.riskFactors.join(', ') || null;
 
     if (existingVisit) {
-      // Update existing
-      const { error: visitError } = await this.supabase
-        .from('prenatal_visits')
-        .update(visitData)
-        .eq('id', existingVisit.id);
-      if (visitError) throw visitError;
+      if (existingVisit.status === 'Attended' && (await this.getCurrentUserAccess()).role !== 'admin') {
+        throw new Error('Completed prenatal visits are read-only.');
+      }
+      await this.completePrenatalVisit(existingVisit.id, visitData);
     } else {
-      // Insert new
-      const { error: visitError } = await this.supabase.from('prenatal_visits').insert(visitData);
+      const { data: patient, error: patientError } = await this.supabase
+        .from('patient_basic_info')
+        .select('station_ass')
+        .eq('id', patientId)
+        .single();
+      if (patientError) throw patientError;
+      const assignedStation = patient.station_ass;
+      const actualStation = serviceStation;
+      const { count: visitCount } = await this.supabase
+        .from('prenatal_visits')
+        .select('id', { count: 'exact', head: true })
+        .eq('patient_id', patientId);
+      const { error: visitError } = await this.supabase.from('prenatal_visits').insert({
+        ...visitData,
+        visit_number: (visitCount || 0) + 1,
+        assigned_staff: assignedStaff,
+        assigned_station: assignedStation,
+        station_ass: actualStation,
+        performed_by: createdBy
+      });
       if (visitError) throw visitError;
     }
 
@@ -2909,6 +3061,8 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         start_date: vitals.date,
         status: 'Completed',
         created_by: createdBy,
+        administered_by: createdBy,
+        station_ass: serviceStation,
       };
 
       const { error: supError } = await this.supabase.from('supplements').insert(supData);
@@ -2937,7 +3091,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           .order('created_at', { ascending: false }),
         this.supabase
           .from('deliveries')
-          .select('id, mother_id, delivery_date, delivery_type, delivery_mode'),
+          .select('id, mother_id, station_ass, stations:station_ass (station_name), delivery_date, delivery_type, delivery_mode'),
         this.supabase
           .from('newborns')
           .select('id, mother_id, delivery_id, condition_at_birth')
@@ -2968,14 +3122,14 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       };
 
       const getStation = patient => patient?.stations?.station_name || patient?.municipality || 'Unknown';
-      const getRecord = ({ patientId, eventDate, deliveryType, outcome, source, id }) => {
+      const getRecord = ({ patientId, eventDate, deliveryType, outcome, source, id, stationName = null }) => {
         const patient = patientMap.get(patientId);
         if (!patient || !eventDate) return null;
         return {
           id,
           patientId,
           patientName: `${patient.first_name || ''} ${patient.last_name || ''}`.trim() || 'Unknown Patient',
-          station: getStation(patient),
+          station: stationName || getStation(patient),
           age: calculateAgeAt(patient.date_of_birth, eventDate),
           eventDate,
           deliveryType: deliveryType || 'N/A',
@@ -3002,7 +3156,8 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           deliveryType: type,
           outcome,
           source: 'Delivery',
-          id: `delivery-${delivery.id}`
+          id: `delivery-${delivery.id}`,
+          stationName: delivery.stations?.station_name || 'Unassigned'
         });
       }).filter(Boolean);
 
@@ -3167,7 +3322,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       const lastDay = new Date(year, month + 1, 0).toISOString().slice(0, 10);
       const { data: deliveries, error: deliveriesError } = await this.supabase
         .from('deliveries')
-        .select('mother_id, delivery_date, delivery_type, complications')
+        .select('mother_id, station_ass, stations:station_ass (station_name), delivery_date, delivery_type, complications')
         .gte('delivery_date', firstDay)
         .lte('delivery_date', lastDay);
 
@@ -3218,14 +3373,6 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           if (patientSupplements.length > 0) station.totalSupplementsGiven++;
         }
 
-        const patientDeliveries = (deliveries || []).filter(d => d.mother_id === patientId);
-        station.recentDeliveries += patientDeliveries.length;
-        patientDeliveries.forEach(d => {
-          if (d.delivery_type?.toLowerCase() === 'nsd') station.deliveryTypes.nsd++;
-          else if (d.delivery_type?.toLowerCase() === 'cs' || d.delivery_type?.toLowerCase() === 'cesarean') station.deliveryTypes.cs++;
-          if (d.complications && d.complications.length > 0) station.complications++;
-        });
-
         const patientNewborns = (newborns || []).filter(n => n.mother_id === patientId);
         station.newborns += patientNewborns.length;
         patientNewborns.forEach(n => {
@@ -3234,6 +3381,15 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           const newbornVaccinations = (vaccinations || []).filter(v => v.newborn_id === n.id && v.status === 'Completed');
           if (newbornVaccinations.length > 0) station.totalNewbornVaccinated++;
         });
+      });
+
+      (deliveries || []).forEach(delivery => {
+        const station = stationMap.get(delivery.stations?.station_name);
+        if (!station) return;
+        station.recentDeliveries++;
+        if (delivery.delivery_type?.toLowerCase() === 'nsd') station.deliveryTypes.nsd++;
+        else if (delivery.delivery_type?.toLowerCase() === 'cs' || delivery.delivery_type?.toLowerCase() === 'cesarean') station.deliveryTypes.cs++;
+        if (delivery.complications && delivery.complications.length > 0) station.complications++;
       });
 
       const stationsReport = Array.from(stationMap.values()).map(station => {

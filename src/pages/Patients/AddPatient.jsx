@@ -51,22 +51,6 @@ const BP_RANGES = {
 ════════════════════════════ */
 const formatStationName = (station) => {
     if (!station) return '';
-    
-    const stationMap = {
-        'cho iii': 'City Health Office 3',
-        'cho 3': 'City Health Office 3',
-        'cho3': 'City Health Office 3',
-        'salawag': 'Salawag',
-    };
-    
-    const lowerStation = station.toLowerCase().trim();
-    
-    // Check for exact match in map
-    if (stationMap[lowerStation]) {
-        return stationMap[lowerStation];
-    }
-    
-    // For stations not in the map, apply general formatting
     // Capitalize first letter of each word
     return station
         .split(' ')
@@ -306,25 +290,27 @@ const AddPatient = () => {
             }
 
             try {
+                const { role, stationId, currentUser } = await patientService.getCurrentUserAccess();
+                const selectedStationId = await patientService.getStationIdByName(formData.station);
                 const staffAtStation = await patientService.getDoctorsByStation(formData.station);
-                setDoctorList(staffAtStation);
-                setMidwifeList(staffAtStation);
-
-                const retainedStaff = await patientService.getRetainedStaff(formData.station);
-                const staffList = Array.isArray(retainedStaff) ? retainedStaff : (retainedStaff ? [retainedStaff] : []);
+                const staffList = (staffAtStation || []).filter(staff =>
+                    role === 'admin' || (staff.station_ass === stationId && stationId === selectedStationId)
+                );
+                setDoctorList(staffList);
+                setMidwifeList(staffList);
                 setRetainedStaffList(staffList);
                 setFormData(prev => ({
                     ...prev,
-                    retained_staff: staffList.length > 0 ? staffList[0].id : '',
+                    retained_staff: '',
                     attending_staff: ''
                 }));
-                console.log(`✅ Staff filtered for ${formData.station}:`, { staffCount: staffAtStation.length });
+                console.log(`✅ Assignable staff loaded for ${formData.station}:`, { staffCount: staffList.length });
             } catch (err) {
                 console.error(err);
             }
         };
         filterStaff();
-    }, [formData.station, loadingStations]);
+    }, [formData.station, loadingStations, user]);
 
     useEffect(() => {
         if (formData.dob) {
@@ -2130,12 +2116,16 @@ const AddPatient = () => {
 
                                     <div className="form-group">
                                         <label>Assigned Staff</label>
-                                        <select name="retained_staff" value={formData.retained_staff} onChange={handleChange}>
-                                            <option value="">{retainedStaffList.length} available</option>
-                                            {retainedStaffList.map(staff => (
-                                                <option key={staff.id} value={staff.id}>{staff.full_name}</option>
-                                            ))}
-                                        </select>
+                                        {user?.role?.toLowerCase() === 'staff' ? (
+                                            <input value={formData.retained_staff ? user.fullName || user.email : 'No staff assigned for this station'} readOnly />
+                                        ) : (
+                                            <select name="retained_staff" value={formData.retained_staff} onChange={handleChange}>
+                                                <option value="">No staff assigned</option>
+                                                {retainedStaffList.map(staff => (
+                                                    <option key={staff.id} value={staff.id}>{staff.full_name}</option>
+                                                ))}
+                                            </select>
+                                        )}
                                     </div>
                                 </div>
                             </div>
