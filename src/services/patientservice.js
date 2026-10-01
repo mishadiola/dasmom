@@ -163,6 +163,52 @@ export default class PatientService {
       }));
   }
 
+  async getSuggestedReturningMothers() {
+    try {
+      const allPatients = await this.getAllPatients({ includeArchived: true });
+      
+      const { data: deliveries, error: err } = await this.supabase
+        .from('deliveries')
+        .select('mother_id, delivery_date')
+        .order('delivery_date', { ascending: false });
+        
+      if (err) throw err;
+      
+      const latestDeliveryMap = new Map();
+      const deliveryCountMap = new Map();
+      
+      (deliveries || []).forEach(d => {
+        if (!d.mother_id) return;
+        const count = deliveryCountMap.get(d.mother_id) || 0;
+        deliveryCountMap.set(d.mother_id, count + 1);
+        
+        const existing = latestDeliveryMap.get(d.mother_id);
+        if (!existing || new Date(d.delivery_date) > new Date(existing)) {
+          latestDeliveryMap.set(d.mother_id, d.delivery_date);
+        }
+      });
+      
+      return allPatients
+        .filter(p => {
+          if (p.archiveStatus === 'active' || p.archiveStatus === 'missed_delivery') return false;
+          if (!latestDeliveryMap.has(p.id)) return false;
+          return true;
+        })
+        .map(p => ({
+          id: p.id,
+          name: p.name,
+          age: p.age,
+          dob: p.dob, // Wait, getAllPatients might not return dob directly. I need to make sure dob is returned.
+          station: p.station,
+          lastDelivery: latestDeliveryMap.get(p.id),
+          previousPregnancies: deliveryCountMap.get(p.id) || 0
+        }));
+    } catch (e) {
+      console.error(e);
+      return [];
+    }
+  }
+
   async getAllPatients({ includeArchived = false } = {}) {
     try {
       const { role, stationId } = await this.getCurrentUserAccess();

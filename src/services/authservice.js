@@ -306,18 +306,22 @@ export default class AuthService {
   async fetchProfileName(userId, role) {
     let fullName = null;
     let displayName = null;
+    let assignedStation = null;
 
     try {
       if (role === 'admin' || role.includes('staff') || role === 'cho personnel' || role.includes('midwife') || role.includes('doctor')) {
         const { data, error } = await this.supabase
           .from('staff_profiles')
-          .select('full_name')
+          .select('full_name, station_ass, stations:station_ass(station_name)')
           .eq('id', userId)
           .maybeSingle();
         
         if (data?.full_name) {
           fullName = data.full_name;
           displayName = data.full_name.split(' ')[0];
+        }
+        if (data?.stations?.station_name) {
+          assignedStation = data.stations.station_name;
         }
       } else if (role === 'mother' || role === 'patient') {
         const { data, error } = await this.supabase
@@ -341,7 +345,7 @@ export default class AuthService {
       fullName = displayName;
     }
 
-    return { fullName, displayName };
+    return { fullName, displayName, assigned_station: assignedStation };
   }
 
   async getAuthUser() {
@@ -420,6 +424,7 @@ export default class AuthService {
       isDeactivated: Boolean(userData.is_deactivated),
       displayName: profile.displayName,
       fullName: profile.fullName,
+      station: profile.assigned_station,
     };
 
     this.saveUser(this._currentUser);

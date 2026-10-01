@@ -313,6 +313,15 @@ const DashboardLayout = () => {
     };
 
     // Filter nav items based on view
+    const getDisplayRole = (roleStr) => {
+        if (!roleStr) return 'STAFF';
+        const r = String(roleStr).toLowerCase();
+        if (r.includes('staff')) return 'STATION STAFF';
+        if (r.includes('cho')) return 'CHO PERSONNEL';
+        if (r.includes('admin')) return 'ADMIN';
+        return roleStr.toUpperCase();
+    };
+
     const canViewReports = ['admin', 'cho personnel'].includes(String(user?.role || '').toLowerCase());
     const filteredNavItems = isUserView ? [
         {
@@ -554,7 +563,7 @@ const DashboardLayout = () => {
                                     {!isUserView && (
                                         <span className="user-role">
                                             <Shield size={10} aria-hidden="true" />
-                                            {user?.role?.toUpperCase() || 'STAFF'}
+                                            {getDisplayRole(user?.role)}
                                         </span>
                                     )}
                                 </div>

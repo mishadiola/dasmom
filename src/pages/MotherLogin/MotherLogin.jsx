@@ -133,7 +133,7 @@ const MotherLogin = () => {
                         <form className="ml-form" onSubmit={handleSubmit}>
                             <div className="ml-form-group">
                                 <label className="ml-label">{t('login_email_label')}</label>
-                                <div className="ml-input-wrapper">
+                                <div className="ml-input-wrapper" style={errors.email ? { borderColor: 'var(--color-danger)' } : {}}>
                                     <Mail size={18} className="ml-input-icon" />
                                     <input 
                                         type="email" 
@@ -148,6 +148,7 @@ const MotherLogin = () => {
                                         required
                                     />
                                 </div>
+                                {errors.email && <p style={{ color: 'var(--color-danger)', fontSize: '0.8rem', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}><AlertCircle size={12} /> {errors.email}</p>}
                             </div>
 
                             <div className="ml-form-group">

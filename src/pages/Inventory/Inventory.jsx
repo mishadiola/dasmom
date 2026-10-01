@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext, useMemo, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import useClickOutside from '../../hooks/useClickOutside';
 import {
@@ -61,6 +62,7 @@ const formatReadableDate = (dateString) => {
 
 const Inventory = () => {
     const { settings } = useSystemSettings();
+    const location = useLocation();
   const { alert: customAlert, confirm } = useModal();
   const { user } = useContext(AuthContext);
   const [userScope, setUserScope] = useState({ role: 'user', stationId: null, stationName: null, userId: user?.id || null });
@@ -92,6 +94,19 @@ const Inventory = () => {
   const [dateFilterError, setDateFilterError] = useState('');
 
   const hasActiveFilters = statusFilter !== 'All' || archiveFilter !== 'active' || searchTerm !== '' || dateFilter !== 'all';
+
+  useEffect(() => {
+
+    if (location.state?.filterStatus) {
+
+        setStatusFilter(location.state.filterStatus);
+
+        window.history.replaceState({}, document.title);
+
+    }
+
+  }, [location.state]);
+
 
   const clearFilters = () => {
       setStatusFilter('All');
@@ -1566,14 +1581,14 @@ const Inventory = () => {
           )}
 
           <button
-            className="clear-filters-btn"
+            className="refresh-data-btn"
             onClick={handleRefresh}
             disabled={isRefreshing}
             title="Refresh data"
             style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '5px' }}
           >
             <RefreshCw size={14} className={isRefreshing ? 'spinning' : ''} />
-            <span>Refresh</span>
+            <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
           </button>
         </div>
       </div>
@@ -2935,3 +2950,4 @@ const Inventory = () => {
 };
 
 export default Inventory;
+

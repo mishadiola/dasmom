@@ -664,7 +664,7 @@ const PatientsList = () => {
                         </button>
                     <button className="btn btn-primary" onClick={() => navigate('/dashboard/patients/add')}>
                         <Plus size={16} />
-                        Add Pregnancy
+                        Register Pregnancy
                     </button>
                 </div>
             </div>

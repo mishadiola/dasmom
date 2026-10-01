@@ -1362,21 +1362,57 @@ const Vaccinations = () => {
             setVaccinationRecords(transformedVaccRecords);
             setSupplementRecords(transformedSuppRecords);
 
-            // Update stats
-            setStats({
-                totalAdministered: transformedVaccRecords.filter(r => r.status === 'Completed').length,
-                mothersPending: transformedVaccRecords.filter(r => r.type === 'Mother' && r.status === 'Pending').length,
-                newbornsPending: transformedVaccRecords.filter(r => r.type === 'Newborn' && r.status === 'Pending').length,
-                supplementsDistributed: suppRecords.length,
-                lowStockAlerts: 0 // TODO: calculate
-            });
+            // Update stats (will be set after inventory logic)
 
             // Update inventory
             const inventoryService = (await import('../../services/inventoryservice')).default;
             const invSvc = new inventoryService();
             const vaccineInvData = await invSvc.getVaccineInventory();
             const suppInvData = await invSvc.getSupplementInventory();
-            const inventory = [...vaccineInvData.map(v => ({ ...v, type: 'vaccine', threshold: 20, status: v.quantity < 10 ? 'Critical' : v.quantity < 20 ? 'Low' : 'Sufficient' })), ...suppInvData.map(s => ({ ...s, type: 'supplement', threshold: 50, status: s.quantity < 25 ? 'Critical' : s.quantity < 50 ? 'Low' : 'Sufficient' }))];
+            
+            const groupByName = (list, isVaccine) => {
+                const grouped = {};
+                (list || []).forEach(item => {
+                    const name = isVaccine ? item.vaccine_name : item.supplement_name;
+                    if (!name) return;
+                    if (!grouped[name]) {
+                        grouped[name] = { total_quantity: 0, total_max_stock: 0 };
+                    }
+                    
+                    let isExpired = false;
+                    if (item.expiration_date) {
+                        const expDate = new Date(item.expiration_date);
+                        expDate.setHours(0, 0, 0, 0);
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        isExpired = expDate <= today;
+                    }
+                    
+                    if (!isExpired) {
+                        grouped[name].total_quantity += item.quantity || 0;
+                    }
+                    const maxStock = isVaccine ? (item.max_quantity || item.max_stock) : (item.max_quant || item.max_stock);
+                    grouped[name].total_max_stock += maxStock || (isVaccine ? 500 : 1000);
+                });
+                return Object.values(grouped);
+            };
+
+            const vaxGroups = groupByName(vaccineInvData, true);
+            const suppGroups = groupByName(suppInvData, false);
+            const lowStockCount = [...vaxGroups, ...suppGroups].filter(i => {
+                const percentage = i.total_max_stock ? Math.round((i.total_quantity / i.total_max_stock) * 100) : 0;
+                return i.total_quantity > 0 && percentage <= 20;
+            }).length;
+
+            setStats({
+                totalAdministered: transformedVaccRecords.filter(r => r.status === 'Completed').length,
+                mothersPending: transformedVaccRecords.filter(r => r.type === 'Mother' && r.status === 'Pending').length,
+                newbornsPending: transformedVaccRecords.filter(r => r.type === 'Newborn' && r.status === 'Pending').length,
+                supplementsDistributed: transformedSuppRecords.reduce((sum, r) => sum + (parseInt(r.dose?.toString().match(/\d+/)?.[0]) || 1), 0),
+                lowStockAlerts: lowStockCount
+            });
+
+            const inventory = [...(vaccineInvData || []).map(v => ({ ...v, type: 'vaccine', threshold: 20, status: v.quantity < 10 ? 'Critical' : v.quantity < 20 ? 'Low' : 'Sufficient' })), ...(suppInvData || []).map(s => ({ ...s, type: 'supplement', threshold: 50, status: s.quantity < 25 ? 'Critical' : s.quantity < 50 ? 'Low' : 'Sufficient' }))];
             setInventory(inventory);
         } catch (error) {
             console.error('Error loading dashboard data:', error);
@@ -1442,11 +1478,37 @@ const Vaccinations = () => {
 
     // Derived Stats for UI mapping
     const dynamicSummaryStats = [
-        { label: 'Total Vaccinations Administered', value: stats.totalAdministered, color: 'lilac', icon: Syringe },
-        { label: 'Mothers Pending Vaccines', value: stats.mothersPending, color: 'pink', icon: AlertCircle },
-        { label: 'Newborns Pending Vaccines', value: stats.newbornsPending, color: 'orange', icon: AlertCircle },
-        { label: 'Supplements Distributed', value: stats.supplementsDistributed, unit: 'units', color: 'sage', icon: Pill },
-        { label: 'Low Stock Items', value: stats.lowStockAlerts, color: 'rose', icon: Package },
+        { label: 'Total Vaccinations Administered', value: stats.totalAdministered, color: 'lilac', icon: Syringe, onClick: () => {
+            setActiveTab('administered');
+            setFilters({ patientType: 'All', item: 'Vaccines' });
+            setSearchTerm('');
+            setDateFilter('all');
+            document.querySelector('.vacc-tabs')?.scrollIntoView({ behavior: 'smooth' });
+        } },
+        { label: 'Mothers Pending Vaccines', value: stats.mothersPending, color: 'pink', icon: AlertCircle, onClick: () => {
+            setActiveTab('pending');
+            setFilters({ patientType: 'Mother', item: 'Vaccines' });
+            setSearchTerm('');
+            setDateFilter('all');
+            document.querySelector('.vacc-tabs')?.scrollIntoView({ behavior: 'smooth' });
+        } },
+        { label: 'Newborns Pending Vaccines', value: stats.newbornsPending, color: 'orange', icon: AlertCircle, onClick: () => {
+            setActiveTab('pending');
+            setFilters({ patientType: 'Newborn', item: 'Vaccines' });
+            setSearchTerm('');
+            setDateFilter('all');
+            document.querySelector('.vacc-tabs')?.scrollIntoView({ behavior: 'smooth' });
+        } },
+        { label: 'Supplements Distributed', value: stats.supplementsDistributed, unit: 'units', color: 'sage', icon: Pill, onClick: () => {
+            setActiveTab('administered');
+            setFilters({ patientType: 'All', item: 'Supplements' });
+            setSearchTerm('');
+            setDateFilter('all');
+            document.querySelector('.vacc-tabs')?.scrollIntoView({ behavior: 'smooth' });
+        } },
+        { label: 'Low Stock Items', value: stats.lowStockAlerts, color: 'rose', icon: Package, onClick: () => {
+            navigate('/inventory', { state: { filterStatus: 'Low Stock' } });
+        } },
     ];
 
     const handleFilter = (k, v) => setFilters(prev => ({ ...prev, [k]: v }));
@@ -1757,7 +1819,19 @@ const Vaccinations = () => {
                 {dynamicSummaryStats.map(s => {
                     const Icon = s.icon;
                     return (
-                        <div key={s.label} className={`stat-card stat-card--${s.color} ${loading ? 'skeleton-loading' : ''}`}>
+                        <div 
+                            key={s.label} 
+                            className={`stat-card stat-card--${s.color} ${loading ? 'skeleton-loading' : ''} stat-card--clickable`}
+                            onClick={s.onClick}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    s.onClick && s.onClick();
+                                }
+                            }}
+                        >
                             <div className="stat-top">
                                 <div className={`stat-icon stat-icon--${s.color}`}>
                                     <Icon size={20} />

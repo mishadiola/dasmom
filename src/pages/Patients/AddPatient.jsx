@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useRef } from 'react';
+import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import {
@@ -10,6 +10,7 @@ import '../../styles/pages/AddPatient.css';
 import PatientService from "../../services/patientservice";
 import InventoryService from '../../services/inventoryservice';
 import { formatDate } from '../../utils/formatters';
+import { formatMotherId } from '../../utils/displayIds';
 
 const patientService = new PatientService();
 const inventoryService = new InventoryService();
@@ -97,6 +98,33 @@ const AddPatient = () => {
     const [selectedExistingPatient, setSelectedExistingPatient] = useState(null);
     const [emailSuggestions, setEmailSuggestions] = useState([]);
 
+    const [suggestedMothers, setSuggestedMothers] = useState([]);
+    const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+    const [fetchError, setFetchError] = useState('');
+    const [suggestedSort, setSuggestedSort] = useState('recent'); // 'recent', 'oldest', 'az', 'za'
+    const [suggestedStation, setSuggestedStation] = useState('All');
+    const [suggestedPeriod, setSuggestedPeriod] = useState('All Time'); // 'All Time', 'This Year', 'Last Year'
+
+    const fetchSuggestedMothers = async () => {
+        setLoadingSuggestions(true);
+        setFetchError('');
+        try {
+            const data = await patientService.getSuggestedReturningMothers();
+            setSuggestedMothers(data);
+        } catch(e) {
+            console.error(e);
+            setFetchError(e.message || 'An error occurred while fetching patients.');
+        } finally {
+            setLoadingSuggestions(false);
+        }
+    };
+
+    useEffect(() => {
+        if (registrationMode === 'existing' && suggestedMothers.length === 0) {
+            fetchSuggestedMothers();
+        }
+    }, [registrationMode]);
+
     const hydrateExistingPatient = async (patient) => {
         if (!patient) return;
 
@@ -163,10 +191,20 @@ const AddPatient = () => {
     const [bpWarning, setBpWarning] = useState(null);
     const [tempWarning, setTempWarning] = useState(null);
     const [sameAsPatientAddress, setSameAsPatientAddress] = useState(false);
+    const [lmpError, setLmpError] = useState('');
+
+    const getDisplayRole = (roleStr) => {
+        if (!roleStr) return 'Loading...';
+        const r = roleStr.toLowerCase();
+        if (r.includes('staff')) return 'Station Staff';
+        if (r.includes('cho')) return 'CHO Personnel';
+        if (r.includes('admin')) return 'Admin';
+        return roleStr;
+    };
 
     const currentStaff = {
         id: user?.id || null,
-        full_name: user ? `${user.email} (Admin)` : 'Admin User'
+        full_name: user ? `${user.email} (${getDisplayRole(user.role)})` : 'Loading...'
     };
 
     const [formData, setFormData] = useState({
@@ -175,7 +213,7 @@ const AddPatient = () => {
         alternateContact: '', address: '', station: '', municipality: 'Dasmariñas',
         province: 'Cavite', philhealth: '', validId: '',
         pregnancyStatus: 'Pregnant', gravida: '', para: '',
-        lmp: '', edd: '', gestationalAge: '', pregnancyType: 'Singleton',
+        lmp: '', edd: '', gestationalAge: '', pregnancyType: 'Not Yet Determined',
         plannedDeliveryPlace: 'Hospital',
         conditions: [], otherConditions: '', riskLevel: 'Low Risk',
         retained_staff: '',
@@ -251,7 +289,7 @@ const AddPatient = () => {
 
     useEffect(() => {
         if (user) {
-            const bhwName = `${user.email} (Admin)`;
+            const bhwName = `${user.email} (${getDisplayRole(user.role)})`;
             setFormData(prev => ({ ...prev, bhwAssigned: bhwName }));
             console.log('✅ BHW from AuthContext:', bhwName);
         }
@@ -302,10 +340,20 @@ const AddPatient = () => {
     useEffect(() => {
         if (formData.lmp) {
             const lmpDate = new Date(formData.lmp);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            if (lmpDate > today) {
+                setLmpError('Last menstrual period date cannot be in the future.');
+                setFormData(prev => ({ ...prev, edd: '', gestationalAge: '' }));
+                return;
+            } else {
+                setLmpError('');
+            }
+            
             const eddDate = new Date(lmpDate);
             eddDate.setDate(eddDate.getDate() + 280);
 
-            const today = new Date();
             const diffTime = Math.abs(today - lmpDate);
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
             const weeks = Math.floor(diffDays / 7);
@@ -316,11 +364,14 @@ const AddPatient = () => {
                 edd: eddDate.toISOString().split('T')[0],
                 gestationalAge: `${weeks}w ${days}d`
             }));
+        } else {
+            setLmpError('');
+            setFormData(prev => ({ ...prev, edd: '', gestationalAge: '' }));
         }
     }, [formData.lmp]);
 
     useEffect(() => {
-        if (!formData.lmp) {
+        if (!formData.lmp || lmpError) {
             setSchedulePreview([]);
             return;
         }
@@ -347,7 +398,7 @@ const AddPatient = () => {
         let risk = 'Low Risk';
         
         // Check for multiple pregnancy (high-risk indicator)
-        const isMultipleBirth = formData.pregnancyType && formData.pregnancyType.toLowerCase() !== 'singleton';
+        const isMultipleBirth = formData.pregnancyType === 'Twins' || formData.pregnancyType === 'Multiple';
         
         // Check selected conditions from MEDICAL_CONDITIONS
         const selectedConditions = formData.conditions.map(conditionName => {
@@ -821,7 +872,7 @@ const AddPatient = () => {
         const riskFactors = [
             ...formData.conditions,
             ...(formData.otherConditions ? [formData.otherConditions] : []),
-            ...(formData.pregnancyType !== 'Singleton' ? [`${formData.pregnancyType} Pregnancy`] : []),
+            ...(formData.pregnancyType === 'Twins' || formData.pregnancyType === 'Multiple' ? [`${formData.pregnancyType} Pregnancy`] : []),
             ...(formData.age && (formData.age < 18 || formData.age > 35) ? [`Age ${formData.age} (${formData.age < 18 ? 'Teenage' : 'Advanced Maternal Age'})`] : []),
         ].filter(Boolean);
 
@@ -945,6 +996,12 @@ const AddPatient = () => {
         } else if (activeTab === 'pregnancy') {
             const requiredPregnancy = ['gravida', 'para', 'lmp'];
             checkFields(requiredPregnancy);
+            
+            if (lmpError) {
+                missing.push('lmp-invalid');
+                setToast({ type: 'error', message: lmpError });
+            }
+
             if (formData.pregnancyStatus === 'Postpartum') checkFields(['attending_staff']);
             
             if (formData.pregnancyStatus === 'Pregnant' && formData.edd) {
@@ -983,6 +1040,48 @@ const AddPatient = () => {
             window.scrollTo(0, 0);
         }
     };
+
+    const filteredSuggestedMothers = useMemo(() => {
+        let result = [...suggestedMothers];
+
+        if (searchQuery) {
+            const query = searchQuery.toLowerCase();
+            result = result.filter(p => 
+                p.name.toLowerCase().includes(query) || 
+                (p.id && p.id.toString().includes(query))
+            );
+        }
+
+        if (suggestedStation !== 'All') {
+            result = result.filter(p => p.station === suggestedStation);
+        }
+
+        if (suggestedPeriod !== 'All Time') {
+            const thisYear = new Date().getFullYear();
+            result = result.filter(p => {
+                if (!p.lastDelivery) return false;
+                const dYear = new Date(p.lastDelivery).getFullYear();
+                if (suggestedPeriod === 'This Year') return dYear === thisYear;
+                if (suggestedPeriod === 'Last Year') return dYear === thisYear - 1;
+                return true;
+            });
+        }
+
+        result.sort((a, b) => {
+            if (suggestedSort === 'recent') {
+                return new Date(b.lastDelivery || 0) - new Date(a.lastDelivery || 0);
+            } else if (suggestedSort === 'oldest') {
+                return new Date(a.lastDelivery || 0) - new Date(b.lastDelivery || 0);
+            } else if (suggestedSort === 'az') {
+                return a.name.localeCompare(b.name);
+            } else if (suggestedSort === 'za') {
+                return b.name.localeCompare(a.name);
+            }
+            return 0;
+        });
+
+        return result;
+    }, [suggestedMothers, searchQuery, suggestedStation, suggestedPeriod, suggestedSort]);
 
     return (
         <div className="add-patient-page">
@@ -1091,55 +1190,126 @@ const AddPatient = () => {
 
                             {registrationMode === 'existing' && !selectedExistingPatient && (
                                 <div style={{ marginBottom: '24px' }}>
-                                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500, fontSize: '13.5px', color: 'var(--color-text)' }}>Search Existing Patient</label>
-                                    <div style={{ position: 'relative', width: '100%' }}>
-                                        <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-light)', pointerEvents: 'none' }} />
-                                        <input 
-                                            type="text" 
-                                            placeholder="Search by name or Patient ID..." 
-                                            value={searchQuery}
-                                            onChange={handleSearch}
-                                            style={{ 
-                                                width: '100%', 
-                                                padding: '10px 16px 10px 42px', 
-                                                border: '1.5px solid #eef0f4', 
-                                                borderRadius: '12px', 
-                                                fontFamily: 'var(--font)', 
-                                                fontSize: '13.5px', 
-                                                color: 'var(--color-text)', 
-                                                background: '#f8f9fb', 
-                                                transition: 'all 0.2s ease',
-                                                outline: 'none',
-                                                boxSizing: 'border-box'
-                                            }}
-                                            onFocus={e => { e.target.style.borderColor = 'var(--color-rose)'; e.target.style.background = '#fff'; e.target.style.boxShadow = '0 0 0 3px rgba(185, 129, 138, 0.1)'; }}
-                                            onBlur={e => { e.target.style.borderColor = '#eef0f4'; e.target.style.background = '#f8f9fb'; e.target.style.boxShadow = 'none'; }}
-                                        />
-                                    </div>
-                                    {searchQuery.length > 2 && (
-                                        <div style={{ marginTop: '8px', border: '1.5px solid #eef0f4', borderRadius: '12px', overflow: 'hidden', background: '#fff' }}>
-                                            {searchResults.length > 0 ? searchResults.map(p => (
-                                                <div key={p.id} style={{ padding: '12px 16px', borderBottom: '1px solid #eef0f4', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'background 0.15s ease' }} onClick={async () => {
-                                                    const fullPatient = await patientService.getPatientById(p.id);
-                                                    if (fullPatient) {
-                                                        await hydrateExistingPatient(fullPatient);
-                                                    } else {
-                                                        setSelectedExistingPatient(p);
-                                                    }
-                                                    setSearchQuery('');
-                                                    setSearchResults([]);
-                                                }} onMouseEnter={e => e.currentTarget.style.background = '#f8f9fb'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
-                                                    <div>
-                                                        <div style={{ fontWeight: 600, color: 'var(--color-text)', fontSize: '14px' }}>{p.name}</div>
-                                                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>DOB: {p.dob || 'N/A'} • Station: {p.station || 'N/A'}</div>
-                                                    </div>
-                                                    <button type="button" className="btn btn-outline" style={{ padding: '4px 12px', fontSize: '12px' }}>Select</button>
-                                                </div>
-                                            )) : (
-                                                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13.5px' }}>No patients found matching "{searchQuery}"</div>
-                                            )}
+                                    <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                        <div style={{ position: 'relative', flex: 1, minWidth: '250px' }}>
+                                            <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-light)' }} />
+                                            <input 
+                                                type="text" 
+                                                placeholder="Search by name or Patient ID..." 
+                                                value={searchQuery}
+                                                onChange={(e) => setSearchQuery(e.target.value)}
+                                                style={{ 
+                                                    width: '100%', padding: '10px 16px 10px 42px', border: '1.5px solid #eef0f4', 
+                                                    borderRadius: '12px', fontSize: '13.5px', background: '#f8f9fb', outline: 'none'
+                                                }}
+                                                onFocus={e => { e.target.style.borderColor = 'var(--color-rose)'; e.target.style.background = '#fff'; }}
+                                                onBlur={e => { e.target.style.borderColor = '#eef0f4'; e.target.style.background = '#f8f9fb'; }}
+                                            />
                                         </div>
-                                    )}
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <select 
+                                                value={suggestedStation}
+                                                onChange={(e) => setSuggestedStation(e.target.value)}
+                                                style={{ padding: '9px 12px', border: '1.5px solid #eef0f4', borderRadius: '8px', fontSize: '13px', background: '#fff', outline: 'none', cursor: 'pointer' }}
+                                            >
+                                                <option value="All">All Stations</option>
+                                                {availableStations.map(s => <option key={s} value={s}>{formatStationName(s)}</option>)}
+                                            </select>
+                                            <select 
+                                                value={suggestedPeriod}
+                                                onChange={(e) => setSuggestedPeriod(e.target.value)}
+                                                style={{ padding: '9px 12px', border: '1.5px solid #eef0f4', borderRadius: '8px', fontSize: '13px', background: '#fff', outline: 'none', cursor: 'pointer' }}
+                                            >
+                                                <option value="All Time">All Time</option>
+                                                <option value="This Year">This Year</option>
+                                                <option value="Last Year">Last Year</option>
+                                            </select>
+                                            <select 
+                                                value={suggestedSort}
+                                                onChange={(e) => setSuggestedSort(e.target.value)}
+                                                style={{ padding: '9px 12px', border: '1.5px solid #eef0f4', borderRadius: '8px', fontSize: '13px', background: '#fff', outline: 'none', cursor: 'pointer' }}
+                                            >
+                                                <option value="recent">Most Recent Delivery</option>
+                                                <option value="oldest">Oldest Delivery</option>
+                                                <option value="az">Name A-Z</option>
+                                                <option value="za">Name Z-A</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    <div style={{ border: '1px solid #eef0f4', borderRadius: '12px', overflow: 'hidden', background: '#fff' }}>
+                                        {loadingSuggestions ? (
+                                            <table className="do-table" style={{ margin: 0, width: '100%' }}>
+                                                <thead>
+                                                    <tr>
+                                                        <th style={{ paddingLeft: '16px' }}>Patient ID</th>
+                                                        <th>Mother</th>
+                                                        <th>Age</th>
+                                                        <th>Station</th>
+                                                        <th>Last Delivery</th>
+                                                        <th style={{ paddingRight: '16px' }}>Previous Pregnancies</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {Array.from({ length: 5 }).map((_, i) => (
+                                                        <tr key={i} className="do-row">
+                                                            <td style={{ paddingLeft: '16px' }}><div className="ap-skeleton" style={{ width: '80px', height: '14px' }}></div></td>
+                                                            <td><div className="ap-skeleton" style={{ width: '130px', height: '14px' }}></div></td>
+                                                            <td><div className="ap-skeleton" style={{ width: '25px', height: '14px' }}></div></td>
+                                                            <td><div className="ap-skeleton" style={{ width: '90px', height: '14px' }}></div></td>
+                                                            <td><div className="ap-skeleton" style={{ width: '75px', height: '14px' }}></div></td>
+                                                            <td style={{ paddingRight: '16px' }}><div className="ap-skeleton" style={{ width: '25px', height: '14px' }}></div></td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        ) : fetchError ? (
+                                            <div style={{ padding: '32px', textAlign: 'center' }}>
+                                                <AlertTriangle size={24} style={{ margin: '0 auto 8px', color: '#e05c73' }} />
+                                                <p style={{ color: 'var(--color-text)', fontWeight: 500, marginBottom: '8px' }}>Failed to load existing patients</p>
+                                                <p style={{ color: 'var(--color-text-muted)', fontSize: '13px', marginBottom: '16px' }}>{fetchError}</p>
+                                                <button type="button" className="btn btn-outline" onClick={() => fetchSuggestedMothers()}>Retry</button>
+                                            </div>
+                                        ) : filteredSuggestedMothers.length > 0 ? (
+                                            <table className="do-table" style={{ margin: 0, width: '100%' }}>
+                                                <thead>
+                                                    <tr>
+                                                        <th style={{ paddingLeft: '16px' }}>Patient ID</th>
+                                                        <th>Mother</th>
+                                                        <th>Age</th>
+                                                        <th>Station</th>
+                                                        <th>Last Delivery</th>
+                                                        <th style={{ paddingRight: '16px' }}>Previous Pregnancies</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {filteredSuggestedMothers.map(p => (
+                                                        <tr key={p.id} className="do-row" style={{ cursor: 'pointer', transition: 'all 0.2s ease' }} onClick={async () => {
+                                                            const fullPatient = await patientService.getPatientById(p.id);
+                                                            if (fullPatient) {
+                                                                await hydrateExistingPatient(fullPatient);
+                                                            } else {
+                                                                setSelectedExistingPatient(p);
+                                                            }
+                                                        }} onMouseEnter={e => e.currentTarget.style.background = '#fcf8f9'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                            <td style={{ paddingLeft: '16px' }}>{p.id ? formatMotherId(p.id) : 'N/A'}</td>
+                                                            <td style={{ fontWeight: 500, color: 'var(--color-text)' }}>{p.name}</td>
+                                                            <td>{p.age || 'N/A'}</td>
+                                                            <td>{p.station || 'N/A'}</td>
+                                                            <td>{p.lastDelivery ? new Date(p.lastDelivery).toLocaleDateString() : 'N/A'}</td>
+                                                            <td style={{ paddingRight: '16px' }}>{p.previousPregnancies}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        ) : (
+                                            <div style={{ padding: '32px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                                                <User size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+                                                <p style={{ margin: 0, fontSize: '14px' }}>No suggested patients found</p>
+                                                <p style={{ margin: '4px 0 0', fontSize: '12.5px', opacity: 0.7 }}>Try adjusting your search or filters.</p>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             )}
 
@@ -1540,8 +1710,15 @@ const AddPatient = () => {
                                                 name="lmp" 
                                                 value={formData.lmp} 
                                                 onChange={handleChange} 
-                                                className={missingFields.includes('lmp') ? 'error-field' : ''}
+                                                max={new Date().toISOString().split('T')[0]}
+                                                className={missingFields.includes('lmp') || missingFields.includes('lmp-invalid') || lmpError ? 'error-field' : ''}
+                                                onKeyDown={(e) => e.preventDefault()}
                                             />
+                                            {lmpError && (
+                                                <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
+                                                    {lmpError}
+                                                </span>
+                                            )}
                                         </div>
                                         <div className="form-group">
                                             <label>Expected Date of Delivery</label>
@@ -1557,6 +1734,7 @@ const AddPatient = () => {
                                         <div className="form-group">
                                             <label>Pregnancy Type</label>
                                             <select name="pregnancyType" value={formData.pregnancyType} onChange={handleChange}>
+                                                <option value="Not Yet Determined">Not Yet Determined</option>
                                                 <option value="Singleton">Singleton</option>
                                                 <option value="Twins">Twins</option>
                                                 <option value="Multiple">Multiple</option>
@@ -1742,7 +1920,7 @@ const AddPatient = () => {
                                         <span className="checkmark"></span> 
                                         <span>{cond.name}</span>
                                         {!cond.isExclusive && (
-                                            <span className={`risk-badge risk-badge--${cond.risk.toLowerCase()}`}>
+                                            <span className={`risk-badge risk-${cond.risk.toLowerCase()}`}>
                                                 {cond.risk} Risk
                                             </span>
                                         )}

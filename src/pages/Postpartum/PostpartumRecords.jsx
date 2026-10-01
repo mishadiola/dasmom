@@ -192,13 +192,13 @@ const PostpartumRecords = () => {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState({
-        deliveryType: 'All', station: 'All', followUp: 'All'
+        deliveryType: 'All', station: 'All', followUp: 'All', summaryCard: 'All'
     });
 
-    const hasActiveFilters = filters.deliveryType !== 'All' || filters.station !== 'All' || filters.followUp !== 'All' || searchTerm !== '';
+    const hasActiveFilters = filters.deliveryType !== 'All' || filters.station !== 'All' || filters.followUp !== 'All' || filters.summaryCard !== 'All' || searchTerm !== '';
 
     const clearFilters = () => {
-        setFilters({ deliveryType: 'All', station: 'All', followUp: 'All' });
+        setFilters({ deliveryType: 'All', station: 'All', followUp: 'All', summaryCard: 'All' });
         setSearchTerm('');
         setActivePopover(null);
     };
@@ -368,7 +368,16 @@ const PostpartumRecords = () => {
         const matchDT = filters.deliveryType === 'All' || m.deliveryType === filters.deliveryType;
         const matchStation = filters.station === 'All' || m.station === filters.station;
         const matchFU = filters.followUp === 'All' || m.followUpStatus === filters.followUp;
-        return matchSearch && matchDT && matchStation && matchFU;
+                let matchSummary = true;
+        if (filters.summaryCard !== 'All') {
+            if (filters.summaryCard === 'Recent Deliveries (42 days)') matchSummary = m.daysPostpartum <= 42;
+            else if (filters.summaryCard === 'Due for Postpartum Visit') matchSummary = m.followUpStatus === 'Upcoming' && m.nextFollowUp !== 'TBD';
+            else if (filters.summaryCard === 'Missed Follow-ups') matchSummary = m.followUpStatus === 'Missed';
+            else if (filters.summaryCard === 'With Complications') matchSummary = m.recoveryStatus === 'Complication';
+            else if (filters.summaryCard === 'Recovered Mothers') matchSummary = m.daysPostpartum > 42 && m.recoveryStatus === 'Normal';
+        }
+
+        return matchSearch && matchDT && matchStation && matchFU && matchSummary;
     });
 
     const getFollowUpBadge = (status) => {
@@ -723,3 +732,5 @@ const PostpartumRecords = () => {
 };
 
 export default PostpartumRecords;
+
+

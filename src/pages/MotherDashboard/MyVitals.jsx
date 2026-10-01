@@ -340,7 +340,14 @@ const MyVitals = () => {
                     <>
                         {/* ── Top Summary Cards ── */}
                         <div className="vitals-section-card">
-                            <h2 className="section-title">{t('vitals_current_health')}</h2>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '8px', marginBottom: '20px' }}>
+                                <h2 className="section-title" style={{ margin: 0 }}>{t('vitals_current_health')}</h2>
+                                {CURRENT_VITALS.date && (
+                                    <span style={{ fontSize: '13.5px', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                                        Recorded: {new Date(CURRENT_VITALS.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                    </span>
+                                )}
+                            </div>
                             <div className="vitals-summary-grid">
                                 <div className="v-summary-card v-summary-card--green">
                                     <div className="v-card-top">

@@ -397,7 +397,7 @@ const Dashboard = () => {
                     <p className="welcome-actions-title">Quick Actions</p>
                     <div className="welcome-actions">
                         {[
-                            { label: 'Add Pregnancy', icon: Plus, color: 'rose', path: '/dashboard/patients/add' },
+                            { label: 'Register Pregnancy', icon: Plus, color: 'rose', path: '/dashboard/patients/add' },
                             { label: 'View Schedules', icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal', state: { openBooking: true } },
                             { label: 'High Risk Patients', icon: AlertTriangle, color: 'blue', path: '/dashboard/high-risk' },
                             { label: 'Log Delivery', icon: Baby, color: 'pink', path: '/dashboard/deliveries', state: { openRecordDelivery: true } },

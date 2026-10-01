@@ -166,9 +166,12 @@ const formatRoleLabel = (role) => {
 };
 
 const AddUserModal = ({ onClose, onSuccess }) => {
+    const { user } = useContext(AuthContext);
+    const isStationStaff = user && normalizeRoleValue(user.role) === 'staff';
+
     const staffService = new StaffService();
     const [showPwd, setShowPwd] = useState(false);
-    const [form, setForm] = useState({ name: '', email: '', password: '', role: 'staff', station: '' });
+    const [form, setForm] = useState({ name: '', email: '', password: '', role: isStationStaff ? 'staff' : 'staff', station: isStationStaff ? (user.station || '') : '' });
     const [stations, setStations] = useState([]);
     const [roles, setRoles] = useState([]);
     const [showStationDropdown, setShowStationDropdown] = useState(false);
@@ -239,8 +242,8 @@ const AddUserModal = ({ onClose, onSuccess }) => {
                 fullName: form.name,
                 email: form.email,
                 password: form.password,
-                role: form.role,
-                station: form.station || null,
+                role: isStationStaff ? 'staff' : form.role,
+                station: isStationStaff ? user.station : (form.station || null),
             });
             setError('');
             onSuccess?.();
@@ -279,55 +282,65 @@ const AddUserModal = ({ onClose, onSuccess }) => {
                         </div>
                         <div className="form-group">
                             <label>Role <span className="req">*</span></label>
-                            <select value={normalizeRoleValue(form.role)} onChange={e => update('role', e.target.value)}>
-                                {roles.length > 0 ? roles.map(role => (
-                                    <option key={role.id} value={role.value}>{formatRoleLabel(role.value)}</option>
-                                )) : (
-                                    <>
-                                        <option value="admin">Admin</option>
-                                        <option value="staff">Station Staff</option>
-                                        <option value="cho personnel">CHO Personnel</option>
-                                    </>
-                                )}
-                            </select>
+                            {isStationStaff ? (
+                                <input type="text" value="Station Staff" readOnly disabled style={{ backgroundColor: '#f5f5f5', color: '#666', border: '1px solid #eef0f4', padding: '10px 14px', borderRadius: '8px', fontSize: '14px', width: '100%' }} />
+                            ) : (
+                                <select value={normalizeRoleValue(form.role)} onChange={e => update('role', e.target.value)}>
+                                    {roles.length > 0 ? roles.map(role => (
+                                        <option key={role.id} value={role.value}>{formatRoleLabel(role.value)}</option>
+                                    )) : (
+                                        <>
+                                            <option value="admin">Admin</option>
+                                            <option value="staff">Station Staff</option>
+                                            <option value="cho personnel">CHO Personnel</option>
+                                        </>
+                                    )}
+                                </select>
+                            )}
                         </div>
                         <div className="form-group form-group--full">
                             <label>Assign Station / Barangay</label>
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                <div style={{ position: 'relative', flex: '1 1 200px' }}>
-                                    <select
-                                        value={form.station}
-                                        onChange={e => update('station', e.target.value)}
-                                        style={{ 
-                                            width: '100%', 
-                                            paddingRight: '36px',
-                                            appearance: 'none',
-                                            WebkitAppearance: 'none',
-                                            MozAppearance: 'none'
-                                        }}
-                                    >
-                                        <option value="">Select Station / Barangay...</option>
-                                        {stations.map(s => (
-                                            <option key={s} value={s}>{formatStationName(s)}</option>
-                                        ))}
-                                    </select>
-                                    <ChevronDown 
-                                        size={16} 
-                                        style={{ 
-                                            position: 'absolute',
-                                            right: '12px',
-                                            top: '50%',
-                                            transform: 'translateY(-50%)',
-                                            pointerEvents: 'none',
-                                            color: '#666'
-                                        }} 
-                                    />
-                                </div>
-                                <button type="button" className="btn btn-outline" onClick={() => setShowAddStationModal(true)} style={{ whiteSpace: 'nowrap' }}>
-                                    <SettingsIcon size={14} /> Manage Stations
-                                </button>
-                            </div>
-                            <span className="form-hint">Choose an existing station or add a new one.</span>
+                            {isStationStaff ? (
+                                <input type="text" value={formatStationName(user.station)} readOnly disabled style={{ backgroundColor: '#f5f5f5', color: '#666', border: '1px solid #eef0f4', padding: '10px 14px', borderRadius: '8px', fontSize: '14px', width: '100%' }} />
+                            ) : (
+                                <>
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                        <div style={{ position: 'relative', flex: '1 1 200px' }}>
+                                            <select
+                                                value={form.station}
+                                                onChange={e => update('station', e.target.value)}
+                                                style={{ 
+                                                    width: '100%', 
+                                                    paddingRight: '36px',
+                                                    appearance: 'none',
+                                                    WebkitAppearance: 'none',
+                                                    MozAppearance: 'none'
+                                                }}
+                                            >
+                                                <option value="">Select Station / Barangay...</option>
+                                                {stations.map(s => (
+                                                    <option key={s} value={s}>{formatStationName(s)}</option>
+                                                ))}
+                                            </select>
+                                            <ChevronDown 
+                                                size={16} 
+                                                style={{ 
+                                                    position: 'absolute',
+                                                    right: '12px',
+                                                    top: '50%',
+                                                    transform: 'translateY(-50%)',
+                                                    pointerEvents: 'none',
+                                                    color: '#666'
+                                                }} 
+                                            />
+                                        </div>
+                                        <button type="button" className="btn btn-outline" onClick={() => setShowAddStationModal(true)} style={{ whiteSpace: 'nowrap' }}>
+                                            <SettingsIcon size={14} /> Manage Stations
+                                        </button>
+                                    </div>
+                                    <span className="form-hint">Choose an existing station or add a new one.</span>
+                                </>
+                            )}
                         </div>
                         <div className="form-group form-group--full">
                             <label>Password <span className="req">*</span></label>

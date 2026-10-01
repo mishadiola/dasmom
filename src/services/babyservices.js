@@ -316,31 +316,36 @@ class BabyService {
       const motherIds = [...new Set(filtered.map(delivery => delivery.patient_basic_info?.id).filter(Boolean))];
       const [{ data: mothers }, { data: pregnancies }, { data: visits }] = await Promise.all([
         supabase.from('patient_basic_info').select('id, date_of_birth').in('id', motherIds),
-        supabase.from('pregnancy_info').select('patient_id, pregnancy_type, gravida, created_at').in('patient_id', motherIds).order('created_at', { ascending: false }),
+        supabase.from('pregnancy_info').select('id, patient_id, pregnancy_type, gravida, created_at').in('patient_id', motherIds).order('created_at', { ascending: false }),
         supabase.from('prenatal_visits').select('patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm').in('patient_id', motherIds).eq('status', 'Attended').order('visit_date', { ascending: false })
       ]);
       const motherMap = new Map((mothers || []).map(mother => [mother.id, mother]));
-      const latestPregnancyMap = new Map();
-      (pregnancies || []).forEach(pregnancy => {
-        if (pregnancy.patient_id && !latestPregnancyMap.has(pregnancy.patient_id)) {
-          latestPregnancyMap.set(pregnancy.patient_id, pregnancy);
+      
+      const pregnancyMap = new Map((pregnancies || []).map(p => [p.id, p]));
+      
+      const visitsByMother = new Map();
+      (visits || []).forEach(v => {
+        if (!visitsByMother.has(v.patient_id)) {
+          visitsByMother.set(v.patient_id, []);
         }
-      });
-      const latestVisitMap = new Map();
-      (visits || []).forEach(visit => {
-        if (visit.patient_id && !latestVisitMap.has(visit.patient_id)) {
-          latestVisitMap.set(visit.patient_id, visit);
-        }
+        visitsByMother.get(v.patient_id).push(v);
       });
 
       const deliveryRecords = filtered.map(d => {
         const newborn = Array.isArray(d.newborns) ? d.newborns[0] : d.newborns;
         const staff = Array.isArray(d.staff_profiles) ? d.staff_profiles[0] : d.staff_profiles;
         const motherId = d.patient_basic_info?.id || '';
+        
+        const matchedPregnancy = d.pregnancy_id ? pregnancyMap.get(d.pregnancy_id) : (pregnancies || []).find(p => p.patient_id === motherId);
+        
+        const motherVisits = visitsByMother.get(motherId) || [];
+        const deliveryDateObj = d.delivery_date ? new Date(d.delivery_date) : new Date();
+        const matchedVisit = motherVisits.find(v => new Date(v.visit_date) <= deliveryDateObj) || motherVisits[0] || null;
+
         const riskAssessment = this.patientService.getPregnancyRisk(
           motherMap.get(motherId),
-          latestPregnancyMap.get(motherId),
-          latestVisitMap.get(motherId)
+          matchedPregnancy || {},
+          matchedVisit
         );
         return {
           id: d.id,

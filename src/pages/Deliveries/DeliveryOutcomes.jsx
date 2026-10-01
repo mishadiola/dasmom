@@ -898,14 +898,13 @@ const DeliveryOutcomes = () => {
                                         <th>Outcome</th>
                                         <th>Type</th>
                                         <th>Complications</th>
-                                        <th>Baby Status</th>
                                         <th>Staff</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {loading ? (
-                                        <tr><td colSpan="9" className="do-loading">Loading...</td></tr>
+                                        <tr><td colSpan="8" className="do-loading">Loading...</td></tr>
                                     ) : filtered.map((d, index) => (
                                         <tr key={d.id} className={`do-row ${getRowClass(d)}`}>
                                             <td className="row-number-cell" style={{ width: '50px' }}>
@@ -942,10 +941,6 @@ const DeliveryOutcomes = () => {
                                                     {d.complications || 'None'}
                                                 </span>
                                             </td>
-                                            <td>
-                                                {d.babyName && <div className="baby-name-summary">{d.babyName}</div>}
-                                                <span className={`baby-badge ${getBabyBadge(getDisplayData(d).babyStatus)}`}>{getDisplayData(d).babyStatus}</span>
-                                            </td>
                                             <td>{d.staff}</td>
                                             <td>
                                                 <div className="row-actions">
@@ -958,7 +953,7 @@ const DeliveryOutcomes = () => {
                                     ))}
                                     {!loading && !filtered.length && (
                                         <tr>
-                                            <td colSpan="9" className="do-empty">
+                                            <td colSpan="8" className="do-empty">
                                                 <Baby size={28} />
                                                 <p>No matching records found</p>
                                             </td>

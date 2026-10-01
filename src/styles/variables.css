@@ -10,6 +10,7 @@
     /* ─── Derived UI Colors ─── */
     --color-rose-dark: #9c6672;
     --color-rose-light: #d4a5ab;
+    --color-danger: #d9534f; /* Healthcare readable error red */
 
     /* ─── Text ─── */
     --color-text: #2d2234;
