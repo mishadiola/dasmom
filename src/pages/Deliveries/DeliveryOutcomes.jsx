@@ -81,7 +81,6 @@ const DeliveryOutcomes = () => {
     const [stats, setStats] = useState([]);
     const [loading, setLoading] = useState(true);
     const [stations, setStations] = useState(['All Stations']);
-    const [staffList, setStaffList] = useState([]);
     const [showExportModal, setShowExportModal] = useState(false);
 
     // Table date filter state (separate from summary period filter and export modal)
@@ -207,9 +206,6 @@ const DeliveryOutcomes = () => {
         try {
             const stationsData = await babyService.getStations();
             setStations(stationsData);
-            
-            const allStaff = await babyService.getAllStaff();
-            setStaffList(allStaff);
         } catch (err) {
             console.error('Config load error:', err);
         }
@@ -653,7 +649,6 @@ const DeliveryOutcomes = () => {
                 onClose={() => { setShowModal(false); setSelectedDelivery(null); }}
                 onSuccess={loadData}
                 stations={stations}
-                staffList={staffList}
                 editDelivery={selectedDelivery}
             />
 
@@ -1034,13 +1029,12 @@ const DeliveryOutcomes = () => {
     );
 };
 
-const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editDelivery }) => {
+const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) => {
     const patientService = new PatientService();
     const babyService = new BabyService();
     const [section, setSection] = useState('patient');
     const [loading, setLoading] = useState(false);
     const [searchResults, setSearchResults] = useState([]);
-    const [localStaff, setLocalStaff] = useState(staffList);
     const [stationRows, setStationRows] = useState([]);
     const [userAccess, setUserAccess] = useState(null);
     const [staffLoading, setStaffLoading] = useState(true);
@@ -1051,8 +1045,8 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
         patientName: '',
         station: '',
         stationId: '',
-        visitStationId: '',
-        visitStation: '',
+        visitStationId: userAccess?.stationId || '',
+        visitStation: stationRows.find(station => station.id === userAccess?.stationId)?.station_name || '',
         gestationalAge: '',
         riskLevel: '',
         pregnancyType: '',
@@ -1191,19 +1185,28 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
         const loadConfiguration = async () => {
             setStaffLoading(true);
             try {
-                const [access, stationResult, staffResult] = await Promise.all([
-                    new PatientService().getCurrentUserAccess(),
+                const access = await new PatientService().getCurrentUserAccess();
+                const [stationResult, staffResult] = await Promise.all([
                     supabase.from('stations').select('id, station_name').order('station_name'),
-                    supabase.from('staff_profiles').select('id, full_name, station_ass, stations:station_ass (station_name)').order('full_name')
+                    supabase.from('staff_profiles').select('full_name, station_ass').eq('id', access.currentUser?.id || '').maybeSingle()
                 ]);
                 if (stationResult.error) throw stationResult.error;
                 if (staffResult.error) throw staffResult.error;
-                setUserAccess(access);
+                const attendingStationId = access.stationId || staffResult.data?.station_ass || null;
+                const attendingAccess = { ...access, stationId: attendingStationId };
+                setUserAccess(attendingAccess);
                 setStationRows(stationResult.data || []);
-                setLocalStaff(staffResult.data || []);
+                if (!editDelivery) {
+                    setForm(prev => ({
+                        ...prev,
+                        attendingStaffId: access.currentUser?.id || '',
+                        attendingStaffName: staffResult.data?.full_name || access.currentUser?.fullName || access.currentUser?.displayName || '',
+                        visitStationId: attendingStationId || '',
+                        visitStation: stationResult.data?.find(station => station.id === attendingStationId)?.station_name || ''
+                    }));
+                }
             } catch (err) {
                 console.error('Delivery configuration load failed:', err);
-                setLocalStaff([]);
             } finally {
                 setStaffLoading(false);
             }
@@ -1212,19 +1215,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
         if (show) {
             loadConfiguration();
         }
-    }, [show]);
-    const filteredStaffList = useMemo(() => {
-        if (!form.visitStationId) return [];
-
-        const sourceStaff = localStaff.length ? localStaff : staffList;
-        return sourceStaff.filter(staff => {
-            if (staff.station_ass !== form.visitStationId) return false;
-            if (userAccess?.role === 'staff') return staff.id === userAccess.currentUser?.id;
-            if (userAccess?.role === 'cho personnel') return staff.station_ass === userAccess.stationId;
-            return true;
-        });
-    }, [form.visitStationId, localStaff, staffList, userAccess]);
-
+    }, [show, editDelivery]);
     const updateForm = (key, value) => {
         setForm(prev => {
             const next = { ...prev, [key]: value };
@@ -1313,13 +1304,6 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
             setForm(prev => ({ ...prev, postpartumDate: ppDate.toISOString().split('T')[0] }));
         }
     }, [form.deliveryDate]);
-    
-    useEffect(() => {
-        if (show && staffList.length === 0) {
-            console.log('Staff list:', staffList);
-        }
-    }, [show, staffList]);
-
     // Populate form when editing existing delivery
     useEffect(() => {
         if (editDelivery && show) {
@@ -1368,8 +1352,8 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                 patientName: '',
                 station: '',
                 stationId: '',
-                visitStationId: userAccess?.stationId || '',
-                visitStation: stationRows.find(station => station.id === userAccess?.stationId)?.station_name || '',
+                visitStationId: '',
+                visitStation: '',
                 gestationalAge: '',
                 riskLevel: '',
                 pregnancyType: '',
@@ -1377,8 +1361,8 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                 deliveryTime: '',
                 deliveryType: '',
                 pregnancyOutcome: '',
-                attendingStaffId: '',
-                attendingStaffName: '',
+                attendingStaffId: userAccess?.currentUser?.id || '',
+                attendingStaffName: userAccess?.currentUser?.fullName || userAccess?.currentUser?.displayName || '',
                 facility: '',
                 complications: [],
                 miscarriageInfo: {
@@ -1423,14 +1407,14 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
             patientName: patient.name,
             station: patient.station,
             stationId: patient.stationId || '',
-            visitStationId: userAccess?.role === 'admin' ? patient.stationId || '' : userAccess?.stationId || patient.stationId || '',
-            visitStation: stationRows.find(station => station.id === (userAccess?.role === 'admin' ? patient.stationId : userAccess?.stationId))?.station_name || '',
+            visitStationId: userAccess?.stationId || '',
+            visitStation: stationRows.find(station => station.id === userAccess?.stationId)?.station_name || '',
             facility: prev.facility,
             riskLevel: patient.riskLevel,
             pregnancyType: patient.pregnancyType || 'Singleton',
             gestationalAge: patient.gestationalAge || '',
-            attendingStaffId: '',
-            attendingStaffName: ''
+            attendingStaffId: userAccess?.currentUser?.id || '',
+            attendingStaffName: userAccess?.currentUser?.fullName || userAccess?.currentUser?.displayName || ''
         }));
         setSearchResults([]);
         // Clear patient-related validation errors
@@ -1705,40 +1689,19 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
                             </div>
                             <div className="form-group">
                                 <label>Attending Staff <span className="req">*</span></label>
-                                <select 
-                                    value={form.attendingStaffId} 
-                                    onChange={e => {
-                                        const staff = filteredStaffList.find(s => s.id === e.target.value);
-                                        updateForm('attendingStaffId', e.target.value);
-                                        updateForm('attendingStaffName', staff?.full_name || '');
-                                    }}
-                                    disabled={!form.visitStationId || staffLoading}
-                                    className={isFieldInvalid('Attending Staff', form.attendingStaffId) ? 'field-error' : ''}
-                                >
-                                    <option value="">Select Staff</option>
-                                    {filteredStaffList.map(s => (
-                                        <option key={s.id} value={s.id}>
-                                            {s.full_name} - {s.stations?.station_name || 'N/A'}
-                                        </option>
-                                    ))}
-                                </select>
+                                <input
+                                    value={form.attendingStaffName || userAccess?.currentUser?.fullName || userAccess?.currentUser?.displayName || (staffLoading ? 'Loading...' : '')}
+                                    readOnly
+                                    className={`readonly-field ${isFieldInvalid('Attending Staff', form.attendingStaffId) ? 'field-error' : ''}`}
+                                />
                             </div>
                             <div className="form-group">
                                 <label>Mother&apos;s Station</label>
                                 <input value={form.station} readOnly className="readonly-field" />
                             </div>
                             <div className="form-group">
-                                <label>Delivery Station <span className="req">*</span></label>
-                                {userAccess?.role === 'admin' ? (
-                                    <select value={form.visitStationId} onChange={e => updateForm('visitStationId', e.target.value)} required>
-                                        <option value="">Select station</option>
-                                        {stationRows.map(station => (
-                                            <option key={station.id} value={station.id}>{station.station_name}</option>
-                                        ))}
-                                    </select>
-                                ) : (
-                                    <input value={form.visitStation || 'Station not assigned'} readOnly className="readonly-field" />
-                                )}
+                                <label>Attending Staff Station <span className="req">*</span></label>
+                                <input value={form.visitStation || 'Staff station not assigned'} readOnly className="readonly-field" />
                             </div>
                             <div className="form-group">
                                 <label>Place of Delivery</label>

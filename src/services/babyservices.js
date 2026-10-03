@@ -387,11 +387,17 @@ class BabyService {
   async recordDelivery(deliveryData, newbornData, deliveryId = null) {
     const createdBy = await this.patientService.getCurrentUserId();
     if (!createdBy) throw new Error('No logged-in user');
-    const { role, stationId: currentStationId } = await this.patientService.getCurrentUserAccess();
-    const deliveryStationId = role === 'admin'
-      ? deliveryData.station_ass || currentStationId
-      : currentStationId;
-    if (!deliveryStationId) throw new Error('Your account must have an assigned station to record a delivery.');
+    const { data: attendingProfile, error: attendingProfileError } = await supabase
+      .from('staff_profiles')
+      .select('station_ass')
+      .eq('id', createdBy)
+      .maybeSingle();
+    if (attendingProfileError) throw attendingProfileError;
+
+    const deliveryStationId = deliveryId
+      ? deliveryData.station_ass
+      : attendingProfile?.station_ass;
+    if (!deliveryStationId) throw new Error('The attending staff member must have an assigned station to record a delivery.');
 
     if (deliveryData.outcome === 'Miscarriage') {
       const { data: pregnancyRows, error: pregnancyError } = await supabase
@@ -454,7 +460,9 @@ class BabyService {
       };
     }
 
-    const attendingStaffId = deliveryData.attending_staff || deliveryData.attendingStaffId || null;
+    const attendingStaffId = deliveryId
+      ? deliveryData.attending_staff || deliveryData.attendingStaffId || null
+      : createdBy;
     if (!attendingStaffId) throw new Error('Select the staff member who attended the delivery.');
 
     const { data: pregnancyRows, error: pregnancyRowsError } = await supabase

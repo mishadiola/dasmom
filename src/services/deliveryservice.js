@@ -124,20 +124,26 @@ export default class DeliveryService {
         try {
             const { data: authData, error: authError } = await this.supabase.auth.getUser();
             if (authError) throw authError;
-            if (!formData.stationId) throw new Error('A delivery station is required.');
+            const { data: attendingProfile, error: attendingProfileError } = await this.supabase
+                .from('staff_profiles')
+                .select('station_ass')
+                .eq('id', authData.user?.id || '')
+                .maybeSingle();
+            if (attendingProfileError) throw attendingProfileError;
+            if (!attendingProfile?.station_ass) throw new Error('The attending staff member must have an assigned station to record a delivery.');
 
             const { data: delivery, error } = await this.supabase
                 .from('deliveries')
                 .insert({
                     mother_id: formData.patientId,
-                    station_ass: formData.stationId,
+                    station_ass: attendingProfile.station_ass,
                     delivery_date: formData.deliveryDate,
                     delivery_time: formData.deliveryTime || '00:00',
                     delivery_type: formData.deliveryType,
                     gestational_age: formData.gestationalAge || null,
                     risk_level: formData.riskLevel || 'Normal',
                     complications: Array.isArray(formData.complications) ? formData.complications : [],
-                    attending_staff: formData.attendingStaffId || formData.staffId || null,
+                    attending_staff: authData.user?.id || null,
                     postpartum_visit_date: formData.postpartumDate || null,
                     notes: formData.notes || null,
                     created_by: authData.user?.id || null

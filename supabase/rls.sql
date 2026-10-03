@@ -828,23 +828,43 @@ CREATE POLICY patient_read_own ON public.patient_basic_info FOR SELECT TO authen
   USING (id = auth.uid());
 
 -- deliveries
-CREATE POLICY admin_deliveries ON public.deliveries FOR ALL TO authenticated
+CREATE POLICY admin_read_all_deliveries ON public.deliveries FOR SELECT TO authenticated
+  USING (get_my_role() = 'admin');
+CREATE POLICY insert_recorded_delivery ON public.deliveries FOR INSERT TO authenticated
+  WITH CHECK (
+    get_my_role() IN ('admin', 'cho personnel', 'staff')
+    AND attending_staff = auth.uid()
+    AND station_ass IS NOT NULL
+    AND EXISTS (
+      SELECT 1
+      FROM public.staff_profiles attending_profile
+      WHERE attending_profile.id = auth.uid()
+        AND attending_profile.station_ass = deliveries.station_ass
+    )
+  );
+CREATE POLICY admin_update_deliveries ON public.deliveries FOR UPDATE TO authenticated
   USING (get_my_role() = 'admin')
   WITH CHECK (get_my_role() = 'admin');
-CREATE POLICY cho_deliveries ON public.deliveries FOR ALL TO authenticated
+CREATE POLICY admin_delete_deliveries ON public.deliveries FOR DELETE TO authenticated
+  USING (get_my_role() = 'admin');
+CREATE POLICY cho_update_deliveries ON public.deliveries FOR UPDATE TO authenticated
   USING (get_my_role() = 'cho personnel' AND station_ass IS NOT DISTINCT FROM get_my_station())
   WITH CHECK (
     get_my_role() = 'cho personnel'
     AND station_ass IS NOT DISTINCT FROM get_my_station()
     AND (attending_staff IS NULL OR public.staff_member_belongs_to_station(attending_staff, station_ass))
   );
-CREATE POLICY staff_deliveries ON public.deliveries FOR ALL TO authenticated
+CREATE POLICY cho_delete_deliveries ON public.deliveries FOR DELETE TO authenticated
+  USING (get_my_role() = 'cho personnel' AND station_ass IS NOT DISTINCT FROM get_my_station());
+CREATE POLICY staff_update_deliveries ON public.deliveries FOR UPDATE TO authenticated
   USING (get_my_role() = 'staff' AND station_ass IS NOT DISTINCT FROM get_my_station())
   WITH CHECK (
     get_my_role() = 'staff'
     AND station_ass IS NOT DISTINCT FROM get_my_station()
     AND (attending_staff IS NULL OR public.staff_member_belongs_to_station(attending_staff, station_ass))
   );
+CREATE POLICY staff_delete_deliveries ON public.deliveries FOR DELETE TO authenticated
+  USING (get_my_role() = 'staff' AND station_ass IS NOT DISTINCT FROM get_my_station());
 CREATE POLICY patient_deliveries_read ON public.deliveries FOR SELECT TO authenticated
   USING (mother_id = auth.uid());
 CREATE POLICY cho_read_all_deliveries ON public.deliveries FOR SELECT TO authenticated
@@ -885,6 +905,29 @@ CREATE POLICY staff_insert_pregnancy ON public.pregnancy_info FOR INSERT TO auth
       OR EXISTS (
         SELECT 1 FROM public.patient_basic_info p
         WHERE p.id = patient_id AND p.created_by = auth.uid()
+      )
+    )
+  );
+CREATE POLICY delivery_attending_insert_pregnancy ON public.pregnancy_info FOR INSERT TO authenticated
+  WITH CHECK (
+    get_my_role() IN ('staff', 'cho personnel')
+    AND created_by = auth.uid()
+    AND (
+      EXISTS (
+        SELECT 1
+        FROM public.deliveries d
+        WHERE d.mother_id = pregnancy_info.patient_id
+          AND d.attending_staff = auth.uid()
+          AND pregnancy_info.pregn_postp = 'Postpartum'
+      )
+      OR (
+        miscarriage_info IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM public.pregnancy_info current_pregnancy
+          WHERE current_pregnancy.patient_id = pregnancy_info.patient_id
+            AND current_pregnancy.pregn_postp = 'Pregnant'
+        )
       )
     )
   );
@@ -1048,6 +1091,19 @@ CREATE POLICY cho_newborns ON public.newborns FOR ALL TO authenticated
 CREATE POLICY staff_newborns ON public.newborns FOR ALL TO authenticated
   USING (get_my_role() = 'staff' AND newborn_assigned_to_me(id))
   WITH CHECK (get_my_role() = 'staff' AND newborn_assigned_to_me(id));
+CREATE POLICY delivery_attending_insert_newborns ON public.newborns FOR INSERT TO authenticated
+  WITH CHECK (
+    get_my_role() IN ('staff', 'cho personnel')
+    AND EXISTS (
+      SELECT 1
+      FROM public.deliveries d
+      JOIN public.staff_profiles attending_profile ON attending_profile.id = auth.uid()
+      WHERE d.id = newborns.delivery_id
+        AND d.mother_id = newborns.mother_id
+        AND d.attending_staff = auth.uid()
+        AND d.station_ass = attending_profile.station_ass
+    )
+  );
 CREATE POLICY cho_read_all_newborns ON public.newborns FOR SELECT TO authenticated
   USING (get_my_role() = 'cho personnel');
 CREATE POLICY staff_read_all_newborns ON public.newborns FOR SELECT TO authenticated
