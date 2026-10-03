@@ -13,6 +13,20 @@ class VaccinationService {
     return user?.id || null;
   }
 
+  async getCurrentUserStationId() {
+    const userId = await this.getCurrentUserId();
+    if (!userId) return null;
+
+    const { data, error } = await this.supabase
+      .from('staff_profiles')
+      .select('station_ass')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data?.station_ass || null;
+  }
+
   async getAssignedStaffForPatient(patientId) {
     const { data, error } = await this.supabase
       .from('prenatal_visits')
@@ -36,6 +50,28 @@ class VaccinationService {
 
     if (error) throw error;
     return data?.mother_id ? this.getAssignedStaffForPatient(data.mother_id) : null;
+  }
+
+  async getAssignedStationForPatient(patientId) {
+    const { data, error } = await this.supabase
+      .from('patient_basic_info')
+      .select('station_ass')
+      .eq('id', patientId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data?.station_ass || null;
+  }
+
+  async getAssignedStationForNewborn(newbornId) {
+    const { data, error } = await this.supabase
+      .from('newborns')
+      .select('mother_id')
+      .eq('id', newbornId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data?.mother_id ? this.getAssignedStationForPatient(data.mother_id) : null;
   }
 
   /**
@@ -70,65 +106,91 @@ class VaccinationService {
       ? 'id, quantity, vaccine_name, brand, expiration_date'
       : 'id, quantity, supplement_name, brand, expiration_date';
 
-    let query = this.supabase
-      .from(table)
-      .select(selectClause)
-      .gt('quantity', 0)
-      .order('expiration_date', { ascending: true, nullsFirst: false });
-
-    query = query.eq(nameField, normalizedName);
-    if (brand) {
-      query = query.eq('brand', brand);
-    }
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    let eligibleItems = data || [];
-
+    let stationRows = [];
     if (stationId) {
-      const { data: stationRows, error: stationError } = await this.supabase
+      const { data, error } = await this.supabase
         .from(stationTable)
         .select(`id, station_id, ${idField}, quantity`)
         .eq('station_id', stationId)
         .gt('quantity', 0);
 
-      if (stationError) throw stationError;
+      if (error) throw error;
+      stationRows = data || [];
+      if (stationRows.length === 0) return null;
+    }
 
-      const stationItemIds = new Set(
-        (stationRows || [])
-          .map(row => row[idField])
-          .filter(Boolean)
-      );
+    const stationRowsByItem = new Map(stationRows.map(row => [row[idField], row]));
+    const findEligible = async (exactName) => {
+      let query = this.supabase
+        .from(table)
+        .select(selectClause)
+        .order('expiration_date', { ascending: true, nullsFirst: false });
 
-      if (stationItemIds.size > 0) {
-        eligibleItems = eligibleItems.filter(item => stationItemIds.has(item.id));
+      if (stationId) {
+        query = query.in('id', [...stationRowsByItem.keys()]);
       } else {
-        eligibleItems = [];
+        query = query.gt('quantity', 0);
       }
-    }
+      if (exactName) query = query.eq(nameField, exactName);
+      if (brand) query = query.eq('brand', brand);
 
-    if (eligibleItems.length > 0) {
-      return eligibleItems[0];
-    }
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data || []).map(item => ({
+        ...item,
+        station_inventory_id: stationRowsByItem.get(item.id)?.id || null,
+        station_quantity: stationRowsByItem.get(item.id)?.quantity ?? null
+      }));
+    };
 
-    if (brand) {
-      return null;
-    }
+    const exactItems = await findEligible(normalizedName);
+    if (exactItems.length > 0) return exactItems[0];
+    if (brand) return null;
 
-    const { data: fallbackData, error: fallbackError } = await this.supabase
-      .from(table)
-      .select(selectClause)
-      .gt('quantity', 0)
-      .order('expiration_date', { ascending: true, nullsFirst: false });
-
-    if (fallbackError) throw fallbackError;
-
+    const fallbackItems = await findEligible(null);
     const normalizedSearch = normalizedName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    return (fallbackData || []).find(item => {
+    return fallbackItems.find(item => {
       const candidateName = String(item[nameField] || '').toLowerCase().replace(/[^a-z0-9]/g, '');
       return candidateName.includes(normalizedSearch) || normalizedSearch.includes(candidateName);
     }) || null;
+  }
+
+  async decrementStationInventory({ itemType, inventoryItem, stationId }) {
+    if (!stationId || !inventoryItem?.id) {
+      throw new Error('Station inventory item is required');
+    }
+
+    const isVaccine = itemType === 'vaccine';
+    const table = isVaccine ? 'station_vaccine_inventory' : 'station_supplement_inventory';
+    const idField = isVaccine ? 'vaccine_id' : 'supplement_inventory_id';
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { data: stationItem, error: fetchError } = await this.supabase
+        .from(table)
+        .select('id, quantity')
+        .eq('station_id', stationId)
+        .eq(idField, inventoryItem.id)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+      if (!stationItem || Number(stationItem.quantity) <= 0) {
+        throw new Error('No stock available at your assigned station');
+      }
+
+      const { data, error } = await this.supabase
+        .from(table)
+        .update({ quantity: Number(stationItem.quantity) - 1 })
+        .eq('id', stationItem.id)
+        .eq('quantity', stationItem.quantity)
+        .gt('quantity', 0)
+        .select('id')
+        .maybeSingle();
+
+      if (error) throw error;
+      if (data) return true;
+    }
+
+    throw new Error('Station inventory changed while recording; please retry');
   }
 
   /**
@@ -238,6 +300,7 @@ class VaccinationService {
       }
 
       const assignedStaff = await this.getAssignedStaffForNewborn(newbornId);
+      const assignedStation = await this.getAssignedStationForNewborn(newbornId);
       const inserts = [];
 
       for (const schedule of vaccineSchedule) {
@@ -270,6 +333,7 @@ class VaccinationService {
             status: 'Pending',
             created_by: createdBy,
             assigned_staff: assignedStaff,
+            station_ass: assignedStation,
             notes: `${doseOrdinal} dose of ${vaccine}`
           });
         }
@@ -308,20 +372,12 @@ class VaccinationService {
 
       const { vaccineId, vaccineName, doseNumber, date, staff, notes, remarks, lmpDate } = vaccineData;
 
-      // Get vaccine inventory items with the same name, sorted by expiration date (nearest first)
-      const { data: vaccInvItems, error: invError } = await this.supabase
-        .from('vaccine_inventory')
-        .select('id, quantity, expiration_date')
-        .eq('vaccine_name', vaccineName)
-        .gt('quantity', 0)
-        .order('expiration_date', { ascending: true, nullsFirst: false });
-
-      if (invError || !vaccInvItems || vaccInvItems.length === 0) {
-        throw new Error('Vaccine not found in inventory or out of stock');
-      }
-
-      // Use the vaccine with the nearest expiration date
-      const vaccInv = vaccInvItems[0];
+      const vaccInv = await this.resolveInventoryItem({
+        itemType: 'vaccine',
+        itemName: vaccineName,
+        stationId: performingStationId
+      });
+      if (!vaccInv) throw new Error('Vaccine not found in your station inventory or out of stock');
       const assignedStaff = patientType === 'Mother'
         ? await this.getAssignedStaffForPatient(patientId)
         : await this.getAssignedStaffForNewborn(patientId);
@@ -369,20 +425,11 @@ class VaccinationService {
         if (insertError) throw insertError;
       }
 
-      // Decrement vaccine inventory quantity
-      const newQuantity = (vaccInv.quantity || 1) - 1;
-      if (newQuantity >= 0) {
-        const { error: updateInvError } = await this.supabase
-          .from('vaccine_inventory')
-          .update({ quantity: newQuantity })
-          .eq('id', vaccInv.id);
-
-        if (updateInvError) {
-          console.error('Warning: Failed to update vaccine inventory quantity:', updateInvError);
-        } else {
-          console.log(`✅ Decremented vaccine inventory for ${vaccineName}: ${vaccInv.quantity} -> ${newQuantity}`);
-        }
-      }
+      await this.decrementStationInventory({
+        itemType: 'vaccine',
+        inventoryItem: vaccInv,
+        stationId: performingStationId
+      });
 
       // Trigger automatic maternal vaccination scheduling if this is first Td vaccine for a mother
       if (patientType === 'Mother' && (vaccineName.includes('Td') || vaccineName.includes('Tetanus'))) {
@@ -570,6 +617,7 @@ class VaccinationService {
     try {
       const schedule = [];
       const assignedStaff = await this.getAssignedStaffForPatient(patientId);
+      const assignedStation = await this.getAssignedStationForPatient(patientId);
       const baseDate = new Date(firstVaccineDate);
       
       // Tetanus-Diphtheria (Td) Schedule
@@ -678,6 +726,7 @@ class VaccinationService {
       if (schedule.length > 0) {
         schedule.forEach((vaccination) => {
           vaccination.assigned_staff = assignedStaff;
+          vaccination.station_ass = assignedStation;
         });
         const { error } = await this.supabase
           .from('vaccinations')
@@ -704,6 +753,7 @@ class VaccinationService {
     try {
       const schedule = [];
       const assignedStaff = await this.getAssignedStaffForPatient(patientId);
+      const assignedStation = await this.getAssignedStationForPatient(patientId);
       const today = new Date();
       const deliveryDateObj = new Date(deliveryDate);
       const daysSinceDelivery = Math.floor((today - deliveryDateObj) / (1000 * 60 * 60 * 24));
@@ -727,6 +777,7 @@ class VaccinationService {
         vaccinated_date: null,
         created_by: createdBy,
         assigned_staff: assignedStaff,
+        station_ass: assignedStation,
         notes: '1st dose of MMR (Measles, Mumps, Rubella) - After delivery if not immune'
       });
 

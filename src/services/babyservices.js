@@ -1,52 +1,11 @@
 import supabase from '../config/supabaseclient';
-import AuthService from './authservice';
 import PatientService from './patientservice';
 import VaccinationService from './vaccinationservice';
 import { buildPregnancyHistory, getLatestPregnancyRecord, getPregnancyForDelivery } from '../utils/pregnancyUtils';
 
 class BabyService {
   constructor() {
-    this.authService = new AuthService();
     this.patientService = new PatientService();
-  }
-
-  async getCurrentUserAccess() {
-    const currentUser = await this.authService.getAuthUser();
-    let role = String(currentUser?.role || '').toLowerCase().replace(/_/g, ' ').trim();
-    let stationId = null;
-
-    if (!role && currentUser?.id) {
-      const { data: userRow } = await supabase
-        .from('users')
-        .select('usertype')
-        .eq('id', currentUser.id)
-        .maybeSingle();
-
-      if (userRow?.usertype) {
-        const { data: typeRow } = await supabase
-          .from('user_type')
-          .select('user_type')
-          .eq('id', userRow.usertype)
-          .maybeSingle();
-        role = String(typeRow?.user_type || '').toLowerCase().replace(/_/g, ' ').trim();
-      }
-    }
-
-    if (['cho personnel', 'staff'].includes(role) && currentUser?.id) {
-      const { data: profile } = await supabase
-        .from('staff_profiles')
-        .select('station_ass')
-        .eq('id', currentUser.id)
-        .maybeSingle();
-      stationId = profile?.station_ass || null;
-    }
-
-    return { role, stationId, currentUser };
-  }
-
-  async getCurrentUserId() {
-    const user = await this.authService.getAuthUser();
-    return user?.id || null;
   }
 
   async searchPregnantMothers(query) {
@@ -226,7 +185,7 @@ class BabyService {
 
   async getAllDeliveries() {
     try {
-      const { role, stationId } = await this.getCurrentUserAccess();
+      const { role, stationId } = await this.patientService.getCurrentUserAccess();
       const { data, error } = await supabase
         .from('deliveries')
         .select(`
@@ -426,9 +385,9 @@ class BabyService {
   }
 
   async recordDelivery(deliveryData, newbornData, deliveryId = null) {
-    const createdBy = await this.getCurrentUserId();
+    const createdBy = await this.patientService.getCurrentUserId();
     if (!createdBy) throw new Error('No logged-in user');
-    const { role, stationId: currentStationId } = await this.getCurrentUserAccess();
+    const { role, stationId: currentStationId } = await this.patientService.getCurrentUserAccess();
     const deliveryStationId = role === 'admin'
       ? deliveryData.station_ass || currentStationId
       : currentStationId;

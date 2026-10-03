@@ -6,59 +6,6 @@ export default class DeliveryService {
     }
 
     /**
-     * Fetch all delivery outcomes (newborns joined with mother info)
-     */
-    async getAllDeliveries() {
-        try {
-            const { data, error } = await this.supabase
-                .from('deliveries')
-                .select(`
-                    id, mother_id, station_ass, delivery_date, delivery_time, delivery_type,
-                    delivery_mode, gestational_age, risk_level, complications,
-                    postpartum_visit_date, attending_staff,
-                    stations:station_ass (station_name),
-                    pregnancy_info!deliveries_pregnancy_id_fkey (place_of_delivery),
-                    patient_basic_info!deliveries_mother_id_fkey (first_name, last_name),
-                    staff_profiles!deliveries_attending_staff_fkey (full_name),
-                    newborns (gender, birth_weight, apgar_1min, apgar_5min, condition_at_birth)
-                `)
-                .order('delivery_date', { ascending: false });
-
-            if (error) throw error;
-            return (data || []).map(delivery => {
-                const baby = Array.isArray(delivery.newborns) ? delivery.newborns[0] : delivery.newborns;
-                const staff = Array.isArray(delivery.staff_profiles) ? delivery.staff_profiles[0] : delivery.staff_profiles;
-                return {
-                    id: delivery.id,
-                    patientId: delivery.mother_id,
-                    patientName: `${delivery.patient_basic_info?.first_name || ''} ${delivery.patient_basic_info?.last_name || ''}`.trim() || 'Unknown',
-                    stationId: delivery.station_ass,
-                    station: delivery.stations?.station_name || 'Unassigned',
-                    deliveryDate: delivery.delivery_date,
-                    deliveryTime: delivery.delivery_time || '--:--',
-                    deliveryType: delivery.delivery_type || 'N/A',
-                    deliveryMode: delivery.delivery_mode || 'N/A',
-                    gestationalAge: delivery.gestational_age || 'N/A',
-                    riskLevel: delivery.risk_level || 'Normal',
-                    complications: delivery.complications || [],
-                    babyOutcome: baby?.condition_at_birth || 'Healthy',
-                    babyGender: baby?.gender || 'Unknown',
-                    babyWeight: baby?.birth_weight ? `${baby.birth_weight} kg` : 'N/A',
-                    staff: staff?.full_name || 'Unassigned',
-                    attendingStaffId: delivery.attending_staff,
-                    facility: delivery.pregnancy_info?.place_of_delivery || 'N/A',
-                    apgar1: baby?.apgar_1min,
-                    apgar5: baby?.apgar_5min,
-                    postpartumDate: delivery.postpartum_visit_date || 'N/A'
-                };
-            });
-        } catch (err) {
-            console.error('Error in getAllDeliveries:', err);
-            return [];
-        }
-    }
-
-    /**
      * Fetch patients expected to deliver soon (Nearest Due Date)
      */
     async getUpcomingDeliveries() {

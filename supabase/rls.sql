@@ -1354,6 +1354,9 @@ CREATE POLICY cho_station_vaccine_inv ON public.station_vaccine_inventory FOR AL
   WITH CHECK (get_my_role() = 'cho personnel' AND station_id IS NOT DISTINCT FROM get_my_station());
 CREATE POLICY staff_station_vaccine_inv ON public.station_vaccine_inventory FOR SELECT TO authenticated
   USING (get_my_role() = 'staff' AND station_id IS NOT DISTINCT FROM get_my_station());
+CREATE POLICY staff_update_station_vaccine_inv ON public.station_vaccine_inventory FOR UPDATE TO authenticated
+  USING (get_my_role() = 'staff' AND station_id IS NOT DISTINCT FROM get_my_station())
+  WITH CHECK (get_my_role() = 'staff' AND station_id IS NOT DISTINCT FROM get_my_station());
 CREATE POLICY admin_station_supplement_inv ON public.station_supplement_inventory FOR ALL TO authenticated
   USING (get_my_role() = 'admin')
   WITH CHECK (get_my_role() = 'admin');
@@ -1362,3 +1365,6 @@ CREATE POLICY cho_station_supplement_inv ON public.station_supplement_inventory 
   WITH CHECK (get_my_role() = 'cho personnel' AND station_id IS NOT DISTINCT FROM get_my_station());
 CREATE POLICY staff_station_supplement_inv ON public.station_supplement_inventory FOR SELECT TO authenticated
   USING (get_my_role() = 'staff' AND station_id IS NOT DISTINCT FROM get_my_station());
+CREATE POLICY staff_update_station_supplement_inv ON public.station_supplement_inventory FOR UPDATE TO authenticated
+  USING (get_my_role() = 'staff' AND station_id IS NOT DISTINCT FROM get_my_station())
+  WITH CHECK (get_my_role() = 'staff' AND station_id IS NOT DISTINCT FROM get_my_station());

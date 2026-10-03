@@ -1192,7 +1192,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, staffList, editD
             setStaffLoading(true);
             try {
                 const [access, stationResult, staffResult] = await Promise.all([
-                    babyService.getCurrentUserAccess(),
+                    new PatientService().getCurrentUserAccess(),
                     supabase.from('stations').select('id, station_name').order('station_name'),
                     supabase.from('staff_profiles').select('id, full_name, station_ass, stations:station_ass (station_name)').order('full_name')
                 ]);

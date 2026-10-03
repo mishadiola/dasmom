@@ -94,99 +94,60 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
             const patientService = new PatientService();
             const currentUser = await patientService.getCurrentUserId();
             if (!currentUser) throw new Error('No logged-in user');
-            const assignedStaff = await new VaccinationService().getAssignedStaffForNewborn(newborn.id);
+            const vaccinationService = new VaccinationService();
+            const performingStationId = await vaccinationService.getCurrentUserStationId();
+            if (!performingStationId) throw new Error('Your account must have an assigned service station.');
+            const assignedStaff = await vaccinationService.getAssignedStaffForNewborn(newborn.id);
 
             for (const vaccId of selectedIds) {
                 // Get the vaccine record to find the vaccine name
-                const { data: vaccRecord } = await supabase
+                const { data: vaccRecord, error: recordError } = await supabase
                     .from('vaccinations')
-                    .select('id, vaccine_inventory_id, notes')
+                    .select('id, vaccine_inventory_id, notes, vaccine_inventory(vaccine_name)')
                     .eq('id', vaccId)
                     .single();
+                if (recordError) throw recordError;
 
-                let vaccineInvId = vaccRecord?.vaccine_inventory_id;
-                let vaccineName = null;
-
-                // If no vaccine_inventory_id, try to find it from notes
-                if (!vaccineInvId && vaccRecord?.notes) {
-                    const vaccineMatch = vaccRecord.notes.match(/(\d+)(?:st|nd|rd|th) dose of (.+)/);
-                    if (vaccineMatch) {
-                        vaccineName = vaccineMatch[2].trim();
-                        console.log('🔍 Extracted vaccine name from notes:', vaccineName);
-                        
-                        // Try to find the vaccine in inventory
-                        const { data: vaccInv, error: invError } = await supabase
-                            .from('vaccine_inventory')
-                            .select('id, quantity, vaccine_name')
-                            .or(`vaccine_name.ilike.%${vaccineName}%,vaccine_name.ilike.%${vaccineName.replace(/ \(.+\)/, '')}%`)
-                            .limit(1);
-
-                        if (vaccInv && vaccInv.length > 0) {
-                            vaccineInvId = vaccInv[0].id;
-                            vaccineName = vaccInv[0].vaccine_name;
-                            console.log('✅ Found vaccine in inventory:', vaccineName, 'ID:', vaccineInvId);
-                        }
-                    }
-                }
+                const vaccineMatch = vaccRecord?.notes?.match(/(?:\d+)(?:st|nd|rd|th) dose of (.+)/);
+                const notes = String(vaccRecord?.notes || '').toLowerCase();
+                const scheduledName = vaccineMatch?.[1]?.trim() || (
+                    /tetanus|tdap|\btd\b/.test(notes) ? 'Tetanus Diphtheria (TD)' :
+                    /influenza|\bflu\b/.test(notes) ? 'Influenza Vaccine' : null
+                );
+                const vaccineName = vaccRecord?.vaccine_inventory?.vaccine_name || scheduledName;
+                const inventoryItem = vaccineName
+                    ? await vaccinationService.resolveInventoryItem({
+                        itemType: 'vaccine',
+                        itemName: vaccineName,
+                        stationId: performingStationId
+                    })
+                    : null;
+                if (!inventoryItem) throw new Error('This vaccine is not available in your assigned station inventory.');
 
                 // Update the vaccination record with date, status, and vaccine_inventory_id
                 const updateData = { 
                     vaccinated_date: date, 
                     status: 'Completed', 
                     created_by: currentUser,
+                    vaccinated_by: currentUser,
+                    station_ass: performingStationId,
                     assigned_staff: assignedStaff,
-                    remarks: remarks || null
+                    remarks: remarks || null,
+                    vaccine_inventory_id: inventoryItem.id
                 };
-                if (vaccineInvId) {
-                    updateData.vaccine_inventory_id = vaccineInvId;
-                }
                 
                 const { error: updateError } = await supabase
                     .from('vaccinations')
                     .update(updateData)
                     .eq('id', vaccId);
 
-                if (updateError) {
-                    console.error('❌ Error updating vaccination record:', updateError);
-                } else {
-                    console.log('✅ Updated vaccination record:', vaccId);
-                }
+                if (updateError) throw updateError;
 
-                // Decrement vaccine inventory
-                if (vaccineInvId) {
-                    const { data: vaccInv } = await supabase
-                        .from('vaccine_inventory')
-                        .select('id, quantity, vaccine_name')
-                        .eq('id', vaccineInvId)
-                        .single();
-
-                    if (vaccInv && vaccInv.quantity > 0) {
-                        await supabase
-                            .from('vaccine_inventory')
-                            .update({ quantity: vaccInv.quantity - 1 })
-                            .eq('id', vaccInv.id);
-                        console.log(`✅ Decremented vaccine: ${vaccInv.vaccine_name} (${vaccInv.quantity} -> ${vaccInv.quantity - 1})`);
-                    }
-                } else if (vaccRecord?.notes) {
-                    // Fallback: try to find by name in notes
-                    const vaccineMatch = vaccRecord.notes.match(/(\d+)(?:st|nd|rd|th) dose of (.+)/);
-                    if (vaccineMatch) {
-                        const extractedName = vaccineMatch[2].trim();
-                        const { data: vaccInv } = await supabase
-                            .from('vaccine_inventory')
-                            .select('id, quantity, vaccine_name')
-                            .or(`vaccine_name.ilike.%${extractedName}%,vaccine_name.ilike.%${extractedName.replace(/ \(.+\)/, '')}%`)
-                            .limit(1);
-
-                        if (vaccInv && vaccInv.length > 0 && vaccInv[0].quantity > 0) {
-                            await supabase
-                                .from('vaccine_inventory')
-                                .update({ quantity: vaccInv[0].quantity - 1 })
-                                .eq('id', vaccInv[0].id);
-                            console.log(`✅ Decremented vaccine (by name): ${vaccInv[0].vaccine_name}`);
-                        }
-                    }
-                }
+                await vaccinationService.decrementStationInventory({
+                    itemType: 'vaccine',
+                    inventoryItem,
+                    stationId: performingStationId
+                });
             }
 
             if (onSave) onSave();

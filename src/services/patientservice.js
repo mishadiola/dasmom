@@ -1592,6 +1592,14 @@ async smartSemesterScheduling({ patientId, lmp, createdBy, maxPerDay = 35, retai
 
 async schedulePrenatalVaccinations(patientId, lmp, createdBy) {
   try {
+    const { data: patient, error: patientError } = await this.supabase
+      .from('patient_basic_info')
+      .select('station_ass')
+      .eq('id', patientId)
+      .maybeSingle();
+    if (patientError) throw patientError;
+    const assignedStation = patient?.station_ass || null;
+
     const { data: assignedVisit } = await this.supabase
       .from('prenatal_visits')
       .select('assigned_staff')
@@ -1653,6 +1661,7 @@ async schedulePrenatalVaccinations(patientId, lmp, createdBy) {
         scheduled_vaccination: tdapDate,
         vaccinated_date: null,
         assigned_staff: assignedStaff,
+        station_ass: assignedStation,
         created_by: createdBy,
         notes: 'Tdap (Tetanus-Diphtheria) prenatal vaccine - target 27 to 36 weeks'
       });
@@ -1666,6 +1675,7 @@ async schedulePrenatalVaccinations(patientId, lmp, createdBy) {
         scheduled_vaccination: fluDate,
         vaccinated_date: null,
         assigned_staff: assignedStaff,
+        station_ass: assignedStation,
         created_by: createdBy,
         notes: 'Influenza (Flu) prenatal vaccine - any time during pregnancy'
       });

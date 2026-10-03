@@ -143,10 +143,28 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
         if (mode === 'supplement') {
             const fetchSupplementTypes = async () => {
                 try {
+                    if (!patientStationId) {
+                        setSupplementTypes([]);
+                        return;
+                    }
+
+                    const { data: stationRows, error: stationError } = await supabase
+                        .from('station_supplement_inventory')
+                        .select('supplement_inventory_id')
+                        .eq('station_id', patientStationId)
+                        .gt('quantity', 0);
+                    if (stationError) throw stationError;
+
+                    const supplementIds = [...new Set((stationRows || []).map(item => item.supplement_inventory_id).filter(Boolean))];
+                    if (supplementIds.length === 0) {
+                        setSupplementTypes([]);
+                        return;
+                    }
+
                     const { data, error } = await supabase
                         .from('supplement_inventory')
                         .select('supplement_name')
-                        .gt('quantity', 0)
+                        .in('id', supplementIds)
                         .order('supplement_name', { ascending: true });
                     
                     if (error) throw error;
@@ -181,7 +199,6 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                         .select('brand')
                         .in('id', supplementIds)
                         .eq('supplement_name', form.supplement)
-                        .gt('quantity', 0)
                         .not('brand', 'is', null)
                         .order('brand', { ascending: true });
 
@@ -280,7 +297,6 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                     .from('vaccine_inventory')
                     .select('id, vaccine_name, brand')
                     .in('id', vaccineIds)
-                    .gt('quantity', 0)
                     .not('brand', 'is', null)
                     .order('vaccine_name', { ascending: true });
 
@@ -404,7 +420,9 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                 const { stationId } = await resolvePatientStation(patientId, form.patientType, stationHint);
                 console.log('🏢 Final resolved station ID:', stationId, 'hint:', stationHint);
                 const access = await patientService.getCurrentUserAccess();
-                setPatientStationId(access.stationId || stationId);
+                const vaccinationService = new VaccinationService();
+                const userStationId = access.stationId || await vaccinationService.getCurrentUserStationId();
+                setPatientStationId(userStationId);
 
                 if (barangay) {
                     const { data: staffData, error: staffError } = await supabase
@@ -536,9 +554,9 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
             const currentUser = await patientService.getCurrentUserId();
             if (!currentUser) throw new Error('No logged-in user');
             const access = await patientService.getCurrentUserAccess();
-            const performingStationId = access.stationId || patientStationId;
-            if (!performingStationId) throw new Error('Your account must have an assigned service station.');
             const vaccinationService = new VaccinationService();
+            const performingStationId = access.stationId || await vaccinationService.getCurrentUserStationId();
+            if (!performingStationId) throw new Error('Your account must have an assigned service station.');
             const assignedStaff = form.patientType === 'Mother'
                 ? await vaccinationService.getAssignedStaffForPatient(patientId)
                 : await vaccinationService.getAssignedStaffForNewborn(patientId);
@@ -552,45 +570,33 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                 if (selectedScheduledIds.length > 0) {
                     // Only update checked scheduled vaccination records, do not insert new rows.
                     for (const [index, scheduledId] of selectedScheduledIds.entries()) {
-                        const { data: vaccRecord } = await supabase
+                        const { data: vaccRecord, error: recordError } = await supabase
                             .from('vaccinations')
                             .select('id, vaccine_inventory_id, notes')
                             .eq('id', scheduledId)
                             .single();
+                        if (recordError) throw recordError;
 
-                        let vaccineInvId = vaccRecord?.vaccine_inventory_id;
                         const selectedVaccineName = selectedVaccineNames.length > 0
                             ? (selectedVaccineNames[index] || selectedVaccineNames[0])
                             : null;
                         const selectedBrand = selectedVaccineName ? (selectedVaccineBrands[selectedVaccineName] || null) : null;
-
-                        if (selectedVaccineName) {
-                            const inventoryItem = await resolveInventoryBatch('vaccine', selectedVaccineName, selectedBrand, patientStationId);
-                            if (inventoryItem?.id) {
-                                vaccineInvId = inventoryItem.id;
-                            }
-                        }
-
-                        if (!vaccineInvId && vaccRecord?.notes) {
-                            const vaccineMatch = vaccRecord.notes.match(/(\d+)(?:st|nd|rd|th) dose of (.+)/);
-                            if (vaccineMatch) {
-                                const extractedName = vaccineMatch[2].trim();
-                                const { data: fuzzyItems, error: fuzzyError } = await supabase
-                                    .from('vaccine_inventory')
-                                    .select('id, quantity, vaccine_name')
-                                    .gt('quantity', 0)
-                                    .order('expiration_date', { ascending: true, nullsFirst: false });
-
-                                if (!fuzzyError && fuzzyItems) {
-                                    const searchTerm = extractedName.toLowerCase().replace(/[^a-z0-9]/g, '');
-                                    const match = fuzzyItems.find(item => {
-                                        const normalizedItem = item.vaccine_name.toLowerCase().replace(/[^a-z0-9]/g, '');
-                                        return normalizedItem.includes(searchTerm) || searchTerm.includes(normalizedItem);
-                                    });
-                                    if (match) vaccineInvId = match.id;
-                                }
-                            }
-                        }
+                        const { data: scheduledInventory, error: scheduledInventoryError } = vaccRecord?.vaccine_inventory_id
+                            ? await supabase.from('vaccine_inventory').select('vaccine_name').eq('id', vaccRecord.vaccine_inventory_id).maybeSingle()
+                            : { data: null, error: null };
+                        if (scheduledInventoryError) throw scheduledInventoryError;
+                        const vaccineMatch = vaccRecord?.notes?.match(/(?:\d+)(?:st|nd|rd|th) dose of (.+)/);
+                        const notes = String(vaccRecord?.notes || '').toLowerCase();
+                        const scheduledName = vaccineMatch?.[1]?.trim() || (
+                            /tetanus|tdap|\btd\b/.test(notes) ? 'Tetanus Diphtheria (TD)' :
+                            /influenza|\bflu\b/.test(notes) ? 'Influenza Vaccine' : null
+                        );
+                        const vaccineName = selectedVaccineName || scheduledInventory?.vaccine_name || scheduledName;
+                        const inventoryItem = vaccineName
+                            ? await resolveInventoryBatch('vaccine', vaccineName, selectedBrand, performingStationId)
+                            : null;
+                        if (!inventoryItem) throw new Error('This vaccine is not available in your assigned station inventory.');
+                        const vaccineInvId = inventoryItem.id;
 
                         const updateData = {
                             vaccinated_date: form.date,
@@ -610,38 +616,11 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                             .eq('id', scheduledId);
                         if (updateError) throw updateError;
 
-                        if (vaccineInvId) {
-                            const { data: vaccInv } = await supabase
-                                .from('vaccine_inventory')
-                                .select('id, quantity, vaccine_name')
-                                .eq('id', vaccineInvId)
-                                .single();
-
-                            if (vaccInv && vaccInv.quantity > 0) {
-                                await supabase
-                                    .from('vaccine_inventory')
-                                    .update({ quantity: vaccInv.quantity - 1 })
-                                    .eq('id', vaccInv.id);
-                                console.log(`✅ Decremented vaccine: ${vaccInv.vaccine_name}`);
-
-                                if (patientStationId) {
-                                    const { data: stationInv, error: stationInvError } = await supabase
-                                        .from('station_vaccine_inventory')
-                                        .select('id, quantity')
-                                        .eq('station_id', patientStationId)
-                                        .eq('vaccine_id', vaccInv.id)
-                                        .maybeSingle();
-
-                                    if (!stationInvError && stationInv && stationInv.quantity > 0) {
-                                        await supabase
-                                            .from('station_vaccine_inventory')
-                                            .update({ quantity: stationInv.quantity - 1 })
-                                            .eq('id', stationInv.id);
-                                        console.log(`✅ Decremented station vaccine inventory for ${vaccInv.vaccine_name} at station ${patientStationId}`);
-                                    }
-                                }
-                            }
-                        }
+                        await vaccinationService.decrementStationInventory({
+                            itemType: 'vaccine',
+                            inventoryItem,
+                            stationId: performingStationId
+                        });
                     }
 
                     if (onSave) {
@@ -662,7 +641,7 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                         }
 
                         const selectedBrand = selectedVaccineBrands[vaccineName] || null;
-                        const vaccInv = await resolveInventoryBatch('vaccine', vaccineName, selectedBrand, patientStationId);
+                        const vaccInv = await resolveInventoryBatch('vaccine', vaccineName, selectedBrand, performingStationId);
 
                         if (!vaccInv) {
                             await customAlert({ title: 'Out of Stock', text: `No stock available for ${vaccineName}`, iconType: 'warning' });
@@ -705,28 +684,11 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                             throw new Error('Failed to insert vaccination: ' + insertError.message);
                         }
 
-                        // Decrement inventory
-                        const newQuantity = vaccInv.quantity - 1;
-                        await supabase.from('vaccine_inventory')
-                            .update({ quantity: newQuantity })
-                            .eq('id', vaccInv.id);
-
-                        if (patientStationId) {
-                            const { data: stationInv, error: stationInvError } = await supabase
-                                .from('station_vaccine_inventory')
-                                .select('id, quantity')
-                                .eq('station_id', patientStationId)
-                                .eq('vaccine_id', vaccInv.id)
-                                .maybeSingle();
-
-                            if (!stationInvError && stationInv && stationInv.quantity > 0) {
-                                await supabase
-                                    .from('station_vaccine_inventory')
-                                    .update({ quantity: stationInv.quantity - 1 })
-                                    .eq('id', stationInv.id);
-                                console.log(`✅ Decremented station vaccine inventory for ${vaccInv.vaccine_name} at station ${patientStationId}`);
-                            }
-                        }
+                        await vaccinationService.decrementStationInventory({
+                            itemType: 'vaccine',
+                            inventoryItem: vaccInv,
+                            stationId: performingStationId
+                        });
 
                         // Auto-schedule maternal vaccinations for pregnant mothers - ONLY on first Td dose
                         if (form.patientType === 'Mother' && isPregnant && doseNumber === 1) {
@@ -763,7 +725,7 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                 // Manual entry route when no scheduled rows are checked
                 if (selectedVaccineNames.length === 0 && selectedScheduledIds.length === 0) {
                     // Manual entry: try to find in inventory first, otherwise create without inventory
-                    const vaccInv = await resolveInventoryBatch('vaccine', form.vaccine, form.brand || null, patientStationId);
+                    const vaccInv = await resolveInventoryBatch('vaccine', form.vaccine, form.brand || null, performingStationId);
                     const doseNumber = parseInt(form.dose.match(/\d+/)?.[0]) || 1;
                     const vaccinationRecord = {
                         patient_id: patientId,
@@ -783,30 +745,11 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                         const { error: insertError } = await supabase.from('vaccinations').insert([vaccinationRecord]);
                         if (insertError) throw insertError;
 
-                        if (vaccInv.quantity > 0) {
-                            await supabase
-                                .from('vaccine_inventory')
-                                .update({ quantity: vaccInv.quantity - 1 })
-                                .eq('id', vaccInv.id);
-                            console.log(`✅ Decremented vaccine: ${form.vaccine}`);
-                        }
-
-                        if (patientStationId) {
-                            const { data: stationInv, error: stationInvError } = await supabase
-                                .from('station_vaccine_inventory')
-                                .select('id, quantity')
-                                .eq('station_id', patientStationId)
-                                .eq('vaccine_id', vaccInv.id)
-                                .maybeSingle();
-
-                            if (!stationInvError && stationInv && stationInv.quantity > 0) {
-                                await supabase
-                                    .from('station_vaccine_inventory')
-                                    .update({ quantity: stationInv.quantity - 1 })
-                                    .eq('id', stationInv.id);
-                                console.log(`✅ Decremented station vaccine inventory for ${form.vaccine} at station ${patientStationId}`);
-                            }
-                        }
+                        await vaccinationService.decrementStationInventory({
+                            itemType: 'vaccine',
+                            inventoryItem: vaccInv,
+                            stationId: performingStationId
+                        });
                     } else {
                         console.log(`⚠️ Vaccine not in inventory, creating manual record for: ${form.vaccine}`);
                         const { error: insertError } = await supabase.from('vaccinations').insert([vaccinationRecord]);
@@ -839,7 +782,8 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                 }
             } else {
                 // Supplement handling: try to find in inventory first, otherwise create manual record
-                const suppInv = await resolveInventoryBatch('supplement', form.supplement, selectedSupplementBrand || null, patientStationId);
+                const suppInv = await resolveInventoryBatch('supplement', form.supplement, selectedSupplementBrand || null, performingStationId);
+                if (!suppInv) throw new Error('This supplement is not available in your assigned station inventory.');
 
                 const supplementRecord = {
                     patient_id: patientId,
@@ -851,25 +795,15 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                     station_ass: performingStationId
                 };
 
-                // If supplement found in inventory, link it and decrement
-                if (suppInv) {
-                    supplementRecord.supplement_inventory_id = suppInv.id;
-
-                    // Decrement supplement inventory
-                    if (suppInv.quantity > 0) {
-                        await supabase
-                            .from('supplement_inventory')
-                            .update({ quantity: suppInv.quantity - 1 })
-                            .eq('id', suppInv.id);
-                        console.log(`✅ Decremented supplement: ${form.supplement}`);
-                    }
-                } else {
-                    // Manual entry: create record without inventory link
-                    console.log(`⚠️ Supplement not in inventory, creating manual record for: ${form.supplement}`);
-                }
+                supplementRecord.supplement_inventory_id = suppInv.id;
 
                 const { error: supplementError } = await supabase.from('supplements').insert([supplementRecord]);
                 if (supplementError) throw supplementError;
+                await vaccinationService.decrementStationInventory({
+                    itemType: 'supplement',
+                    inventoryItem: suppInv,
+                    stationId: performingStationId
+                });
             }
 
             if (onSave) {
