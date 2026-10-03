@@ -16,9 +16,10 @@
 
 .vdm-modal {
     background: white;
-    width: 90%;
+    width: calc(100% - 32px);
     max-width: 550px;
-    max-height: 90vh;
+    max-height: calc(100dvh - 100px);
+    margin: 20px auto 80px auto;
     border-radius: 32px;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
     display: flex;
@@ -28,95 +29,115 @@
 }
 
 .vdm-header {
-    padding: 40px 32px 32px;
+    padding: 24px 20px 16px;
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    color: white;
     position: relative;
+    gap: 16px;
+    background: #fdfaf6;
+    border-bottom: 1px solid #f0eaea;
 }
-
-.vdm-header.status-completed { background: linear-gradient(135deg, #50a88e, #3d8a74); }
-.vdm-header.status-upcoming { background: linear-gradient(135deg, #f59e0b, #d97706); }
-.vdm-header.status-missed { background: linear-gradient(135deg, #ef4444, #dc2626); }
 
 .vdm-header-content {
     display: flex;
-    gap: 20px;
+    gap: 16px;
     align-items: center;
+    flex: 1;
+    min-width: 0;
 }
 
 .vdm-icon-wrap {
-    width: 64px;
-    height: 64px;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 20px;
+    width: 48px;
+    height: 48px;
+    background: #f0e6e6;
+    color: #a48282;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
-    backdrop-filter: blur(10px);
+    flex-shrink: 0;
 }
 
-.vdm-title-area h2 {
-    font-size: 24px;
-    font-weight: 800;
-    margin: 0 0 4px;
+.vdm-title-area {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 .vdm-category {
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
-    opacity: 0.9;
+    color: #999;
+    margin-bottom: 4px;
+}
+
+.vdm-title-area h2 {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0;
+    word-wrap: break-word;
+    white-space: normal;
+    line-height: 1.3;
+    color: #2c3e50;
 }
 
 .vdm-close-btn {
-    background: rgba(255, 255, 255, 0.2);
+    background: #f0e6e6;
     border: none;
-    width: 44px;
-    height: 44px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    color: white;
+    color: #666;
     transition: var(--t-fast);
+    flex-shrink: 0;
 }
 
 .vdm-close-btn:hover {
-    background: rgba(255, 255, 255, 0.3);
-    transform: rotate(90deg);
+    background: #e6dada;
 }
 
 .vdm-body {
-    padding: 32px;
+    padding: 16px 20px;
     overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     flex-direction: column;
-    gap: 32px;
+    gap: 16px;
 }
 
 .vdm-status-shelf {
     display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
     justify-content: space-between;
     align-items: center;
-    background: #f8f9fb;
-    padding: 20px;
-    border-radius: 24px;
+    background: #fff;
+    border: 1px solid #f0eaea;
+    padding: 12px 16px;
+    border-radius: 12px;
 }
 
 .vdm-status-indicator {
     display: flex;
     align-items: center;
-    gap: 12px;
-    font-weight: 800;
-    font-size: 18px;
+    gap: 6px;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    white-space: nowrap;
 }
 
-.vdm-status-indicator.status-completed { color: #50a88e; }
-.vdm-status-indicator.status-upcoming { color: #f59e0b; }
-.vdm-status-indicator.status-missed { color: #ef4444; }
+.vdm-status-indicator.status-completed { background: #eef7f4; color: #4b8b7a; }
+.vdm-status-indicator.status-upcoming { background: #fff8eb; color: #b78a38; }
+.vdm-status-indicator.status-missed { background: #fcebeb; color: #c95252; }
 
 .vdm-quick-meta {
     text-align: right;
@@ -138,13 +159,46 @@
 }
 
 .vdm-section h3 {
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 700;
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
+    gap: 8px;
+    margin-bottom: 8px;
     color: var(--color-text);
+}
+
+.vdm-details-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: #fff;
+    border: 1px solid #f0eaea;
+    padding: 12px 16px;
+    border-radius: 12px;
+}
+
+.vdm-detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.vdm-detail-item .label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #999;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.vdm-detail-item .value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text);
+    word-wrap: break-word;
 }
 
 .vdm-section p {
@@ -220,10 +274,11 @@
 }
 
 .vdm-footer {
-    padding: 24px 32px;
-    background: #f8f9fb;
+    padding: 16px 20px;
+    background: #ffffff;
     display: flex;
     gap: 16px;
+    border-top: 1px solid #f0eaea;
 }
 
 .vdm-btn-secondary {
@@ -240,12 +295,13 @@
 
 .vdm-btn-primary {
     flex: 2;
-    padding: 14px;
-    border-radius: 14px;
+    padding: 12px;
+    border-radius: 12px;
     border: none;
     background: var(--color-rose);
     color: white;
     font-weight: 700;
+    font-size: 15px;
     cursor: pointer;
     font-family: var(--font);
     display: flex;

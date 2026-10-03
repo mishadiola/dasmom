@@ -856,7 +856,7 @@
         position: fixed;
         top: 0; left: 0; right: 0; bottom: 0;
         background: rgba(0, 0, 0, 0.4);
-        z-index: 60;
+        z-index: 9999;
         display: flex;
         flex-direction: column;
         justify-content: flex-end;
@@ -930,6 +930,32 @@
         align-items: center;
         justify-content: center;
         margin-right: 14px;
+    }
+
+    .mobile-more-logout-wrapper {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 16px;
+    }
+
+    .mobile-more-logout-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 16px;
+        background: rgba(185, 129, 138, 0.08); /* subtle dusty rose / mauve */
+        color: var(--color-rose);
+        border: none;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 13.5px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .mobile-more-logout-btn:active,
+    .mobile-more-logout-btn:hover {
+        background: rgba(185, 129, 138, 0.15);
     }
 }
 

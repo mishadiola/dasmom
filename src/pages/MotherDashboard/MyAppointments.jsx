@@ -55,7 +55,7 @@ const MyAppointments = () => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [calendarView, setCalendarView] = useState('day'); // 'day', 'week', 'month'
     const [typeFilter, setTypeFilter] = useState('All'); // 'All', 'Prenatal', 'Vaccination', 'Postpartum'
-    const [statusFilter, setStatusFilter] = useState('All'); // 'All', 'Upcoming', 'Attended', 'Missed'
+    const [statusFilter, setStatusFilter] = useState('Upcoming'); // 'All', 'Upcoming', 'Attended', 'Missed'
     const [selectedAppt, setSelectedAppt] = useState(null);
     const { t } = useLanguage();
     const [patientInfo, setPatientInfo] = useState({});
@@ -109,7 +109,7 @@ const MyAppointments = () => {
                         staffStation: visit.assigned_staff_station,
                         notes: visit.missed_reason || visit.clinical_notes || '',
                         pregnancyNumber: pregnancy.pregnancyNumber,
-                        color: 'green'
+                        color: String(visit.next_appt_type || '').toLowerCase().includes('postpartum') ? 'blue' : 'green'
                     }));
                 const postpartumVisitDates = new Set(visitAppts
                     .filter(appointment => appointment.type === 'Postpartum')
@@ -170,7 +170,7 @@ const MyAppointments = () => {
                                     ? t('appt_postpartum_missed')
                                     : t('appt_postpartum_scheduled'),
                             assessment: d.postpartum_remarks,
-                            color: 'pink'
+                            color: 'blue'
                         };
                     });
 
@@ -760,16 +760,44 @@ const MyAppointments = () => {
 
             {/* Read-Only Appointment Modal */}
             {selectedAppt && (
-                <div className="modal-overlay" onClick={() => setSelectedAppt(null)}>
-                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '450px', padding: 0}}>
-                        <div className="modal-header" style={{padding: '24px 24px 16px', borderBottom: '1px solid #eef0f4', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                <>
+                <style>{`
+                    .uv-floating-chat-btn, .floating-chatbot, .chatbot-wrapper, .chatbot-btn, df-messenger {
+                        display: none !important;
+                    }
+                    .appt-compact-overlay {
+                        position: fixed;
+                        top: 0; left: 0; right: 0; bottom: 0;
+                        background: rgba(0, 0, 0, 0.4);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        z-index: 9999;
+                        padding: 20px;
+                    }
+                    .appt-compact-modal {
+                        background: white;
+                        width: 100%;
+                        max-width: 400px;
+                        border-radius: 16px;
+                        height: auto;
+                        max-height: 85vh;
+                        overflow-y: auto;
+                        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+                        display: flex;
+                        flex-direction: column;
+                    }
+                `}</style>
+                <div className="appt-compact-overlay" onClick={() => setSelectedAppt(null)}>
+                    <div className="appt-compact-modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header" style={{padding: '20px 20px 16px', borderBottom: '1px solid #eef0f4', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                             <h2 style={{margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px'}}>
                                 <CalendarIcon size={20} color="var(--color-rose)"/> {t('appt_details')}
                             </h2>
                             <button className="btn-icon" onClick={() => setSelectedAppt(null)}><X size={18} /></button>
                         </div>
-                        <div className="modal-body" style={{padding: '24px'}}>
-                            <div style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
+                        <div className="modal-body" style={{padding: '20px 24px 24px'}}>
+                            <div style={{display: 'flex', flexDirection: 'column', gap: '14px'}}>
                                 <div style={{display: 'flex', justifyContent: 'space-between'}}>
                                     <span style={{color: '#64748b', fontSize: '13px', fontWeight: 600}}>{t('appt_type')}</span>
                                     <span style={{fontWeight: 600}}>{selectedAppt.type}</span>
@@ -812,6 +840,7 @@ const MyAppointments = () => {
                         </div>
                     </div>
                 </div>
+                </>
             )}
         </div>
     );

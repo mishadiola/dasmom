@@ -332,9 +332,9 @@ const UserVaccinations = () => {
                                     <span className={`uv-status-badge status-${String(status).toLowerCase()}`}>
                                         {getStatusIcon(status)} 
                                         {{
-                                            'Completed': t('vax_modal_status_completed'),
-                                            'Upcoming': t('vax_modal_status_upcoming'),
-                                            'Missed': t('vax_modal_status_missed')
+                                            'Completed': t('vax_modal_status_completed', 'Completed'),
+                                            'Upcoming': t('vax_modal_status_upcoming', 'Pending'),
+                                            'Missed': t('vax_modal_status_missed', 'Missed')
                                         }[status] || status}
                                     </span>
                                 </div>

@@ -662,6 +662,12 @@ const DashboardLayout = () => {
                                     <div className="mobile-more-icon-wrap"><Settings size={18} /></div>
                                     <span>{t('more_settings')}</span>
                                 </NavLink>
+                                <div className="mobile-more-logout-wrapper">
+                                    <button className="mobile-more-logout-btn" onClick={() => { setMobileMoreOpen(false); handleLogout(); }}>
+                                        <LogOut size={16} />
+                                        <span>{t('menu_logout')}</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -671,7 +677,9 @@ const DashboardLayout = () => {
 
 
             {/* ── Mother Portal AI Chat Assistant ── */}
-            {isUserView && <MotherAIChatAssistant />}
+            <div style={{ display: (isUserView && mobileMoreOpen) ? 'none' : 'block' }}>
+                {isUserView && <MotherAIChatAssistant />}
+            </div>
         </div>
     );
 };

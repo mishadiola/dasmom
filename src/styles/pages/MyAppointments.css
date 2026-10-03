@@ -469,21 +469,21 @@
 }
 
 .visit-item.type-prenatal {
-    background: rgba(122, 162, 219, 0.15);
-    border-left: 3px solid #7aa2db;
-    color: #3b5a8c;
+    background: rgba(16, 185, 129, 0.15); /* #10b981 */
+    border-left: 3px solid #10b981;
+    color: #047857;
 }
 
 .visit-item.type-vaccination {
-    background: rgba(230, 184, 110, 0.2);
-    border-left: 3px solid #e6b86e;
-    color: #8a6a10;
+    background: rgba(245, 158, 11, 0.15); /* #f59e0b */
+    border-left: 3px solid #f59e0b;
+    color: #b45309;
 }
 
 .visit-item.type-postpartum {
-    background: rgba(109, 184, 160, 0.2);
-    border-left: 3px solid #6db8a0;
-    color: #3d8870;
+    background: rgba(59, 130, 246, 0.15); /* #3b82f6 */
+    border-left: 3px solid #3b82f6;
+    color: #1d4ed8;
 }
 
 /* ── Day View Schedule List ── */
@@ -1271,15 +1271,13 @@
         min-height: 48px !important;
         padding: 4px !important;
         border-radius: 8px !important;
-        background: #ffffff !important;
-        border: 1px solid rgba(185, 129, 138, 0.15) !important;
         display: flex !important;
         flex-direction: column !important;
         justify-content: center !important;
         flex-shrink: 0 !important;
     }
-    .appt-date-box .m { font-size: 9px !important; color: var(--color-rose) !important; }
-    .appt-date-box .d { font-size: 16px !important; font-weight: 800 !important; margin: 1px 0 !important; color: var(--color-text-dark) !important; }
+    .appt-date-box .m { font-size: 9px !important; color: inherit !important; }
+    .appt-date-box .d { font-size: 16px !important; font-weight: 800 !important; margin: 1px 0 !important; color: inherit !important; }
 
     /* Main Info */
     .appt-main-info {
