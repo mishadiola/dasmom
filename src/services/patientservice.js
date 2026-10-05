@@ -2067,6 +2067,15 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
     if (userError) throw userError;
 
+    let patientEmail = userData?.email_address || null;
+    if (!patientEmail) {
+      const { data: emailData, error: emailError } = await this.supabase
+        .rpc('get_patient_email', { p_patient_id: patientId });
+
+      if (emailError) throw emailError;
+      patientEmail = emailData?.[0]?.email_address || null;
+    }
+
     // Fetch pregnancy info
     const { data: pregnancyData } = await this.supabase
       .from('pregnancy_info')
@@ -2269,8 +2278,8 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       isArchived: Boolean(userData?.is_archived),
       isDeactivated: Boolean(userData?.is_deactivated),
       archiveStatus,
-      gmail: userData?.email_address || null,
-      email: userData?.email_address || null,
+      gmail: patientEmail,
+      email: patientEmail,
       name: `${patientData.first_name || ''} ${patientData.last_name || ''}`.trim(),
       age: this.calculateAge(patientData.date_of_birth),
       station: patientData.stations?.station_name || 'N/A',

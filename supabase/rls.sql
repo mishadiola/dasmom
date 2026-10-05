@@ -32,6 +32,39 @@ AS $$
     (SELECT station_ass FROM public.patient_basic_info WHERE id = auth.uid() LIMIT 1)
   );
 $$;
+
+CREATE OR REPLACE FUNCTION public.get_patient_email(p_patient_id UUID)
+RETURNS TABLE(email_address TEXT)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+SET row_security = off
+AS $$
+BEGIN
+  IF auth.uid() IS NULL
+    OR COALESCE(public.get_my_role(), '') NOT IN ('admin', 'staff', 'cho personnel') THEN
+    RAISE EXCEPTION 'Not authorized to view patient email';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.patient_basic_info
+    WHERE id = p_patient_id
+  ) THEN
+    RAISE EXCEPTION 'Patient not found';
+  END IF;
+
+  RETURN QUERY
+  SELECT u.email_address::TEXT
+  FROM public.users u
+  WHERE u.id = p_patient_id;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.get_patient_email(UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_patient_email(UUID) FROM anon;
+GRANT EXECUTE ON FUNCTION public.get_patient_email(UUID) TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.belongs_to_my_station(patient_id UUID)
 RETURNS BOOLEAN
 LANGUAGE SQL
