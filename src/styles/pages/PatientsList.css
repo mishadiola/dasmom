@@ -1002,11 +1002,11 @@
 }
 
 .vm-label {
-    font-size: 11.5px;
-    font-weight: 700;
+    font-size: 12px;
+    font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: var(--color-text-light);
+    color: var(--color-text);
 }
 
 .vm-req {

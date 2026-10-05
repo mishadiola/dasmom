@@ -120,15 +120,15 @@ const RecordVitalsModal = ({ patient, onSave, onClose, supplements }) => {
                 <form className="pv-modal-body" onSubmit={handleSubmit}>
                     <div className="vm-grid">
                         <div className="vm-field">
-                            <label className="vm-label">Blood Pressure Systolic *</label>
+                            <label className="vm-label">Blood Pressure Systolic <span className="vm-req">*</span></label>
                             <input className="vm-input" type="number" value={form.bpSystolic} onChange={e => set('bpSystolic', e.target.value)} required />
                         </div>
                         <div className="vm-field">
-                            <label className="vm-label">Blood Pressure Diastolic *</label>
+                            <label className="vm-label">Blood Pressure Diastolic <span className="vm-req">*</span></label>
                             <input className="vm-input" type="number" value={form.bpDiastolic} onChange={e => set('bpDiastolic', e.target.value)} required />
                         </div>
                         <div className="vm-field">
-                            <label className="vm-label">Weight (kg) *</label>
+                            <label className="vm-label">Weight (kg) <span className="vm-req">*</span></label>
                             <input className="vm-input" type="number" value={form.weight} onChange={e => set('weight', e.target.value)} required />
                         </div>
                         <div className="vm-field">
@@ -160,7 +160,7 @@ const RecordVitalsModal = ({ patient, onSave, onClose, supplements }) => {
                             <input className="vm-input" value={form.presentation} onChange={e => set('presentation', e.target.value)} />
                         </div>
                         <div className="vm-field">
-                            <label className="vm-label">Date *</label>
+                            <label className="vm-label">Date <span className="vm-req">*</span></label>
                             <input className="vm-input" type="date" value={form.date} onChange={e => set('date', e.target.value)} required />
                         </div>
                     </div>
