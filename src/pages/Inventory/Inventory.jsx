@@ -65,13 +65,17 @@ const Inventory = () => {
     const location = useLocation();
   const { alert: customAlert, confirm } = useModal();
   const { user } = useContext(AuthContext);
-  const [userScope, setUserScope] = useState({ role: 'user', stationId: null, stationName: null, userId: user?.id || null });
+  const [userScope, setUserScope] = useState(() => ({
+    role: normalizeRole(user?.role) || 'user',
+    stationId: null,
+    stationName: user?.station || null,
+    userId: user?.id || null
+  }));
   const [availableStations, setAvailableStations] = useState([]);
   const isAdmin = isAdminRole(userScope.role);
   const visibleStations = useMemo(() => {
-    if (!userScope.stationName) return availableStations;
     if (isAdmin) return availableStations;
-    return [userScope.stationName];
+    return userScope.stationName ? [userScope.stationName] : [];
   }, [availableStations, isAdmin, userScope.stationName]);
   const [activeTab, setActiveTab] = useState('vaccines');
   const [mainTab, setMainTab] = useState('inventory');
@@ -106,6 +110,19 @@ const Inventory = () => {
     }
 
   }, [location.state]);
+
+  useEffect(() => {
+    setUserScope({
+      role: normalizeRole(user?.role) || 'user',
+      stationId: null,
+      stationName: user?.station || null,
+      userId: user?.id || null
+    });
+    setVaccines([]);
+    setSupplements([]);
+    setStationCurrentInventory([]);
+    setDistributionHistory([]);
+  }, [user?.id]);
 
 
   const clearFilters = () => {
@@ -372,15 +389,19 @@ const Inventory = () => {
     loadScope();
     fetchData();
 
-    const vaxSub = inventoryService.subscribeToInventory('vaccine_inventory', () => fetchData());
-    const suppSub = inventoryService.subscribeToInventory('supplement_inventory', () => fetchData());
+    const vaxSub = isAdmin
+      ? inventoryService.subscribeToInventory('vaccine_inventory', () => fetchData())
+      : null;
+    const suppSub = isAdmin
+      ? inventoryService.subscribeToInventory('supplement_inventory', () => fetchData())
+      : null;
 
     return () => {
       isCurrent = false;
-      vaxSub.unsubscribe();
-      suppSub.unsubscribe();
+      vaxSub?.unsubscribe();
+      suppSub?.unsubscribe();
     };
-  }, [user?.id]);
+  }, [user?.id, isAdmin]);
 
   // Separate effect for station inventory to prevent clearing on central inventory updates
   useEffect(() => {
@@ -408,14 +429,20 @@ const Inventory = () => {
     const stationVaccineSub = inventoryService.supabase
       .channel('realtime:station_vaccine_inventory')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'station_vaccine_inventory' }, () => {
-        if (isCurrent) fetchStationData();
+        if (isCurrent) {
+          fetchStationData();
+          if (!isAdmin) fetchData();
+        }
       })
       .subscribe();
 
     const stationSupplementSub = inventoryService.supabase
       .channel('realtime:station_supplement_inventory')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'station_supplement_inventory' }, () => {
-        if (isCurrent) fetchStationData();
+        if (isCurrent) {
+          fetchStationData();
+          if (!isAdmin) fetchData();
+        }
       })
       .subscribe();
 
@@ -424,7 +451,7 @@ const Inventory = () => {
       inventoryService.supabase.removeChannel(stationVaccineSub);
       inventoryService.supabase.removeChannel(stationSupplementSub);
     };
-  }, [user?.id]);
+  }, [user?.id, isAdmin]);
 
   const getStatus = (qty, maxStock, hasExpiredStock) => {
     return getInventoryStatus(qty, maxStock, hasExpiredStock);
@@ -1352,9 +1379,13 @@ const Inventory = () => {
       <div className="page-header">
         <div>
           <h1 className="page-title">
-            <Package size={22} className="header-icon" /> Inventory Management
+            <Package size={22} className="header-icon" /> {isAdmin ? 'Inventory Management' : 'Station Inventory'}
           </h1>
-          <p className="page-subtitle">Track and manage vaccine and supplement supplies across CHO stations to help maintain adequate stock levels.</p>
+          <p className="page-subtitle">
+            {isAdmin
+              ? 'Track and manage vaccine and supplement supplies across CHO stations to help maintain adequate stock levels.'
+              : `Current vaccine and supplement stock distributed to ${userScope.stationName || 'your assigned station'}.`}
+          </p>
         </div>
         <div className="header-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <button
@@ -1369,20 +1400,22 @@ const Inventory = () => {
             style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
             onClick={() => setMainTab('distribution')}
           >
-            <Truck size={16} /> Station Distribution
+            <Truck size={16} /> {isAdmin ? 'Station Distribution' : 'Distribution History'}
           </button>
-          <button
-            className="btn btn-primary"
-            onClick={() => {
-              setForm({ item_name: '', quantity: '', max_stock: activeTab === 'vaccines' ? 500 : 1000, unit: activeTab === 'vaccines' ? 'vials' : 'tablets', brand: '', expiration_date: '', batch_number: '', manufactured_date: '' });
-              setModalSearchTerm('');
-              setSearchResults([]);
-              setSelectedExistingItem(null);
-              setShowAddModal(true);
-            }}
-          >
-            <Plus size={16} /> Add Item
-          </button>
+          {isAdmin && (
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                setForm({ item_name: '', quantity: '', max_stock: activeTab === 'vaccines' ? 500 : 1000, unit: activeTab === 'vaccines' ? 'vials' : 'tablets', brand: '', expiration_date: '', batch_number: '', manufactured_date: '' });
+                setModalSearchTerm('');
+                setSearchResults([]);
+                setSelectedExistingItem(null);
+                setShowAddModal(true);
+              }}
+            >
+              <Plus size={16} /> Add Item
+            </button>
+          )}
         </div>
       </div>
 
@@ -1608,7 +1641,6 @@ const Inventory = () => {
         </button>
       </div>
 
-      {isAdmin && (
       <div className="inv-card">
         <div className="table-wrapper">
           <table className="inv-table">
@@ -1616,17 +1648,17 @@ const Inventory = () => {
               <tr>
                 <th className="row-number-header">#</th>
                 <th>Item Name</th>
-                <th>Total Stock</th>
+                <th>{isAdmin ? 'Total Stock' : 'Station Stock'}</th>
                 <th>Unit</th>
                 <th>Batch Info</th>
                 <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
+                {isAdmin && <th style={{ textAlign: 'right' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="7" className="text-center py-8">
+                  <td colSpan={isAdmin ? 7 : 6} className="text-center py-8">
                     Loading inventory data...
                   </td>
                 </tr>
@@ -1715,7 +1747,7 @@ const Inventory = () => {
                           {status.label}
                         </span>
                       </td>
-                      <td style={{ textAlign: 'right' }}>
+                      {isAdmin && <td style={{ textAlign: 'right' }}>
                         <div className="action-btns">
                           <button
                             className="action-btn edit-btn"
@@ -1769,11 +1801,11 @@ const Inventory = () => {
                             </button>
                           )}
                         </div>
-                      </td>
+                      </td>}
                     </tr>
                     {expandedRow === rowNumber && item.items.length > 0 && (
                       <tr key={`detail-${item.item_name}-${index}`} className="inv-row-detail">
-                        <td colSpan="7" style={{ padding: '0' }}>
+                        <td colSpan={isAdmin ? 7 : 6} style={{ padding: '0' }}>
                           <div style={{
                             padding: '16px 20px',
                             background: '#f8f9fa',
@@ -1848,7 +1880,7 @@ const Inventory = () => {
                                       )}
                                       <div><strong>Manufactured:</strong> {subItem.manufactured_date ? formatDate(subItem.manufactured_date) : 'N/A'}</div>
                                     </div>
-                                    <div style={{
+                                    {isAdmin && <div style={{
                                       display: 'flex',
                                       gap: '8px',
                                       borderTop: '1px solid #e9ecef',
@@ -1913,7 +1945,7 @@ const Inventory = () => {
                                           <Archive size={12} /> Archive
                                         </button>
                                       )}
-                                    </div>
+                                    </div>}
                                   </div>
                                 );
                               })}
@@ -1927,7 +1959,7 @@ const Inventory = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan="7" className="text-center py-8">
+                  <td colSpan={isAdmin ? 7 : 6} className="text-center py-8">
                     No items found
                   </td>
                 </tr>
@@ -1964,7 +1996,6 @@ const Inventory = () => {
           </div>
         )}
       </div>
-      )}
 
       <div className="inv-side-col">
         <div className="inv-card">
@@ -2028,7 +2059,11 @@ const Inventory = () => {
           <h1 className="page-title">
             <Truck size={22} className="header-icon" /> Station Distribution
           </h1>
-          <p className="page-subtitle">Transfer vaccines and supplements from CHO inventory to registered health stations.</p>
+          <p className="page-subtitle">
+            {isAdmin
+              ? 'Transfer vaccines and supplements from CHO inventory to registered health stations.'
+              : `Distribution records for ${userScope.stationName || 'your assigned station'}.`}
+          </p>
         </div>
         <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
           <button
@@ -2045,24 +2080,26 @@ const Inventory = () => {
           >
             <ArrowLeft size={16} /> Back to Inventory
           </button>
-          <button
-            className="btn btn-primary"
-            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-            onClick={() => {
-              setDistForm({
-                item_type: 'vaccine',
-                item_id: '',
-                quantity: '',
-                destination_station: '',
-                distribution_date: new Date().toISOString().split('T')[0],
-                released_by: user?.fullName || user?.email?.split('@')[0] || '',
-                remarks: '',
-              });
-              setShowDistributionModal(true);
-            }}
-          >
-            <Plus size={16} /> New Distribution
-          </button>
+          {isAdmin && (
+            <button
+              className="btn btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              onClick={() => {
+                setDistForm({
+                  item_type: 'vaccine',
+                  item_id: '',
+                  quantity: '',
+                  destination_station: '',
+                  distribution_date: new Date().toISOString().split('T')[0],
+                  released_by: user?.fullName || user?.email?.split('@')[0] || '',
+                  remarks: '',
+                });
+                setShowDistributionModal(true);
+              }}
+            >
+              <Plus size={16} /> New Distribution
+            </button>
+          )}
         </div>
       </div>
 
@@ -2713,7 +2750,7 @@ const Inventory = () => {
       )}
 
       {/* ── STATION DISTRIBUTION MODAL ── */}
-      {showDistributionModal && (
+      {isAdmin && showDistributionModal && (
         <div className="modal-overlay" onClick={() => setShowDistributionModal(false)}>
           <div
             className="modal-content"
@@ -2950,4 +2987,3 @@ const Inventory = () => {
 };
 
 export default Inventory;
-

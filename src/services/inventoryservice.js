@@ -1,7 +1,10 @@
 import supabase from '../config/supabaseclient';
 import AuthService from './authservice'; // ← now you have real AuthService
 
-const normalizeInventoryRole = (value) => String(value ?? '').trim().toLowerCase();
+const normalizeInventoryRole = (value) => {
+  const normalized = String(value ?? '').trim().toLowerCase().replace(/[_-]/g, ' ');
+  return normalized === 'station staff' ? 'staff' : normalized;
+};
 const isAdminRole = (role) => {
   const normalized = normalizeInventoryRole(role);
   return normalized === 'admin' || normalized === 'super admin' || normalized === 'super-admin' || normalized.includes('admin');
@@ -18,38 +21,9 @@ class InventoryService {
   }
 
   async _ensureAdmin() {
-    const user = await this.auth.getAuthUser();
-    if (!user) throw new Error('No user session');
-
-    // Resolve authoritative role from DB (users.usertype) with fallback to staff_profiles
-    let role = normalizeInventoryRole(user.role);
-    try {
-      const { data: userRow } = await this.supabase
-        .from('users')
-        .select('id, usertype')
-        .eq('id', user.id)
-        .maybeSingle();
-      if (userRow?.usertype) {
-        const { data: t } = await this.supabase
-          .from('user_type')
-          .select('user_type')
-          .eq('id', userRow.usertype)
-          .maybeSingle();
-        if (t?.user_type) role = normalizeInventoryRole(t.user_type);
-      } else {
-        const { data: sp } = await this.supabase
-          .from('staff_profiles')
-          .select('station_ass')
-          .eq('id', user.id)
-          .maybeSingle();
-        if (sp) role = 'staff';
-      }
-    } catch (err) {
-      console.warn('Failed to resolve role from DB, falling back to session role:', err);
-    }
-
-    if (!isAdminRole(role)) throw new Error('Only admins can modify inventory');
-    console.debug('Inventory._ensureAdmin resolved role=', role, 'for user=', user?.id);
+    const scope = await this._getCurrentUserScope();
+    if (!isAdminRole(scope.role)) throw new Error('Only admins can modify inventory');
+    console.debug('Inventory._ensureAdmin resolved role=', scope.role, 'for user=', scope.userId);
   }
 
   async _resolveStationId(stationName) {
@@ -79,62 +53,54 @@ class InventoryService {
   }
 
   async _getCurrentUserScope() {
-    const user = await this.auth.getAuthUser();
+    const { data: { user }, error: authError } = await this.supabase.auth.getUser();
+    if (authError) throw authError;
     if (!user?.id) {
       return { role: 'user', stationId: null, stationName: null, userId: null };
     }
 
-    let role = normalizeInventoryRole(user.role);
-    let stationId = null;
-    let stationName = null;
-
-    try {
-      const { data: userRow } = await this.supabase
-        .from('users')
-        .select('id, usertype')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (userRow?.usertype) {
-        const { data: typeRow } = await this.supabase
-          .from('user_type')
-          .select('user_type')
-          .eq('id', userRow.usertype)
-          .maybeSingle();
-
-        if (typeRow?.user_type) {
-          role = normalizeInventoryRole(typeRow.user_type);
-        }
-      }
-
-      if (isAdminRole(role)) {
-        return { role: 'admin', stationId: null, stationName: null, userId: user.id };
-      }
-
-      if (['staff', 'cho personnel'].includes(role)) {
-        const { data: staffRow } = await this.supabase
-          .from('staff_profiles')
-          .select('station_ass')
-          .eq('id', user.id)
-          .maybeSingle();
-
-        stationId = staffRow?.station_ass || null;
-
-        if (stationId) {
-          const { data: stationRow } = await this.supabase
-            .from('stations')
-            .select('station_name')
-            .eq('id', stationId)
-            .maybeSingle();
-
-          stationName = stationRow?.station_name || null;
-        }
-      }
-    } catch (err) {
-      console.warn('Inventory user scope lookup failed:', err);
+    const { data: userRow, error: userError } = await this.supabase
+      .from('users')
+      .select('usertype')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (userError) throw userError;
+    if (!userRow?.usertype) {
+      throw new Error(`No user type is assigned to authenticated user ${user.id}`);
     }
 
-    return { role, stationId, stationName, userId: user.id };
+    const { data: typeRow, error: typeError } = await this.supabase
+      .from('user_type')
+      .select('user_type')
+      .eq('id', userRow.usertype)
+      .maybeSingle();
+    if (typeError) throw typeError;
+    if (!typeRow?.user_type) {
+      throw new Error(`User type ${userRow.usertype} was not found`);
+    }
+
+    const role = normalizeInventoryRole(typeRow.user_type);
+    if (isAdminRole(role)) {
+      return { role: 'admin', stationId: null, stationName: null, userId: user.id };
+    }
+
+    if (!['staff', 'cho personnel'].includes(role)) {
+      return { role, stationId: null, stationName: null, userId: user.id };
+    }
+
+    const { data: staffRow, error: staffError } = await this.supabase
+      .from('staff_profiles')
+      .select('station_ass, stations:station_ass (station_name)')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (staffError) throw staffError;
+
+    return {
+      role,
+      stationId: staffRow?.station_ass || null,
+      stationName: staffRow?.stations?.station_name || null,
+      userId: user.id
+    };
   }
 
   async getStationInventorySnapshot() {
@@ -187,7 +153,8 @@ class InventoryService {
     if (supplementIds.length > 0) {
       const { data: supplementData, error: supplementError } = await this.supabase
         .from('supplement_inventory')
-        .select('id, supplement_name, unit, max_quant, brand, expiration_date, batch_number, manufactured_date');
+        .select('id, supplement_name, unit, max_quant, brand, expiration_date, batch_number, manufactured_date')
+        .in('id', supplementIds);
       if (supplementError) throw supplementError;
       supplementDetails = Object.fromEntries((supplementData || []).map(row => [row.id, row]));
     }
@@ -247,7 +214,6 @@ class InventoryService {
         station_id,
         stations:station_id (station_name),
         distributed_by,
-        users:distributed_by (email_address),
         vaccine_id,
         vaccine_inventory:vaccine_id (vaccine_name, brand, batch, unit)
       `);
@@ -261,7 +227,6 @@ class InventoryService {
         station_id,
         stations:station_id (station_name),
         distributed_by,
-        users:distributed_by (email_address),
         supplement_id,
         supplement_inventory:supplement_id (supplement_name, brand, batch_number, unit)
       `);
@@ -283,6 +248,25 @@ class InventoryService {
     if (supplementResult.error) {
       console.error('Error fetching supplement distribution history:', supplementResult.error);
       throw supplementResult.error;
+    }
+
+    const releaserIds = [...new Set(
+      (vaccineResult.data || [])
+        .concat(supplementResult.data || [])
+        .map(row => row.distributed_by)
+        .filter(Boolean)
+    )];
+    const releasersById = new Map();
+    if (releaserIds.length > 0) {
+      const { data: releasers, error: releasersError } = await this.supabase
+        .rpc('get_distribution_releasers', { p_user_ids: releaserIds });
+      if (releasersError) throw releasersError;
+      for (const releaser of releasers || []) {
+        releasersById.set(
+          releaser.id,
+          releaser.full_name || releaser.email_address || 'Unknown'
+        );
+      }
     }
 
     const stationIds = [...new Set((vaccineResult.data || [])
@@ -328,7 +312,7 @@ class InventoryService {
       quantity: row.quantity,
       unit: row.vaccine_inventory?.unit || 'vials',
       destination_station: row.stations?.station_name || 'Unknown',
-      released_by: row.users?.email_address || row.distributed_by || 'Unknown',
+      released_by: releasersById.get(row.distributed_by) || 'Unknown',
       remarks: row.remarks || ''
     }));
 
@@ -343,7 +327,7 @@ class InventoryService {
       quantity: row.quantity,
       unit: row.supplement_inventory?.unit || 'pcs',
       destination_station: row.stations?.station_name || 'Unknown',
-      released_by: row.users?.email_address || row.distributed_by || 'Unknown',
+      released_by: releasersById.get(row.distributed_by) || 'Unknown',
       remarks: ''
     }));
 
@@ -355,6 +339,8 @@ class InventoryService {
   }
 
   async distributeInventory({ itemType, itemId, quantity, destinationStation, distributedBy, distributedDate, remarks }) {
+    await this._ensureAdmin();
+
     if (!itemType || !['vaccine', 'supplement'].includes(itemType)) {
       throw new Error('Invalid item type for distribution');
     }

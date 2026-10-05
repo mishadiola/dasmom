@@ -133,6 +133,43 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.get_distribution_releasers(p_user_ids UUID[])
+RETURNS TABLE(id UUID, full_name TEXT, email_address TEXT)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+SET row_security = off
+AS $$
+DECLARE
+  v_role TEXT := public.get_my_role();
+  v_station UUID := public.get_my_station();
+BEGIN
+  IF auth.uid() IS NULL OR COALESCE(v_role, '') NOT IN ('admin', 'staff', 'cho personnel') THEN
+    RAISE EXCEPTION 'Not authorized to view distribution releasers';
+  END IF;
+
+  RETURN QUERY
+  SELECT u.id, sp.full_name::TEXT, u.email_address::TEXT
+  FROM public.users u
+  LEFT JOIN public.staff_profiles sp ON sp.id = u.id
+  WHERE u.id = ANY(COALESCE(p_user_ids, ARRAY[]::UUID[]))
+    AND (
+      v_role = 'admin'
+      OR EXISTS (
+        SELECT 1 FROM public.vaccine_distribution vd
+        WHERE vd.distributed_by = u.id
+          AND vd.station_id IS NOT DISTINCT FROM v_station
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.supplement_distribution sd
+        WHERE sd.distributed_by = u.id
+          AND sd.station_id IS NOT DISTINCT FROM v_station
+      )
+    );
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.get_assignable_staff(p_station_id UUID)
 RETURNS TABLE(id UUID, full_name TEXT, station_ass UUID)
 LANGUAGE SQL
@@ -503,6 +540,8 @@ REVOKE ALL ON FUNCTION public.get_assignable_staff(UUID) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_assignable_staff(UUID) TO authenticated;
 REVOKE ALL ON FUNCTION public.get_staff_directory() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_staff_directory() TO authenticated;
+REVOKE ALL ON FUNCTION public.get_distribution_releasers(UUID[]) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_distribution_releasers(UUID[]) TO authenticated;
 REVOKE ALL ON FUNCTION public.complete_prenatal_visit(UUID, JSONB, UUID) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.complete_prenatal_visit(UUID, JSONB, UUID) TO authenticated;
 REVOKE ALL ON FUNCTION public.rebalance_prenatal_visits(UUID, JSONB, UUID[]) FROM PUBLIC;
@@ -1136,16 +1175,44 @@ CREATE POLICY admin_vaccine_inv ON public.vaccine_inventory FOR ALL TO authentic
   USING (get_my_role() = 'admin')
   WITH CHECK (get_my_role() = 'admin');
 CREATE POLICY cho_vaccine_inv ON public.vaccine_inventory FOR SELECT TO authenticated
-  USING (get_my_role() = 'cho personnel');
+  USING (
+    get_my_role() = 'cho personnel'
+    AND EXISTS (
+      SELECT 1 FROM public.station_vaccine_inventory svi
+      WHERE svi.vaccine_id = vaccine_inventory.id
+        AND svi.station_id IS NOT DISTINCT FROM get_my_station()
+    )
+  );
 CREATE POLICY staff_vaccine_inv ON public.vaccine_inventory FOR SELECT TO authenticated
-  USING (get_my_role() = 'staff');
+  USING (
+    get_my_role() = 'staff'
+    AND EXISTS (
+      SELECT 1 FROM public.station_vaccine_inventory svi
+      WHERE svi.vaccine_id = vaccine_inventory.id
+        AND svi.station_id IS NOT DISTINCT FROM get_my_station()
+    )
+  );
 CREATE POLICY admin_supplement_inv ON public.supplement_inventory FOR ALL TO authenticated
   USING (get_my_role() = 'admin')
   WITH CHECK (get_my_role() = 'admin');
 CREATE POLICY cho_supplement_inv ON public.supplement_inventory FOR SELECT TO authenticated
-  USING (get_my_role() = 'cho personnel');
+  USING (
+    get_my_role() = 'cho personnel'
+    AND EXISTS (
+      SELECT 1 FROM public.station_supplement_inventory ssi
+      WHERE ssi.supplement_inventory_id = supplement_inventory.id
+        AND ssi.station_id IS NOT DISTINCT FROM get_my_station()
+    )
+  );
 CREATE POLICY staff_supplement_inv ON public.supplement_inventory FOR SELECT TO authenticated
-  USING (get_my_role() = 'staff');
+  USING (
+    get_my_role() = 'staff'
+    AND EXISTS (
+      SELECT 1 FROM public.station_supplement_inventory ssi
+      WHERE ssi.supplement_inventory_id = supplement_inventory.id
+        AND ssi.station_id IS NOT DISTINCT FROM get_my_station()
+    )
+  );
 
 -- vaccinations
 CREATE POLICY admin_vaccinations ON public.vaccinations FOR ALL TO authenticated
@@ -1405,7 +1472,9 @@ CREATE POLICY staff_supplement_dist ON public.supplement_distribution FOR SELECT
 CREATE POLICY admin_station_vaccine_inv ON public.station_vaccine_inventory FOR ALL TO authenticated
   USING (get_my_role() = 'admin')
   WITH CHECK (get_my_role() = 'admin');
-CREATE POLICY cho_station_vaccine_inv ON public.station_vaccine_inventory FOR ALL TO authenticated
+CREATE POLICY cho_station_vaccine_inv ON public.station_vaccine_inventory FOR SELECT TO authenticated
+  USING (get_my_role() = 'cho personnel' AND station_id IS NOT DISTINCT FROM get_my_station());
+CREATE POLICY cho_update_station_vaccine_inv ON public.station_vaccine_inventory FOR UPDATE TO authenticated
   USING (get_my_role() = 'cho personnel' AND station_id IS NOT DISTINCT FROM get_my_station())
   WITH CHECK (get_my_role() = 'cho personnel' AND station_id IS NOT DISTINCT FROM get_my_station());
 CREATE POLICY staff_station_vaccine_inv ON public.station_vaccine_inventory FOR SELECT TO authenticated
@@ -1416,7 +1485,9 @@ CREATE POLICY staff_update_station_vaccine_inv ON public.station_vaccine_invento
 CREATE POLICY admin_station_supplement_inv ON public.station_supplement_inventory FOR ALL TO authenticated
   USING (get_my_role() = 'admin')
   WITH CHECK (get_my_role() = 'admin');
-CREATE POLICY cho_station_supplement_inv ON public.station_supplement_inventory FOR ALL TO authenticated
+CREATE POLICY cho_station_supplement_inv ON public.station_supplement_inventory FOR SELECT TO authenticated
+  USING (get_my_role() = 'cho personnel' AND station_id IS NOT DISTINCT FROM get_my_station());
+CREATE POLICY cho_update_station_supplement_inv ON public.station_supplement_inventory FOR UPDATE TO authenticated
   USING (get_my_role() = 'cho personnel' AND station_id IS NOT DISTINCT FROM get_my_station())
   WITH CHECK (get_my_role() = 'cho personnel' AND station_id IS NOT DISTINCT FROM get_my_station());
 CREATE POLICY staff_station_supplement_inv ON public.station_supplement_inventory FOR SELECT TO authenticated
