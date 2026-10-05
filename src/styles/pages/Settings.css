@@ -163,13 +163,16 @@
 
 .uav-superadmin { background: linear-gradient(135deg, #e05c73, #b73a52); }
 .uav-admin      { background: linear-gradient(135deg, #5baed0, #2d7fa3); }
-.uav-staff      { background: linear-gradient(135deg, #6db8a0, #3d8870); }
+.uav-stationstaff { background: linear-gradient(135deg, #f0df92, #d1a511); }
+.uav-chopersonnel { background: linear-gradient(135deg, #6db8a0, #3d8870); }
+.uav-staff { background: linear-gradient(135deg, #f0df92, #d1a511); }
 
 /* Role badge */
 .role-badge { font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 6px; white-space: nowrap; }
 .badge-superadmin { background: rgba(224,92,115,0.12); color: #b73a52; }
 .badge-admin      { background: rgba(91,174,208,0.12);  color: #2d7fa3; }
-.badge-staff      { background: rgba(109,184,160,0.12); color: #3d8870; }
+.badge-staff      { background: rgba(232,184,75,0.15);  color: #a87c12; }
+.badge-cho        { background: rgba(109,184,160,0.12); color: #3d8870; }
 
 /* Status dot */
 .status-dot { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; }
@@ -424,12 +427,15 @@
 .profile-role { 
     font-size: 12px; 
     font-weight: 700; 
-    color: var(--color-rose); 
-    background: rgba(224,92,115,0.08); 
     padding: 4px 12px; 
     border-radius: 8px;
     text-align: center;
 }
+.pr-superadmin { color: #b73a52; background: rgba(224,92,115,0.08); }
+.pr-admin      { color: #2d7fa3; background: rgba(91,174,208,0.08); }
+.pr-stationstaff { color: #a87c12; background: rgba(232,184,75,0.12); }
+.pr-chopersonnel { color: #3d8870; background: rgba(109,184,160,0.08); }
+.pr-staff { color: #a87c12; background: rgba(232,184,75,0.12); }
 
 .profile-info-item {
     width: 100%;

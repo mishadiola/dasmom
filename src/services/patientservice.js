@@ -489,12 +489,17 @@ export default class PatientService {
 
     if (age !== null && (age < 18 || age > 35)) addFactor(`Age ${age}`);
     if (Number.isFinite(gravida) && gravida >= 3) addFactor(`Gravida ${gravida}`);
-    if (pregnancyType && pregnancyType !== 'singleton') addFactor('Multiple pregnancy');
+    const nonMultipleTypes = ['singleton', 'not yet determined', 'unknown', 'n/a', 'none', ''];
+    if (pregnancyType && !nonMultipleTypes.includes(pregnancyType)) {
+      addFactor('Multiple pregnancy');
+    }
+
+    const transientRiskPattern = /^(age\b|gravida\b|multiple pregnancy$|hypertension \(high\)$|hypotension \(low\)$|high bp$|overweight bmi$|underweight bmi$|obese bmi$|fever$|hypothermia$|abnormal (pulse|respiratory rate|fetal heart rate)$)/i;
 
     // Also add any other text that might be comma-separated in riskText but not None
     if (riskText) {
       riskText.split(',').map(s => s.trim()).forEach(f => {
-        if (f && f.toLowerCase() !== 'none' && !factors.some(existing => existing.toLowerCase() === f.toLowerCase())) {
+        if (f && f.toLowerCase() !== 'none' && !transientRiskPattern.test(f) && !factors.some(existing => existing.toLowerCase() === f.toLowerCase())) {
           addFactor(f);
         }
       });
@@ -508,7 +513,6 @@ export default class PatientService {
     if (riskTextLower.includes('anemia') || riskTextLower.includes('anaemia')) addFactor('Anemia');
     if (riskTextLower.includes('previous c-section') || riskTextLower.includes('c-section')) addFactor('Previous C-section');
 
-    const transientRiskPattern = /^(age\b|gravida\b|multiple pregnancy$|hypertension \(high\)$|hypotension \(low\)$|high bp$|overweight bmi$|underweight bmi$|obese bmi$|fever$|hypothermia$|abnormal (pulse|respiratory rate|fetal heart rate)$)/i;
     (patient.medicalConditions || []).forEach(condition => {
       const value = String(condition || '').trim();
       if (value && !transientRiskPattern.test(value)) addFactor(value);

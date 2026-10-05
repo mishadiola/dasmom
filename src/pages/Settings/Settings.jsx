@@ -153,7 +153,7 @@ const normalizeRoleValue = (role) => {
     if (!value) return 'staff';
     if (value === 'super admin' || value === 'admin') return 'admin';
     if (value === 'cho personnel' || value === 'cho personnel') return 'cho personnel';
-    if (value === 'staff') return 'staff';
+    if (value === 'staff' || value === 'station staff' || value === 'station_staff' || value === 'station-staff') return 'staff';
     return value;
 };
 
@@ -737,24 +737,54 @@ const EditUserModal = ({ staff, onClose, onSuccess }) => {
     );
 };
 const UserAccountsTab = () => {
+    const { user } = useContext(AuthContext);
     const { confirm, alert: customAlert } = useModal();
     const staffService = new StaffService();
     const [search, setSearch] = useState('');
     const [roleFilter, setRoleFilter] = useState('All');
     const [statusFilter, setStatusFilter] = useState('Active'); // 'All' | 'Active' | 'Archived'
+    const [stationFilter, setStationFilter] = useState('All');
     const [activePopover, setActivePopover] = useState(null);
     const [showModal, setShowModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [selectedStaff, setSelectedStaff] = useState(null);
     const [staff, setStaff] = useState([]);
     const [roleOptions, setRoleOptions] = useState([]);
+    const [stationOptions, setStationOptions] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [currentPage, setCurrentPage] = useState(1);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [search, roleFilter, statusFilter, stationFilter]);
 
     const fetchStaff = async () => {
         setLoading(true);
         try {
             const staffList = await staffService.getAllStaff();
-            setStaff(staffList);
+            
+            const callerRole = normalizeRoleValue(user?.role);
+            let permittedStaff = staffList;
+            
+            if (callerRole === 'staff' || callerRole === 'cho personnel') {
+                const userStation = formatStationName(user?.station);
+                permittedStaff = staffList.filter(s => {
+                    const sRole = normalizeRoleValue(s.role);
+                    const sStation = formatStationName(s.station);
+                    
+                    if (sStation !== userStation) return false;
+                    
+                    if (callerRole === 'staff') {
+                        return sRole === 'staff';
+                    }
+                    if (callerRole === 'cho personnel') {
+                        return sRole === 'staff' || sRole === 'cho personnel';
+                    }
+                    return true;
+                });
+            }
+            
+            setStaff(permittedStaff);
         } catch (err) {
             console.error('Failed to fetch staff:', err);
         } finally {
@@ -784,17 +814,19 @@ const UserAccountsTab = () => {
     }, [activePopover]);
 
     useEffect(() => {
-        const fetchRoles = async () => {
+        const fetchRolesAndStations = async () => {
             try {
                 const roles = await staffService.getAllUserRoles();
                 setRoleOptions(roles);
+                const stationsList = await staffService.getAllStations();
+                setStationOptions(stationsList);
             } catch (err) {
-                console.error('Failed to fetch roles:', err);
+                console.error('Failed to fetch roles or stations:', err);
             }
         };
 
         fetchStaff();
-        fetchRoles();
+        fetchRolesAndStations();
     }, []);
 
     const filtered = staff.filter(u => {
@@ -811,11 +843,18 @@ const UserAccountsTab = () => {
         } else if (statusFilter === 'Archived') {
             matchSt = isArchived;
         }
+        
+        const matchStation = stationFilter === 'All' || formatStationName(u.station) === formatStationName(stationFilter);
 
-        return matchS && matchR && matchSt;
+        return matchS && matchR && matchSt && matchStation;
     });
 
-    const hasActiveFilters = search !== '' || roleFilter !== 'All' || statusFilter !== 'Active';
+    const itemsPerPage = 10;
+    const totalPages = Math.ceil(filtered.length / itemsPerPage);
+    const paginatedStaff = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+    const hasActiveFilters = search !== '' || roleFilter !== 'All' || statusFilter !== 'Active' || stationFilter !== 'All';
+    const isAdmin = ['admin', 'super admin'].includes(normalizeRoleValue(user?.role));
 
     const handleModalSuccess = () => {
         fetchStaff();
@@ -957,6 +996,35 @@ const UserAccountsTab = () => {
                         </div>
                     )}
                 </div>
+                {isAdmin && (
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${stationFilter !== 'All' ? 'active-filter' : ''}`}
+                            onClick={() => setActivePopover(activePopover === 'station' ? null : 'station')}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            <span>{stationFilter === 'All' ? 'All Stations' : formatStationName(stationFilter)}</span>
+                            <ChevronDown size={14} className="filter-btn-icon" />
+                        </button>
+                        {activePopover === 'station' && (
+                            <div className="filter-popover" style={{ left: 0, right: 'auto', minWidth: '180px' }}>
+                                <div className="popover-title">STATION</div>
+                                <div className="popover-options">
+                                    <label className="popover-checkbox-label" style={{ cursor: 'pointer' }}>
+                                        <input type="radio" name="stationFilter" checked={stationFilter === 'All'} onChange={() => { setStationFilter('All'); setActivePopover(null); }} />
+                                        All Stations
+                                    </label>
+                                    {stationOptions.map(station => (
+                                        <label key={station} className="popover-checkbox-label" style={{ cursor: 'pointer' }}>
+                                            <input type="radio" name="stationFilter" checked={stationFilter === station} onChange={() => { setStationFilter(station); setActivePopover(null); }} />
+                                            {formatStationName(station)}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
                 <div className="filter-dropdown-container">
                     <button 
                         className={`filter-btn ${statusFilter !== 'All' && statusFilter !== 'Active' ? 'active-filter' : ''}`}
@@ -993,6 +1061,7 @@ const UserAccountsTab = () => {
                             setSearch('');
                             setRoleFilter('All');
                             setStatusFilter('Active');
+                            setStationFilter('All');
                         }}
                     >
                         Clear
@@ -1005,6 +1074,7 @@ const UserAccountsTab = () => {
                 <table className="set-table">
                     <thead>
                         <tr>
+                            <th style={{ width: '40px' }}>NO.</th>
                             <th>User</th>
                             <th>Role</th>
                             <th>Email</th>
@@ -1014,16 +1084,19 @@ const UserAccountsTab = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {filtered.length > 0 ? (
-                            filtered.map(u => (
+                        {paginatedStaff.length > 0 ? (
+                            paginatedStaff.map((u, i) => (
                                 <tr key={u.id} className={u.status === 'Inactive' ? 'row-inactive' : ''}>
+                                    <td style={{ color: 'var(--color-text-muted)', fontWeight: '600' }}>
+                                        {(currentPage - 1) * itemsPerPage + i + 1}
+                                    </td>
                                     <td>
                                         <div className="user-cell">
                                             <div className={`user-avatar uav-${u.role.toLowerCase().replace(' ', '')}`}>{u.avatar}</div>
                                             <span>{u.name}</span>
                                         </div>
                                     </td>
-                                    <td><span className={`role-badge ${u.role === 'Super Admin' ? 'badge-superadmin' : u.role === 'Admin' ? 'badge-admin' : 'badge-staff'}`}>{u.role}</span></td>
+                                    <td><span className={`role-badge ${u.role === 'Super Admin' ? 'badge-superadmin' : u.role === 'Admin' ? 'badge-admin' : u.role === 'CHO Personnel' ? 'badge-cho' : 'badge-staff'}`}>{u.role}</span></td>
                                     <td className="email-cell">{u.email}</td>
                                     <td>{u.station}</td>
                                     <td>
@@ -1055,7 +1128,7 @@ const UserAccountsTab = () => {
                             ))
                         ) : (
                             <tr>
-                                <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#999' }}>
+                                <td colSpan="7" style={{ textAlign: 'center', padding: '32px', color: '#999' }}>
                                     No staff members found
                                 </td>
                             </tr>
@@ -1063,6 +1136,48 @@ const UserAccountsTab = () => {
                     </tbody>
                 </table>
             </div>
+
+            {filtered.length > itemsPerPage && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', padding: '0 8px', fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                    <div>
+                        Showing {(currentPage - 1) * itemsPerPage + 1}–{Math.min(currentPage * itemsPerPage, filtered.length)} of {filtered.length}
+                    </div>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                        <button 
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                            style={{ border: 'none', background: 'transparent', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.5 : 1, padding: '4px 8px' }}
+                        >
+                            ‹
+                        </button>
+                        {Array.from({ length: totalPages }, (_, idx) => (
+                            <button
+                                key={idx + 1}
+                                onClick={() => setCurrentPage(idx + 1)}
+                                style={{ 
+                                    border: 'none', 
+                                    background: currentPage === idx + 1 ? 'var(--color-rose)' : 'transparent', 
+                                    color: currentPage === idx + 1 ? 'white' : 'var(--color-text)',
+                                    borderRadius: '6px',
+                                    padding: '4px 10px',
+                                    cursor: 'pointer',
+                                    fontWeight: currentPage === idx + 1 ? '600' : '400'
+                                }}
+                            >
+                                {idx + 1}
+                            </button>
+                        ))}
+                        <button 
+                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                            disabled={currentPage === totalPages}
+                            style={{ border: 'none', background: 'transparent', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', opacity: currentPage === totalPages ? 0.5 : 1, padding: '4px 8px' }}
+                        >
+                            ›
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {showModal && <AddUserModal onClose={() => setShowModal(false)} onSuccess={handleModalSuccess} />}
             {showEditModal && <EditUserModal staff={selectedStaff} onClose={() => setShowEditModal(false)} onSuccess={handleModalSuccess} />}
         </div>
@@ -1282,7 +1397,7 @@ const ProfileTab = () => {
                         {user?.fullName?.split(' ').map(n => n[0]).slice(0, 2).join('') || 'U'}
                     </div>
                     <h3>{user?.fullName || 'User Account'}</h3>
-                    <p className="profile-role">{user?.role?.toUpperCase() || 'Staff'}</p>
+                    <p className={`profile-role pr-${(user?.role || 'staff').toLowerCase().replace(' ', '')}`}>{user?.role?.toUpperCase() || 'Staff'}</p>
                     <div className="profile-info-item">
                         <Mail size={13} /> {user?.email}
                     </div>

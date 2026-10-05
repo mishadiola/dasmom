@@ -248,6 +248,7 @@ const PatientsList = () => {
     const [patients, setPatients] = useState([]);
     const [availableStations, setAvailableStations] = useState([]);
     const [assignmentAccess, setAssignmentAccess] = useState({ role: '', stationId: null });
+    const [defaultApplied, setDefaultApplied] = useState(false);
 
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -385,6 +386,17 @@ const PatientsList = () => {
     fetchStations();
 }, []);
 
+    useEffect(() => {
+        if (!defaultApplied && availableStations.length > 0 && assignmentAccess.role) {
+            if (assignmentAccess.role === 'staff' && assignmentAccess.stationId) {
+                const assignedStation = availableStations.find(s => s.id === assignmentAccess.stationId);
+                if (assignedStation) {
+                    setFilters(prev => ({ ...prev, stations: [assignedStation.station_name] }));
+                }
+            }
+            setDefaultApplied(true);
+        }
+    }, [availableStations, assignmentAccess, defaultApplied]);
 
     const filteredPatients = patients.filter(p => {
         const matchesSearch =

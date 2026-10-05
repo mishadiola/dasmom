@@ -198,7 +198,7 @@ const PatientProfile = () => {
                 <div class="header">
                     <h1 class="patient-name">${p.name}</h1>
                     <p class="patient-info">Patient ID: ${getShortPatientId(p.id)} | Age: ${p.age} years | Station: ${p.station}</p>
-                    <p class="patient-info">Risk Level: <span class="risk-badge">${(p.risk || 'Normal').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}</span></p>
+                    <p class="patient-info">Risk Level: <span class="risk-badge">${(p.risk || 'Normal').toUpperCase()}</span></p>
                     <p class="patient-info">Generated on: ${formatDate(new Date())}</p>
                 </div>
 
@@ -518,7 +518,7 @@ const PatientProfile = () => {
                         <div className="profile-title-row">
                             <h1 className="profile-name">{p.name}</h1>
                             <span className={`risk-badge risk-${p.risk?.toLowerCase().split(' ')[0]}`}>
-                                {p.risk ? p.risk.toLowerCase().replace(/\b\w/g, l => l.toUpperCase()) : ''}
+                                {p.risk ? p.risk.toUpperCase() : 'NORMAL'}
                             </span>
                         </div>
                         <p className="profile-meta">
@@ -748,7 +748,7 @@ const PatientProfile = () => {
                                                                 <span className="risk-visit-number">Visit #{visit.visit_number}</span>
                                                             </div>
                                                             <div className={`risk-badge risk-${(visit.calculated_risk || 'normal').toLowerCase().split(' ')[0]}`}>
-                                                                {visit.calculated_risk || 'Normal'} Risk
+                                                                {(visit.calculated_risk || 'Normal').toUpperCase()}
                                                             </div>
                                                         </div>
                                                         {visit.risk_factors && visit.risk_factors.split(',').filter(f => f.trim() && f.trim().toLowerCase() !== 'none').length > 0 && (
