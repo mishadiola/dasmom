@@ -222,6 +222,15 @@ const AddUserModal = ({ onClose, onSuccess }) => {
         fetchRoles();
     }, []);
 
+    useEffect(() => {
+        if (normalizeRoleValue(form.role) === 'cho personnel' && stations.length > 0) {
+            const choStation = stations.find(s => formatStationName(s) === 'City Health Office 3') || 'City Health Office 3';
+            if (form.station !== choStation) {
+                setForm(p => ({ ...p, station: choStation }));
+            }
+        }
+    }, [form.role, stations]);
+
     const genPassword = () => {
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$';
         const pwd = Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
@@ -317,18 +326,23 @@ const AddUserModal = ({ onClose, onSuccess }) => {
                                             <select
                                                 value={form.station}
                                                 onChange={e => update('station', e.target.value)}
+                                                disabled={normalizeRoleValue(form.role) === 'cho personnel'}
                                                 style={{ 
                                                     width: '100%', 
                                                     paddingRight: '36px',
                                                     appearance: 'none',
                                                     WebkitAppearance: 'none',
-                                                    MozAppearance: 'none'
+                                                    MozAppearance: 'none',
+                                                    ...(normalizeRoleValue(form.role) === 'cho personnel' ? { backgroundColor: '#f5f5f5', color: '#666', cursor: 'not-allowed' } : {})
                                                 }}
                                             >
                                                 <option value="">Select Station / Barangay...</option>
                                                 {stations.map(s => (
                                                     <option key={s} value={s}>{formatStationName(s)}</option>
                                                 ))}
+                                                {normalizeRoleValue(form.role) === 'cho personnel' && !stations.find(s => formatStationName(s) === 'City Health Office 3') && (
+                                                    <option value="City Health Office 3">City Health Office 3</option>
+                                                )}
                                             </select>
                                             <ChevronDown 
                                                 size={16} 
@@ -591,6 +605,15 @@ const EditUserModal = ({ staff, onClose, onSuccess }) => {
         fetchRoles();
     }, []);
 
+    useEffect(() => {
+        if (normalizeRoleValue(form.role) === 'cho personnel' && stations.length > 0) {
+            const choStation = stations.find(s => formatStationName(s) === 'City Health Office 3') || 'City Health Office 3';
+            if (form.station !== choStation) {
+                setForm(p => ({ ...p, station: choStation }));
+            }
+        }
+    }, [form.role, stations]);
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSubmitting(true);
@@ -655,18 +678,23 @@ const EditUserModal = ({ staff, onClose, onSuccess }) => {
                                     <select
                                         value={form.station}
                                         onChange={e => update('station', e.target.value)}
+                                        disabled={normalizeRoleValue(form.role) === 'cho personnel'}
                                         style={{ 
                                             width: '100%', 
                                             paddingRight: '36px',
                                             appearance: 'none',
                                             WebkitAppearance: 'none',
-                                            MozAppearance: 'none'
+                                            MozAppearance: 'none',
+                                            ...(normalizeRoleValue(form.role) === 'cho personnel' ? { backgroundColor: '#f5f5f5', color: '#666', cursor: 'not-allowed' } : {})
                                         }}
                                     >
                                         <option value="">Select Station / Barangay...</option>
                                         {stations.map(s => (
                                             <option key={s} value={s}>{formatStationName(s)}</option>
                                         ))}
+                                        {normalizeRoleValue(form.role) === 'cho personnel' && !stations.find(s => formatStationName(s) === 'City Health Office 3') && (
+                                            <option value="City Health Office 3">City Health Office 3</option>
+                                        )}
                                     </select>
                                     <ChevronDown 
                                         size={16} 
