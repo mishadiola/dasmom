@@ -4,6 +4,7 @@ import useClickOutside from '../../hooks/useClickOutside';
 import PatientService from '../../services/patientservice';
 import BabyService from '../../services/babyservices';
 import VaccinationService from '../../services/vaccinationservice';
+import InventoryService from '../../services/inventoryservice';
 import supabase from '../../config/supabaseclient';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useModal } from '../../context/ModalContext';
@@ -22,6 +23,8 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import ExportModal from '../../components/ExportModal';
+
+const inventoryService = new InventoryService();
 
 // Constants for vaccine and supplement types
 const VACCINE_TYPES = [
@@ -222,37 +225,14 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
         if (mode === 'vaccine' && patientStationId) {
             const fetchVaccineTypes = async () => {
                 try {
-                    console.log('🔍 Fetching vaccines for station:', patientStationId);
-                    
-                    // DEBUG: Fetch all to see what's in the table
-                    const { data: allSvi } = await supabase.from('station_vaccine_inventory').select('*');
-                    console.log('🐞 ALL station_vaccine_inventory records:', allSvi);
-
-                    const { data: stationRows, error: stationError } = await supabase
-                        .from('station_vaccine_inventory')
-                        .select('vaccine_id, quantity')
-                        .eq('station_id', patientStationId)
-                        .gt('quantity', 0);
-
-                    console.log('📦 Station vaccine inventory rows:', stationRows, 'Error:', stationError);
-                    if (stationError) throw stationError;
-
-                    const vaccineIds = [...new Set((stationRows || []).map(item => item.vaccine_id).filter(Boolean))];
-                    if (vaccineIds.length === 0) {
-                        setVaccineTypes([]);
-                        return;
-                    }
-
-                    const { data: vaccineRows, error: vaccineError } = await supabase
-                        .from('vaccine_inventory')
-                        .select('id, vaccine_name')
-                        .in('id', vaccineIds)
-                        .order('vaccine_name', { ascending: true });
-
-                    console.log('📦 Resolved vaccine inventory names:', vaccineRows, 'Error:', vaccineError);
-                    if (vaccineError) throw vaccineError;
-
-                    const uniqueVaccines = [...new Set((vaccineRows || []).map(item => item.vaccine_name).filter(Boolean))];
+                    const inventoryRows = await inventoryService.getStationInventorySnapshot();
+                    const availableVaccines = inventoryRows.filter(item =>
+                        item.item_type === 'Vaccine' &&
+                        item.station_id === patientStationId &&
+                        Number(item.quantity) > 0
+                    );
+                    const uniqueVaccines = [...new Set(availableVaccines.map(item => item.item_name).filter(Boolean))]
+                        .sort((a, b) => a.localeCompare(b));
                     setVaccineTypes(uniqueVaccines);
                 } catch (error) {
                     console.error('Error fetching vaccine types:', error);
@@ -279,33 +259,17 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
             }
 
             try {
-                const { data: stationRows, error: stationError } = await supabase
-                    .from('station_vaccine_inventory')
-                    .select('vaccine_id')
-                    .eq('station_id', patientStationId)
-                    .gt('quantity', 0);
-
-                if (stationError) throw stationError;
-
-                const vaccineIds = [...new Set((stationRows || []).map(item => item.vaccine_id).filter(Boolean))];
-                if (vaccineIds.length === 0) {
-                    setVaccineBrandOptions({});
-                    return;
-                }
-
-                const { data: vaccineRows, error: vaccineError } = await supabase
-                    .from('vaccine_inventory')
-                    .select('id, vaccine_name, brand')
-                    .in('id', vaccineIds)
-                    .not('brand', 'is', null)
-                    .order('vaccine_name', { ascending: true });
-
-                if (vaccineError) throw vaccineError;
+                const inventoryRows = await inventoryService.getStationInventorySnapshot();
+                const availableVaccines = inventoryRows.filter(item =>
+                    item.item_type === 'Vaccine' &&
+                    item.station_id === patientStationId &&
+                    Number(item.quantity) > 0
+                );
 
                 const nextOptions = {};
                 for (const vaccineName of selectedNames) {
-                    nextOptions[vaccineName] = [...new Set((vaccineRows || [])
-                        .filter(item => item.vaccine_name === vaccineName)
+                    nextOptions[vaccineName] = [...new Set(availableVaccines
+                        .filter(item => item.item_name === vaccineName)
                         .map(item => item.brand)
                         .filter(Boolean))];
                 }
@@ -419,10 +383,8 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
 
                 const { stationId } = await resolvePatientStation(patientId, form.patientType, stationHint);
                 console.log('🏢 Final resolved station ID:', stationId, 'hint:', stationHint);
-                const access = await patientService.getCurrentUserAccess();
-                const vaccinationService = new VaccinationService();
-                const userStationId = access.stationId || await vaccinationService.getCurrentUserStationId();
-                setPatientStationId(userStationId);
+                const inventoryScope = await inventoryService.getCurrentUserScope();
+                setPatientStationId(inventoryScope.stationId || stationId);
 
                 if (barangay) {
                     const { data: staffData, error: staffError } = await supabase
@@ -1315,10 +1277,8 @@ const Vaccinations = () => {
             // Update stats (will be set after inventory logic)
 
             // Update inventory
-            const inventoryService = (await import('../../services/inventoryservice')).default;
-            const invSvc = new inventoryService();
-            const vaccineInvData = await invSvc.getVaccineInventory();
-            const suppInvData = await invSvc.getSupplementInventory();
+            const vaccineInvData = await inventoryService.getVaccineInventory();
+            const suppInvData = await inventoryService.getSupplementInventory();
             
             const groupByName = (list, isVaccine) => {
                 const grouped = {};

@@ -1015,6 +1015,7 @@ CREATE POLICY patient_pregnancy_update_prefs ON public.pregnancy_info FOR UPDATE
   WITH CHECK (patient_id = auth.uid());
 
 -- prenatal_visits
+-- assigned_station tracks the patient's assigned station; station_ass tracks where care was performed.
 CREATE POLICY admin_prenatal ON public.prenatal_visits FOR ALL TO authenticated
   USING (get_my_role() = 'admin')
   WITH CHECK (get_my_role() = 'admin');
@@ -1028,18 +1029,23 @@ CREATE POLICY cho_insert_prenatal ON public.prenatal_visits FOR INSERT TO authen
         status = 'Scheduled'
         AND station_ass IS NULL
         AND assigned_station IS NOT DISTINCT FROM get_my_station()
-        AND (assigned_staff IS NULL OR public.staff_member_belongs_to_station(assigned_staff, get_my_station()))
+        AND EXISTS (
+          SELECT 1 FROM public.patient_basic_info p
+          WHERE p.id = patient_id
+            AND p.station_ass IS NOT DISTINCT FROM assigned_station
+            AND (assigned_staff IS NULL OR public.staff_member_belongs_to_station(assigned_staff, p.station_ass))
+        )
         AND performed_by IS NULL
       )
       OR (
         status = 'Scheduled'
-        AND assigned_staff IS NULL
         AND created_by = auth.uid()
         AND station_ass IS NULL
         AND EXISTS (
           SELECT 1 FROM public.patient_basic_info p
           WHERE p.id = patient_id
             AND p.station_ass IS NOT DISTINCT FROM assigned_station
+            AND (assigned_staff IS NULL OR public.staff_member_belongs_to_station(assigned_staff, p.station_ass))
         )
         AND performed_by IS NULL
       )
@@ -1048,13 +1054,11 @@ CREATE POLICY cho_insert_prenatal ON public.prenatal_visits FOR INSERT TO authen
         AND created_by = auth.uid()
         AND performed_by = auth.uid()
         AND station_ass IS NOT DISTINCT FROM get_my_station()
-        AND (
-          assigned_staff IS NULL
-          OR EXISTS (
-            SELECT 1 FROM public.patient_basic_info p
-            WHERE p.id = patient_id
-              AND public.staff_member_belongs_to_station(assigned_staff, p.station_ass)
-          )
+        AND EXISTS (
+          SELECT 1 FROM public.patient_basic_info p
+          WHERE p.id = patient_id
+            AND p.station_ass IS NOT DISTINCT FROM assigned_station
+            AND (assigned_staff IS NULL OR public.staff_member_belongs_to_station(assigned_staff, p.station_ass))
         )
       )
     )
@@ -1063,13 +1067,24 @@ CREATE POLICY cho_update_prenatal ON public.prenatal_visits FOR UPDATE TO authen
   USING (
     get_my_role() = 'cho personnel'
     AND status IN ('Scheduled', 'Missed')
-    AND assigned_station IS NOT DISTINCT FROM get_my_station()
     AND (
-      assigned_staff IS NULL
-      OR EXISTS (
-        SELECT 1 FROM public.patient_basic_info p
-        WHERE p.id = patient_id
-          AND public.staff_member_belongs_to_station(assigned_staff, p.station_ass)
+      (
+        assigned_station IS NOT DISTINCT FROM get_my_station()
+        AND EXISTS (
+          SELECT 1 FROM public.patient_basic_info p
+          WHERE p.id = patient_id
+            AND p.station_ass IS NOT DISTINCT FROM assigned_station
+            AND (assigned_staff IS NULL OR public.staff_member_belongs_to_station(assigned_staff, p.station_ass))
+        )
+      )
+      OR (
+        created_by = auth.uid()
+        AND EXISTS (
+          SELECT 1 FROM public.patient_basic_info p
+          WHERE p.id = patient_id
+            AND p.station_ass IS NOT DISTINCT FROM assigned_station
+            AND (assigned_staff IS NULL OR public.staff_member_belongs_to_station(assigned_staff, p.station_ass))
+        )
       )
     )
   )
@@ -1077,8 +1092,26 @@ CREATE POLICY cho_update_prenatal ON public.prenatal_visits FOR UPDATE TO authen
     get_my_role() = 'cho personnel'
     AND status IN ('Scheduled', 'Missed')
     AND station_ass IS NULL
-    AND assigned_station IS NOT DISTINCT FROM get_my_station()
-    AND (assigned_staff IS NULL OR public.staff_member_belongs_to_station(assigned_staff, get_my_station()))
+    AND (
+      (
+        assigned_station IS NOT DISTINCT FROM get_my_station()
+        AND EXISTS (
+          SELECT 1 FROM public.patient_basic_info p
+          WHERE p.id = patient_id
+            AND p.station_ass IS NOT DISTINCT FROM assigned_station
+            AND (assigned_staff IS NULL OR public.staff_member_belongs_to_station(assigned_staff, p.station_ass))
+        )
+      )
+      OR (
+        created_by = auth.uid()
+        AND EXISTS (
+          SELECT 1 FROM public.patient_basic_info p
+          WHERE p.id = patient_id
+            AND p.station_ass IS NOT DISTINCT FROM assigned_station
+            AND (assigned_staff IS NULL OR public.staff_member_belongs_to_station(assigned_staff, p.station_ass))
+        )
+      )
+    )
     AND performed_by IS NULL
   );
 CREATE POLICY cho_delete_prenatal ON public.prenatal_visits FOR DELETE TO authenticated
@@ -1095,20 +1128,25 @@ CREATE POLICY staff_insert_prenatal ON public.prenatal_visits FOR INSERT TO auth
     AND (
       (
         status = 'Scheduled'
-        AND (assigned_staff IS NULL OR public.staff_member_belongs_to_station(assigned_staff, get_my_station()))
         AND station_ass IS NULL
         AND assigned_station IS NOT DISTINCT FROM get_my_station()
+        AND EXISTS (
+          SELECT 1 FROM public.patient_basic_info p
+          WHERE p.id = patient_id
+            AND p.station_ass IS NOT DISTINCT FROM assigned_station
+            AND (assigned_staff IS NULL OR public.staff_member_belongs_to_station(assigned_staff, p.station_ass))
+        )
         AND performed_by IS NULL
       )
       OR (
         status = 'Scheduled'
-        AND assigned_staff IS NULL
         AND created_by = auth.uid()
         AND station_ass IS NULL
         AND EXISTS (
           SELECT 1 FROM public.patient_basic_info p
           WHERE p.id = patient_id
             AND p.station_ass IS NOT DISTINCT FROM assigned_station
+            AND (assigned_staff IS NULL OR public.staff_member_belongs_to_station(assigned_staff, p.station_ass))
         )
         AND performed_by IS NULL
       )
@@ -1117,13 +1155,11 @@ CREATE POLICY staff_insert_prenatal ON public.prenatal_visits FOR INSERT TO auth
         AND created_by = auth.uid()
         AND performed_by = auth.uid()
         AND station_ass IS NOT DISTINCT FROM get_my_station()
-        AND (
-          assigned_staff IS NULL
-          OR EXISTS (
-            SELECT 1 FROM public.patient_basic_info p
-            WHERE p.id = patient_id
-              AND public.staff_member_belongs_to_station(assigned_staff, p.station_ass)
-          )
+        AND EXISTS (
+          SELECT 1 FROM public.patient_basic_info p
+          WHERE p.id = patient_id
+            AND p.station_ass IS NOT DISTINCT FROM assigned_station
+            AND (assigned_staff IS NULL OR public.staff_member_belongs_to_station(assigned_staff, p.station_ass))
         )
       )
     )
@@ -1131,16 +1167,46 @@ CREATE POLICY staff_insert_prenatal ON public.prenatal_visits FOR INSERT TO auth
 CREATE POLICY staff_update_prenatal ON public.prenatal_visits FOR UPDATE TO authenticated
   USING (
     get_my_role() = 'staff'
-    AND assigned_staff = auth.uid()
     AND status IN ('Scheduled', 'Missed')
-    AND assigned_station IS NOT DISTINCT FROM get_my_station()
+    AND (
+      (
+        assigned_staff = auth.uid()
+        AND assigned_station IS NOT DISTINCT FROM get_my_station()
+      )
+      OR (
+        created_by = auth.uid()
+        AND EXISTS (
+          SELECT 1 FROM public.patient_basic_info p
+          WHERE p.id = patient_id
+            AND p.station_ass IS NOT DISTINCT FROM assigned_station
+        )
+      )
+    )
   )
   WITH CHECK (
     get_my_role() = 'staff'
-    AND assigned_staff = auth.uid()
     AND status IN ('Scheduled', 'Missed')
     AND station_ass IS NULL
-    AND assigned_station IS NOT DISTINCT FROM get_my_station()
+    AND (
+      (
+        assigned_staff = auth.uid()
+        AND assigned_station IS NOT DISTINCT FROM get_my_station()
+        AND EXISTS (
+          SELECT 1 FROM public.patient_basic_info p
+          WHERE p.id = patient_id
+            AND p.station_ass IS NOT DISTINCT FROM assigned_station
+        )
+      )
+      OR (
+        created_by = auth.uid()
+        AND EXISTS (
+          SELECT 1 FROM public.patient_basic_info p
+          WHERE p.id = patient_id
+            AND p.station_ass IS NOT DISTINCT FROM assigned_station
+            AND (assigned_staff IS NULL OR public.staff_member_belongs_to_station(assigned_staff, p.station_ass))
+        )
+      )
+    )
     AND performed_by IS NULL
   );
 CREATE POLICY staff_delete_prenatal ON public.prenatal_visits FOR DELETE TO authenticated

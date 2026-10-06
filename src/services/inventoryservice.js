@@ -165,6 +165,7 @@ class InventoryService {
         const vaxDetail = vaccineDetails[row.vaccine_id] || {};
         return {
           id: row.id,
+          station_id: row.station_id,
           station: row.stations?.station_name || 'Unknown station',
           item_name: vaxDetail.vaccine_name || 'Unknown vaccine',
           item_type: 'Vaccine',
