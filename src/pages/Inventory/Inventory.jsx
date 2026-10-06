@@ -89,6 +89,8 @@ const Inventory = () => {
   const [statusFilter, setStatusFilter] = useState('All');
   const [activePopover, setActivePopover] = useState(null);
   const filterRowRef = useRef(null);
+  const fetchDataInFlightRef = useRef(false);
+  const fetchDataQueuedRef = useRef(false);
   useClickOutside(filterRowRef, () => setActivePopover(null));
   const [activeSummaryFilter, setActiveSummaryFilter] = useState(null);
   const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
@@ -311,66 +313,79 @@ const Inventory = () => {
   };
 
   const fetchData = async () => {
-    setLoading(true);
+    if (fetchDataInFlightRef.current) {
+      fetchDataQueuedRef.current = true;
+      return;
+    }
+
+    fetchDataInFlightRef.current = true;
     try {
-      const [vaxData, suppData, statsData, stationsData] = await Promise.all([
-        inventoryService.getVaccineInventory(),
-        inventoryService.getSupplementInventory(),
-        patientService.getVaccinationStats(),
-        patientService.getAvailableStations()
-      ]);
+      do {
+        fetchDataQueuedRef.current = false;
+        setLoading(true);
+        try {
+          const [vaxData, suppData, statsData, stationsData] = await Promise.all([
+            inventoryService.getVaccineInventory(),
+            inventoryService.getSupplementInventory(),
+            patientService.getVaccinationStats(),
+            patientService.getAvailableStations()
+          ]);
 
-      setAvailableStations(stationsData && stationsData.length > 0 ? stationsData : [
-        'Salawag',
-        'Dasma I',
-        'Dasma 2',
-        'Dasma 3',
-        'Dasma 4',
-        'Armstrong',
-        'City Health Office 3'
-      ]);
+          setAvailableStations(stationsData && stationsData.length > 0 ? stationsData : [
+            'Salawag',
+            'Dasma I',
+            'Dasma 2',
+            'Dasma 3',
+            'Dasma 4',
+            'Armstrong',
+            'City Health Office 3'
+          ]);
 
-      console.log('Inventory data fetched - vaccines:', vaxData?.length || 0, 'supplements:', suppData?.length || 0, 'stats:', statsData);
+          console.log('Inventory data fetched - vaccines:', vaxData?.length || 0, 'supplements:', suppData?.length || 0, 'stats:', statsData);
 
-      setVaccStats(statsData || { mothersPending: 0, newbornsPending: 0 });
-      await loadPendingVaccinations();
+          setVaccStats(statsData || { mothersPending: 0, newbornsPending: 0 });
+          await loadPendingVaccinations();
 
-      const mappedVaccines = (vaxData || []).map(row => ({
-        id: row?.id || '',
-        item_name: row?.vaccine_name || row?.item_name || 'Unknown',
-        quantity: row?.quantity || 0,
-        max_stock: row?.max_quantity || row?.max_stock || 500,
-        unit: row?.unit || 'vials',
-        status: row?.status || 'active', // Note: This is a custom status field, not from DB
-        brand: row?.brand || '',
-        expiration_date: row?.expiration_date || null,
-        doses: row?.doses || null,
-        batch: row?.batch || null,
-        manufactured_date: row?.manufactured_date || null,
-        created_at: row?.created_at || null
-      }));
-      const mappedSupplements = (suppData || []).map(row => ({
-        id: row?.id || '',
-        item_name: row?.supplement_name || row?.item_name || 'Unknown',
-        quantity: row?.quantity || 0,
-        max_stock: row?.max_quant || row?.max_stock || 1000,
-        unit: row?.unit || 'tablets',
-        status: row?.status || 'active', // Note: This is a custom status field, not from DB
-        brand: row?.brand || '',
-        expiration_date: row?.expiration_date || null,
-        batch_number: row?.batch_number || null,
-        manufactured_date: row?.manufactured_date || null,
-        created_at: row?.created_at || null
-      }));
+          const mappedVaccines = (vaxData || []).map(row => ({
+            id: row?.id || '',
+            item_name: row?.vaccine_name || row?.item_name || 'Unknown',
+            quantity: row?.quantity || 0,
+            max_stock: row?.max_quantity || row?.max_stock || 500,
+            unit: row?.unit || 'vials',
+            status: row?.status || 'active', // Note: This is a custom status field, not from DB
+            brand: row?.brand || '',
+            expiration_date: row?.expiration_date || null,
+            doses: row?.doses || null,
+            batch: row?.batch || null,
+            manufactured_date: row?.manufactured_date || null,
+            created_at: row?.created_at || null
+          }));
+          const mappedSupplements = (suppData || []).map(row => ({
+            id: row?.id || '',
+            item_name: row?.supplement_name || row?.item_name || 'Unknown',
+            quantity: row?.quantity || 0,
+            max_stock: row?.max_quant || row?.max_stock || 1000,
+            unit: row?.unit || 'tablets',
+            status: row?.status || 'active', // Note: This is a custom status field, not from DB
+            brand: row?.brand || '',
+            expiration_date: row?.expiration_date || null,
+            batch_number: row?.batch_number || null,
+            manufactured_date: row?.manufactured_date || null,
+            created_at: row?.created_at || null
+          }));
 
-      console.log('Mapped vaccines:', mappedVaccines.length, 'Mapped supplements:', mappedSupplements.length);
+          console.log('Mapped vaccines:', mappedVaccines.length, 'Mapped supplements:', mappedSupplements.length);
 
-      setVaccines(mappedVaccines);
-      setSupplements(mappedSupplements);
-    } catch (error) {
-      console.error('Error fetching inventory:', error);
+          setVaccines(mappedVaccines);
+          setSupplements(mappedSupplements);
+        } catch (error) {
+          console.error('Error fetching inventory:', error);
+        } finally {
+          setLoading(false);
+        }
+      } while (fetchDataQueuedRef.current);
     } finally {
-      setLoading(false);
+      fetchDataInFlightRef.current = false;
     }
   };
 
@@ -406,21 +421,43 @@ const Inventory = () => {
   // Separate effect for station inventory to prevent clearing on central inventory updates
   useEffect(() => {
     let isCurrent = true;
+    let refreshTimer;
+    let isFetching = false;
+    let refreshQueued = false;
 
     const fetchStationData = async () => {
-      try {
-        const stationInventoryData = await inventoryService.getStationInventorySnapshot();
-        if (isCurrent) setStationCurrentInventory(stationInventoryData || []);
-
-        const history = await inventoryService.getStationDistributionHistory();
-        if (isCurrent) setDistributionHistory(history || []);
-      } catch (err) {
-        console.warn('Failed to fetch station inventory/distribution data:', err);
-        if (isCurrent) {
-          setStationCurrentInventory([]);
-          setDistributionHistory([]);
-        }
+      if (isFetching) {
+        refreshQueued = true;
+        return;
       }
+
+      isFetching = true;
+      try {
+        do {
+          refreshQueued = false;
+          try {
+            const [stationInventoryData, history] = await Promise.all([
+              inventoryService.getStationInventorySnapshot(),
+              inventoryService.getStationDistributionHistory()
+            ]);
+            if (isCurrent) {
+              setStationCurrentInventory(stationInventoryData || []);
+              setDistributionHistory(history || []);
+            }
+          } catch (err) {
+            console.warn('Failed to fetch station inventory/distribution data:', err);
+          }
+        } while (refreshQueued && isCurrent);
+      } finally {
+        isFetching = false;
+      }
+    };
+
+    const scheduleStationDataRefresh = () => {
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        if (isCurrent) fetchStationData();
+      }, 150);
     };
 
     fetchStationData();
@@ -430,7 +467,7 @@ const Inventory = () => {
       .channel('realtime:station_vaccine_inventory')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'station_vaccine_inventory' }, () => {
         if (isCurrent) {
-          fetchStationData();
+          scheduleStationDataRefresh();
           if (!isAdmin) fetchData();
         }
       })
@@ -440,7 +477,7 @@ const Inventory = () => {
       .channel('realtime:station_supplement_inventory')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'station_supplement_inventory' }, () => {
         if (isCurrent) {
-          fetchStationData();
+          scheduleStationDataRefresh();
           if (!isAdmin) fetchData();
         }
       })
@@ -448,6 +485,7 @@ const Inventory = () => {
 
     return () => {
       isCurrent = false;
+      clearTimeout(refreshTimer);
       inventoryService.supabase.removeChannel(stationVaccineSub);
       inventoryService.supabase.removeChannel(stationSupplementSub);
     };

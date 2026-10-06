@@ -3,16 +3,15 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseKey = import.meta.env.VITE_SUPABASE_KEY
 
-console.log('SUPABASECLIENT LOADED')
-console.log('ENV VARS:', import.meta.env)
-console.log('URL:', supabaseUrl)
-console.log('KEY:', supabaseKey)
-
 if (!supabaseUrl || !supabaseKey) {
     throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_KEY. Add them to your .env and restart the dev server.')
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey)
+const supabase = createClient(supabaseUrl, supabaseKey, {
+    auth: {
+        lockAcquireTimeout: 30000
+    }
+})
 
 export default supabase
 

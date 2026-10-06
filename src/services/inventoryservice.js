@@ -1,6 +1,8 @@
 import supabase from '../config/supabaseclient';
 import AuthService from './authservice'; // ← now you have real AuthService
 
+let currentUserScopeRequest = null;
+
 const normalizeInventoryRole = (value) => {
   const normalized = String(value ?? '').trim().toLowerCase().replace(/[_-]/g, ' ');
   return normalized === 'station staff' ? 'staff' : normalized;
@@ -52,7 +54,17 @@ class InventoryService {
     return await this._getCurrentUserScope();
   }
 
-  async _getCurrentUserScope() {
+  _getCurrentUserScope() {
+    if (!currentUserScopeRequest) {
+      currentUserScopeRequest = this._loadCurrentUserScope()
+        .finally(() => {
+          currentUserScopeRequest = null;
+        });
+    }
+    return currentUserScopeRequest;
+  }
+
+  async _loadCurrentUserScope() {
     const { data: { user }, error: authError } = await this.supabase.auth.getUser();
     if (authError) throw authError;
     if (!user?.id) {
