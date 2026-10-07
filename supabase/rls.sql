@@ -316,16 +316,18 @@ BEGIN
     RAISE EXCEPTION 'Prenatal visit not found';
   END IF;
 
-  IF v_role IN ('staff', 'cho personnel')
-    AND (v_visit.status IS NULL OR v_visit.status NOT IN ('Scheduled', 'Missed')) THEN
-    RAISE EXCEPTION 'Only a pending visit can be completed';
+  IF v_visit.status IS DISTINCT FROM 'Scheduled' THEN
+    RAISE EXCEPTION 'Only a scheduled visit can be completed in place';
   END IF;
 
   SELECT * INTO v_payload
   FROM jsonb_populate_record(v_visit, COALESCE(p_payload, '{}'::jsonb));
 
+  IF v_payload.visit_date IS DISTINCT FROM v_visit.visit_date THEN
+    RAISE EXCEPTION 'A scheduled visit date cannot be changed while completing it';
+  END IF;
+
   UPDATE public.prenatal_visits AS visit SET
-    visit_date = COALESCE(v_payload.visit_date, visit.visit_date),
     trimester = COALESCE(v_payload.trimester, visit.trimester),
     gestational_age = COALESCE(v_payload.gestational_age, visit.gestational_age),
     bp_systolic = v_payload.bp_systolic,
@@ -359,6 +361,13 @@ BEGIN
   RETURN v_visit;
 END;
 $$;
+
+UPDATE public.vaccinations
+SET status = 'Cancelled'
+WHERE patient_id IS NOT NULL
+  AND newborn_id IS NULL
+  AND status = 'Pending'
+  AND vaccinated_date IS NULL;
 
 CREATE OR REPLACE FUNCTION public.rebalance_prenatal_visits(
   p_current_visit_id UUID,
@@ -396,24 +405,34 @@ BEGIN
 
   FOR v_item IN SELECT value FROM jsonb_array_elements(COALESCE(p_schedule, '[]'::jsonb))
   LOOP
-    UPDATE public.prenatal_visits
-    SET visit_number = (v_item->>'visitNumber')::INTEGER,
-        visit_date = (v_item->>'date')::DATE,
-        trimester = (v_item->>'trimester')::INTEGER,
-        gestational_age = (v_item->>'week') || 'w',
-        next_appt_type = COALESCE(v_item->>'type', 'Routine Prenatal'),
-        next_appt_date = NULLIF(v_item->>'nextApptDate', '')::DATE
-    WHERE id = (v_item->>'id')::UUID
-      AND id = ANY(COALESCE(p_future_visit_ids, ARRAY[]::UUID[]))
-      AND patient_id = v_current.patient_id
-      AND visit_number > v_current.visit_number
-      AND status = 'Scheduled';
+    IF v_item->>'status' = 'Cancelled' THEN
+      UPDATE public.prenatal_visits
+      SET status = 'Cancelled'
+      WHERE id = (v_item->>'id')::UUID
+        AND id = ANY(COALESCE(p_future_visit_ids, ARRAY[]::UUID[]))
+        AND patient_id = v_current.patient_id
+        AND visit_date > v_current.visit_date
+        AND status = 'Scheduled';
+    ELSE
+      UPDATE public.prenatal_visits
+      SET visit_number = (v_item->>'visitNumber')::INTEGER,
+          visit_date = (v_item->>'date')::DATE,
+          trimester = (v_item->>'trimester')::INTEGER,
+          gestational_age = (v_item->>'week') || 'w',
+          next_appt_type = COALESCE(v_item->>'type', 'Routine Prenatal'),
+          next_appt_date = NULLIF(v_item->>'nextApptDate', '')::DATE
+      WHERE id = (v_item->>'id')::UUID
+        AND id = ANY(COALESCE(p_future_visit_ids, ARRAY[]::UUID[]))
+        AND patient_id = v_current.patient_id
+        AND visit_date > v_current.visit_date
+        AND status = 'Scheduled';
+    END IF;
 
     IF NOT FOUND THEN
       RAISE EXCEPTION 'A scheduled future visit could not be rebalanced';
     END IF;
 
-    IF v_first_date IS NULL THEN
+    IF v_first_date IS NULL AND v_item->>'status' IS DISTINCT FROM 'Cancelled' THEN
       v_first_date := (v_item->>'date')::DATE;
     END IF;
   END LOOP;

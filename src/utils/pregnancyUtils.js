@@ -50,7 +50,7 @@ export const isNewbornVaccinationEligible = (newborn) => {
     return Boolean(condition || newborn.vaccines?.length);
 };
 
-export const buildPregnancyHistory = (records = [], visits = [], deliveries = [], newborns = [], maternalVaccinations = []) => {
+export const buildPregnancyHistory = (records = [], visits = [], deliveries = [], newborns = []) => {
     const latest = getLatestPregnancyRecord(records);
     const groupedRecords = new Map();
     records.forEach(record => {
@@ -102,9 +102,6 @@ export const buildPregnancyHistory = (records = [], visits = [], deliveries = []
             ? deliveryPostpartumDates.has(String(visit.visit_date || '').slice(0, 10))
             : belongsToRange(visit.visit_date)
         );
-        const pregnancyMaternalVaccinations = maternalVaccinations.filter(vaccination =>
-            belongsToRange(vaccination.scheduled_vaccination || vaccination.vaccinated_date)
-        );
         const deliveryIds = new Set(pregnancyDeliveries.map(delivery => delivery.id));
         const pregnancyNewborns = newborns.filter(newborn => deliveryIds.has(newborn.delivery_id));
 
@@ -115,11 +112,9 @@ export const buildPregnancyHistory = (records = [], visits = [], deliveries = []
             isCurrent: group === currentGroup,
             status: getPregnancyStatus(record),
             visits: pregnancyVisits,
-            maternalVaccinations: pregnancyMaternalVaccinations,
             deliveries: pregnancyDeliveries,
             newborns: pregnancyNewborns,
             vaccinations: [
-                ...pregnancyMaternalVaccinations,
                 ...pregnancyNewborns
                     .filter(isNewbornVaccinationEligible)
                     .flatMap(newborn => newborn.vaccines || [])

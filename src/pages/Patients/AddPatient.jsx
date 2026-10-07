@@ -364,13 +364,12 @@ const AddPatient = () => {
 
         setLoadingSchedule(true);
         try {
-            const preview = patientService.generateSemesterSchedule(formData.lmp, {
-                time: '08:00'
-            });
+            const preview = patientService.generateSemesterSchedule(formData.lmp);
             const normalizedPreview = preview
                 .filter(v => v && v.date && !Number.isNaN(new Date(v.date).getTime()))
                 .map(v => ({ ...v, date: new Date(v.date).toISOString().split('T')[0] }));
-            const futurePreview = patientService.filterScheduleAfterToday(normalizedPreview);
+            const futurePreview = patientService.filterScheduleAfterToday(normalizedPreview)
+                .filter(visit => Number(visit.visitNumber) > 1);
             setSchedulePreview(futurePreview);
         } catch (err) {
             console.error('Error building schedule preview:', err);
@@ -2001,7 +2000,7 @@ const AddPatient = () => {
                                                         <div className="day-number">{new Date(visit.date).getDate()}</div>
                                                         <div className="week-label">{visit.week}w</div>
                                                         <div className="date-label">{new Date(visit.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
-                                                        <div className="visit-number">Visit {visit.visitNumber + 1}</div>
+                                                        <div className="visit-number">Visit {visit.visitNumber}</div>
                                                     </div>
                                                 ))}
                                             </div>
@@ -2011,70 +2010,8 @@ const AddPatient = () => {
                                     ) : formData.lmp ? (
                                         <div>Loading calendar...</div>
                                     ) : (
-                                        <div className="no-lmp">Enter LMP to see 9-visit calendar</div>
+                                        <div className="no-lmp">Enter LMP to see the 8-visit calendar</div>
                                     )}
-
-                                    {/* Auto-Generated Vaccination Schedule */}
-                                    <div style={{ marginTop: '24px' }}>
-                                        <label>Auto-Generated Vaccination Schedule</label>
-                                        <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#64748b', textTransform: 'none', lineHeight: '1.5' }}>
-                                            The maternal vaccination schedule is automatically generated based on the patient's LMP and assigned prenatal care plan.
-                                        </p>
-                                        {formData.lmp && !loadingSchedule ? (
-                                            (() => {
-                                                const previewVisits = Array.isArray(schedulePreview)
-                                                    ? schedulePreview.map((visit) => ({
-                                                        ...visit,
-                                                        week: patientService.calculateWeeksAtDate(formData.lmp, visit.date)
-                                                      }))
-                                                    : [];
-
-                                                if (previewVisits.length === 0) {
-                                                    return <div className="no-lmp">No future prenatal visits available yet. The vaccination dates will be scheduled once a future visit is created.</div>;
-                                                }
-
-                                                const tdapVisit = previewVisits.find(v => v.week !== null && v.week >= 27 && v.week <= 36) || previewVisits[0];
-                                                const fluVisit = previewVisits[1] || previewVisits[0];
-
-                                                const vaccSchedule = [
-                                                    {
-                                                        name: 'Tdap',
-                                                        date: new Date(tdapVisit.date),
-                                                        week: tdapVisit.week,
-                                                        stage: 'Tdap prenatal vaccination',
-                                                        trimester: patientService.getTrimesterFromWeek(tdapVisit.week)
-                                                    }
-                                                ];
-
-                                                if (fluVisit && fluVisit.date !== tdapVisit.date) {
-                                                    vaccSchedule.push({
-                                                        name: 'Flu',
-                                                        date: new Date(fluVisit.date),
-                                                        week: fluVisit.week,
-                                                        stage: 'Influenza prenatal vaccination',
-                                                        trimester: patientService.getTrimesterFromWeek(fluVisit.week)
-                                                    });
-                                                }
-
-                                                return (
-                                                    <div className="visit-calendar visit-calendar--preview vacc-calendar">
-                                                        {vaccSchedule.map((vacc, i) => (
-                                                            <div key={i} className={`calendar-day trimester-${vacc.trimester}`}>
-                                                                <div className="day-number">{vacc.date.getDate()}</div>
-                                                                <div className="week-label">{vacc.name}</div>
-                                                                <div className="date-label">{vacc.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
-                                                                <div className="visit-number">{vacc.stage}</div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                );
-                                            })()
-                                        ) : formData.lmp ? (
-                                            <div>Loading vaccination schedule...</div>
-                                        ) : (
-                                            <div className="no-lmp">Enter LMP to see vaccination schedule</div>
-                                        )}
-                                    </div>
                                 </div>
                                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                                     <div className={`prenatal-risk-info-card risk-info--${formData.riskLevel === 'High Risk' ? 'high' : 'low'}`}>
@@ -2092,7 +2029,7 @@ const AddPatient = () => {
                                                         High-risk pregnancies require additional monitoring beyond the standard prenatal schedule provided by this system.
                                                     </p>
                                                     <p className="risk-action-text">
-                                                        Refer the patient to the appropriate physician or healthcare facility for additional prenatal checkups, vaccinations, and specialized maternal care when necessary.
+                                                        Refer the patient to the appropriate physician or healthcare facility for additional prenatal checkups and specialized maternal care when necessary.
                                                     </p>
                                                 </div>
                                             </>

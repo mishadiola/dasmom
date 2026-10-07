@@ -7,14 +7,13 @@ import {
     Search, Plus, Eye, Edit2, Trash2, CalendarCheck,
     AlertTriangle, HeartPulse, Filter, Clock, ChevronLeft,
     ChevronRight, Calendar as CalendarIcon, Users, MapPin, X,
-    CheckCircle2, Zap, RotateCcw, Syringe, ArchiveRestore,
+    CheckCircle2, Zap, RotateCcw, ArchiveRestore,
     Download
 } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
 import ScheduledVisitModal from '../../components/Prenatal/ScheduledVisitModal';
 import PatientModal from '../../components/Prenatal/PatientModal';
 import PostpartumVisitModal from '../../components/PostpartumVisitModal';
-import { RecordModal } from '../Vaccinations/Vaccinations';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -141,20 +140,16 @@ const PrenatalVisits = () => {
     const [calendarView, setCalendarView] = useState('day');
     const [selectedVisit, setSelectedVisit] = useState(null);
     const [postpartumVisitMother, setPostpartumVisitMother] = useState(null);
-    const [vaccinationRecordModal, setVaccinationRecordModal] = useState(null);
     const [showExportMenu, setShowExportMenu] = useState(false);
     const exportMenuRef = useRef(null);
 
     // -- Derived Data --
-    const [vaccinationsTable, setVaccinationsTable] = useState([]);
     const [postpartumTable, setPostpartumTable] = useState([]);
     const [visitsTable, setVisitsTable] = useState([]);
     const [archivedPatientIds, setArchivedPatientIds] = useState(new Set());
     const [selectedPatient, setSelectedPatient] = useState(null);
-    const [visitTypeTab, setVisitTypeTab] = useState('prenatal'); // 'prenatal' | 'vaccination' | 'postpartum'
+    const [visitTypeTab, setVisitTypeTab] = useState('prenatal'); // 'prenatal' | 'postpartum'
     const [visitCategoryTab, setVisitCategoryTab] = useState('upcoming'); // 'upcoming' | 'missed' | 'completed'
-    const [selectedVaccinePatientId, setSelectedVaccinePatientId] = useState('');
-    const [patientVaccinations, setPatientVaccinations] = useState([]);
     const [visitAccess, setVisitAccess] = useState(null);
     const [assignmentStaff, setAssignmentStaff] = useState([]);
 
@@ -252,71 +247,14 @@ const PrenatalVisits = () => {
             const archivedIds = await patientService.getArchivedPatientIds();
             setArchivedPatientIds(archivedIds);
 
-            const [visitsData, vaccData] = await Promise.all([
-                patientService.getPrenatalVisits({ includeArchived: true }),
-                patientService.supabase
-                    .from('vaccinations')
-                    .select(`
-                        id,
-                        patient_id,
-                        dose_number,
-                        status,
-                        vaccinated_date,
-                        scheduled_vaccination,
-                        assigned_staff,
-                        notes,
-                        created_at,
-                        vaccine_inventory (vaccine_name),
-                        patient_basic_info!vaccinations_patient_id_fkey (id, first_name, last_name)
-                    `)
-                    .not('patient_id', 'is', null)
-                    .order('scheduled_vaccination', { ascending: true, nullsFirst: false })
-            ]);
-
-            const vaccineRows = (vaccData && vaccData.data) || [];
-            const vaccineStaffIds = [...new Set(vaccineRows.map(row => row.assigned_staff).filter(Boolean))];
-            const { data: vaccineStaffProfiles, error: vaccineStaffError } = vaccineStaffIds.length
-                ? await patientService.supabase.from('staff_profiles').select('id, full_name').in('id', vaccineStaffIds)
-                : { data: [], error: null };
-            if (vaccineStaffError) throw vaccineStaffError;
-            const vaccineStaffNames = Object.fromEntries((vaccineStaffProfiles || []).map(profile => [profile.id, profile.full_name]));
+            const visitsData = await patientService.getPrenatalVisits({ includeArchived: true });
 
             const processedVisits = (visitsData || []).map(v => ({
                 ...v,
                 visitDateOnly: v.visit_date || v.visitDateOnly || ''
             }));
 
-            const processedVaccs = ((vaccData && vaccData.data) || []).map(v => {
-                const dateStr = v.scheduled_vaccination || v.vaccinated_date || (v.created_at ? v.created_at.split('T')[0] : '');
-                const patientName = v.patient_basic_info
-                    ? `${v.patient_basic_info.first_name || ''} ${v.patient_basic_info.last_name || ''}`.trim()
-                    : 'Unknown patient';
-
-                const vaccineName =
-                    v.vaccine_inventory?.vaccine_name ||
-                    String(v.notes || '').trim() ||
-                    'Vaccine';
-
-                return {
-                    id: v.id,
-                    patientId: v.patient_id,
-                    patientName: patientName || v.patient_id,
-                    assignedStaffId: v.assigned_staff || null,
-                    assignedStaff: vaccineStaffNames[v.assigned_staff] || null,
-                    vaccineName,
-                    doseText: v.dose_number ? `Dose ${v.dose_number}` : '',
-                    visitDate: dateStr,
-                    visitDateOnly: dateStr,
-                    status: v.status || 'Pending',
-                    vaccinatedDate: v.vaccinated_date,
-                    scheduledVaccination: v.scheduled_vaccination,
-                    notes: v.notes,
-                    raw: v
-                };
-            });
-
             setVisitsTable(processedVisits);
-            setVaccinationsTable(processedVaccs);
 
         } catch (error) {
             console.error('Prenatal fetch error:', error);
@@ -484,89 +422,6 @@ const PrenatalVisits = () => {
         loadPostpartumFollowUps();
     }, [visitTypeTab, patientService.supabase]);
 
-    useEffect(() => {
-        if (visitTypeTab !== 'vaccination') return;
-        if (vaccinationsTable.length === 0) {
-            fetchData();
-        }
-    }, [visitTypeTab, fetchData, vaccinationsTable.length]);
-
-    // Generate vaccination schedule timeline based on patient's LMP and db records
-    const calculatedVaccineSchedule = useMemo(() => {
-        const selPat = allPatients.find(p => p.id === selectedVaccinePatientId);
-        if (!selPat || !selPat.lmp) return [];
-
-        const lmpDate = new Date(selPat.lmp);
-        if (Number.isNaN(lmpDate.getTime())) return [];
-
-        // Td1 is LMP + 12 weeks (First Prenatal Visit)
-        const td1Date = new Date(lmpDate);
-        td1Date.setDate(lmpDate.getDate() + 12 * 7);
-
-        // Td2 is 4 weeks after Td1 (LMP + 16 weeks)
-        const td2Date = new Date(td1Date);
-        td2Date.setDate(td1Date.getDate() + 28);
-
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        // Find match in actual vaccinations from DB
-        const findVaccRecord = (doseNum) => {
-            return patientVaccinations.find(v => {
-                const isTd = v.notes?.toLowerCase().includes('td') || 
-                             v.notes?.toLowerCase().includes('tetanus') ||
-                             (v.vaccine_inventory?.vaccine_name?.toLowerCase().includes('td') || 
-                              v.vaccine_inventory?.vaccine_name?.toLowerCase().includes('tetanus'));
-                return isTd && v.dose_number === doseNum;
-            });
-        };
-
-        const recTd1 = findVaccRecord(1);
-        const recTd2 = findVaccRecord(2);
-
-        const determineStatus = (dueDate, rec) => {
-            if (rec) {
-                return rec.status || 'Completed';
-            }
-            // Fallback status
-            const diffTime = today.getTime() - dueDate.getTime();
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            
-            if (diffDays > 14) {
-                return 'Missed';
-            } else if (diffTime > 0) {
-                return 'Scheduled'; // Due around now
-            } else {
-                return 'Upcoming'; // Future
-            }
-        };
-
-        const getDisplayDate = (dueDate, rec) => {
-            if (rec && rec.vaccinated_date) {
-                return rec.vaccinated_date;
-            }
-            if (rec && rec.scheduled_vaccination) {
-                return rec.scheduled_vaccination;
-            }
-            return dueDate.toISOString().split('T')[0];
-        };
-
-        return [
-            {
-                name: 'Td1 (Tetanus-Diphtheria)',
-                displayDate: getDisplayDate(td1Date, recTd1),
-                description: 'First Prenatal Visit',
-                status: determineStatus(td1Date, recTd1)
-            },
-            {
-                name: 'Td2 (Tetanus-Diphtheria)',
-                displayDate: getDisplayDate(td2Date, recTd2),
-                description: '4 weeks after Td1',
-                status: determineStatus(td2Date, recTd2)
-            }
-        ];
-    }, [selectedVaccinePatientId, allPatients, patientVaccinations]);
-
     // Auto-fill assigned staff from auth context
     useEffect(() => {
         if (user) {
@@ -704,17 +559,6 @@ const PrenatalVisits = () => {
 
     const TODAY = new Date().toISOString().split('T')[0];
 
-    // Filtering for vaccination records
-    const filteredVaccinations = vaccinationsTable.filter(v => {
-        const matchesSearch = (v.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            v.patientId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            v.vaccineName?.toLowerCase().includes(searchTerm.toLowerCase()));
-        const matchesArchive =
-            archiveFilter === 'all' ||
-            (archiveFilter === 'archived' ? archivedPatientIds.has(v.patientId) : !archivedPatientIds.has(v.patientId));
-        return matchesSearch && matchesArchive;
-    });
-
     // Category filtering for tabbed table view
     const archivedVisitRows = visitsTable.filter(v => archivedPatientIds.has(v.patientId));
 
@@ -722,9 +566,7 @@ const PrenatalVisits = () => {
         const today = new Date().toISOString().split('T')[0];
 
         let activeRows = [];
-        if (visitTypeTab === 'vaccination') {
-            activeRows = filteredVaccinations;
-        } else if (visitTypeTab === 'postpartum') {
+        if (visitTypeTab === 'postpartum') {
             activeRows = postpartumTable.filter(v => {
                 const matchesSearch = (v.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                     v.patientId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -980,12 +822,6 @@ const PrenatalVisits = () => {
                     Prenatal
                 </button>
                 <button
-                    className={`visit-type-tab ${visitTypeTab === 'vaccination' ? 'active' : ''}`}
-                    onClick={() => setVisitTypeTab('vaccination')}
-                >
-                    Vaccination
-                </button>
-                <button
                     className={`visit-type-tab ${visitTypeTab === 'postpartum' ? 'active' : ''}`}
                     onClick={() => setVisitTypeTab('postpartum')}
                 >
@@ -1037,11 +873,9 @@ const PrenatalVisits = () => {
                     {calendarView === 'day' ? (
                         <div className="day-view-container">
                             {visibleDays.map(day => {
-                                const dayItems = visitTypeTab === 'vaccination'
-                                    ? vaccinationsTable.filter(v => v.visitDateOnly === day.date)
-                                    : visitTypeTab === 'postpartum'
-                                        ? postpartumTable.filter(v => v.visitDateOnly === day.date)
-                                        : visitsTable.filter(v => v.visitDateOnly === day.date);
+                                const dayItems = visitTypeTab === 'postpartum'
+                                    ? postpartumTable.filter(v => v.visitDateOnly === day.date)
+                                    : visitsTable.filter(v => v.visitDateOnly === day.date);
                                 const dayManual = visitTypeTab === 'prenatal' ? manualVisits.filter(v => v.visit_date === day.date) : [];
 
                                 return (
@@ -1060,11 +894,11 @@ const PrenatalVisits = () => {
                                                 <div
                                                     key={item.id}
                                                     className={`schedule-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
-                                                    onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit({ ...item, type: visitTypeTab === 'vaccination' ? 'Vaccination' : 'Prenatal' }); }}
+                                                    onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit({ ...item, type: 'Prenatal' }); }}
                                                 >
                                                     <div className="schedule-details">
                                                         <span className="schedule-patient">{item.patientName}</span>
-                                                        <span className="schedule-id">{visitTypeTab === 'vaccination' ? item.vaccineName : visitTypeTab === 'postpartum' ? 'Postpartum Follow-up' : formatMotherId(item.patientId)}</span>
+                                                        <span className="schedule-id">{visitTypeTab === 'postpartum' ? 'Postpartum Follow-up' : formatMotherId(item.patientId)}</span>
                                                         <span className="schedule-id">Assigned: {item.assignedStaff || 'Unassigned'}</span>
                                                     </div>
                                                     <span className={`schedule-status status-${(item.status || 'scheduled').toLowerCase()}`}>
@@ -1094,11 +928,9 @@ const PrenatalVisits = () => {
                             {calendarView === 'week' ? (
                                 <div className="week-row">
                                     {visibleDays.map(day => {
-                                        const dayItems = visitTypeTab === 'vaccination'
-                                            ? vaccinationsTable.filter(v => v.visitDateOnly === day.date)
-                                            : visitTypeTab === 'postpartum'
-                                                ? postpartumTable.filter(v => v.visitDateOnly === day.date)
-                                                : visitsTable.filter(v => v.visitDateOnly === day.date);
+                                        const dayItems = visitTypeTab === 'postpartum'
+                                            ? postpartumTable.filter(v => v.visitDateOnly === day.date)
+                                            : visitsTable.filter(v => v.visitDateOnly === day.date);
                                         const dayManual = visitTypeTab === 'prenatal' ? manualVisits.filter(mv => mv.visit_date === day.date) : [];
 
                                         return (
@@ -1112,10 +944,10 @@ const PrenatalVisits = () => {
                                                         <div 
                                                             key={item.id} 
                                                             className={`visit-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
-                                                            onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit({ ...item, type: visitTypeTab === 'vaccination' ? 'Vaccination' : 'Prenatal' }); }}
+                                                            onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit({ ...item, type: 'Prenatal' }); }}
                                                         >
                                                             <span className="visit-patient">{item.patientName}</span>
-                                                            <span className="visit-status">{visitTypeTab === 'vaccination' ? item.vaccineName : visitTypeTab === 'postpartum' ? 'Postpartum' : (item.status || 'Scheduled')}</span>
+                                                            <span className="visit-status">{visitTypeTab === 'postpartum' ? 'Postpartum' : (item.status || 'Scheduled')}</span>
                                                             <span className="visit-status">Assigned: {item.assignedStaff || 'Unassigned'}</span>
                                                         </div>
                                                     ))}
@@ -1142,11 +974,9 @@ const PrenatalVisits = () => {
                                     return weeks.map((week, weekIndex) => (
                                         <div key={weekIndex} className="week-row">
                                             {week.map(day => {
-                                                const dayItems = visitTypeTab === 'vaccination'
-                                                    ? vaccinationsTable.filter(v => v.visitDateOnly === day.date)
-                                                    : visitTypeTab === 'postpartum'
-                                                        ? postpartumTable.filter(v => v.visitDateOnly === day.date)
-                                                        : visitsTable.filter(v => v.visitDateOnly === day.date);
+                                                const dayItems = visitTypeTab === 'postpartum'
+                                                    ? postpartumTable.filter(v => v.visitDateOnly === day.date)
+                                                    : visitsTable.filter(v => v.visitDateOnly === day.date);
                                                 const dayManual = visitTypeTab === 'prenatal' ? manualVisits.filter(mv => mv.visit_date === day.date) : [];
 
                                                 return (
@@ -1160,10 +990,10 @@ const PrenatalVisits = () => {
                                                                 <div 
                                                                     key={item.id} 
                                                                     className={`visit-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
-                                                                    onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit({ ...item, type: visitTypeTab === 'vaccination' ? 'Vaccination' : 'Prenatal' }); }}
+                                                                    onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit({ ...item, type: 'Prenatal' }); }}
                                                                 >
                                                                     <span className="visit-patient">{item.patientName}</span>
-                                                                    <span className="visit-status">{visitTypeTab === 'vaccination' ? item.vaccineName : visitTypeTab === 'postpartum' ? 'Postpartum' : (item.status || 'Scheduled')}</span>
+                                                                    <span className="visit-status">{visitTypeTab === 'postpartum' ? 'Postpartum' : (item.status || 'Scheduled')}</span>
                                                                     <span className="visit-status">Assigned: {item.assignedStaff || 'Unassigned'}</span>
                                                                 </div>
                                                             ))}
@@ -1194,14 +1024,14 @@ const PrenatalVisits = () => {
             <div className="pv-table-section">
                 <div className="section-header-row">
                     <h2 className="section-title">
-                        <Clock size={18} /> {visitTypeTab === 'vaccination' ? 'Vaccination Records' : 'Visit Records'}
+                        <Clock size={18} /> Visit Records
                     </h2>
                     <div className="table-filters" style={{ flexGrow: 1, display: 'flex', justifyContent: 'flex-end' }}>
                         <div className="shared-search-wrap" style={{ maxWidth: '400px' }}>
                             <Search size={16} className="shared-search-icon" />
                             <input 
                                 type="text" 
-                                placeholder={visitTypeTab === 'vaccination' ? "Search Patient or Vaccine" : "Search Patient Name"} 
+                                placeholder="Search Patient Name"
                                 value={searchTerm}
                                 onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                                 className="shared-search-input"
@@ -1336,88 +1166,6 @@ const PrenatalVisits = () => {
                                                 <div className="empty-state-content">
                                                     <CheckCircle2 size={32} />
                                                     <p>No completed visits.</p>
-                                                </div>
-                                            )}
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                ) : visitTypeTab === 'vaccination' ? (
-                    <div className="table-responsive">
-                        <table className="pv-table">
-                            <thead>
-                                <tr>
-                                    <th style={{ textAlign: 'center', width: '50px' }}>#</th>
-                                    <th>Patient Name</th>
-                                    <th>Vaccine</th>
-                                    <th>Scheduled Date &amp; Time</th>
-                                    <th>Assigned Staff</th>
-                                    <th>Status</th>
-                                    <th className="text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {paginatedTabVisits.length > 0 ? (
-                                    paginatedTabVisits.map((vacc, idx) => (
-                                        <tr key={vacc.id}>
-                                            <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: '12.5px', width: '50px' }}>{tabStartIndex + idx + 1}</td>
-                                            <td>
-                                                <div className="p-info">
-                                                    <span className="p-name">{vacc.patientName}</span>
-                                                    <span className="p-id">{formatMotherId(vacc.patientId)}</span>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <div className="p-info">
-                                                    <span className="p-name" style={{ fontWeight: 600 }}>{vacc.vaccineName}</span>
-                                                    <span className="p-id">{vacc.doseText || ''}</span>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <span className="visit-date">{formatReadableDate(vacc.visitDate)}</span>
-                                            </td>
-                                            <td>{vacc.assignedStaff || 'Unassigned'}</td>
-                                            <td>
-                                                <span className={`status-badge status-${vacc.status?.toLowerCase() || 'scheduled'}`}>
-                                                    {vacc.status}
-                                                </span>
-                                            </td>
-                                            <td className="text-right">
-                                                <div className="row-actions">
-                                                    <button className="action-btn-text action-btn-secondary" onClick={() => setSelectedVisit({ ...vacc, type: 'Vaccination' })} title="View" style={{ padding: '6px 8px', minWidth: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                        <Eye size={14} />
-                                                    </button>
-                                                    <button className="action-btn-text action-btn-primary" onClick={() => setVaccinationRecordModal({ mode: 'vaccine', initialPatientType: 'Mother', initialPatientName: vacc.patientName, initialAutoSelectId: vacc.id })} title="Record Vaccination">
-                                                        <Syringe size={14} /> Record
-                                                    </button>
-                                                    <button className="action-btn-text action-btn-accent" onClick={() => navigate(`/dashboard/patients/${vacc.patientId}`)} title="View Patient Profile">
-                                                        <Users size={14} /> Profile
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan="7" className="empty-tab-state">
-                                            {visitCategoryTab === 'upcoming' && (
-                                                <div className="empty-state-content">
-                                                    <CalendarCheck size={32} />
-                                                    <p>No upcoming vaccination schedules.</p>
-                                                </div>
-                                            )}
-                                            {visitCategoryTab === 'missed' && (
-                                                <div className="empty-state-content">
-                                                    <AlertTriangle size={32} />
-                                                    <p>No missed vaccination schedules.</p>
-                                                </div>
-                                            )}
-                                            {visitCategoryTab === 'completed' && (
-                                                <div className="empty-state-content">
-                                                    <CheckCircle2 size={32} />
-                                                    <p>No completed vaccination records.</p>
                                                 </div>
                                             )}
                                         </td>
@@ -1712,13 +1460,6 @@ const PrenatalVisits = () => {
                     mother={postpartumVisitMother}
                     onClose={() => setPostpartumVisitMother(null)}
                     onSave={() => { setPostpartumVisitMother(null); fetchData(); }}
-                />
-            )}
-            {vaccinationRecordModal && (
-                <RecordModal
-                    {...vaccinationRecordModal}
-                    onClose={() => setVaccinationRecordModal(null)}
-                    onSave={() => { setVaccinationRecordModal(null); fetchData(); }}
                 />
             )}
             <ExportModal 

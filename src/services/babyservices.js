@@ -1,6 +1,5 @@
 import supabase from '../config/supabaseclient';
 import PatientService from './patientservice';
-import VaccinationService from './vaccinationservice';
 import { buildPregnancyHistory, getLatestPregnancyRecord, getPregnancyForDelivery } from '../utils/pregnancyUtils';
 
 class BabyService {
@@ -20,17 +19,7 @@ class BabyService {
           last_name,
           station_ass,
           stations:station_ass (station_name),
-          province,
-          pregnancy_info (
-            id,
-            pregn_postp,
-            edd,
-            pregnancy_type,
-            lmd,
-            gravida,
-            para,
-            created_at
-          )
+          province
         `;
       const [firstNameResult, lastNameResult, stationResult] = await Promise.all([
         supabase.from('patient_basic_info').select(patientSelect).ilike('first_name', `%${safeTerm}%`).order('created_at', { ascending: false }).limit(10),
@@ -42,15 +31,49 @@ class BabyService {
       if (queryError) throw queryError;
 
       const patients = [...(firstNameResult.data || []), ...(lastNameResult.data || []), ...(stationResult.data || [])]
-        .filter((patient, index, rows) => rows.findIndex(row => row.id === patient.id) === index)
-        .slice(0, 10);
+        .filter((patient, index, rows) => rows.findIndex(row => row.id === patient.id) === index);
 
-      return (patients || []).map(patient => {
-        const pregnancyRows = Array.isArray(patient.pregnancy_info) ? patient.pregnancy_info : [patient.pregnancy_info];
-        const preg = pregnancyRows
-          .filter(Boolean)
-          .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0];
+      if (patients.length === 0) return [];
 
+      const patientIds = patients.map(patient => patient.id);
+      const { data: pregnancyRows, error: pregnancyError } = await supabase
+        .from('pregnancy_info')
+        .select('id, patient_id, pregn_postp, edd, pregnancy_type, lmd, gravida, para, created_at')
+        .in('patient_id', patientIds)
+        .order('created_at', { ascending: false });
+      if (pregnancyError) throw pregnancyError;
+
+      const latestPregnancyByPatient = new Map();
+      for (const pregnancy of pregnancyRows || []) {
+        if (!latestPregnancyByPatient.has(pregnancy.patient_id)) {
+          latestPregnancyByPatient.set(pregnancy.patient_id, pregnancy);
+        }
+      }
+
+      const missingStationIds = [...new Set(
+        patients
+          .filter(patient => {
+            const joinedStations = Array.isArray(patient.stations) ? patient.stations : [patient.stations];
+            return !joinedStations.some(station => station?.station_name) && patient.station_ass;
+          })
+          .map(patient => patient.station_ass)
+      )];
+      let stationNamesById = new Map();
+      if (missingStationIds.length > 0) {
+        const { data: stationRows, error: stationError } = await supabase
+          .from('stations')
+          .select('id, station_name')
+          .in('id', missingStationIds);
+        if (stationError) throw stationError;
+        stationNamesById = new Map((stationRows || []).map(station => [station.id, station.station_name]));
+      }
+
+      return patients.map(patient => {
+        const preg = latestPregnancyByPatient.get(patient.id);
+        const joinedStations = Array.isArray(patient.stations) ? patient.stations : [patient.stations];
+        const stationName = joinedStations.find(station => station?.station_name)?.station_name
+          || stationNamesById.get(patient.station_ass)
+          || 'No Station';
         // Calculate gestational age from LMP
         let gestationalAge = '';
         if (preg?.lmd) {
@@ -68,7 +91,7 @@ class BabyService {
           id: patient.id,
           name: `${patient.first_name || ''} ${patient.last_name || ''}`.trim(),
           stationId: patient.station_ass || null,
-          station: `${patient.stations?.station_name || 'No Station'}, ${patient.province || 'N/A'}`,
+          station: `${stationName}, ${patient.province || 'N/A'}`,
           riskLevel: 'Normal', // Default risk level since calculated_risk field doesn't exist
           isPregnant: preg?.pregn_postp?.toLowerCase() === 'pregnant',
           pregnancyType: preg?.pregnancy_type || 'Singleton',
@@ -77,7 +100,7 @@ class BabyService {
           gravida: preg?.gravida || 1,
           para: preg?.para || 0
         };
-      }).filter(patient => patient.isPregnant);
+      }).filter(patient => patient.isPregnant).slice(0, 10);
     } catch (error) {
       console.error('Error in searchPregnantMothers:', error);
       return [];
@@ -706,20 +729,6 @@ class BabyService {
           }
         }
 
-        // Schedule postpartum maternal vaccinations - DISABLED per user request
-        // User only wants Td and Influenza for pregnant mothers, not postpartum vaccines
-        // try {
-        //   const vaccService = new VaccinationService();
-        //   await vaccService.schedulePostpartumMaternalVaccinations(
-        //     deliveryData.mother_id,
-        //     deliveryData.delivery_date,
-        //     createdBy
-        //   );
-        //   console.log(`✅ Scheduled postpartum maternal vaccinations for mother ${deliveryData.mother_id}`);
-        // } catch (vaccError) {
-        //   console.error('Warning: Failed to schedule postpartum maternal vaccinations:', vaccError);
-        //   // Don't throw error - delivery should still succeed
-        // }
     }
 
     // NOTE: Newborn vaccine scheduling is handled separately by VaccinationService.scheduleNewbornVaccinations()

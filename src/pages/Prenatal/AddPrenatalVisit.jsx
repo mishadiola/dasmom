@@ -87,10 +87,12 @@ const AddPrenatalVisit = () => {
         if (patient && userAccess && !isFormInitialized) {
             const pregnancyVisits = patient.currentPregnancy?.visits || [];
             const scheduledVisits = pregnancyVisits
-                .filter(visit => ['Scheduled', 'Missed'].includes(visit.status))
+                .filter(visit => visit.status === 'Scheduled')
                 .sort((left, right) => Number(left.visit_number) - Number(right.visit_number));
-            const nextScheduledVisit = scheduledVisits[0] || null;
-            const maxVisitNumber = pregnancyVisits.reduce((max, visit) => Math.max(max, Number(visit.visit_number) || 0), 0);
+            const today = new Date().toISOString().split('T')[0];
+            const nextScheduledVisit = scheduledVisits.find(
+                visit => String(visit.visit_date).slice(0, 10) >= today
+            ) || null;
             
             setFormData(prev => ({
                 ...prev,
@@ -99,7 +101,7 @@ const AddPrenatalVisit = () => {
                 gestationalAge: patient.weeks ? `${patient.weeks}w` : '',
                 trimester: patient.trimester || '',
                 visitDate: new Date().toISOString().split('T')[0],
-                visitNumber: nextScheduledVisit?.visit_number || maxVisitNumber + 1,
+                visitNumber: patientService.getPrenatalVisitNumberForWeek(patient.weeks || 0),
                 attendingMidwife: nextScheduledVisit?.assigned_staff || '',
                 healthFacility: userAccess.role === 'admin'
                     ? patient.station || ''
@@ -419,20 +421,33 @@ const AddPrenatalVisit = () => {
             const visits = (allVisits || []).filter(visit => currentPregnancyVisitIdSet.has(visit.id));
 
             const scheduledVisits = visits
-                .filter(visit => ['Scheduled', 'Missed'].includes(visit.status))
+                .filter(visit => visit.status === 'Scheduled')
                 .sort((left, right) => Number(left.visit_number) - Number(right.visit_number));
             const visitDateStr = formData.visitDate;
-            const exactMatch = scheduledVisits.find(visit => String(visit.visit_date).slice(0, 10) === visitDateStr);
-            const targetVisit = scheduledVisits.find(visit => Number(visit.visit_number) === Number(formData.visitNumber))
-                || exactMatch
-                || scheduledVisits[0]
-                || null;
-            const isOffSchedule = Boolean(targetVisit && String(targetVisit.visit_date).slice(0, 10) !== visitDateStr);
-            const maxVisitNumber = visits.reduce((max, visit) => Math.max(max, Number(visit.visit_number) || 0), 0);
-
-            const rowVisitNumber = targetVisit ? Number(targetVisit.visit_number) : maxVisitNumber + 1;
+            const exactMatch = scheduledVisits.find(
+                visit => String(visit.visit_date).slice(0, 10) === visitDateStr
+            ) || null;
+            const isOffSchedule = !exactMatch;
+            const rowVisitNumber = exactMatch
+                ? Number(exactMatch.visit_number)
+                : patientService.getPrenatalVisitNumberForWeek(
+                    patientService.calculateWeeksAtDate(formData.lmp, visitDateStr)
+                );
             const rowVisitDate = formData.visitDate;
-            const rowId = targetVisit?.id || null;
+            const rowId = exactMatch?.id || null;
+
+            const pastScheduledVisits = visits.filter(visit =>
+                visit.status === 'Scheduled' &&
+                String(visit.visit_date).slice(0, 10) < visitDateStr
+            );
+            for (const missedVisit of pastScheduledVisits) {
+                const { error: missedError } = await patientService.supabase
+                    .from('prenatal_visits')
+                    .update({ status: 'Missed' })
+                    .eq('id', missedVisit.id)
+                    .eq('status', 'Scheduled');
+                if (missedError) throw missedError;
+            }
 
             console.log('Target visit info:', { 
                 rowVisitNumber, 
@@ -519,10 +534,7 @@ const AddPrenatalVisit = () => {
                 await patientService.rebalancePrenatalSchedule(
                     patientId,
                     formData.lmp,
-                    rowVisitNumber,
                     rowVisitDate,
-                    createdBy,
-                    {},
                     35,
                     [...currentPregnancyVisitIds, currentVisitId],
                     currentVisitId
@@ -547,11 +559,11 @@ const AddPrenatalVisit = () => {
     const isHighBP = parseInt(formData.bpSystolic) >= 140 || parseInt(formData.bpDiastolic) >= 90;
     const scheduledVisitToRecord = (patient?.currentPregnancy?.visits || []).find(visit =>
         Number(visit.visit_number) === Number(formData.visitNumber)
-        && ['Scheduled', 'Missed'].includes(visit.status)
+        && visit.status === 'Scheduled'
     );
     const currentPregnancyVisits = patient?.currentPregnancy?.visits || [];
     const scheduledPregnancyVisits = currentPregnancyVisits
-        .filter(visit => ['Scheduled', 'Missed'].includes(visit.status))
+        .filter(visit => visit.status === 'Scheduled')
         .sort((left, right) => Number(left.visit_number) - Number(right.visit_number));
     const isOutsideScheduledDate = Boolean(
         scheduledVisitToRecord

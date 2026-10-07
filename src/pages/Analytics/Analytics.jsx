@@ -124,6 +124,7 @@ const Analytics = () => {
         visits: [],
         deliveries: [],
         vaccinations: [],
+        newborns: [],
         stations: []
     });
     const stationOptions = useMemo(() => [
@@ -171,7 +172,7 @@ const Analytics = () => {
                     supabase.from('pregnancy_info').select('patient_id, pregn_postp, pregnancy_type, lmd, edd, gravida, para, miscarriage_info, created_at'),
                     supabase.from('prenatal_visits').select('id, patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm, next_appt_date, next_appt_type'),
                     supabase.from('deliveries').select('id, mother_id, station_ass, stations:station_ass(station_name), delivery_date, delivery_type, complications, risk_level'),
-                    supabase.from('vaccinations').select('id, patient_id, newborn_id, status, dose_number, scheduled_vaccination, vaccinated_date'),
+                    supabase.from('vaccinations').select('id, newborn_id, status, dose_number, scheduled_vaccination, vaccinated_date').not('newborn_id', 'is', null),
                     supabase.from('newborns').select('id, mother_id, delivery_id'),
                     supabase.from('stations').select('id, station_name').order('station_name')
                 ]);
@@ -375,9 +376,10 @@ const Analytics = () => {
 
         // Loop vaccinations
         dbData.vaccinations.forEach(v => {
-            const patId = v.patient_id || v.newborn_id;
-            const pat = dbData.patients.find(p => p.id === patId);
-            const station = normalizeStation(pat?.stations?.station_name);
+            if (!v.newborn_id) return;
+            const newborn = dbData.newborns.find(n => n.id === v.newborn_id);
+            const mother = dbData.patients.find(p => p.id === newborn?.mother_id);
+            const station = normalizeStation(mother?.stations?.station_name);
             if (!isWithinDateRange(v.vaccinated_date)) return;
 
             liveAgg[station].totalVacc++;
@@ -527,7 +529,6 @@ const Analytics = () => {
         const totalVal = weeks.map(() => 0);
         const highRiskVal = weeks.map(() => 0);
         const deliveriesVal = weeks.map(() => 0);
-        const vaccMother = weeks.map(() => ({ completed: 0, total: 0 }));
         const vaccNewborn = weeks.map(() => ({ completed: 0, total: 0 }));
         const postpartum = weeks.map(() => ({ eligible: 0, completed: 0 }));
         const visitsByWeek = weeks.map(() => ({ missed: 0, total: 0 }));
@@ -562,11 +563,12 @@ const Analytics = () => {
             if (visit.status === 'Missed' || (visit.status === 'Scheduled' && new Date(visit.visit_date) < now)) visitsByWeek[index].missed++;
         });
         dbData.vaccinations.forEach(vaccination => {
-            const patientId = vaccination.patient_id || vaccination.newborn_id;
-            if (vaccination.patient_id && !selectedPatientIds.has(patientId)) return;
+            if (!vaccination.newborn_id) return;
+            const newborn = dbData.newborns.find(n => n.id === vaccination.newborn_id);
+            if (!selectedPatientIds.has(newborn?.mother_id)) return;
             const index = bucket(vaccination.vaccinated_date || vaccination.scheduled_vaccination);
             if (index < 0) return;
-            const series = vaccination.newborn_id ? vaccNewborn[index] : vaccMother[index];
+            const series = vaccNewborn[index];
             series.total++;
             if (vaccination.status === 'Completed') series.completed++;
         });
@@ -575,7 +577,6 @@ const Analytics = () => {
             totalVal,
             highRiskVal,
             deliveriesVal,
-            vaccMother: vaccMother.map(series => series.total ? Math.round((series.completed / series.total) * 100) : 0),
             vaccNewborn: vaccNewborn.map(series => series.total ? Math.round((series.completed / series.total) * 100) : 0),
             postpartumRate: postpartum.map(series => series.eligible ? Math.round((series.completed / series.eligible) * 100) : 0),
             missedRate: visitsByWeek.map(series => series.total ? Math.round((series.missed / series.total) * 100) : 0)
@@ -798,9 +799,10 @@ const Analytics = () => {
         });
 
         dbData.vaccinations.forEach(v => {
-            const patId = v.patient_id || v.newborn_id;
-            const pat = dbData.patients.find(p => p.id === patId);
-            const station = normalizeStation(pat?.stations?.station_name);
+            if (!v.newborn_id) return;
+            const newborn = dbData.newborns.find(n => n.id === v.newborn_id);
+            const mother = dbData.patients.find(p => p.id === newborn?.mother_id);
+            const station = normalizeStation(mother?.stations?.station_name);
             if (!liveAgg[station]) return;
             if (!isWithinExportDateRange(v.vaccinated_date)) return;
 
@@ -1097,22 +1099,14 @@ const Analytics = () => {
     }, [trendData, activeData.missedRate]);
 
     const vaccTrendsCalculated = useMemo(() => {
-        const vm = trendData.vaccMother;
-        const vnb = trendData.vaccNewborn;
-        const length = vm.length;
-        if (length < 2) return { vmChange: '+0%', vnbChange: '+0%' };
-        
-        const vmDiff = vm[length - 1] - vm[length - 2];
-        const vmPct = formatPercentChange(vm[length - 1], vm[length - 2]);
+        const newbornRates = trendData.vaccNewborn;
+        const length = newbornRates.length;
+        if (length < 2) return { isUp: true, change: '+0%' };
 
-        const vnbDiff = vnb[length - 1] - vnb[length - 2];
-        const vnbPct = formatPercentChange(vnb[length - 1], vnb[length - 2]);
-
+        const difference = newbornRates[length - 1] - newbornRates[length - 2];
         return {
-            vmChange: vmPct,
-            vmIsUp: vmDiff >= 0,
-            vnbChange: vnbPct,
-            vnbIsUp: vnbDiff >= 0
+            isUp: difference >= 0,
+            change: formatPercentChange(newbornRates[length - 1], newbornRates[length - 2])
         };
     }, [trendData]);
 
@@ -1384,13 +1378,13 @@ const Analytics = () => {
                         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="kpi-card glass-card tier-success">
                             <div className="kpi-card-header">
                                 <div className="kpi-icon-circle"><Syringe size={20} /></div>
-                                <span className={`trend-badge ${vaccTrendsCalculated.vmIsUp ? 'trend-up' : 'trend-down'}`}>{vaccTrendsCalculated.vmIsUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />} {vaccTrendsCalculated.vmChange}</span>
+                                <span className={`trend-badge ${vaccTrendsCalculated.isUp ? 'trend-up' : 'trend-down'}`}>{vaccTrendsCalculated.isUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />} {vaccTrendsCalculated.change}</span>
                                 <span className="kpi-priority-badge badge-success">SUCCESS</span>
                             </div>
                             <div className="kpi-card-body">
                                 <span className="kpi-val">{activeData.vaccRate}%</span>
                                 <h3 className="kpi-label">Vaccination Completion</h3>
-                                <span className="kpi-sub">Maternal & newborn series</span>
+                                <span className="kpi-sub">Newborn vaccination schedule</span>
                             </div>
                         </motion.div>
 
@@ -1473,11 +1467,10 @@ const Analytics = () => {
                             <div className="card-header-compact">
                                 <div>
                                     <h2 className="section-header-title">Vaccination Progress</h2>
-                                    <p className="section-header-subtitle">Mother vs newborn immunization compliance rates</p>
+                                    <p className="section-header-subtitle">Newborn immunization compliance rate</p>
                                 </div>
                                 <div className="chart-legend">
-                                    <span className="legend-item"><span className="legend-dot color-vacc-m"></span>Mothers ({activeData.vaccRate}%)</span>
-                                    <span className="legend-item"><span className="legend-dot color-vacc-nb"></span>Newborns ({(activeData.vaccRate * 0.95).toFixed(0)}%)</span>
+                                    <span className="legend-item"><span className="legend-dot color-vacc-nb"></span>Newborns ({activeData.vaccRate}%)</span>
                                 </div>
                             </div>
                             <div className="chart-wrapper">
@@ -1486,7 +1479,6 @@ const Analytics = () => {
                                         <line key={i} x1="40" x2="480" y1={20 + ratio * 180} y2={20 + ratio * 180} stroke="#f1f3f5" strokeWidth="1" />
                                     ))}
                                     <line x1="40" x2="480" y1="38" y2="38" stroke="#b9818a" strokeWidth="1.5" strokeDasharray="4,4" className="vacc-target-line" />
-                                    <path d={getSvgLinePath(trendData.vaccMother, 500, 240, 40, 20, 20, 40, 100)} className="chart-line stroke-vacc-m" />
                                     <path d={getSvgLinePath(trendData.vaccNewborn, 500, 240, 40, 20, 20, 40, 100)} className="chart-line stroke-vacc-nb" />
                                     {trendData.labels.map((lbl, idx) => {
                                         const labelDivisor2 = trendData.labels.length <= 1 ? 1 : trendData.labels.length - 1;
@@ -1648,11 +1640,10 @@ const Analytics = () => {
                             <div className="card-header-compact">
                                 <div>
                                     <h2 className="section-header-title">Vaccination Progress</h2>
-                                    <p className="section-header-subtitle">Maternal &amp; Newborn Immunization Completion Rates over time</p>
+                                    <p className="section-header-subtitle">Newborn immunization completion rate over time</p>
                                 </div>
                                 <div className="chart-legend">
-                                    <span className="legend-item"><span className="legend-dot color-vacc-m"></span>Mothers ({activeData.vaccRate}%)</span>
-                                    <span className="legend-item"><span className="legend-dot color-vacc-nb"></span>Newborns ({(activeData.vaccRate * 0.95).toFixed(0)}%)</span>
+                                    <span className="legend-item"><span className="legend-dot color-vacc-nb"></span>Newborns ({activeData.vaccRate}%)</span>
                                     <span className="legend-item"><span className="legend-target-line"></span>90% Target</span>
                                 </div>
                             </div>
@@ -1662,7 +1653,6 @@ const Analytics = () => {
                                         <line key={i} x1="40" x2="480" y1={20 + ratio * 180} y2={20 + ratio * 180} stroke="#f1f3f5" strokeWidth="1" />
                                     ))}
                                     <line x1="40" x2="480" y1="38" y2="38" stroke="#b9818a" strokeWidth="1.5" strokeDasharray="4,4" className="vacc-target-line" />
-                                    <path d={getSvgLinePath(trendData.vaccMother, 500, 240, 40, 20, 20, 40, 100)} className="chart-line stroke-vacc-m" />
                                     <path d={getSvgLinePath(trendData.vaccNewborn, 500, 240, 40, 20, 20, 40, 100)} className="chart-line stroke-vacc-nb" />
                                     {trendData.labels.map((lbl, idx) => {
                                         const labelDivisor2 = trendData.labels.length <= 1 ? 1 : trendData.labels.length - 1;

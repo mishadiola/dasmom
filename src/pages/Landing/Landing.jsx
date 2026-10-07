@@ -109,8 +109,8 @@ const Landing = () => {
       icon: Syringe,
       title: "Vaccination Tracking",
       description:
-        "Keep track of vaccinations and supplements recommended during pregnancy and after your baby is born.",
-      benefit: "Help protect yourself and your baby through timely care.",
+        "Track maternal supplements during pregnancy and your baby's vaccinations after birth.",
+      benefit: "Follow your baby's vaccination schedule after birth.",
       color: "amber",
     },
     {
@@ -155,8 +155,8 @@ const Landing = () => {
     {
       icon: Syringe,
       step: "03",
-      title: "Vaccination & Supplement Tracking",
-      desc: "Recommended vaccinations and supplements are recorded to help you stay on track with your maternal care.",
+      title: "Maternal Supplements & Newborn Vaccinations",
+      desc: "Track supplements during pregnancy and follow your baby's vaccination schedule after birth.",
     },
     {
       icon: Building2,
@@ -371,7 +371,7 @@ const Landing = () => {
               DASMOM+ is here to support you through every step of your motherhood journey — from pregnancy to postpartum care.
             </p>
             <p className="ldg-hero__desc" style={{marginTop: '12px'}}>
-              Keep track of your prenatal visits, health records, vaccinations, pregnancy progress, and postpartum care while staying connected with your healthcare team.
+              Keep track of your prenatal visits, health records, your baby's vaccination schedule, pregnancy progress, and postpartum care while staying connected with your healthcare team.
             </p>
 
             <ul
@@ -875,7 +875,7 @@ const Landing = () => {
             Your Maternal Care, <span>All in One Place</span>
           </h2>
           <p className="ldg-access-cta__desc">
-            Access your DASMOM+ account to view your health records, upcoming appointments, vaccination information, pregnancy progress, and available support services.
+            Access your DASMOM+ account to view your health records, prenatal appointments, your baby's vaccination schedule, pregnancy progress, and available support services.
           </p>
 
           <div className="ldg-access-cta__icons">

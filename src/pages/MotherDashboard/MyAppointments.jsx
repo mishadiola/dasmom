@@ -94,7 +94,6 @@ const MyAppointments = () => {
 
                 const currentPregnancy = patient.currentPregnancy;
                 const currentStatus = String(patient.pregnancyRecord?.pregn_postp || patient.pregnancyRecord?.status || currentPregnancy?.status || patient.pregnancyStatus || '').toLowerCase();
-                const isPregnant = currentStatus === 'pregnant';
                 const isPostpartum = currentStatus === 'postpartum';
                 const visitAppts = (patient.pregnancyHistory || [])
                     .flatMap(pregnancy => (pregnancy.visits || []).map(visit => ({ pregnancy, visit })))
@@ -114,21 +113,6 @@ const MyAppointments = () => {
                 const postpartumVisitDates = new Set(visitAppts
                     .filter(appointment => appointment.type === 'Postpartum')
                     .map(appointment => getDateOnly(appointment.date)));
-
-                const maternalVaccines = (isPregnant ? currentPregnancy?.maternalVaccinations || [] : [])
-                    .filter(v => v.scheduled_vaccination || v.vaccinated_date)
-                    .map((v, idx) => ({
-                        id: v.id || `vac-${idx}`,
-                        date: v.scheduled_vaccination || v.vaccinated_date,
-                        time: '',
-                        type: 'Vaccination',
-                        status: v.status || 'Scheduled',
-                        location: sanitizeUUID(patient.station, 'Health Station'),
-                        staffName: v.assigned_staff_name,
-                        staffStation: v.assigned_staff_station,
-                        notes: sanitizeUUID(v.notes || v.vaccine_name, 'Vaccination'),
-                        color: 'yellow'
-                    }));
 
                 const newbornVaccines = (isPostpartum ? currentPregnancy?.newborns || [] : [])
                     .filter(isNewbornVaccinationEligible)
@@ -174,7 +158,7 @@ const MyAppointments = () => {
                         };
                     });
 
-                const combined = [...visitAppts, ...maternalVaccines, ...newbornVaccines, ...postpartumAppts];
+                const combined = [...visitAppts, ...newbornVaccines, ...postpartumAppts];
                 setAppointmentsData(combined);
             } catch (err) {
                 console.error('Failed to load appointments:', err);

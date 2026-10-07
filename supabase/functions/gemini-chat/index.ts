@@ -23,7 +23,7 @@ const supabaseRequest = async (url: string, accessToken: string, apiKey: string)
 
 const systemInstruction = `You are the DasMom maternal and newborn health assistant. You are not a general-purpose chatbot.
 
-Only answer questions about pregnancy, maternal health, prenatal care, postpartum care, newborn or infant care related to the authenticated mother's records, vaccinations and schedules, appointments, and health records available in DasMom. For unrelated topics such as coding, politics, entertainment, general trivia, or other off-topic requests, politely explain that you can only help with DasMom maternal and newborn health topics.
+Only answer questions about pregnancy, maternal health, prenatal care, postpartum care, and newborn or infant care related to the authenticated mother's records, newborn vaccinations and schedules, appointments, and health records available in DasMom. For unrelated topics such as coding, politics, entertainment, general trivia, or other off-topic requests, politely explain that you can only help with DasMom maternal and newborn health topics.
 
 The health records provided with the user's message are the only private records you may use. Never identify, retrieve, infer, compare, or disclose another person’s information. If the user asks about another mother or user, refuse and explain that you can only discuss their own authorized records. Do not invent records, dates, diagnoses, or medical advice. When records do not answer the question, say so and recommend contacting a qualified healthcare provider. For urgent warning signs, recommend immediate professional care.
 
@@ -79,14 +79,14 @@ runtime.serve(async (req: Request) => {
       return jsonResponse({ error: "The assistant is available only to logged-in mothers" }, 403);
     }
 
-    const [visitsResult, vaccinesResult, deliveriesResult] = await Promise.all([
+    const [visitsResult, newbornsResult, deliveriesResult] = await Promise.all([
       supabaseRequest(
         `${supabaseUrl}/rest/v1/prenatal_visits?patient_id=eq.${encodedPatientId}&select=visit_date,visit_number,next_appt_date,next_appt_type,status,clinical_notes&order=visit_date.desc&limit=20`,
         accessToken,
         supabaseAnonKey,
       ),
       supabaseRequest(
-        `${supabaseUrl}/rest/v1/vaccinations?patient_id=eq.${encodedPatientId}&select=scheduled_vaccination,vaccinated_date,status,notes&order=scheduled_vaccination.asc&limit=30`,
+        `${supabaseUrl}/rest/v1/newborns?mother_id=eq.${encodedPatientId}&select=id,baby_name`,
         accessToken,
         supabaseAnonKey,
       ),
@@ -97,16 +97,33 @@ runtime.serve(async (req: Request) => {
       ),
     ]);
 
-    const queryError = [visitsResult, vaccinesResult, deliveriesResult]
+    const queryError = [visitsResult, newbornsResult, deliveriesResult]
       .find((result) => !result.response.ok);
     if (queryError) {
       console.error("Patient context query failed:", queryError.data);
       return jsonResponse({ error: "Unable to load your health information" }, 500);
     }
 
+    const newbornIds = (newbornsResult.data ?? []).map((newborn: { id: string }) => newborn.id);
+    let vaccines: unknown[] = [];
+    if (newbornIds.length > 0) {
+      const newbornIdFilter = newbornIds.map((id: string) => `"${id}"`).join(",");
+      const vaccinesResult = await supabaseRequest(
+        `${supabaseUrl}/rest/v1/vaccinations?newborn_id=in.(${newbornIdFilter})&select=newborn_id,scheduled_vaccination,vaccinated_date,status,notes&order=scheduled_vaccination.asc&limit=100`,
+        accessToken,
+        supabaseAnonKey,
+      );
+      if (!vaccinesResult.response.ok) {
+        console.error("Newborn vaccination query failed:", vaccinesResult.data);
+        return jsonResponse({ error: "Unable to load your newborn's vaccination information" }, 500);
+      }
+      vaccines = vaccinesResult.data ?? [];
+    }
+
     const patientContext = JSON.stringify({
       prenatalVisits: visitsResult.data ?? [],
-      vaccinations: vaccinesResult.data ?? [],
+      newborns: newbornsResult.data ?? [],
+      newbornVaccinations: vaccines,
       postpartumVisits: deliveriesResult.data ?? [],
     });
     const response = await fetch(

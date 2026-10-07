@@ -47,7 +47,7 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
     const { alert: customAlert } = useModal();
     const babyService = new BabyService();
     const [form, setForm] = useState({
-        patientType: initialPatientType || 'Mother', patientName: initialPatientName || '', vaccine: '',
+        patientType: mode === 'vaccine' ? 'Newborn' : initialPatientType || 'Mother', patientName: initialPatientName || '', vaccine: '',
         supplement: '', dose: '', date: new Date().toISOString().split('T')[0], nextDue: '', staff: '', remarks: '', brand: ''
     });
     const [isSaving, setIsSaving] = useState(false);
@@ -65,7 +65,6 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [supplementTypes, setSupplementTypes] = useState([]);
     const [vaccineTypes, setVaccineTypes] = useState([]);
-    const [isPregnant, setIsPregnant] = useState(false);
     const [patientStationId, setPatientStationId] = useState(null);
     const [vaccineSearchQuery, setVaccineSearchQuery] = useState('');
     const updateForm = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
@@ -243,7 +242,7 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
         } else if (mode === 'vaccine') {
             setVaccineTypes([]);
         }
-    }, [mode, form.patientType, form.supplement, isPregnant, patientStationId]);
+    }, [mode, form.patientType, form.supplement, patientStationId]);
 
     useEffect(() => {
         const loadVaccineBrands = async () => {
@@ -365,22 +364,6 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
 
                 setSelectedPatient(prev => prev ? { ...prev, id: patientId, label: patientLabel || prev.label, type: form.patientType, station: stationHint || prev.station } : { id: patientId, label: patientLabel || form.patientName, type: form.patientType, station: stationHint });
 
-                if (form.patientType === 'Mother') {
-                    const { data: pregInfo } = await supabase
-                        .from('pregnancy_info')
-                        .select('pregn_postp')
-                        .eq('patient_id', patientId)
-                        .order('created_at', { ascending: false })
-                        .limit(1)
-                        .maybeSingle();
-
-                    const isCurrentlyPregnant = pregInfo?.pregn_postp === 'Pregnant';
-                    setIsPregnant(isCurrentlyPregnant);
-                    console.log('🤰 Pregnancy status for mother:', isCurrentlyPregnant);
-                } else {
-                    setIsPregnant(false);
-                }
-
                 const { stationId } = await resolvePatientStation(patientId, form.patientType, stationHint);
                 console.log('🏢 Final resolved station ID:', stationId, 'hint:', stationHint);
                 const inventoryScope = await inventoryService.getCurrentUserScope();
@@ -405,10 +388,16 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                     setStaffList([]);
                 }
 
+                if (mode !== 'vaccine' || form.patientType !== 'Newborn') {
+                    setPendingVaccines([]);
+                    setSelectedVaccines({});
+                    return;
+                }
+
                 const { data: pendingRows, error: pendingError } = await supabase
                     .from('vaccinations')
                     .select(`id, dose_number, scheduled_vaccination, vaccinated_date, status, vaccine_inventory (vaccine_name), notes`)
-                    .eq(form.patientType === 'Mother' ? 'patient_id' : 'newborn_id', patientId)
+                    .eq('newborn_id', patientId)
                     .eq('status', 'Pending')
                     .order('scheduled_vaccination', { ascending: true });
 
@@ -443,7 +432,7 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
         };
 
         searchPendingVaccines();
-    }, [form.patientName, form.patientType, selectedPatient?.id, selectedPatient?.label]);
+    }, [form.patientName, form.patientType, selectedPatient?.id, selectedPatient?.label, mode]);
 
     const handleSelectSuggestion = async (suggestion) => {
         console.log('🎯 handleSelectSuggestion called with:', suggestion);
@@ -472,6 +461,11 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
         console.log('🔍 handleSave - selectedPatient:', selectedPatient);
         console.log('🔍 handleSave - form.patientName:', form.patientName);
         console.log('🔍 handleSave - form.patientType:', form.patientType);
+
+        if (mode === 'vaccine' && form.patientType !== 'Newborn') {
+            await customAlert({ title: 'Newborn Vaccinations Only', text: 'Vaccinations can only be recorded for newborns.', iconType: 'warning' });
+            return;
+        }
 
         if (!form.patientName ||
             (mode === 'vaccine' && !hasPendingSelection && !hasCheckboxSelection && (!form.vaccine || !form.dose)) ||
@@ -652,35 +646,6 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                             stationId: performingStationId
                         });
 
-                        // Auto-schedule maternal vaccinations for pregnant mothers - ONLY on first Td dose
-                        if (form.patientType === 'Mother' && isPregnant && doseNumber === 1) {
-                            if (vaccineName.toLowerCase().includes('tetanus') || vaccineName.toLowerCase().includes('td')) {
-                                const vaccService = new VaccinationService();
-
-                                // Check if this is truly the first Td vaccine for this patient
-                                const { data: existingTdVaccines } = await supabase
-                                    .from('vaccinations')
-                                    .select('id')
-                                    .eq('patient_id', patientId)
-                                    .ilike('notes', '%Td%')
-                                    .eq('status', 'Completed');
-
-                                const isFirstTd = !existingTdVaccines || existingTdVaccines.length === 0;
-
-                                if (isFirstTd) {
-                                    console.log(`🔄 First Td vaccine (dose 1) for pregnant mother, scheduling full maternal vaccination schedule...`);
-                                    // Get patient's LMP for influenza scheduling
-                                    const { data: patientData } = await supabase
-                                        .from('patient_basic_info')
-                                        .select('pregnancy_info (lmd)')
-                                        .eq('id', patientId)
-                                        .single();
-                                    const lmpDate = patientData?.pregnancy_info?.[0]?.lmd || null;
-
-                                    await vaccService.scheduleMaternalVaccinations(patientId, form.date, vaccineName, currentUser, lmpDate);
-                                }
-                            }
-                        }
                     }
                 }
 
@@ -690,7 +655,7 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                     const vaccInv = await resolveInventoryBatch('vaccine', form.vaccine, form.brand || null, performingStationId);
                     const doseNumber = parseInt(form.dose.match(/\d+/)?.[0]) || 1;
                     const vaccinationRecord = {
-                        patient_id: patientId,
+                        newborn_id: patientId,
                         dose_number: doseNumber,
                         vaccinated_date: form.date,
                         scheduled_vaccination: form.date,
@@ -718,29 +683,6 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                         if (insertError) throw insertError;
                     }
 
-                    if (form.patientType === 'Mother' && isPregnant) {
-                        const vaccService = new VaccinationService();
-                        const { data: patientData } = await supabase
-                            .from('patient_basic_info')
-                            .select('pregnancy_info (lmd)')
-                            .eq('id', patientId)
-                            .single();
-                        const lmpDate = patientData?.pregnancy_info?.[0]?.lmd || null;
-
-                        const { data: existingTdVaccines } = await supabase
-                            .from('vaccinations')
-                            .select('id')
-                            .eq('patient_id', patientId)
-                            .ilike('notes', '%Td%')
-                            .eq('status', 'Completed');
-
-                        const isFirstTd = !existingTdVaccines || existingTdVaccines.length === 0;
-
-                        if (isFirstTd && (form.vaccine.toLowerCase().includes('tetanus') || form.vaccine.toLowerCase().includes('td'))) {
-                            console.log(`🔄 First Td vaccine for pregnant mother, scheduling full maternal vaccination schedule...`);
-                            await vaccService.scheduleMaternalVaccinations(patientId, form.date, form.vaccine, currentUser, lmpDate);
-                        }
-                    }
                 }
             } else {
                 // Supplement handling: try to find in inventory first, otherwise create manual record
@@ -787,7 +729,7 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                 <div className="modal-header">
                     <div>
                         <h2><Syringe size={20} /> Record Vaccination</h2>
-                        <p>{mode === 'vaccine' ? 'Log a vaccine dose for a mother or newborn.' : 'Record supplement distribution.'}</p>
+                        <p>{mode === 'vaccine' ? 'Log a vaccine dose for a newborn.' : 'Record supplement distribution.'}</p>
                     </div>
                     <button className="modal-close" onClick={onClose}><X size={20} /></button>
                 </div>
@@ -795,10 +737,14 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                     <div className="form-grid-2">
                         <div className="form-group">
                             <label>Patient Type <span className="req">*</span></label>
-                            <select value={form.patientType} onChange={e => updateForm('patientType', e.target.value)}>
-                                <option>Mother</option>
-                                <option>Newborn</option>
-                            </select>
+                            {mode === 'vaccine' ? (
+                                <input value="Newborn" readOnly aria-label="Patient Type" />
+                            ) : (
+                                <select value={form.patientType} onChange={e => updateForm('patientType', e.target.value)}>
+                                    <option>Mother</option>
+                                    <option>Newborn</option>
+                                </select>
+                            )}
                         </div>
                         <div className="form-group">
                             <label>Patient Name / ID <span className="req">*</span></label>
@@ -999,7 +945,6 @@ const Vaccinations = () => {
     // State
     const [stats, setStats] = useState({
         totalAdministered: 0,
-        mothersPending: 0,
         newbornsPending: 0,
         supplementsDistributed: 0,
         lowStockAlerts: 0
@@ -1042,7 +987,7 @@ const Vaccinations = () => {
         if (location.state?.openRecordModal && location.state?.patientName) {
             setRecordModal({
                 mode: 'vaccine',
-                initialPatientType: location.state.patientType || 'Mother',
+                initialPatientType: 'Newborn',
                 initialPatientName: location.state.patientName,
             });
             navigate(location.pathname, { replace: true, state: {} });
@@ -1078,7 +1023,6 @@ const Vaccinations = () => {
                 .from('vaccinations')
                 .select(`
                     id,
-                    patient_id,
                     newborn_id,
                     vaccine_inventory_id,
                     dose_number,
@@ -1091,16 +1035,11 @@ const Vaccinations = () => {
                     created_at,
                     created_by,
                     staff_profiles!vaccinations_created_by_fkey (full_name),
-                    vaccine_inventory (vaccine_name, brand, unit, doses, batch, expiration_date),
-                    patient_basic_info!vaccinations_patient_id_fkey (id, first_name, last_name, station_ass, stations:station_ass (station_name), province)
+                    vaccine_inventory (vaccine_name, brand, unit, doses, batch, expiration_date)
                 `)
+                .not('newborn_id', 'is', null)
                 .order('created_at', { ascending: false });
             console.log('💉 Fetched vaccination records:', vaccRecords?.length || 0);
-            console.log('🔍 Sample vaccination records with patient_id:', vaccRecords?.filter(r => r.patient_id).slice(0, 5).map(r => ({
-                id: r.id,
-                patient_id: r.patient_id,
-                patient_basic_info: r.patient_basic_info
-            })));
             const { data: suppRecords } = await supabase.from('supplements').select('*').order('created_at', { ascending: false });
 
             const { data: allPatients } = await supabase
@@ -1163,10 +1102,6 @@ const Vaccinations = () => {
             const transformedVaccRecords = (vaccRecords || [])
                 .filter(record => {
                     if (!isVisiblePatientRecord(record.patient_id, record.newborn_id)) return false;
-                    if (record.patient_id && !patientMap.has(record.patient_id)) {
-                        console.warn('Filtering out record with invalid patient_id:', record.patient_id);
-                        return false;
-                    }
                     if (record.newborn_id && !newbornMap.has(record.newborn_id)) {
                         console.warn('Filtering out record with invalid newborn_id:', record.newborn_id);
                         return false;
@@ -1175,18 +1110,7 @@ const Vaccinations = () => {
                 })
                 .map(record => {
                 let patientName, station, type, patientId, birthDate = null;
-                if (record.patient_id) {
-                    // Mother - use patientMap directly since nested query may not work
-                    const patientInfo = patientMap.get(record.patient_id);
-                    console.log('🔍 Mother record lookup:', { patient_id: record.patient_id, patientInfo, name: patientInfo?.name, station: patientInfo?.station });
-                    if (!patientInfo || !patientInfo.name) {
-                        console.warn('Patient info missing from patientMap for patient_id:', record.patient_id);
-                    }
-                    patientName = patientInfo?.name || 'Unknown';
-                    station = patientInfo?.station || 'Unknown';
-                    type = 'Mother';
-                    patientId = record.patient_id;
-                } else if (record.newborn_id) {
+                if (record.newborn_id) {
                     // Newborn - use newbornMap which has mother info pre-fetched
                     const newbornInfo = newbornMap.get(record.newborn_id);
                     if (!newbornInfo) {
@@ -1316,7 +1240,6 @@ const Vaccinations = () => {
 
             setStats({
                 totalAdministered: transformedVaccRecords.filter(r => r.status === 'Completed').length,
-                mothersPending: transformedVaccRecords.filter(r => r.type === 'Mother' && r.status === 'Pending').length,
                 newbornsPending: transformedVaccRecords.filter(r => r.type === 'Newborn' && r.status === 'Pending').length,
                 supplementsDistributed: transformedSuppRecords.reduce((sum, r) => sum + (parseInt(r.dose?.toString().match(/\d+/)?.[0]) || 1), 0),
                 lowStockAlerts: lowStockCount
@@ -1391,13 +1314,6 @@ const Vaccinations = () => {
         { label: 'Total Vaccinations Administered', value: stats.totalAdministered, color: 'lilac', icon: Syringe, onClick: () => {
             setActiveTab('administered');
             setFilters({ patientType: 'All', item: 'Vaccines' });
-            setSearchTerm('');
-            setDateFilter('all');
-            document.querySelector('.vacc-tabs')?.scrollIntoView({ behavior: 'smooth' });
-        } },
-        { label: 'Mothers Pending Vaccines', value: stats.mothersPending, color: 'pink', icon: AlertCircle, onClick: () => {
-            setActiveTab('pending');
-            setFilters({ patientType: 'Mother', item: 'Vaccines' });
             setSearchTerm('');
             setDateFilter('all');
             document.querySelector('.vacc-tabs')?.scrollIntoView({ behavior: 'smooth' });
@@ -1784,7 +1700,7 @@ const Vaccinations = () => {
                                 <div className="popover-title">Patient Type</div>
                                 <div className="popover-options">
                                     <button className={`popover-opt-btn ${filters.patientType === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('patientType', 'All'); setActivePopover(null); }}>All Patient Types</button>
-                                    <button className={`popover-opt-btn ${filters.patientType === 'Mother' ? 'selected' : ''}`} onClick={() => { handleFilter('patientType', 'Mother'); setActivePopover(null); }}>Mother</button>
+                                    <button className={`popover-opt-btn ${filters.patientType === 'Mother' ? 'selected' : ''}`} onClick={() => { handleFilter('patientType', 'Mother'); setActivePopover(null); }}>Mother (Supplements)</button>
                                     <button className={`popover-opt-btn ${filters.patientType === 'Newborn' ? 'selected' : ''}`} onClick={() => { handleFilter('patientType', 'Newborn'); setActivePopover(null); }}>Newborn</button>
                                 </div>
                             </div>

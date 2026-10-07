@@ -7,7 +7,7 @@ import {
     Syringe, Search, Filter, Calendar, 
     CheckCircle2, Clock, AlertCircle, 
     ChevronRight, Info, Download,
-    HeartPulse, Baby, ArrowLeft, UserRound, MapPin
+    Baby, ArrowLeft, UserRound, MapPin
 } from 'lucide-react';
 import '../../styles/pages/UserVaccinations.css';
 import VaccineDetailModal from '../../components/MotherDashboard/VaccineDetailModal';
@@ -34,17 +34,8 @@ const UserVaccinations = () => {
                 if (!authUser?.id) return;
                 const patient = await ps.getPatientById(authUser.id);
                 
-                // Combine mother's vaccines and children's vaccines
+                // Mothers can view newborn vaccination schedules, but do not receive vaccination records themselves.
                 let allVaccines = [];
-                
-                // Add mother's vaccines
-                if (patient?.vaccines) {
-                    allVaccines = allVaccines.concat(patient.vaccines.map(v => ({
-                        ...v,
-                        personType: 'self',
-                        personName: 'You'
-                    })));
-                }
                 
                 // Add children's vaccines
                 if (patient?.newborns && patient.newborns.length > 0) {
@@ -84,8 +75,7 @@ const UserVaccinations = () => {
         const displayName = v.notes || v.vaccine_name || v.name || '';
         const matchesSearch = displayName.toLowerCase().includes(searchTerm.toLowerCase());
         // Determine category based on person type: self = Maternal, child = Newborn
-        const category = v.personType === 'self' ? 'Maternal' : 'Newborn';
-        const matchesFilter = filter === 'All' || category === filter;
+        const matchesFilter = filter === 'All' || filter === 'Newborn';
         return matchesSearch && matchesFilter;
     });
 
@@ -145,8 +135,6 @@ const UserVaccinations = () => {
         doc.line(margin, y, pageWidth - margin, y);
         y += 8;
 
-        // ── Maternal Vaccinations ──
-        const maternalVaccines = vaccines.filter(v => v.personType === 'self');
         const newbornVaccines = vaccines.filter(v => v.personType === 'child');
 
         const buildVaccineRows = (list) => list.map(v => {
@@ -192,21 +180,6 @@ const UserVaccinations = () => {
             }
         };
 
-        if (maternalVaccines.length > 0) {
-            doc.setFontSize(13);
-            doc.setTextColor(40);
-            doc.text('Maternal Vaccinations', margin, y);
-            y += 8;
-
-            doc.autoTable({
-                startY: y,
-                head: tableHead,
-                body: buildVaccineRows(maternalVaccines),
-                ...tableStyles,
-            });
-            y = doc.lastAutoTable.finalY + 12;
-        }
-
         if (newbornVaccines.length > 0) {
             // Group by baby name
             const babyNames = [...new Set(newbornVaccines.map(v => v.personName))];
@@ -235,7 +208,7 @@ const UserVaccinations = () => {
             });
         }
 
-        if (maternalVaccines.length === 0 && newbornVaccines.length === 0) {
+        if (newbornVaccines.length === 0) {
             doc.setFontSize(10);
             doc.setTextColor(120);
             doc.text('No vaccination records available.', margin, y);
@@ -296,14 +269,14 @@ const UserVaccinations = () => {
                     />
                 </div>
                 <div className="uv-filters">
-                    {['All', 'Maternal', 'Newborn'].map(f => (
+                    {['All', 'Newborn'].map(f => (
                         <button 
                             key={f}
                             className={`uv-filter-btn ${filter === f ? 'active' : ''}`}
                             onClick={() => setFilter(f)}
                         >
-                            {f === 'Maternal' ? <HeartPulse size={14} /> : f === 'Newborn' ? <Baby size={14} /> : null}
-                            {f === 'All' ? t('vac_all') : f === 'Maternal' ? t('vac_maternal') : t('vac_newborn')}
+                            {f === 'Newborn' ? <Baby size={14} /> : null}
+                            {f === 'All' ? t('vac_all') : t('vac_newborn')}
                         </button>
                     ))}
                 </div>
@@ -313,8 +286,7 @@ const UserVaccinations = () => {
                 {filteredVaccines.length > 0 ? (
                     filteredVaccines.map((vaccine, index) => {
                         const status = vaccine.status || 'Unknown';
-                        // Determine category based on person type: self = Maternal, child = Newborn
-                        const category = vaccine.personType === 'self' ? 'Maternal' : 'Newborn';
+                        const category = 'Newborn';
                         // NOTES COLUMN IS THE VACCINE NAME - use it as primary display
                         const displayName = vaccine.notes || vaccine.vaccine_name || vaccine.name || 'Vaccine';
                         const desc = vaccine.description || '';
@@ -327,7 +299,7 @@ const UserVaccinations = () => {
                             >
                                 <div className="uv-card-header">
                                     <span className={`uv-category-tag ${String(category).toLowerCase()}`}>
-                                        {vaccine.personType === 'self' ? t('vac_my_vaccine') : t('vac_baby_vaccine').replace('{name}', vaccine.personName)}
+                                        {t('vac_baby_vaccine').replace('{name}', vaccine.personName)}
                                     </span>
                                     <span className={`uv-status-badge status-${String(status).toLowerCase()}`}>
                                         {getStatusIcon(status)} 

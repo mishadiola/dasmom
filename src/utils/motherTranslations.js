@@ -257,7 +257,7 @@ export const translations = {
 
         // FAQ questions & answers
         faq_q1: 'What is DASMOM+?',
-        faq_a1: 'DASMOM+ is a maternal healthcare platform that helps mothers and healthcare staff manage and view maternal health records, appointments, vaccinations, and other pregnancy-related information.',
+        faq_a1: 'DASMOM+ is a maternal healthcare platform that helps mothers and healthcare staff manage maternal health records, prenatal appointments, supplements, and newborn vaccination schedules.',
         faq_q2: 'How do I view my health records?',
         faq_a2: 'Go to Records from the bottom navigation. You can view your available vital records and delivery information recorded by your healthcare team.',
         faq_q3: 'Can I edit my health records?',

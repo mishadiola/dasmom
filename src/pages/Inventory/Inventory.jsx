@@ -145,7 +145,6 @@ const Inventory = () => {
       return [];
     }
   });
-  const [vaccStats, setVaccStats] = useState({ mothersPending: 0, newbornsPending: 0 });
   const [pendingVaccinations, setPendingVaccinations] = useState([]);
 
   // Station Distribution states
@@ -324,10 +323,9 @@ const Inventory = () => {
         fetchDataQueuedRef.current = false;
         setLoading(true);
         try {
-          const [vaxData, suppData, statsData, stationsData] = await Promise.all([
+          const [vaxData, suppData, stationsData] = await Promise.all([
             inventoryService.getVaccineInventory(),
             inventoryService.getSupplementInventory(),
-            patientService.getVaccinationStats(),
             patientService.getAvailableStations()
           ]);
 
@@ -341,9 +339,8 @@ const Inventory = () => {
             'City Health Office 3'
           ]);
 
-          console.log('Inventory data fetched - vaccines:', vaxData?.length || 0, 'supplements:', suppData?.length || 0, 'stats:', statsData);
+          console.log('Inventory data fetched - vaccines:', vaxData?.length || 0, 'supplements:', suppData?.length || 0);
 
-          setVaccStats(statsData || { mothersPending: 0, newbornsPending: 0 });
           await loadPendingVaccinations();
 
           const mappedVaccines = (vaxData || []).map(row => ({

@@ -134,7 +134,8 @@ export default class NewbornService {
                         id,
                         first_name,
                         last_name,
-                        station_ass
+                        station_ass,
+                        stations:station_ass (station_name)
                     ),
                     deliveries (
                         delivery_date
@@ -147,7 +148,7 @@ export default class NewbornService {
 
             // Fetch vaccinations separately for all newborns
             const babyIds = babies.map(b => b.id);
-            const { data: allVaccinations = [] } = await this.supabase
+            const { data: allVaccinations = [], error: vaccinationsError } = await this.supabase
                 .from('vaccinations')
                 .select(`
                     id,
@@ -165,6 +166,7 @@ export default class NewbornService {
                     )
                 `)
                 .in('newborn_id', babyIds);
+            if (vaccinationsError) throw vaccinationsError;
 
             // Create a map of newborn_id -> vaccinations
             const vaccMap = new Map();
@@ -191,6 +193,10 @@ export default class NewbornService {
                 const vaccLog = (vaccMap.get(baby.id) || []).map(v => {
                     const scheduledDate = v.scheduled_vaccination || null;
                     const vaccinatedDate = v.vaccinated_date || null;
+                    const vaccineName = v.vaccine_inventory?.vaccine_name ||
+                        v.notes?.match(/^\d+(?:st|nd|rd|th) dose of (.+)$/i)?.[1] ||
+                        v.notes?.trim() ||
+                        null;
                     let status = v.status;
                     if (!status) {
                         if (vaccinatedDate) status = 'Completed';
@@ -199,9 +205,10 @@ export default class NewbornService {
                     }
 
                     return {
+                        vaccineName,
                         id: v.id,
-                        vaccine: v.vaccine_inventory?.vaccine_name || null,
-                        vaccine_name: v.vaccine_inventory?.vaccine_name || null,
+                        vaccine: vaccineName,
+                        vaccine_name: vaccineName,
                         vaccine_inventory: v.vaccine_inventory || null,
                         notes: v.notes || '',
                         dose: `Dose ${v.dose_number || ''}`.trim(),
@@ -225,7 +232,7 @@ export default class NewbornService {
                     babyName: baby.baby_name || 'Newborn',
                     motherId: baby.mother_id,
                     motherName: mother ? `${mother.first_name} ${mother.last_name}`.trim() : 'Unknown',
-                        station: mother?.stations?.station_name || 'N/A',
+                    station: mother?.stations?.station_name || 'N/A',
                     birthDate: baby.deliveries?.delivery_date || null,
                     gender: baby.gender || 'Unknown',
                     birthWeight: baby.birth_weight || 0,

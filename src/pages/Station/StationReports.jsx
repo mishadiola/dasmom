@@ -936,7 +936,6 @@ const DetailModal = ({ station, onClose, navigate }) => {
                         <div>
                             <div className="detail-stats-grid">
                                 <div className="detail-stat"><span>Overall Coverage</span><strong>{station.vaccCoverage}%</strong></div>
-                                <div className="detail-stat"><span>Maternal Vaccines</span><strong>{station.maternalVaccCoverage}%</strong></div>
                                 <div className="detail-stat"><span>Newborn Vaccines</span><strong>{station.newbornVaccCoverage}%</strong></div>
                                 <div className="detail-stat"><span>Supplement Coverage</span><strong>{station.suppCoverage}%</strong></div>
                             </div>
@@ -944,7 +943,6 @@ const DetailModal = ({ station, onClose, navigate }) => {
                                 <h4>Coverage Breakdown</h4>
                                 {[
                                     { label: 'Overall Vaccination', value: station.vaccCoverage },
-                                    { label: 'Maternal Vaccines', value: station.maternalVaccCoverage },
                                     { label: 'Newborn Vaccines', value: station.newbornVaccCoverage },
                                     { label: 'Supplement Coverage', value: station.suppCoverage },
                                 ].map(item => (

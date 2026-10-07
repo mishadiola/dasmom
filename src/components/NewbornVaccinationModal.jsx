@@ -115,14 +115,21 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
                     /influenza|\bflu\b/.test(notes) ? 'Influenza Vaccine' : null
                 );
                 const vaccineName = vaccRecord?.vaccine_inventory?.vaccine_name || scheduledName;
+                const isVitaminASupplement = /^vitamin a$/i.test(scheduledName || vaccineName || '');
                 const inventoryItem = vaccineName
                     ? await vaccinationService.resolveInventoryItem({
-                        itemType: 'vaccine',
+                        itemType: isVitaminASupplement ? 'supplement' : 'vaccine',
                         itemName: vaccineName,
                         stationId: performingStationId
                     })
                     : null;
-                if (!inventoryItem) throw new Error('This vaccine is not available in your assigned station inventory.');
+                if (!inventoryItem) {
+                    throw new Error(
+                        isVitaminASupplement
+                            ? 'Vitamin A is not available in your assigned station inventory.'
+                            : 'This vaccine is not available in your assigned station inventory.'
+                    );
+                }
 
                 // Update the vaccination record with date, status, and vaccine_inventory_id
                 const updateData = { 
@@ -133,7 +140,7 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
                     station_ass: performingStationId,
                     assigned_staff: assignedStaff,
                     remarks: remarks || null,
-                    vaccine_inventory_id: inventoryItem.id
+                    vaccine_inventory_id: isVitaminASupplement ? null : inventoryItem.id
                 };
                 
                 const { error: updateError } = await supabase
@@ -144,7 +151,7 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
                 if (updateError) throw updateError;
 
                 await vaccinationService.decrementStationInventory({
-                    itemType: 'vaccine',
+                    itemType: isVitaminASupplement ? 'supplement' : 'vaccine',
                     inventoryItem,
                     stationId: performingStationId
                 });
@@ -165,7 +172,7 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
             <div className="vacc-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
                     <div>
-                        <h2><Syringe size={20} /> Mark Vaccines as Attended</h2>
+                        <h2><Syringe size={20} /> Mark Scheduled Doses as Attended</h2>
                         <p>{newborn?.babyName || 'Newborn'}</p>
                     </div>
                     <button className="modal-close" onClick={onClose}><X size={20} /></button>

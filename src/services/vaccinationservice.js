@@ -75,16 +75,19 @@ class VaccinationService {
   }
 
   /**
-   * Calculate the scheduled date for a vaccine based on birth date and months offset
+   * Calculate a scheduled date from a birth date using calendar months and elapsed days.
    */
-  computeScheduledDate = (birthDate, monthsOffset) => {
+  computeScheduledDate = (birthDate, monthsOffset = 0, daysOffset = 0) => {
     const target = new Date(birthDate);
-    const wholeMonths = Math.floor(monthsOffset);
-    target.setMonth(target.getMonth() + wholeMonths);
-    const halfMonth = monthsOffset - wholeMonths;
-    if (halfMonth === 0.5) {
-      target.setDate(target.getDate() + 15);
-    }
+    const birthDay = target.getUTCDate();
+    target.setUTCDate(1);
+    target.setUTCMonth(target.getUTCMonth() + monthsOffset);
+    const lastDayOfTargetMonth = new Date(Date.UTC(
+      target.getUTCFullYear(),
+      target.getUTCMonth() + 1,
+      0
+    )).getUTCDate();
+    target.setUTCDate(Math.min(birthDay, lastDayOfTargetMonth) + daysOffset);
     return target;
   };
 
@@ -257,30 +260,30 @@ class VaccinationService {
       }
 
       const vaccineSchedule = [
-        // At Birth (0 months)
-        { months: 0, vaccines: ['BCG Vaccine', 'Hepatitis B Vaccine'], doses: [1, 1] },
-
-        // 1.5 months
-        { months: 1.5, vaccines: [
+        // 6 weeks
+        { weeks: 6, vaccines: [
             'Pentavalent Vaccine (DPT-Hep B-Hib)',
             'Oral Polio Vaccine (OPV)',
             'Pneumococcal Conjugate Vaccine (PCV)'
           ], doses: [1, 1, 1] },
 
-        // 2.5 months
-        { months: 2.5, vaccines: [
+        // 10 weeks
+        { weeks: 10, vaccines: [
             'Pentavalent Vaccine (DPT-Hep B-Hib)',
             'Oral Polio Vaccine (OPV)',
             'Pneumococcal Conjugate Vaccine (PCV)'
           ], doses: [2, 2, 2] },
 
-        // 3.5 months
-        { months: 3.5, vaccines: [
+        // 14 weeks
+        { weeks: 14, vaccines: [
             'Pentavalent Vaccine (DPT-Hep B-Hib)',
             'Oral Polio Vaccine (OPV)',
             'Inactivated Polio Vaccine (IPV)',
             'Pneumococcal Conjugate Vaccine (PCV)'
           ], doses: [3, 3, 1, 3] },
+
+        // 6 months
+        { months: 6, vaccines: ['Vitamin A'], doses: [1] },
 
         // 9 months
         { months: 9, vaccines: [
@@ -302,27 +305,52 @@ class VaccinationService {
       const assignedStaff = await this.getAssignedStaffForNewborn(newbornId);
       const assignedStation = await this.getAssignedStationForNewborn(newbornId);
       const inserts = [];
+      const updates = [];
+      const { data: existingRecords, error: existingError } = await this.supabase
+        .from('vaccinations')
+        .select('id, status, vaccinated_date, scheduled_vaccination, notes')
+        .eq('newborn_id', newbornId);
+
+      if (existingError) throw existingError;
+
+      const existingByNotes = new Map();
+      for (const record of existingRecords || []) {
+        const previous = existingByNotes.get(record.notes);
+        const isCompleted = record.status?.toLowerCase() === 'completed' || record.vaccinated_date;
+        const previousIsCompleted = previous?.status?.toLowerCase() === 'completed' || previous?.vaccinated_date;
+        if (!previous || (isCompleted && !previousIsCompleted)) {
+          existingByNotes.set(record.notes, record);
+        }
+      }
 
       for (const schedule of vaccineSchedule) {
-        const scheduledDate = this.computeScheduledDate(birthDateObj, schedule.months);
+        const scheduledDate = this.computeScheduledDate(
+          birthDateObj,
+          schedule.months || 0,
+          (schedule.weeks || 0) * 7
+        );
         const dateStr = scheduledDate.toISOString().split('T')[0];
 
         for (let i = 0; i < schedule.vaccines.length; i++) {
           const vaccine = schedule.vaccines[i];
           const dose = schedule.doses[i];
           const doseOrdinal = dose === 1 ? '1st' : dose === 2 ? '2nd' : dose === 3 ? '3rd' : `${dose}th`;
+          const notes = `${doseOrdinal} dose of ${vaccine}`;
+          const existingRecord = existingByNotes.get(notes);
 
-          // Get vaccine inventory ID using helper method with fuzzy matching
-          const vaccineId = await this.getVaccineInventoryId(vaccine);
-
-          // Calculate next due date (next vaccine in schedule)
-          let nextDue = null;
-          const nextScheduleIndex = vaccineSchedule.findIndex(s => s.months > schedule.months);
-          if (nextScheduleIndex !== -1) {
-            const nextSchedule = vaccineSchedule[nextScheduleIndex];
-            const nextDate = this.computeScheduledDate(birthDateObj, nextSchedule.months);
-            nextDue = nextDate.toISOString().split('T')[0];
+          if (existingRecord) {
+            if (
+              existingRecord.status?.toLowerCase() === 'pending' &&
+              !existingRecord.vaccinated_date &&
+              existingRecord.scheduled_vaccination !== dateStr
+            ) {
+              updates.push({ id: existingRecord.id, scheduled_vaccination: dateStr });
+            }
+            continue;
           }
+
+          // Vitamin A is managed through supplement inventory, not vaccine inventory.
+          const vaccineId = vaccine === 'Vitamin A' ? null : await this.getVaccineInventoryId(vaccine);
 
           inserts.push({
             newborn_id: newbornId,
@@ -334,18 +362,29 @@ class VaccinationService {
             created_by: createdBy,
             assigned_staff: assignedStaff,
             station_ass: assignedStation,
-            notes: `${doseOrdinal} dose of ${vaccine}`
+            notes
           });
         }
       }
 
-      const { error } = await this.supabase
-        .from('vaccinations')
-        .insert(inserts);
+      for (const update of updates) {
+        const { id, ...values } = update;
+        const { error } = await this.supabase
+          .from('vaccinations')
+          .update(values)
+          .eq('id', id);
+        if (error) throw error;
+      }
 
-      if (error) throw error;
-      console.log(`✅ Scheduled ${inserts.length} vaccines for newborn ${newbornId} using DOB-based due dates`);
-      return { success: true, count: inserts.length };
+      if (inserts.length > 0) {
+        const { error } = await this.supabase
+          .from('vaccinations')
+          .insert(inserts);
+
+        if (error) throw error;
+      }
+      console.log(`✅ Scheduled ${inserts.length} new doses and updated ${updates.length} pending doses for newborn ${newbornId}`);
+      return { success: true, count: inserts.length, updated: updates.length };
     } catch (error) {
       console.error('Error scheduling newborn vaccinations:', error);
       throw error;
@@ -355,10 +394,13 @@ class VaccinationService {
   /**
    * Record a vaccine dose - fills in vaccine_inventory_id and marks as Completed
    * Also decrements the vaccine inventory quantity (using nearest expiration date)
-   * Triggers automatic maternal vaccination scheduling if first Td vaccine
    */
   async recordVaccine(patientId, patientType, vaccineData) {
     try {
+      if (patientType !== 'Newborn') {
+        throw new Error('Vaccination records can only be recorded for newborns.');
+      }
+
       const currentUser = await this.getCurrentUserId();
       if (!currentUser) throw new Error('No logged-in user');
       const { data: userProfile, error: profileError } = await this.supabase
@@ -370,7 +412,7 @@ class VaccinationService {
       const performingStationId = userProfile?.station_ass;
       if (!performingStationId) throw new Error('Your account must have an assigned service station.');
 
-      const { vaccineId, vaccineName, doseNumber, date, staff, notes, remarks, lmpDate } = vaccineData;
+      const { vaccineId, vaccineName, doseNumber, date, staff, notes, remarks } = vaccineData;
 
       const vaccInv = await this.resolveInventoryItem({
         itemType: 'vaccine',
@@ -378,9 +420,7 @@ class VaccinationService {
         stationId: performingStationId
       });
       if (!vaccInv) throw new Error('Vaccine not found in your station inventory or out of stock');
-      const assignedStaff = patientType === 'Mother'
-        ? await this.getAssignedStaffForPatient(patientId)
-        : await this.getAssignedStaffForNewborn(patientId);
+      const assignedStaff = await this.getAssignedStaffForNewborn(patientId);
 
       if (vaccineId) {
         // Update existing scheduled vaccine record
@@ -402,9 +442,8 @@ class VaccinationService {
         if (updateError) throw updateError;
       } else {
         // Create new vaccination record (for manual entries not in schedule)
-        const fieldName = patientType === 'Mother' ? 'patient_id' : 'newborn_id';
         const payload = {
-          [fieldName]: patientId,
+          newborn_id: patientId,
           vaccine_inventory_id: vaccInv.id,
           dose_number: doseNumber,
           vaccinated_date: date,
@@ -431,24 +470,6 @@ class VaccinationService {
         stationId: performingStationId
       });
 
-      // Trigger automatic maternal vaccination scheduling if this is first Td vaccine for a mother
-      if (patientType === 'Mother' && (vaccineName.includes('Td') || vaccineName.includes('Tetanus'))) {
-        // Check if this is the first Td vaccine (dose 1)
-        const { data: existingTdVaccines } = await this.supabase
-          .from('vaccinations')
-          .select('id, dose_number')
-          .eq('patient_id', patientId)
-          .ilike('notes', '%Td%')
-          .eq('status', 'Completed');
-        
-        const isFirstTd = !existingTdVaccines || existingTdVaccines.length === 0;
-        
-        if (isFirstTd) {
-          console.log(`🔄 First Td vaccine recorded for mother ${patientId}, scheduling remaining doses...`);
-          await this.scheduleMaternalVaccinations(patientId, date, vaccineName, currentUser, lmpDate);
-        }
-      }
-
       return { success: true };
     } catch (error) {
       console.error('Error recording vaccine:', error);
@@ -459,13 +480,12 @@ class VaccinationService {
   /**
    * Get all pending (unrecorded) vaccines for a patient
    */
-  async getPendingVaccinesForPatient(patientId, patientType) {
+  async getPendingVaccinesForPatient(patientId) {
     try {
-      const fieldName = patientType === 'Mother' ? 'patient_id' : 'newborn_id';
       const { data: vaccRecords, error } = await this.supabase
         .from('vaccinations')
         .select('id, vaccine_inventory_id, dose_number, scheduled_vaccination, status, notes')
-        .eq(fieldName, patientId)
+        .eq('newborn_id', patientId)
         .eq('status', 'Pending')
         .is('vaccine_inventory_id', null);
 
@@ -480,13 +500,12 @@ class VaccinationService {
   /**
    * Get scheduled vaccines grouped by date for a patient
    */
-  async getScheduledVaccinesByDate(patientId, patientType) {
+  async getScheduledVaccinesByDate(patientId) {
     try {
-      const fieldName = patientType === 'Mother' ? 'patient_id' : 'newborn_id';
       const { data: vaccRecords, error } = await this.supabase
         .from('vaccinations')
         .select('id, dose_number, scheduled_vaccination, status, vaccine_inventory_id, notes')
-        .eq(fieldName, patientId)
+        .eq('newborn_id', patientId)
         .order('scheduled_vaccination', { ascending: true });
 
       if (error) throw error;
@@ -521,7 +540,6 @@ class VaccinationService {
         .from('vaccinations')
         .select(`
           id,
-          patient_id,
           newborn_id,
           vaccine_inventory_id,
           dose_number,
@@ -533,7 +551,6 @@ class VaccinationService {
           created_by,
           staff_profiles!vaccinations_created_by_fkey (full_name),
           vaccine_inventory (vaccine_name),
-          patient_basic_info!vaccinations_patient_id_fkey (id, first_name, last_name, station_ass, stations:station_ass (station_name), province),
           newborns!vaccinations_newborn_id_fkey (
             id, 
             baby_name, 
@@ -541,39 +558,25 @@ class VaccinationService {
             patient_basic_info!mother_id (first_name, last_name, station_ass, stations:station_ass (station_name), province)
           )
         `)
+        .not('newborn_id', 'is', null)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
       return (vaccRecords || []).map(record => {
-        let patientName, station, type, patientId;
-        if (record.patient_id) {
-          patientName = `${record.patient_basic_info?.first_name || ''} ${record.patient_basic_info?.last_name || ''}`.trim();
-          station = `${record.patient_basic_info?.stations?.station_name || 'N/A'}, ${record.patient_basic_info?.province || 'N/A'}`;
-          type = 'Mother';
-          patientId = record.patient_id;
-        } else if (record.newborn_id) {
-          const newbornRecord = Array.isArray(record.newborns) ? record.newborns[0] : record.newborns;
-          const mother = Array.isArray(newbornRecord?.patient_basic_info) ? newbornRecord.patient_basic_info[0] : newbornRecord?.patient_basic_info;
-          patientName = newbornRecord?.baby_name || 'Unknown Newborn';
-          station = `${mother?.stations?.station_name || 'N/A'}, ${mother?.province || 'N/A'}`;
-          type = 'Newborn';
-          patientId = record.newborn_id;
-        } else {
-          patientName = 'Unknown';
-          station = 'Unknown';
-          type = 'Unknown';
-          patientId = 'Unknown';
-        }
+        const newbornRecord = Array.isArray(record.newborns) ? record.newborns[0] : record.newborns;
+        const mother = Array.isArray(newbornRecord?.patient_basic_info) ? newbornRecord.patient_basic_info[0] : newbornRecord?.patient_basic_info;
+        const patientName = newbornRecord?.baby_name || 'Unknown Newborn';
+        const station = `${mother?.stations?.station_name || 'N/A'}, ${mother?.province || 'N/A'}`;
 
         let vaccineName = record.vaccine_inventory?.vaccine_name || 'Unrecorded';
         let doseText = record.dose_number === 1 ? '1st' : record.dose_number === 2 ? '2nd' : record.dose_number === 3 ? '3rd' : `${record.dose_number}th`;
 
         return {
           id: record.id,
-          patientId,
+          patientId: record.newborn_id,
           patientName,
-          patientType: type,
+          patientType: 'Newborn',
           station,
           vaccineName,
           doseNumber: record.dose_number,
@@ -609,190 +612,6 @@ class VaccinationService {
     }
   }
 
-  /**
-   * Automatically schedule maternal vaccinations based on Philippines DOH schedule
-   * When first vaccine is given, schedule remaining doses
-   */
-  async scheduleMaternalVaccinations(patientId, firstVaccineDate, firstVaccineName, createdBy, lmpDate = null) {
-    try {
-      const schedule = [];
-      const assignedStaff = await this.getAssignedStaffForPatient(patientId);
-      const assignedStation = await this.getAssignedStationForPatient(patientId);
-      const baseDate = new Date(firstVaccineDate);
-      
-      // Tetanus-Diphtheria (Td) Schedule
-      if (firstVaccineName.includes('Td') || firstVaccineName.includes('Tetanus')) {
-        const tdVaccineId = await this.getVaccineInventoryId('Tetanus Diphtheria (TD)');
-        
-        // Td2: 4 weeks after Td1
-        const td2Date = new Date(baseDate);
-        td2Date.setDate(td2Date.getDate() + 28);
-        const td2DateStr = td2Date.toISOString().split('T')[0];
-        schedule.push({
-          patient_id: patientId,
-          vaccine_inventory_id: tdVaccineId,
-          dose_number: 2,
-          scheduled_vaccination: td2DateStr,
-          status: 'Pending',
-          vaccinated_date: null,
-          created_by: createdBy,
-          notes: '2nd dose of Tetanus-Diphtheria (Td2) - 4 weeks after Td1'
-        });
-
-        // Td3: 6 months after Td2
-        const td3Date = new Date(td2Date);
-        td3Date.setMonth(td3Date.getMonth() + 6);
-        const td3DateStr = td3Date.toISOString().split('T')[0];
-        schedule.push({
-          patient_id: patientId,
-          vaccine_inventory_id: tdVaccineId,
-          dose_number: 3,
-          scheduled_vaccination: td3DateStr,
-          status: 'Pending',
-          vaccinated_date: null,
-          created_by: createdBy,
-          notes: '3rd dose of Tetanus-Diphtheria (Td3) - 6 months after Td2'
-        });
-
-        // Td4: 1 year after Td3
-        const td4Date = new Date(td3Date);
-        td4Date.setFullYear(td4Date.getFullYear() + 1);
-        const td4DateStr = td4Date.toISOString().split('T')[0];
-        schedule.push({
-          patient_id: patientId,
-          vaccine_inventory_id: tdVaccineId,
-          dose_number: 4,
-          scheduled_vaccination: td4DateStr,
-          status: 'Pending',
-          vaccinated_date: null,
-          created_by: createdBy,
-          notes: '4th dose of Tetanus-Diphtheria (Td4) - 1 year after Td3'
-        });
-
-        // Td5: 1 year after Td4
-        const td5Date = new Date(td4Date);
-        td5Date.setFullYear(td5Date.getFullYear() + 1);
-        const td5DateStr = td5Date.toISOString().split('T')[0];
-        schedule.push({
-          patient_id: patientId,
-          vaccine_inventory_id: tdVaccineId,
-          dose_number: 5,
-          scheduled_vaccination: td5DateStr,
-          status: 'Pending',
-          vaccinated_date: null,
-          created_by: createdBy,
-          notes: '5th dose of Tetanus-Diphtheria (Td5) - 1 year after Td4'
-        });
-      }
-
-      // Influenza (Flu) - schedule if not already given and patient is pregnant
-      if (lmpDate) {
-        const lmp = new Date(lmpDate);
-        const edd = new Date(lmp);
-        edd.setDate(edd.getDate() + 280);
-        
-        // Check if flu vaccine was already given (check for existing flu vaccination)
-        const { data: existingFlu } = await this.supabase
-          .from('vaccinations')
-          .select('id')
-          .eq('patient_id', patientId)
-          .ilike('notes', '%Flu%')
-          .eq('status', 'Completed')
-          .single();
-        
-        if (!existingFlu) {
-          const fluVaccineId = await this.getVaccineInventoryId('Influenza Vaccine');
-          
-          // Schedule flu for any trimester (use current date or next available)
-          const fluDate = new Date(baseDate);
-          fluDate.setDate(fluDate.getDate() + 7);
-          const fluDateStr = fluDate.toISOString().split('T')[0];
-          
-          if (fluDate <= edd) {
-            schedule.push({
-              patient_id: patientId,
-              vaccine_inventory_id: fluVaccineId,
-              dose_number: 1,
-              scheduled_vaccination: fluDateStr,
-              status: 'Pending',
-              vaccinated_date: null,
-              created_by: createdBy,
-              notes: '1st dose of Influenza (Flu) Vaccine - Once per pregnancy'
-            });
-          }
-        }
-      }
-
-      if (schedule.length > 0) {
-        schedule.forEach((vaccination) => {
-          vaccination.assigned_staff = assignedStaff;
-          vaccination.station_ass = assignedStation;
-        });
-        const { error } = await this.supabase
-          .from('vaccinations')
-          .insert(schedule);
-        
-        if (error) throw error;
-        console.log(`✅ Scheduled ${schedule.length} maternal vaccines for patient ${patientId}`);
-        return { success: true, count: schedule.length };
-      }
-
-      return { success: true, count: 0 };
-    } catch (error) {
-      console.error('Error scheduling maternal vaccinations:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Schedule postpartum vaccinations for mother after delivery
-   * MMR (if not immune) only
-   * If birth was recent (within 90 days) and vaccinations not given, start from today
-   */
-  async schedulePostpartumMaternalVaccinations(patientId, deliveryDate, createdBy) {
-    try {
-      const schedule = [];
-      const assignedStaff = await this.getAssignedStaffForPatient(patientId);
-      const assignedStation = await this.getAssignedStationForPatient(patientId);
-      const today = new Date();
-      const deliveryDateObj = new Date(deliveryDate);
-      const daysSinceDelivery = Math.floor((today - deliveryDateObj) / (1000 * 60 * 60 * 24));
-      
-      // If birth was recent (within 90 days), start from today instead of delivery date
-      const baseDate = daysSinceDelivery <= 90 ? today : deliveryDateObj;
-      
-      // Get vaccine inventory IDs
-      const mmrVaccineId = await this.getVaccineInventoryId('MMR (Measles, Mumps, Rubella) Vaccine');
-      
-      // MMR - After delivery (if not immune)
-      const mmrDate = new Date(baseDate);
-      mmrDate.setDate(mmrDate.getDate() + 1); // Day after delivery (or today + 1 if recent)
-      const mmrDateStr = mmrDate.toISOString().split('T')[0];
-      schedule.push({
-        patient_id: patientId,
-        vaccine_inventory_id: mmrVaccineId,
-        dose_number: 1,
-        scheduled_vaccination: mmrDateStr,
-        status: 'Pending',
-        vaccinated_date: null,
-        created_by: createdBy,
-        assigned_staff: assignedStaff,
-        station_ass: assignedStation,
-        notes: '1st dose of MMR (Measles, Mumps, Rubella) - After delivery if not immune'
-      });
-
-      const { error } = await this.supabase
-        .from('vaccinations')
-        .insert(schedule);
-      
-      if (error) throw error;
-      console.log(`✅ Scheduled ${schedule.length} postpartum maternal vaccines for patient ${patientId}`);
-      return { success: true, count: schedule.length };
-    } catch (error) {
-      console.error('Error scheduling postpartum maternal vaccinations:', error);
-      throw error;
-    }
-  }
 }
 
 export default VaccinationService;
