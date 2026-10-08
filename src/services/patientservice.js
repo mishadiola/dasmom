@@ -2091,6 +2091,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       weeks: this.calculateWeeks(preg.lmd),
 
       visits: normalizedVisits,
+      vaccines: [],
       supplements: (supplementsData || []).map(s => ({
         id: s.id,
         supplement_name: s.supplement_inventory?.supplement_name || 'Unknown',
