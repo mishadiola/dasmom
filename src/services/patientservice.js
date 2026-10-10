@@ -274,7 +274,7 @@ export default class PatientService {
           if (v.next_appt_date && !nextApptMap.has(v.patient_id)) {
             nextApptMap.set(v.patient_id, v.next_appt_date);
           }
-          // Track latest attended visit
+
           const existing = latestAttendedVisitMap.get(v.patient_id);
           if (!existing || new Date(v.visit_date) > new Date(existing.visit_date)) {
             latestAttendedVisitMap.set(v.patient_id, v);
@@ -282,14 +282,13 @@ export default class PatientService {
         }
       });
 
-      // 4. Get deliveries to check for postpartum patients
       const { data: deliveries, error: err4 } = await this.supabase
         .from('deliveries')
         .select('mother_id, delivery_date')
         .order('delivery_date', { ascending: false });
       if (err4) throw err4;
 
-      // Keep the latest delivery date so postpartum status is limited to 42 days.
+  
       const deliveredPatients = new Map();
       (deliveries || []).forEach(d => {
         if (d.mother_id && d.delivery_date) {
@@ -300,10 +299,8 @@ export default class PatientService {
         }
       });
 
-      // 5. Build a map: patient_id → current pregnancy
       const pgiMap = latestPregMap;
 
-      // 6. Map patients + their pregnancy + next appointment
       const mapPatient = (p) => {
         const patientType = 'Mother';
         const pgi = pgiMap.get(p.id);
@@ -320,7 +317,6 @@ export default class PatientService {
         const risk = riskAssessment.riskLevel;
         const riskFactors = riskAssessment.riskFactors;
 
-        // Format next appointment date, only show current or future appointments
         const rawNextAppt = nextApptMap.get(p.id) || null;
         let nextAppt = null;
         if (rawNextAppt) {
@@ -332,13 +328,11 @@ export default class PatientService {
           }
         }
 
-        // Determine patient status
         const pregnancyStatus = getPregnancyStatus(pgi).toLowerCase();
         const edd = pgi?.edd ? new Date(pgi.edd) : null;
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         
-        // Check if EDD has passed (more than 7 days overdue = missed delivery)
         const isEddPassed = edd && !Number.isNaN(edd.getTime()) && edd < today;
         const daysOverdue = isEddPassed ? Math.ceil((today - edd) / (1000 * 60 * 60 * 24)) : 0;
         const isMissedDelivery = isEddPassed && daysOverdue > 7 && pregnancyStatus === 'pregnant';

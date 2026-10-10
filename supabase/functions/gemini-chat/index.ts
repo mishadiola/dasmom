@@ -23,7 +23,7 @@ const supabaseRequest = async (url: string, accessToken: string, apiKey: string)
 
 const systemInstruction = `You are the DasMom maternal and newborn health assistant. You are not a general-purpose chatbot.
 
-Only answer questions about pregnancy, maternal health, prenatal care, postpartum care, and newborn or infant care related to the authenticated mother's records, newborn vaccinations and schedules, appointments, and health records available in DasMom. For unrelated topics such as coding, politics, entertainment, general trivia, or other off-topic requests, politely explain that you can only help with DasMom maternal and newborn health topics.
+Only answer questions about pregnancy, maternal health, prenatal care, postpartum care, and newborn or infant care related to the authenticated mother's records, including her children's recorded birth details, delivery information, vaccinations, appointments, and health records available in DasMom. For unrelated topics such as coding, politics, entertainment, general trivia, or other off-topic requests, politely explain that you can only help with DasMom maternal and newborn health topics.
 
 The health records provided with the user's message are the only private records you may use. Never identify, retrieve, infer, compare, or disclose another person’s information. If the user asks about another mother or user, refuse and explain that you can only discuss their own authorized records. Do not invent records, dates, diagnoses, or medical advice. When records do not answer the question, say so and recommend contacting a qualified healthcare provider. For urgent warning signs, recommend immediate professional care.
 
@@ -86,12 +86,12 @@ runtime.serve(async (req: Request) => {
         supabaseAnonKey,
       ),
       supabaseRequest(
-        `${supabaseUrl}/rest/v1/newborns?mother_id=eq.${encodedPatientId}&select=id,baby_name`,
+        `${supabaseUrl}/rest/v1/newborns?mother_id=eq.${encodedPatientId}&select=id,delivery_id,baby_name,gender,birth_weight,birth_length,head_circumference,apgar_1min,apgar_5min,condition_at_birth,risk_level`,
         accessToken,
         supabaseAnonKey,
       ),
       supabaseRequest(
-        `${supabaseUrl}/rest/v1/deliveries?mother_id=eq.${encodedPatientId}&select=postpartum_visit_date,postpartum_attended_date,postpartum_remarks&order=postpartum_visit_date.asc&limit=10`,
+        `${supabaseUrl}/rest/v1/deliveries?mother_id=eq.${encodedPatientId}&select=id,delivery_date,delivery_type,delivery_mode,gestational_age,complications,notes,postpartum_visit_date,postpartum_attended_date,postpartum_remarks&order=delivery_date.desc&limit=20`,
         accessToken,
         supabaseAnonKey,
       ),
@@ -109,7 +109,7 @@ runtime.serve(async (req: Request) => {
     if (newbornIds.length > 0) {
       const newbornIdFilter = newbornIds.map((id: string) => `"${id}"`).join(",");
       const vaccinesResult = await supabaseRequest(
-        `${supabaseUrl}/rest/v1/vaccinations?newborn_id=in.(${newbornIdFilter})&select=newborn_id,scheduled_vaccination,vaccinated_date,status,notes&order=scheduled_vaccination.asc&limit=100`,
+        `${supabaseUrl}/rest/v1/vaccinations?newborn_id=in.(${newbornIdFilter})&select=newborn_id,dose_number,scheduled_vaccination,vaccinated_date,status,notes,vaccine_inventory(vaccine_name)&order=scheduled_vaccination.asc&limit=100`,
         accessToken,
         supabaseAnonKey,
       );
@@ -120,9 +120,22 @@ runtime.serve(async (req: Request) => {
       vaccines = vaccinesResult.data ?? [];
     }
 
+    const deliveriesById = new Map(
+      (deliveriesResult.data ?? []).map((delivery: { id: string; delivery_date: string | null }) => [
+        delivery.id,
+        delivery,
+      ]),
+    );
+    const newborns = (newbornsResult.data ?? []).map((newborn: { delivery_id: string | null }) => ({
+      ...newborn,
+      birth_date: newborn.delivery_id
+        ? deliveriesById.get(newborn.delivery_id)?.delivery_date ?? null
+        : null,
+    }));
+
     const patientContext = JSON.stringify({
       prenatalVisits: visitsResult.data ?? [],
-      newborns: newbornsResult.data ?? [],
+      newborns,
       newbornVaccinations: vaccines,
       postpartumVisits: deliveriesResult.data ?? [],
     });
