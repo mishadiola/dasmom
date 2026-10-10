@@ -112,13 +112,13 @@ const MotherDashboard = () => {
                     // Main dashboard appointments belong only to the current pregnancy.
                     const todayStart = new Date();
                     todayStart.setHours(0, 0, 0, 0);
+                    const todayKey = `${todayStart.getFullYear()}-${String(todayStart.getMonth() + 1).padStart(2, '0')}-${String(todayStart.getDate()).padStart(2, '0')}`;
+                    const getDateKey = value => String(value || '').split('T')[0];
                     const currentVisits = currentPregnancy?.visits || [];
                     let allAppts = isPregnant ? currentVisits
                         .filter(v => {
                             if (!v.visit_date || ['Cancelled', 'Missed', 'Attended', 'Completed'].includes(v.status)) return false;
-                            const visitDay = new Date(v.visit_date);
-                            visitDay.setHours(0, 0, 0, 0);
-                            return visitDay >= todayStart;
+                            return getDateKey(v.visit_date) >= todayKey;
                         })
                         .map(v => ({
                             id: v.id,
@@ -135,9 +135,7 @@ const MotherDashboard = () => {
                         const nextAppointmentSource = currentVisits
                             .filter(visit => visit.status === 'Attended' && visit.next_appt_date)
                             .filter(visit => {
-                                const nextDay = new Date(visit.next_appt_date);
-                                nextDay.setHours(0, 0, 0, 0);
-                                return nextDay >= todayStart && !scheduledDays.has(String(visit.next_appt_date).split('T')[0]);
+                                return getDateKey(visit.next_appt_date) >= todayKey && !scheduledDays.has(getDateKey(visit.next_appt_date));
                             })
                             .sort((left, right) => new Date(left.next_appt_date) - new Date(right.next_appt_date))[0];
 
@@ -154,50 +152,78 @@ const MotherDashboard = () => {
                         }
                     }
 
-                    if (isPostpartum && latestDelivery) {
-                        const d = latestDelivery;
-                        if (d.postpartum_visit_date && new Date(d.postpartum_visit_date) >= now && !d.postpartum_attended_date) {
-                            allAppts.push({
-                                id: `postpartum-${d.id}`,
-                                date: d.postpartum_visit_date,
-                                time: 'TBD',
-                                type: 'Postpartum Checkup',
-                                staff: d.assigned_staff_name || 'Healthcare Worker',
-                                status: 'Scheduled',
-                                location: patient.station || ''
-                            });
-                        }
-                        currentPregnancy?.newborns?.filter(isNewbornVaccinationEligible).forEach(newborn => {
-                            (newborn.vaccines || []).filter(v => v.scheduled_vaccination && new Date(v.scheduled_vaccination) >= now && !['Completed', 'Cancelled', 'Missed'].includes(v.status)).forEach(vaccine => {
+                    if (!isPregnant) {
+                        (patient.deliveries || []).forEach(delivery => {
+                            (delivery.postpartum_visits || [])
+                                .filter(visit => {
+                                    const status = String(visit.status || 'Scheduled').toLowerCase();
+                                    const scheduledDate = visit.scheduled_date || visit.scheduled_at;
+                                    return scheduledDate && getDateKey(scheduledDate) >= todayKey
+                                        && !['attended', 'completed', 'cancelled', 'missed'].includes(status);
+                                })
+                                .forEach(visit => {
+                                    const scheduledDate = visit.scheduled_at || visit.scheduled_date;
+                                    allAppts.push({
+                                        id: visit.id,
+                                        date: scheduledDate,
+                                        time: visit.scheduled_at
+                                            ? new Date(visit.scheduled_at).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' })
+                                            : '',
+                                        type: visit.visit_type || 'Postpartum Visit',
+                                        staff: visit.assigned_staff_name || 'Healthcare Worker',
+                                        status: visit.status || 'Scheduled',
+                                        location: visit.assigned_station_name || visit.station_name || patient.station || ''
+                                    });
+                                });
+                        });
+
+                        const eligibleNewbornIds = new Set((patient.newborns || [])
+                            .filter(isNewbornVaccinationEligible)
+                            .map(newborn => newborn.id));
+                        (patient.vaccines || [])
+                            .filter(vaccine => {
+                                const status = String(vaccine.status || 'Pending').toLowerCase();
+                                const dueDate = vaccine.scheduled_vaccination;
+                                if (vaccine.recipient_type === 'Baby' && !eligibleNewbornIds.has(vaccine.newborn_id)) return false;
+                                return dueDate && getDateKey(dueDate) >= todayKey
+                                    && !['completed', 'cancelled', 'missed', 'overdue'].includes(status);
+                            })
+                            .forEach(vaccine => {
                                 allAppts.push({
                                     id: vaccine.id,
                                     date: vaccine.scheduled_vaccination,
                                     time: '',
-                                    type: `${newborn.baby_name || 'Newborn'} Vaccination`,
+                                    type: `${vaccine.recipient_type === 'Baby' ? `${vaccine.recipient_name || 'Baby'} ` : ''}Vaccination${vaccine.vaccine_name ? ` · ${vaccine.vaccine_name}` : ''}`,
                                     staff: vaccine.assigned_staff_name || 'Healthcare Worker',
-                                    status: vaccine.status || 'Scheduled',
-                                    location: patient.station || ''
+                                    status: vaccine.status || 'Pending',
+                                    location: vaccine.administration_station_name || vaccine.assigned_staff_station || patient.station || ''
                                 });
                             });
-                        });
                     }
 
                     const appts = allAppts
                         .sort((a, b) => new Date(a.date) - new Date(b.date))
-                        .slice(0, 3);
+                        .slice(0, 1);
                         
                     setAppointments(appts);
 
-                    if (latestDelivery?.postpartum_visit_date || latestDelivery?.postpartum_attended_date) {
-                        const scheduledDate = String(latestDelivery.postpartum_visit_date || '').split('T')[0];
-                        const attendedDate = latestDelivery.postpartum_attended_date || null;
+                    const postpartumVisits = latestDelivery?.postpartum_visits || [];
+                    if (postpartumVisits.length > 0) {
+                        const selectedPostpartumVisit = postpartumVisits.find(visit => visit.status !== 'Attended' && visit.status !== 'Cancelled')
+                            || postpartumVisits[postpartumVisits.length - 1];
+                        const scheduledDate = selectedPostpartumVisit.scheduled_at;
+                        const attendedDate = selectedPostpartumVisit.attended_date || null;
                         const todayDate = new Date().toISOString().split('T')[0];
                         setPostpartumVisit({
-                            status: attendedDate ? 'Completed' : scheduledDate < todayDate ? 'Missed' : 'Scheduled',
-                            date: attendedDate || latestDelivery.postpartum_visit_date,
+                            status: selectedPostpartumVisit.status === 'Attended'
+                                ? 'Completed'
+                                : String(selectedPostpartumVisit.scheduled_date || scheduledDate).slice(0, 10) < todayDate
+                                    ? 'Missed'
+                                    : 'Scheduled',
+                            date: attendedDate || scheduledDate,
                             scheduledDate,
                             attendedDate,
-                            remarks: latestDelivery.postpartum_remarks
+                            remarks: selectedPostpartumVisit.assessment
                         });
                     }
 

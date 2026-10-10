@@ -42,6 +42,19 @@ const normalizeVisitStatus = (visit) => {
   return visitDate && visitDate < today ? 'Missed' : (visit.status || 'Scheduled');
 };
 
+const normalizeVaccinationStatus = (vaccination) => {
+  const status = String(vaccination.status || '').trim().toLowerCase();
+  if (vaccination.vaccinated_date || status === 'completed') return 'Completed';
+  if (status === 'missed' || status === 'overdue') return 'Missed';
+  if (status === 'cancelled') return 'Cancelled';
+
+  const scheduledDate = String(vaccination.scheduled_vaccination || '').split('T')[0];
+  const today = new Date();
+  const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  if (scheduledDate && scheduledDate < todayDate) return 'Missed';
+  return vaccination.status || 'Pending';
+};
+
 export default class PatientService {
   constructor() {
     this.supabase = supabase;
@@ -1316,12 +1329,6 @@ export default class PatientService {
       const { default: BabyService } = await import('./babyservices');
       const babyService = new BabyService();
       
-      // Auto-schedule postpartum visit within 48 hours
-      const deliveryDate = new Date(patientData.birthDate);
-      const ppDate = new Date(deliveryDate);
-      ppDate.setDate(ppDate.getDate() + 2); // 48 hours after delivery
-      const postpartumVisitDate = ppDate.toISOString().split('T')[0];
-
       const deliveryData = {
         mother_id: patientId,
         pregnancy_id: pregnancyInfoId,
@@ -1334,7 +1341,6 @@ export default class PatientService {
         complications: [],
         attending_staff: patientData.attending_staff || null,
         facility: patientData.plannedDeliveryPlace || 'Hospital',
-        postpartum_visit_date: postpartumVisitDate,
         notes: null
       };
 
@@ -1899,9 +1905,19 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       .eq('patient_id', patientId)
       .order('created_at', { ascending: false });
 
+    const { data: maternalVaccinationsData, error: maternalVaccinationsError } = await this.supabase
+      .from('vaccinations')
+      .select(`
+        id, patient_id, vaccine_inventory_id, dose_number, scheduled_vaccination,
+        vaccinated_date, status, notes, vaccinated_by, assigned_staff, station_ass,
+        vaccine_inventory (vaccine_name, brand, unit, doses, batch, expiration_date)
+      `)
+      .eq('patient_id', patientId)
+      .order('scheduled_vaccination', { ascending: true, nullsFirst: false });
+    if (maternalVaccinationsError) throw maternalVaccinationsError;
 
     // Fetch deliveries for this patient (via mother_id relationship)
-    const { data: deliveriesData } = await this.supabase
+    const { data: deliveriesData, error: deliveriesError } = await this.supabase
       .from('deliveries')
       .select(`
         *,
@@ -1914,27 +1930,56 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       `)
       .eq('mother_id', patientId)
       .order('delivery_date', { ascending: false });
+    if (deliveriesError) throw deliveriesError;
+
+    const deliveryIds = (deliveriesData || []).map(delivery => delivery.id);
+    const { data: postpartumVisitsData, error: postpartumVisitsError } = deliveryIds.length
+      ? await this.supabase
+        .from('postpartum_visits')
+        .select(`
+          id, delivery_id, patient_id, visit_number, visit_type, scheduled_date, scheduled_at,
+          status, attended_date, missed_reason, assigned_staff, assigned_station, station_ass,
+          personnel_present, performed_by, created_by, assessment, notes,
+          bp_systolic, bp_diastolic, weight_kg, temp_c, pulse_bpm, resp_rate_cpm,
+          uterine_involution, lochia_assessment, perineal_or_wound_condition, pain_assessment,
+          breast_assessment, breastfeeding_status, urination_and_bowel_status,
+          mental_health_assessment, danger_signs, clinical_notes, advice_given,
+          treatments_given, medications_review, family_planning_counseling,
+          is_referred, referred_to, referral_reason, next_appt_date, next_appt_type
+        `)
+        .in('delivery_id', deliveryIds)
+        .order('scheduled_at', { ascending: true })
+      : { data: [], error: null };
+    if (postpartumVisitsError) throw postpartumVisitsError;
 
     // Fetch newborns for this patient (via mother_id relationship)
-    const { data: newbornsData } = await this.supabase
+    const { data: newbornsData, error: newbornsError } = await this.supabase
       .from('newborns')
       .select(`
         *,
         vaccinations (
-          id, dose_number, notes, status, scheduled_vaccination, vaccinated_date,
-          vaccinated_by, assigned_staff,
+          id, vaccine_inventory_id, dose_number, notes, status, scheduled_vaccination, vaccinated_date,
+          vaccinated_by, assigned_staff, station_ass,
           vaccine_inventory (vaccine_name, brand, unit, doses, batch, expiration_date)
         )
       `)
       .eq('mother_id', patientId)
       .order('created_at', { ascending: false });
+    if (newbornsError) throw newbornsError;
 
     const assignedStaffIds = [...new Set([
       patientData.retained_staff,
     ...(visitsData || []).flatMap(visit => [visit.assigned_staff, visit.performed_by, visit.retained_staff]),
       ...(supplementsData || []).flatMap(supplement => [supplement.administered_by, supplement.created_by]),
+      ...(maternalVaccinationsData || []).flatMap(vaccination => [vaccination.assigned_staff, vaccination.vaccinated_by]),
       ...(newbornsData || []).flatMap(newborn => (newborn.vaccinations || []).map(vaccine => vaccine.assigned_staff)),
-      ...(deliveriesData || []).map(delivery => delivery.attending_staff || delivery.assigned_staff)
+      ...(newbornsData || []).flatMap(newborn => (newborn.vaccinations || []).map(vaccine => vaccine.vaccinated_by)),
+      ...(deliveriesData || []).map(delivery => delivery.attending_staff || delivery.assigned_staff),
+      ...(postpartumVisitsData || []).flatMap(visit => [
+        visit.assigned_staff,
+        visit.personnel_present,
+        visit.performed_by
+      ])
     ].filter(Boolean))];
 
     let assignedStaffById = {};
@@ -1965,7 +2010,10 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     const stationIds = [...new Set([
       ...(visitsData || []).flatMap(visit => [visit.assigned_station, visit.station_ass]),
       ...(supplementsData || []).map(supplement => supplement.station_ass),
-      ...(deliveriesData || []).map(delivery => delivery.station_ass)
+      ...(maternalVaccinationsData || []).map(vaccination => vaccination.station_ass),
+      ...(newbornsData || []).flatMap(newborn => (newborn.vaccinations || []).map(vaccination => vaccination.station_ass)),
+      ...(deliveriesData || []).map(delivery => delivery.station_ass),
+      ...(postpartumVisitsData || []).flatMap(visit => [visit.assigned_station, visit.station_ass])
     ].filter(Boolean))];
     const { data: visitStations } = stationIds.length
       ? await this.supabase.from('stations').select('id, station_name').in('id', stationIds)
@@ -1995,6 +2043,23 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     // Find latest attended visit with the updated dynamic risk calculations
     const latestAttendedVisit = normalizedVisits.find(v => v.status === 'Attended') || null;
 
+    const postpartumVisitsByDelivery = new Map();
+    (postpartumVisitsData || []).forEach(visit => {
+      const visits = postpartumVisitsByDelivery.get(visit.delivery_id) || [];
+      visits.push({
+        ...visit,
+        assigned_staff_name: assignedStaffById[visit.assigned_staff]?.name || null,
+        assigned_staff_station: assignedStaffById[visit.assigned_staff]?.station || null,
+        personnel_present_name: assignedStaffById[visit.personnel_present]?.name || null,
+        performed_by_name: assignedStaffById[visit.performed_by]?.name || null,
+        created_by_name: assignedStaffById[visit.created_by]?.name || null,
+        assigned_station_name: stationNameById[visit.assigned_station] || null,
+        visit_station_name: stationNameById[visit.station_ass] || null,
+        station_name: stationNameById[visit.assigned_station || visit.station_ass] || null
+      });
+      postpartumVisitsByDelivery.set(visit.delivery_id, visits);
+    });
+
     const normalizedDeliveries = (deliveriesData || []).map(d => {
       const attendingProfile = Array.isArray(d.staff_profiles) ? d.staff_profiles[0] : d.staff_profiles;
       const staffLookup = assignedStaffById[d.attending_staff];
@@ -2017,9 +2082,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         complications: d.complications,
         notes: d.notes,
         facility: d.pregnancy_info?.place_of_delivery || null,
-        postpartum_visit_date: d.postpartum_visit_date,
-        postpartum_attended_date: d.postpartum_attended_date,
-        postpartum_remarks: d.postpartum_remarks
+        postpartum_visits: postpartumVisitsByDelivery.get(d.id) || []
       };
     });
 
@@ -2030,14 +2093,37 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       condition: newborn.condition_at_birth || newborn.condition || null,
       vaccines: (newborn.vaccinations || []).map(vaccine => ({
         ...vaccine,
+        newborn_id: newborn.id,
         vaccine_name: vaccine.vaccine_inventory?.vaccine_name || null,
         vaccine_inventory: vaccine.vaccine_inventory || null,
+        status: normalizeVaccinationStatus(vaccine),
+        recipient_type: 'Baby',
+        recipient_name: newborn.baby_name || 'Newborn',
+        administration_station_name: stationNameById[vaccine.station_ass] || null,
         assigned_staff: vaccine.assigned_staff || patientData.retained_staff || null,
         assigned_staff_name: assignedStaffById[vaccine.assigned_staff || patientData.retained_staff]?.name || null,
         assigned_staff_station: assignedStaffById[vaccine.assigned_staff || patientData.retained_staff]?.station || null,
-        vaccinated_by_name: assignedStaffById[vaccine.vaccinated_by]?.name || null
+        vaccinated_by_name: assignedStaffById[vaccine.vaccinated_by]?.name || null,
+        vaccinated_by_station: assignedStaffById[vaccine.vaccinated_by]?.station || null
       }))
     }));
+    const vaccinationRecords = [
+      ...(maternalVaccinationsData || []).map(vaccination => ({
+        ...vaccination,
+        vaccine_name: vaccination.vaccine_inventory?.vaccine_name || null,
+        status: normalizeVaccinationStatus(vaccination),
+        recipient_type: 'Mother',
+        recipient_name: `${patientData.first_name || ''} ${patientData.last_name || ''}`.trim() || 'Mother',
+        administration_station_name: stationNameById[vaccination.station_ass] || null,
+        assigned_staff_name: assignedStaffById[vaccination.assigned_staff]?.name || null,
+        vaccinated_by_name: assignedStaffById[vaccination.vaccinated_by]?.name || null
+      })),
+      ...normalizedNewborns.flatMap(newborn => newborn.vaccines)
+    ].sort((left, right) => {
+      const leftDate = left.scheduled_vaccination || left.vaccinated_date || '';
+      const rightDate = right.scheduled_vaccination || right.vaccinated_date || '';
+      return leftDate.localeCompare(rightDate);
+    });
 
     const pregnancyHistory = buildPregnancyHistory(
       pregnancyData || [],
@@ -2085,7 +2171,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       weeks: this.calculateWeeks(preg.lmd),
 
       visits: normalizedVisits,
-      vaccines: [],
+      vaccines: vaccinationRecords,
       supplements: (supplementsData || []).map(s => ({
         id: s.id,
         supplement_name: s.supplement_inventory?.supplement_name || 'Unknown',

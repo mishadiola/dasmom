@@ -345,70 +345,68 @@ const PrenatalVisits = () => {
 
         const loadPostpartumFollowUps = async () => {
             try {
-                const [{ data, error }, { data: postpartumVisits, error: postpartumVisitsError }] = await Promise.all([
-                    patientService.supabase
-                        .from('deliveries')
-                        .select(`
-                        id,
-                        mother_id,
-                        delivery_date,
-                        postpartum_visit_date,
-                        postpartum_attended_date,
-                        postpartum_remarks,
-                        patient_basic_info!deliveries_mother_id_fkey (id, first_name, last_name)
-                    `)
-                        .not('postpartum_visit_date', 'is', null)
-                        .order('postpartum_visit_date', { ascending: false }),
-                    patientService.supabase
-                        .from('prenatal_visits')
-                        .select('patient_id, visit_date, assigned_staff')
-                        .eq('next_appt_type', 'Postpartum Visit')
-                ]);
-
+                const { data: postpartumVisits, error } = await patientService.supabase
+                    .from('postpartum_visits')
+                    .select('id, delivery_id, patient_id, visit_type, scheduled_at, attended_date, status, assigned_staff, station_ass')
+                    .order('scheduled_at', { ascending: false });
                 if (error) throw error;
-                if (postpartumVisitsError) throw postpartumVisitsError;
 
-                const postpartumVisitByKey = new Map((postpartumVisits || []).map(visit => [
-                    `${visit.patient_id}:${String(visit.visit_date).slice(0, 10)}`,
-                    visit
-                ]));
-                const postpartumStaffIds = [...new Set((postpartumVisits || []).map(visit => visit.assigned_staff).filter(Boolean))];
-                const { data: postpartumStaffProfiles, error: postpartumStaffError } = postpartumStaffIds.length
-                    ? await patientService.supabase.from('staff_profiles').select('id, full_name').in('id', postpartumStaffIds)
-                    : { data: [], error: null };
-                if (postpartumStaffError) throw postpartumStaffError;
-                const postpartumStaffNames = Object.fromEntries((postpartumStaffProfiles || []).map(profile => [profile.id, profile.full_name]));
+                const patientIds = [...new Set((postpartumVisits || []).map(visit => visit.patient_id).filter(Boolean))];
+                const staffIds = [...new Set((postpartumVisits || []).map(visit => visit.assigned_staff).filter(Boolean))];
+                const stationIds = [...new Set((postpartumVisits || []).map(visit => visit.station_ass).filter(Boolean))];
+                const [patientResult, staffResult, stationResult] = await Promise.all([
+                    patientIds.length
+                        ? patientService.supabase.from('patient_basic_info').select('id, first_name, last_name').in('id', patientIds)
+                        : Promise.resolve({ data: [], error: null }),
+                    staffIds.length
+                        ? patientService.supabase.from('staff_profiles').select('id, full_name').in('id', staffIds)
+                        : Promise.resolve({ data: [], error: null }),
+                    stationIds.length
+                        ? patientService.supabase.from('stations').select('id, station_name').in('id', stationIds)
+                        : Promise.resolve({ data: [], error: null })
+                ]);
+                if (patientResult.error) throw patientResult.error;
+                if (staffResult.error) throw staffResult.error;
+                if (stationResult.error) throw stationResult.error;
+                const patientById = new Map((patientResult.data || []).map(patient => [patient.id, patient]));
+                const staffById = new Map((staffResult.data || []).map(profile => [profile.id, profile.full_name]));
+                const stationById = new Map((stationResult.data || []).map(station => [station.id, station.station_name]));
 
-                const rows = (data || []).map(d => {
-                    const attendedDate = d.postpartum_attended_date || null;
-                    const scheduledDate = d.postpartum_visit_date || d.delivery_date || '';
+                const rows = (postpartumVisits || []).map(visit => {
+                    const attendedDate = visit.attended_date || null;
+                    const scheduledDate = visit.scheduled_at || '';
                     const dateStr = attendedDate || scheduledDate;
-                    const scheduledVisit = postpartumVisitByKey.get(`${d.mother_id}:${String(scheduledDate).slice(0, 10)}`);
-                    const assignedStaffId = scheduledVisit?.assigned_staff || null;
-                    const patientName = d.patient_basic_info
-                        ? `${d.patient_basic_info.first_name || ''} ${d.patient_basic_info.last_name || ''}`.trim()
-                        : d.mother_id;
+                    const patient = patientById.get(visit.patient_id);
+                    const patientName = patient
+                        ? `${patient.first_name || ''} ${patient.last_name || ''}`.trim()
+                        : visit.patient_id;
+                    const status = visit.status === 'Attended'
+                        ? 'Attended'
+                        : visit.status === 'Cancelled'
+                            ? 'Cancelled'
+                            : scheduledDate && new Date(scheduledDate) < new Date()
+                                ? 'Missed'
+                                : 'Scheduled';
 
                     return {
-                        id: d.id,
-                        patientId: d.mother_id,
-                        patientName: patientName || d.mother_id,
-                        vaccineName: 'Postpartum Follow-up',
+                        id: visit.id,
+                        deliveryId: visit.delivery_id,
+                        patientId: visit.patient_id,
+                        patientName: patientName || visit.patient_id,
+                        vaccineName: visit.visit_type,
                         doseText: '',
-                        assignedStaffId,
-                        assignedStaff: postpartumStaffNames[assignedStaffId] || null,
+                        assignedStaffId: visit.assigned_staff || null,
+                        assignedStaff: staffById.get(visit.assigned_staff) || null,
                         visitDate: dateStr,
-                        visitDateOnly: dateStr,
-                        status: attendedDate
-                            ? 'Attended'
-                            : dateStr && dateStr < new Date().toISOString().split('T')[0]
-                                ? 'Missed'
-                                : 'Scheduled',
+                        visitDateOnly: toLocalDateStr(new Date(scheduledDate)),
+                        status,
                         attendedDate,
                         vaccinatedDate: null,
-                        scheduledVaccination: dateStr,
+                        scheduledVaccination: scheduledDate,
+                        assignedStationId: visit.station_ass || null,
+                        assignedStation: stationById.get(visit.station_ass) || null,
                         notes: 'Postpartum follow-up',
-                        raw: { ...d, assigned_staff: assignedStaffId }
+                        raw: visit
                     };
                 });
 

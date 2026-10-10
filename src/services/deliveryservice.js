@@ -144,7 +144,6 @@ export default class DeliveryService {
                     risk_level: formData.riskLevel || 'Normal',
                     complications: Array.isArray(formData.complications) ? formData.complications : [],
                     attending_staff: authData.user?.id || null,
-                    postpartum_visit_date: formData.postpartumDate || null,
                     notes: formData.notes || null,
                     created_by: authData.user?.id || null
                 })
@@ -166,6 +165,17 @@ export default class DeliveryService {
                 created_by: authData.user?.id || null
             });
             if (newbornError) throw newbornError;
+
+            const { data: postpartumEmail, error: postpartumEmailError } = await this.supabase.functions.invoke(
+                'postpartum-delivery-email',
+                { body: { delivery_id: delivery.id } }
+            );
+            if (postpartumEmailError || !postpartumEmail?.emailSent) {
+                console.error(
+                    'Delivery was recorded, but postpartum email delivery failed:',
+                    postpartumEmailError?.message || postpartumEmail?.error || 'Email was not sent.'
+                );
+            }
 
             // Optionally update mother's status to 'Postpartum'
             await this.supabase

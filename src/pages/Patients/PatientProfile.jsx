@@ -21,11 +21,98 @@ const formatReadableDate = (dateString) => {
     return formatDate(dateString, { month: 'long', day: 'numeric', year: 'numeric' });
 };
 
-const getPostpartumStatus = (delivery) => {
-    if (delivery.postpartum_attended_date) return 'Completed';
-    const scheduledDate = String(delivery.postpartum_visit_date || '').split('T')[0];
-    const today = new Date().toISOString().split('T')[0];
-    return scheduledDate && scheduledDate < today ? 'Missed' : 'Scheduled';
+const formatPostpartumValue = (value) => {
+    if (Array.isArray(value)) return value.filter(Boolean).join(', ');
+    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+    if (value && typeof value === 'object') return Object.values(value).filter(Boolean).join(', ');
+    return String(value ?? '').trim();
+};
+
+const getPostpartumStatus = (visit) => {
+    if (visit.status === 'Attended') return 'Completed';
+    const scheduledAt = visit.scheduled_at || visit.scheduled_date;
+    if (visit.status === 'Scheduled' && scheduledAt && new Date(scheduledAt) < new Date()) return 'Missed';
+    return visit.status || 'Unknown';
+};
+
+const PostpartumVisitSummary = ({ visits = [] }) => {
+    if (!visits.length) return <p style={{ color: '#64748b', fontSize: '13px', margin: '8px 0 0' }}>No postpartum visits are linked to this delivery.</p>;
+
+    return (
+        <div style={{ display: 'grid', gap: '10px', marginTop: '10px' }}>
+            {visits.map(visit => {
+                const status = getPostpartumStatus(visit);
+                const assessmentDetails = Object.entries(visit.assessment || {})
+                    .filter(([key, value]) => key !== 'general_notes' && formatPostpartumValue(value));
+                const clinicalDetails = [
+                    ['Blood pressure', visit.bp_systolic && visit.bp_diastolic ? `${visit.bp_systolic}/${visit.bp_diastolic} mmHg` : null],
+                    ['Weight', visit.weight_kg ? `${visit.weight_kg} kg` : null],
+                    ['Temperature', visit.temp_c ? `${visit.temp_c} °C` : null],
+                    ['Pulse', visit.pulse_bpm ? `${visit.pulse_bpm} bpm` : null],
+                    ['Respiratory rate', visit.resp_rate_cpm ? `${visit.resp_rate_cpm}/min` : null],
+                    ['Uterine recovery', visit.uterine_involution],
+                    ['Lochia', visit.lochia_assessment],
+                    ['Perineal / wound condition', visit.perineal_or_wound_condition],
+                    ['Pain assessment', visit.pain_assessment],
+                    ['Breast assessment', visit.breast_assessment],
+                    ['Breastfeeding', visit.breastfeeding_status],
+                    ['Urination / bowel status', visit.urination_and_bowel_status],
+                    ['Mental health', visit.mental_health_assessment],
+                    ['Danger signs', visit.danger_signs],
+                    ['Clinical notes', visit.clinical_notes || visit.notes || visit.assessment?.general_notes],
+                    ['Advice given', visit.advice_given],
+                    ['Treatments given', visit.treatments_given],
+                    ['Medication review', visit.medications_review],
+                    ['Family planning', visit.family_planning_counseling],
+                    ['Referral', visit.is_referred ? [visit.referred_to, visit.referral_reason].filter(Boolean).join(' — ') || 'Yes' : null],
+                    ['Next appointment', visit.next_appt_date ? `${visit.next_appt_type || 'Follow-up'} · ${formatReadableDate(visit.next_appt_date)}` : null],
+                    ['Missed reason', visit.missed_reason],
+                ].filter(([, value]) => formatPostpartumValue(value));
+                const scheduledDate = visit.scheduled_date || visit.scheduled_at;
+
+                return (
+                    <div key={visit.id} style={{ padding: '12px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '9px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+                            <div>
+                                <strong style={{ color: '#1e293b', fontSize: '13px' }}>{visit.visit_type || `Postpartum visit ${visit.visit_number || ''}`}</strong>
+                                <div style={{ color: '#64748b', fontSize: '12px', marginTop: '3px' }}>
+                                    Scheduled {formatReadableDate(scheduledDate) || 'Date unavailable'}
+                                    {visit.attended_date && ` · Attended ${formatReadableDate(visit.attended_date)}`}
+                                </div>
+                            </div>
+                            <span style={{ color: status === 'Completed' ? '#047857' : status === 'Missed' || status === 'Cancelled' ? '#b91c1c' : '#1d4ed8', backgroundColor: status === 'Completed' ? '#ecfdf5' : status === 'Missed' || status === 'Cancelled' ? '#fef2f2' : '#eff6ff', borderRadius: '20px', padding: '4px 10px', fontSize: '11px', fontWeight: '700' }}>
+                                {status}
+                            </span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '8px', color: '#475569', fontSize: '12px' }}>
+                            <span><strong>Assigned staff:</strong> {visit.assigned_staff_name || 'Unassigned'}</span>
+                            <span><strong>Station:</strong> {visit.assigned_station_name || visit.visit_station_name || visit.station_name || 'Unassigned'}</span>
+                            {visit.personnel_present_name && <span><strong>Personnel present:</strong> {visit.personnel_present_name}</span>}
+                            {visit.performed_by_name && <span><strong>Recorded by:</strong> {visit.performed_by_name}</span>}
+                        </div>
+                        {(clinicalDetails.length > 0 || assessmentDetails.length > 0) && (
+                            <div style={{ marginTop: '10px', paddingTop: '9px', borderTop: '1px solid #f1f5f9' }}>
+                                <strong style={{ color: '#334155', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '.04em' }}>Findings and care</strong>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '6px 14px', marginTop: '6px' }}>
+                                    {clinicalDetails.map(([label, value]) => (
+                                        <div key={label} style={{ color: '#475569', fontSize: '12px' }}><strong>{label}:</strong> {formatPostpartumValue(value)}</div>
+                                    ))}
+                                    {assessmentDetails.map(([key, value]) => (
+                                        <div key={key} style={{ color: '#475569', fontSize: '12px' }}>
+                                            <strong>{key.replace(/_/g, ' ').replace(/\b\w/g, character => character.toUpperCase())}:</strong> {formatPostpartumValue(value)}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {!clinicalDetails.length && !assessmentDetails.length && status === 'Completed' && (
+                            <p style={{ color: '#64748b', fontSize: '12px', margin: '9px 0 0' }}>No assessment findings recorded.</p>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
 };
 
 // Helper function to extract first 4 numeric digits from patient ID
@@ -832,8 +919,11 @@ const PatientProfile = () => {
                                         <p>G{p.gravida || 1} P{p.para || 0}</p>
                                     </div>
                                     <div className="tracking-detail-box">
-                                        <h5>Postpartum Visit</h5>
-                                        <p>{formatReadableDate(p.postpartumVisitDate) || 'Scheduled'}</p>
+                                        <h5>Postpartum Visits</h5>
+                                        <PostpartumVisitSummary
+                                            visits={(p.currentPregnancy?.deliveries || [])
+                                                .flatMap(delivery => delivery.postpartum_visits || [])}
+                                        />
                                     </div>
                                 </div>
                             </>
@@ -1125,39 +1215,47 @@ const PatientProfile = () => {
                 {/* --- DISTRIBUTION RECORDS --- */}
                 {activeTab === 'vaccines' && (
                     <div className="info-grid animate-fade" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', alignItems: 'stretch' }}>
-                        {/* Administered Vaccines Card */}
+                        {/* Maternal and newborn vaccination records */}
                         <div className="info-card" style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #edf2f7', padding: '28px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', height: '100%' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
                                 <div style={{ backgroundColor: '#fff0f3', padding: '12px', borderRadius: '14px', color: '#b9818a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <Syringe size={22} />
                                 </div>
-                                <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#1e293b', margin: 0 }}>Administered Vaccines</h3>
+                                <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#1e293b', margin: 0 }}>Vaccination Records — Mother & Babies</h3>
                             </div>
                             
-                            {p.vaccines.length > 0 ? (
+                            {p.vaccines?.length > 0 ? (
                                 <div style={{ overflowX: 'auto', flex: 1 }}>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                                         <thead>
                                             <tr>
+                                                <th style={{ padding: '0 16px 16px 0', fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid #f1f5f9' }}>Recipient</th>
                                                 <th style={{ padding: '0 16px 16px 0', fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid #f1f5f9' }}>Vaccine Name</th>
                                                 <th style={{ padding: '0 16px 16px 16px', fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid #f1f5f9' }}>Dose</th>
-                                                <th style={{ padding: '0 16px 16px 16px', fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid #f1f5f9' }}>Date Given</th>
+                                                <th style={{ padding: '0 16px 16px 16px', fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid #f1f5f9' }}>Due / Given</th>
                                                 <th style={{ padding: '0 0 16px 16px', fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', borderBottom: '2px solid #f1f5f9', textAlign: 'right' }}>Status</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {p.vaccines.map((v, i) => {
                                                 const status = v.status || (v.vaccinated_date ? 'Completed' : 'Pending');
-                                                const statusColor = status === 'Completed' ? '#059669' : '#d97706';
-                                                const statusBg = status === 'Completed' ? '#d1fae5' : '#fef3c7';
+                                                const statusColor = status === 'Completed' ? '#059669' : status === 'Missed' || status === 'Cancelled' ? '#b91c1c' : '#d97706';
+                                                const statusBg = status === 'Completed' ? '#d1fae5' : status === 'Missed' || status === 'Cancelled' ? '#fee2e2' : '#fef3c7';
                                                 return (
-                                                    <tr key={i} style={{ borderBottom: '1px solid #f8fafc' }}>
-                                                        <td style={{ padding: '20px 16px 20px 0', fontSize: '14px', color: '#0f172a', fontWeight: '600', maxWidth: '260px', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.4' }}>
-                                                            <div>Scheduled: {v.notes || 'Scheduled vaccination'}</div>
-                                                            {v.vaccine_inventory && <small style={{ display: 'block', color: '#64748b', marginTop: '4px' }}>Actual: {v.vaccine_inventory.vaccine_name}{v.vaccine_inventory.brand ? ` · Brand: ${v.vaccine_inventory.brand}` : ''}</small>}
+                                                    <tr key={`${v.recipient_type}-${v.id || i}`} style={{ borderBottom: '1px solid #f8fafc' }}>
+                                                        <td style={{ padding: '20px 16px 20px 0', fontSize: '13px', color: '#475569', fontWeight: '600' }}>
+                                                            <div>{v.recipient_name || p.name}</div>
+                                                            <small style={{ display: 'block', color: '#64748b', marginTop: '3px' }}>{v.recipient_type || 'Mother'}</small>
                                                         </td>
-                                                        <td style={{ padding: '20px 16px', fontSize: '14px', color: '#475569', fontWeight: '500' }}>{v.dose_number}</td>
-                                                        <td style={{ padding: '20px 16px', fontSize: '14px', color: '#475569', fontWeight: '500' }}>{v.vaccinated_date || v.scheduled_vaccination}</td>
+                                                        <td style={{ padding: '20px 16px 20px 0', fontSize: '14px', color: '#0f172a', fontWeight: '600', maxWidth: '260px', wordWrap: 'break-word', whiteSpace: 'normal', lineHeight: '1.4' }}>
+                                                            <div>{v.vaccine_name || v.vaccine_inventory?.vaccine_name || v.notes || 'Scheduled vaccination'}</div>
+                                                            {v.vaccine_inventory?.brand && <small style={{ display: 'block', color: '#64748b', marginTop: '4px' }}>Brand: {v.vaccine_inventory.brand}</small>}
+                                                        </td>
+                                                        <td style={{ padding: '20px 16px', fontSize: '14px', color: '#475569', fontWeight: '500' }}>{v.dose_number ? `Dose ${v.dose_number}` : v.dose || '—'}</td>
+                                                        <td style={{ padding: '20px 16px', fontSize: '14px', color: '#475569', fontWeight: '500' }}>
+                                                            {formatReadableDate(v.vaccinated_date || v.scheduled_vaccination) || 'Not scheduled'}
+                                                            <small style={{ display: 'block', color: '#64748b', marginTop: '3px' }}>{v.vaccinated_date ? 'Given' : 'Scheduled'}</small>
+                                                        </td>
                                                         <td style={{ padding: '20px 0 20px 16px', textAlign: 'right' }}>
                                                             <span style={{ display: 'inline-block', padding: '6px 14px', borderRadius: '24px', fontSize: '12px', fontWeight: '700', backgroundColor: statusBg, color: statusColor, letterSpacing: '0.3px' }}>{status}</span>
                                                         </td>
@@ -1169,7 +1267,7 @@ const PatientProfile = () => {
                                 </div>
                             ) : (
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, padding: '40px 0' }}>
-                                    <p style={{ color: '#94a3b8', fontSize: '14px', fontWeight: '500' }}>No vaccines administered yet.</p>
+                                    <p style={{ color: '#94a3b8', fontSize: '14px', fontWeight: '500' }}>No maternal or newborn vaccination records found.</p>
                                 </div>
                             )}
                         </div>
@@ -1290,30 +1388,10 @@ const PatientProfile = () => {
                                                     <p style={{ margin: '4px 0 0', color: '#991b1b', fontSize: '13px', fontWeight: '500' }}>{Array.isArray(delivery.complications) ? delivery.complications.join(', ') : delivery.complications}</p>
                                                 </div>
                                             )}
-                                            {(delivery.postpartum_visit_date || delivery.postpartum_attended_date) && (
-                                                <div style={{ marginTop: '16px', padding: '12px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', borderLeft: '3px solid #b9818a' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-                                                        <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Postpartum Follow-up</label>
-                                                        <span style={{ fontSize: '12px', fontWeight: '700', color: getPostpartumStatus(delivery) === 'Completed' ? '#059669' : getPostpartumStatus(delivery) === 'Missed' ? '#dc2626' : '#b45309' }}>
-                                                            {getPostpartumStatus(delivery)}
-                                                        </span>
-                                                    </div>
-                                                    <p style={{ margin: '6px 0 0', color: '#475569', fontSize: '13px' }}>
-                                                        Scheduled: {formatReadableDate(delivery.postpartum_visit_date)}
-                                                        {delivery.postpartum_attended_date && ` · Attended: ${formatReadableDate(delivery.postpartum_attended_date)}`}
-                                                    </p>
-                                                    {delivery.postpartum_remarks?.personnel_present?.name && (
-                                                        <p style={{ margin: '5px 0 0', color: '#475569', fontSize: '13px' }}>
-                                                            Personnel present: {delivery.postpartum_remarks.personnel_present.name}
-                                                        </p>
-                                                    )}
-                                                    {delivery.postpartum_remarks?.assessment && (
-                                                        <p style={{ margin: '5px 0 0', color: '#64748b', fontSize: '12px' }}>
-                                                            Assessment recorded: {Object.values(delivery.postpartum_remarks.assessment).filter(Boolean).length} field(s)
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            )}
+                                            <div style={{ marginTop: '16px', padding: '12px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', borderLeft: '3px solid #b9818a' }}>
+                                                <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Postpartum Follow-up</label>
+                                                <PostpartumVisitSummary visits={delivery.postpartum_visits || []} />
+                                            </div>
                                         </div>
                                     ))
                                 ) : (

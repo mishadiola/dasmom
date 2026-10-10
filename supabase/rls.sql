@@ -690,6 +690,7 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.staff_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.patient_basic_info ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.deliveries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.postpartum_visits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pregnancy_info ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.prenatal_visits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.newborns ENABLE ROW LEVEL SECURITY;
@@ -703,6 +704,28 @@ ALTER TABLE public.vaccine_distribution ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.supplement_distribution ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.station_vaccine_inventory ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.station_supplement_inventory ENABLE ROW LEVEL SECURITY;
+
+CREATE OR REPLACE FUNCTION public.is_latest_prenatal_staff_for_patient(
+  p_patient_id UUID,
+  p_staff_id UUID
+)
+RETURNS BOOLEAN
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+SET row_security = off
+AS $$
+  SELECT p_staff_id IS NOT NULL
+    AND p_staff_id = (
+      SELECT v.assigned_staff
+      FROM public.prenatal_visits v
+      WHERE v.patient_id = p_patient_id
+        AND v.assigned_staff IS NOT NULL
+      ORDER BY (v.status = 'Scheduled') DESC, v.visit_date DESC NULLS LAST, v.created_at DESC NULLS LAST
+      LIMIT 1
+    );
+$$;
 
 ALTER TABLE public.vaccinations
   ADD COLUMN IF NOT EXISTS station_ass UUID REFERENCES public.stations(id);
@@ -771,7 +794,7 @@ BEGIN
     WHERE schemaname = 'public'
       AND tablename IN (
         'user_type', 'users', 'staff_profiles', 'patient_basic_info',
-        'deliveries',
+        'deliveries', 'postpartum_visits',
         'pregnancy_info', 'prenatal_visits', 'newborns', 'newborn_growth',
         'supplement_inventory', 'supplements', 'vaccine_inventory',
         'vaccinations', 'stations', 'vaccine_distribution',
@@ -962,6 +985,66 @@ CREATE POLICY cho_read_all_deliveries ON public.deliveries FOR SELECT TO authent
   USING (get_my_role() = 'cho personnel');
 CREATE POLICY staff_read_all_deliveries ON public.deliveries FOR SELECT TO authenticated
   USING (get_my_role() = 'staff');
+
+-- postpartum_visits
+CREATE POLICY postpartum_visits_read ON public.postpartum_visits FOR SELECT TO authenticated
+  USING (
+    patient_id = auth.uid()
+    OR public.get_my_role() = 'admin'
+    OR (
+      public.get_my_role() IN ('cho personnel', 'staff')
+      AND station_ass IS NOT DISTINCT FROM public.get_my_station()
+    )
+  );
+CREATE POLICY postpartum_visits_insert ON public.postpartum_visits FOR INSERT TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.deliveries d
+      WHERE d.id = delivery_id
+        AND d.mother_id = patient_id
+        AND d.station_ass IS NOT DISTINCT FROM public.postpartum_visits.station_ass
+    )
+    AND (assigned_staff IS NULL OR public.is_latest_prenatal_staff_for_patient(patient_id, assigned_staff))
+    AND (performed_by IS NULL OR performed_by = auth.uid())
+    AND (
+      (patient_id = auth.uid() AND created_by IS NULL)
+      OR (
+        public.get_my_role() = 'admin'
+        AND (created_by IS NULL OR created_by = auth.uid())
+      )
+      OR (
+        public.get_my_role() IN ('cho personnel', 'staff')
+        AND station_ass IS NOT DISTINCT FROM public.get_my_station()
+        AND (created_by IS NULL OR created_by = auth.uid())
+      )
+    )
+  );
+CREATE POLICY postpartum_visits_update ON public.postpartum_visits FOR UPDATE TO authenticated
+  USING (
+    public.get_my_role() = 'admin'
+    OR (
+      public.get_my_role() IN ('cho personnel', 'staff')
+      AND station_ass IS NOT DISTINCT FROM public.get_my_station()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.deliveries d
+      WHERE d.id = delivery_id
+        AND d.mother_id = patient_id
+        AND d.station_ass IS NOT DISTINCT FROM public.postpartum_visits.station_ass
+    )
+    AND (assigned_staff IS NULL OR public.is_latest_prenatal_staff_for_patient(patient_id, assigned_staff))
+    AND (
+      public.get_my_role() = 'admin'
+      OR (
+        public.get_my_role() IN ('cho personnel', 'staff')
+        AND station_ass IS NOT DISTINCT FROM public.get_my_station()
+      )
+    )
+  );
 
 -- pregnancy_info
 CREATE POLICY admin_pregnancy ON public.pregnancy_info FOR ALL TO authenticated

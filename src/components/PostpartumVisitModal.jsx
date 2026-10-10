@@ -7,7 +7,7 @@ import { useModal } from '../context/ModalContext';
 import '../styles/pages/PostpartumRecords.css';
 
 const sections = [
-    { title: 'Vital signs', fields: [['blood_pressure', 'Blood pressure'], ['temperature', 'Temperature'], ['pulse', 'Pulse'], ['respiratory_rate', 'Respiratory rate']] },
+    { title: 'Vital signs', fields: [['blood_pressure', 'Blood pressure'], ['weight_kg', 'Weight (kg)'], ['temperature', 'Temperature'], ['pulse', 'Pulse'], ['respiratory_rate', 'Respiratory rate']] },
     { title: 'Uterus / abdominal recovery', fields: [['fundal_height_involution', 'Fundal height / involution'], ['uterine_firmness', 'Uterine firmness'], ['uterine_tenderness', 'Uterine tenderness']] },
     { title: 'Vaginal bleeding (lochia)', fields: [['lochia_amount', 'Amount'], ['lochia_color_type', 'Color / type'], ['lochia_clots', 'Presence of clots'], ['lochia_foul_smell', 'Foul-smelling discharge']] },
     { title: 'Perineum / birth injury', fields: [['perineal_healing', 'Perineal healing'], ['episiotomy_laceration', 'Episiotomy / laceration status'], ['perineal_pain', 'Pain'], ['perineal_swelling_infection', 'Swelling or signs of infection']] },
@@ -17,15 +17,17 @@ const sections = [
     { title: 'Maternal mental / emotional status', fields: [['mood', 'Mood'], ['anxiety_depressive_symptoms', 'Anxiety / depressive symptoms'], ['emotional_wellbeing', 'Emotional wellbeing'], ['support_at_home', 'Support at home']] },
     { title: 'Family planning / contraception', fields: [['contraception_method', 'Contraception method'], ['counseling_provided', 'Counseling provided'], ['pregnancy_spacing_plans', 'Pregnancy spacing plans']] },
     { title: 'Postpartum complications', fields: [['heavy_bleeding', 'Heavy bleeding'], ['fever_infection', 'Fever / infection'], ['high_blood_pressure', 'High blood pressure'], ['severe_headache_vision', 'Severe headache / vision problems'], ['wound_complications', 'Wound complications'], ['breast_infection', 'Breast infection']] },
+    { title: 'Care plan and referrals', fields: [['advice_given', 'Advice given'], ['treatments_given', 'Treatments given'], ['medications_review', 'Medications reviewed'], ['family_planning_counseling', 'Family planning counseling'], ['is_referred', 'Referral needed'], ['referred_to', 'Referred to'], ['referral_reason', 'Referral reason']] },
 ];
 
-const selectFields = new Set(['uterine_firmness', 'lochia_amount', 'lochia_color_type', 'lochia_clots', 'lochia_foul_smell', 'breastfeeding_status', 'pain_severity', 'difficulty_urinating', 'constipation', 'bowel_movement', 'incontinence', 'mood', 'support_at_home', 'counseling_provided']);
+const selectFields = new Set(['uterine_firmness', 'lochia_amount', 'lochia_color_type', 'lochia_clots', 'lochia_foul_smell', 'breastfeeding_status', 'pain_severity', 'difficulty_urinating', 'constipation', 'bowel_movement', 'incontinence', 'mood', 'support_at_home', 'counseling_provided', 'is_referred']);
 
 const PostpartumVisitModal = ({ mother, onClose, onSave }) => {
     const { user } = useContext(AuthContext);
     const { alert: customAlert } = useModal();
     const [staff, setStaff] = useState([]);
     const [staffId, setStaffId] = useState('');
+    const [visitId, setVisitId] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [values, setValues] = useState({});
     const [loading, setLoading] = useState(true);
@@ -48,10 +50,17 @@ const PostpartumVisitModal = ({ mother, onClose, onSave }) => {
     }, [mother.stationId, user?.id, user?.role]);
 
     const update = (key, value) => setValues(prev => ({ ...prev, [key]: value }));
+    const scheduledVisits = mother.scheduledVisits || [];
+    const selectedVisit = scheduledVisits.find(visit => visit.id === visitId);
+
+    useEffect(() => {
+        const nextVisit = mother.scheduledVisits?.find(visit => visit.status !== 'Completed' && visit.status !== 'Cancelled');
+        setVisitId(nextVisit?.id || '');
+    }, [mother.id, mother.scheduledVisits]);
 
     const handleSave = async () => {
-        if (!date || !staffId) {
-            await customAlert({ title: 'Missing Information', text: 'Select the visit date and personnel present.', iconType: 'warning' });
+        if (!visitId || !date || !staffId) {
+            await customAlert({ title: 'Missing Information', text: 'Select a scheduled postpartum visit, visit date, and personnel present.', iconType: 'warning' });
             return;
         }
         setSaving(true);
@@ -62,8 +71,14 @@ const PostpartumVisitModal = ({ mother, onClose, onSave }) => {
                 recorded_by: user?.id || null,
                 personnel_present: { id: staffId, name: selectedStaff?.full_name || user?.fullName || '' },
                 assessment: values,
+                notes: values.general_notes || '',
             };
-            await new BabyService().savePostpartumVisit(mother.id, { date, remarks });
+            await new BabyService().savePostpartumVisit(visitId, {
+                date,
+                personnelPresent: staffId,
+                performedBy: user?.id || null,
+                remarks,
+            });
             onSave?.();
             onClose();
         } catch (error) {
@@ -82,6 +97,16 @@ const PostpartumVisitModal = ({ mother, onClose, onSave }) => {
                 </div>
                 <div className="modal-body">
                     <div className="pp-visit-meta">
+                        <label>Scheduled postpartum visit
+                            <select value={visitId} onChange={event => setVisitId(event.target.value)}>
+                                <option value="">Select scheduled visit</option>
+                                {scheduledVisits.map(visit => (
+                                    <option key={visit.id} value={visit.id} disabled={visit.status === 'Completed' || visit.status === 'Cancelled'}>
+                                        {visit.visit_type} — {new Date(visit.scheduled_at).toLocaleDateString()} ({visit.status})
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
                         <label>Visit date<input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
                         <label><UserRound size={14} /> Personnel present
                             <select value={staffId} onChange={event => setStaffId(event.target.value)} disabled={loading || user?.role === 'staff'}>
@@ -90,7 +115,8 @@ const PostpartumVisitModal = ({ mother, onClose, onSave }) => {
                             </select>
                         </label>
                     </div>
-                    {user?.role === 'staff' && <p className="pp-readonly-note">Staff accounts can record visits only under their own name.</p>}
+                    {selectedVisit?.assigned_staff && <p className="pp-readonly-note">Assigned prenatal staff: {staff.find(item => item.id === selectedVisit.assigned_staff)?.full_name || 'Assigned staff member'}</p>}
+                    {user?.role === 'staff' && <p className="pp-readonly-note">The signed-in staff member is recorded as the person who entered this assessment.</p>}
                     {sections.map(section => (
                         <section className="pp-assessment-section" key={section.title}>
                             <h3><Activity size={15} /> {section.title}</h3>

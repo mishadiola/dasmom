@@ -5,6 +5,8 @@ import { DASMOM_APP_URL } from '../config/appConfig';
 
 const DUPLICATE_EMAIL_MESSAGE = 'Email already exists. Please use a different email address.';
 const normalizeRoleName = role => String(role || '').trim().toLowerCase().replace(/_/g, ' ');
+let cachedAuthUser = null;
+let authUserLookupPromise = null;
 
 export default class AuthService {
   constructor() {
@@ -354,6 +356,27 @@ export default class AuthService {
     if (this._currentUser && this._currentUser.id) {
       return this._currentUser;
     }
+    if (cachedAuthUser?.id) {
+      this._currentUser = cachedAuthUser;
+      return cachedAuthUser;
+    }
+    if (authUserLookupPromise) {
+      const user = await authUserLookupPromise;
+      this._currentUser = user;
+      return user;
+    }
+
+    authUserLookupPromise = this._loadAuthUser();
+    try {
+      const user = await authUserLookupPromise;
+      cachedAuthUser = user;
+      return user;
+    } finally {
+      authUserLookupPromise = null;
+    }
+  }
+
+  async _loadAuthUser() {
     
     let session;
     try {
@@ -378,13 +401,13 @@ export default class AuthService {
           .select('id, email_address, usertype, is_archived, is_deactivated')
           .eq('id', authUser.id)
           .maybeSingle(),
-        8000
+        this.defaultTimeout
       );
       userData = res.data || res;
     } catch (err) {
       console.error('users lookup timed out or failed:', err);
       this._currentUser = null;
-      return null;
+      throw err;
     }
 
     if (!userData || !userData.id) {
@@ -441,10 +464,12 @@ export default class AuthService {
   // Keep user in-memory only; do not persist to localStorage
   clearUser() {
     this._currentUser = null;
+    cachedAuthUser = null;
   }
 
   saveUser(user) {
     this._currentUser = user;
+    cachedAuthUser = user;
   }
 
   getUser() {

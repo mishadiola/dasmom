@@ -1082,7 +1082,6 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
             apgar5: '',
             babyCondition: 'Healthy'
         }],
-        postpartumDate: '',
         notes: ''
     });
     const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
@@ -1295,15 +1294,6 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
         });
     };
     
-    // Auto-calculate postpartum visit date (48 hours after delivery)
-    useEffect(() => {
-        if (form.deliveryDate) {
-            const deliveryDate = new Date(form.deliveryDate);
-            const ppDate = new Date(deliveryDate);
-            ppDate.setDate(ppDate.getDate() + 2); // 48 hours = 2 days
-            setForm(prev => ({ ...prev, postpartumDate: ppDate.toISOString().split('T')[0] }));
-        }
-    }, [form.deliveryDate]);
     // Populate form when editing existing delivery
     useEffect(() => {
         if (editDelivery && show) {
@@ -1341,7 +1331,6 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
                     apgar5: editDelivery.apgar5 || '',
                     babyCondition: editDelivery.babyOutcome || 'Healthy'
                 }],
-                postpartumDate: editDelivery.postpartum_visit_date || editDelivery.postpartumDate || '',
                 notes: editDelivery.notes || ''
             });
             setSection('baby');
@@ -1381,7 +1370,6 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
                     apgar5: '',
                     babyCondition: 'Healthy'
                 }],
-                postpartumDate: '',
                 notes: ''
             });
             setSection('patient');
@@ -1510,7 +1498,6 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
                 complications: form.complications.filter(c => c !== 'None'),
                 attending_staff: form.attendingStaffId || null,
                 facility: form.pregnancyOutcome === 'Miscarriage' ? null : (form.facility || null),
-                postpartum_visit_date: form.postpartumDate || null,
                 notes: form.notes || null
             };
 
@@ -1557,6 +1544,8 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
                 ? 'Miscarriage recorded successfully!'
                 : deliveryId
                     ? 'Delivery updated successfully!'
+                    : result.postpartumEmailError
+                        ? `Delivery recorded, but the postpartum schedule email could not be sent: ${result.postpartumEmailError}`
                     : hasEligibleNewborn
                         ? 'Delivery recorded and vaccinations scheduled for eligible newborns successfully!'
                         : 'Delivery recorded successfully!');
@@ -1832,19 +1821,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
 
                     {section === 'plan' && (
                         <div>
-                            <div className="form-group">
-                                <label>Postpartum Visit (Auto-scheduled within 48 hours)</label>
-                                <input 
-                                    type="date" 
-                                    value={form.postpartumDate} 
-                                    disabled 
-                                    className="computed-field"
-                                    style={{ backgroundColor: '#f5f5f5', cursor: 'not-allowed' }}
-                                />
-                                <small style={{ color: '#666', fontSize: '12px' }}>
-                                    Automatically calculated: 48 hours after delivery date
-                                </small>
-                            </div>
+                            <p>Four postpartum follow-ups are automatically scheduled for 24 hours, 3 days, 7 days, and 6 weeks after birth.</p>
                             <div className="form-group">
                                 <label>Notes</label>
                                 <textarea value={form.notes} onChange={e => updateForm('notes', e.target.value)} rows="3" />
@@ -1991,10 +1968,13 @@ const ViewDeliveryModal = ({ show, onClose, delivery }) => {
                         <div className="view-section">
                             <h3><Calendar size={16} /> Follow-up</h3>
                             <div className="view-fields">
-                                <div className="view-field">
-                                    <label>Postpartum Visit:</label>
-                                    <span>{delivery.postpartumDate || 'N/A'}</span>
-                                </div>
+                                {(delivery.postpartumVisits || []).map(visit => (
+                                    <div className="view-field" key={visit.id}>
+                                        <label>{visit.visit_type}:</label>
+                                        <span>{visit.scheduled_date} · {visit.status}</span>
+                                    </div>
+                                ))}
+                                {!delivery.postpartumVisits?.length && <div className="view-field"><span>No postpartum schedule found.</span></div>}
                             </div>
                         </div>
 

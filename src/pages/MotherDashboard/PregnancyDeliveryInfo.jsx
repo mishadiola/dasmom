@@ -391,9 +391,11 @@ const PregnancyDeliveryInfo = () => {
                                         <p>Attending health worker: {delivery.assigned_staff_name || 'Not assigned'}</p>
                                         {delivery.assigned_staff_station && <p>Health worker station: {delivery.assigned_staff_station}</p>}
                                         <p>Pregnancy ID: {delivery.pregnancy_id}</p>
-                                        {delivery.postpartum_visit_date && <p>Postpartum visit: {new Date(delivery.postpartum_visit_date).toLocaleDateString()}</p>}
-                                        {delivery.postpartum_attended_date && <p>Postpartum attended: {new Date(delivery.postpartum_attended_date).toLocaleDateString()}</p>}
-                                        {delivery.postpartum_remarks && <p>{typeof delivery.postpartum_remarks === 'string' ? delivery.postpartum_remarks : JSON.stringify(delivery.postpartum_remarks)}</p>}
+                                        {delivery.postpartum_visits?.map(visit => (
+                                                <p key={visit.id}>
+                                                    {visit.visit_type}: {new Date(visit.scheduled_at).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' })} · {visit.status === 'Attended' ? 'Completed' : visit.status}
+                                                </p>
+                                            ))}
                                         {delivery.notes && <p>Notes: {delivery.notes}</p>}
                                     </div>
                                 ))}

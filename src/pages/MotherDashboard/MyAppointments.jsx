@@ -33,13 +33,16 @@ const formatCalendarDate = (dateString) => {
     return date.toLocaleDateString('en-US', options);
 };
 
-const getDateOnly = (value) => String(value || '').split('T')[0];
-
-const getPostpartumStatus = (delivery) => {
-    if (delivery.postpartum_attended_date) return 'Completed';
-    const scheduledDate = getDateOnly(delivery.postpartum_visit_date);
-    const today = new Date().toISOString().split('T')[0];
-    return scheduledDate && scheduledDate < today ? 'Missed' : 'Scheduled';
+const getDateOnly = (value) => {
+    if (!value) return '';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return String(value).split('T')[0];
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(parsed);
 };
 
 const sanitizeUUID = (str, fallback) => {
@@ -95,6 +98,23 @@ const MyAppointments = () => {
                 const currentPregnancy = patient.currentPregnancy;
                 const currentStatus = String(patient.pregnancyRecord?.pregn_postp || patient.pregnancyRecord?.status || currentPregnancy?.status || patient.pregnancyStatus || '').toLowerCase();
                 const isPostpartum = currentStatus === 'postpartum';
+                const { data: postpartumVisits, error: postpartumVisitsError } = await patientService.supabase
+                    .from('postpartum_visits')
+                    .select('id, visit_type, scheduled_at, attended_date, status, assigned_staff, assessment, notes')
+                    .eq('patient_id', authUser.id)
+                    .order('scheduled_at', { ascending: true });
+                if (postpartumVisitsError) throw postpartumVisitsError;
+                const postpartumStaffIds = [...new Set((postpartumVisits || [])
+                    .map(visit => visit.assigned_staff)
+                    .filter(Boolean))];
+                const { data: postpartumStaff, error: postpartumStaffError } = postpartumStaffIds.length
+                    ? await patientService.supabase
+                        .from('staff_profiles')
+                        .select('id, full_name')
+                        .in('id', postpartumStaffIds)
+                    : { data: [], error: null };
+                if (postpartumStaffError) throw postpartumStaffError;
+                const postpartumStaffNames = new Map((postpartumStaff || []).map(staff => [staff.id, staff.full_name]));
                 const visitAppts = (patient.pregnancyHistory || [])
                     .flatMap(pregnancy => (pregnancy.visits || []).map(visit => ({ pregnancy, visit })))
                     .filter(({ visit }) => visit.visit_date)
@@ -110,10 +130,6 @@ const MyAppointments = () => {
                         pregnancyNumber: pregnancy.pregnancyNumber,
                         color: String(visit.next_appt_type || '').toLowerCase().includes('postpartum') ? 'blue' : 'green'
                     }));
-                const postpartumVisitDates = new Set(visitAppts
-                    .filter(appointment => appointment.type === 'Postpartum')
-                    .map(appointment => getDateOnly(appointment.date)));
-
                 const newbornVaccines = (isPostpartum ? currentPregnancy?.newborns || [] : [])
                     .filter(isNewbornVaccinationEligible)
                     .flatMap(newborn => (newborn.vaccines || [])
@@ -131,34 +147,42 @@ const MyAppointments = () => {
                             color: 'yellow'
                         })));
 
-                const postpartumAppts = (isPostpartum ? currentPregnancy?.deliveries || [] : [])
-                    .filter(d => d.postpartum_visit_date || d.postpartum_attended_date)
-                    .filter(d => !postpartumVisitDates.has(getDateOnly(d.postpartum_visit_date || d.postpartum_attended_date)))
-                    .map((d, idx) => {
-                        const status = getPostpartumStatus(d);
-                        const date = d.postpartum_attended_date || d.postpartum_visit_date;
+                const postpartumAppts = (isPostpartum ? postpartumVisits || [] : [])
+                    .map(visit => {
+                        const scheduledDate = visit.scheduled_at;
+                        const status = visit.status === 'Attended'
+                            ? 'Attended'
+                            : visit.status === 'Cancelled'
+                                ? 'Cancelled'
+                                : scheduledDate && new Date(scheduledDate) < new Date()
+                                    ? 'Missed'
+                                    : 'Scheduled';
+                        const date = visit.attended_date || scheduledDate;
                         return {
-                            id: d.id || `postpartum-${idx}`,
+                            id: visit.id,
                             date,
-                            scheduledDate: d.postpartum_visit_date,
-                            attendedDate: d.postpartum_attended_date,
-                            time: '',
-                            type: 'Postpartum',
+                            scheduledDate,
+                            attendedDate: visit.attended_date,
+                            time: scheduledDate ? new Date(scheduledDate).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' }) : '',
+                            type: visit.visit_type,
                             status,
                             location: sanitizeUUID(patient.station, 'Health Station'),
-                            staffName: d.assigned_staff_name,
-                            staffStation: d.assigned_staff_station,
+                            staffName: postpartumStaffNames.get(visit.assigned_staff) || null,
                             notes: status === 'Completed'
                                 ? t('appt_postpartum_attended')
                                 : status === 'Missed'
                                     ? t('appt_postpartum_missed')
                                     : t('appt_postpartum_scheduled'),
-                            assessment: d.postpartum_remarks,
+                            assessment: visit.assessment,
                             color: 'blue'
                         };
                     });
 
-                const combined = [...visitAppts, ...newbornVaccines, ...postpartumAppts];
+                const combined = [
+                    ...visitAppts.filter(appointment => appointment.type !== 'Postpartum'),
+                    ...newbornVaccines,
+                    ...postpartumAppts
+                ];
                 setAppointmentsData(combined);
             } catch (err) {
                 console.error('Failed to load appointments:', err);

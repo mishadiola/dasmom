@@ -38,7 +38,7 @@ const DetailModal = ({ mother, onClose }) => {
         breastfeeding: 'N/A',
         mhStatus: 'Normal',
         woundCondition: mother.deliveryType === 'CS' ? 'Pending assessment' : 'N/A (NSD)',
-        postpartumVisitDate: null
+        postpartumVisits: mother.scheduledVisits || []
     });
     const [loading, setLoading] = useState(true);
 
@@ -47,7 +47,7 @@ const DetailModal = ({ mother, onClose }) => {
             try {
                 setLoading(true);
                 // Fetch delivery record with staff info
-                const { data: deliveries } = await babyService.supabase
+                const { data: deliveries, error: deliveryError } = await babyService.supabase
                     .from('deliveries')
                     .select(`
                         id,
@@ -56,9 +56,6 @@ const DetailModal = ({ mother, onClose }) => {
                         delivery_date,
                         delivery_type,
                         complications,
-                        postpartum_visit_date,
-                        postpartum_attended_date,
-                        postpartum_remarks,
                         pregnancy_info!deliveries_pregnancy_id_fkey (place_of_delivery),
                         staff_profiles!deliveries_attending_staff_fkey (full_name),
                         newborns (birth_weight, condition_at_birth),
@@ -66,9 +63,7 @@ const DetailModal = ({ mother, onClose }) => {
                     `)
                     .eq('id', mother.id)
                     .single();
-
-                // Fetch postpartum visit schedule from deliveries
-                const postpartumVisitDate = deliveries?.postpartum_visit_date || null;
+                if (deliveryError) throw deliveryError;
 
                 const updatedDetail = {
                     ...detail,
@@ -78,9 +73,9 @@ const DetailModal = ({ mother, onClose }) => {
                     birthWeight: deliveries?.newborns?.[0]?.birth_weight ? `${deliveries.newborns[0].birth_weight} kg` : 'N/A',
                     deliveryComplications: mother.complications || 'None',
                     woundCondition: mother.deliveryType === 'CS' ? 'Healing Well' : 'N/A (NSD)',
-                    postpartumVisitDate: postpartumVisitDate
-                    , postpartumAttendedDate: deliveries?.postpartum_attended_date || null
-                    , postpartumRemarks: deliveries?.postpartum_remarks || null
+                    postpartumVisits: mother.scheduledVisits || [],
+                    postpartumAttendedDate: mother.postpartumAttendedDate || null,
+                    postpartumRemarks: mother.postpartumRemarks || null
                 };
                 setDetail(updatedDetail);
             } catch (error) {
@@ -150,7 +145,15 @@ const DetailModal = ({ mother, onClose }) => {
                     <section className="modal-section">
                         <h3 className="modal-section-title"><Calendar size={15} /> Postpartum Visit Schedule</h3>
                         <div className="detail-grid">
-                            <div className="detail-item"><span>Scheduled Visit Date</span><strong>{detail.postpartumVisitDate || 'Not scheduled'}</strong></div>
+                            {(detail.postpartumVisits || []).map(visit => (
+                                <div className="detail-item" key={visit.id}>
+                                    <span>{visit.visit_type} · {visit.status}</span>
+                                    <strong>{formatReadableDate(visit.scheduled_at)}</strong>
+                                </div>
+                            ))}
+                            {!(detail.postpartumVisits || []).length && (
+                                <div className="detail-item"><span>Schedule</span><strong>No postpartum visits scheduled</strong></div>
+                            )}
                         </div>
                     </section>
 
@@ -616,7 +619,7 @@ const PostpartumRecords = () => {
                                             </td>
                                             <td>
                                                 <div className="pp-actions">
-                                                    {!m.postpartumAttendedDate && <button className="action-btn record-btn" title="Record Postpartum Visit" onClick={() => setVisitMother(m)}><ClipboardList size={15} /></button>}
+                                                    {m.scheduledVisits?.some(visit => visit.status !== 'Completed' && visit.status !== 'Cancelled') && <button className="action-btn record-btn" title="Record Postpartum Visit" onClick={() => setVisitMother(m)}><ClipboardList size={15} /></button>}
                                                     <button className="action-btn view-btn" title="View Profile" onClick={() => setSelectedMother(m)}>
                                                         <Eye size={15} />
                                                     </button>
@@ -737,5 +740,3 @@ const PostpartumRecords = () => {
 };
 
 export default PostpartumRecords;
-
-

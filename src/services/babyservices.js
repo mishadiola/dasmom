@@ -223,9 +223,6 @@ class BabyService {
           gestational_age,
           risk_level,
           complications,
-          postpartum_visit_date,
-          postpartum_attended_date,
-          postpartum_remarks,
           notes,
           created_at,
           stations:station_ass (station_name),
@@ -295,6 +292,16 @@ class BabyService {
         return false;
       });
 
+      const deliveryIds = filtered.map(delivery => delivery.id);
+      const { data: postpartumVisits, error: postpartumVisitsError } = deliveryIds.length
+        ? await supabase
+          .from('postpartum_visits')
+          .select('id, delivery_id, patient_id, visit_number, visit_type, scheduled_date, scheduled_at, status, attended_date, assigned_staff, assigned_station, station_ass, personnel_present, performed_by, assessment, notes')
+          .in('delivery_id', deliveryIds)
+          .order('scheduled_at', { ascending: true })
+        : { data: [], error: null };
+      if (postpartumVisitsError) throw postpartumVisitsError;
+
       const motherIds = [...new Set(filtered.map(delivery => delivery.patient_basic_info?.id).filter(Boolean))];
       const [{ data: mothers }, { data: pregnancies }, { data: visits }] = await Promise.all([
         supabase.from('patient_basic_info').select('id, date_of_birth').in('id', motherIds),
@@ -313,6 +320,13 @@ class BabyService {
         visitsByMother.get(v.patient_id).push(v);
       });
 
+      const postpartumVisitsByDelivery = new Map();
+      (postpartumVisits || []).forEach(visit => {
+        const schedule = postpartumVisitsByDelivery.get(visit.delivery_id) || [];
+        schedule.push(visit);
+        postpartumVisitsByDelivery.set(visit.delivery_id, schedule);
+      });
+
       const deliveryRecords = filtered.map(d => {
         const newborn = Array.isArray(d.newborns) ? d.newborns[0] : d.newborns;
         const staff = Array.isArray(d.staff_profiles) ? d.staff_profiles[0] : d.staff_profiles;
@@ -329,6 +343,7 @@ class BabyService {
           matchedPregnancy || {},
           matchedVisit
         );
+        const scheduledVisits = postpartumVisitsByDelivery.get(d.id) || [];
         return {
           id: d.id,
           pregnancyId: d.pregnancy_id || null,
@@ -355,9 +370,7 @@ class BabyService {
           staff: staff?.full_name || (d.attending_staff ? d.attending_staff : 'Unassigned'),
           staffStation: staff?.stations?.station_name || null,
           facility: matchedPregnancy?.place_of_delivery || 'N/A',
-          postpartumVisitDate: d.postpartum_visit_date || null,
-          postpartumAttendedDate: d.postpartum_attended_date || null,
-          postpartumRemarks: d.postpartum_remarks || null,
+          postpartumVisits: scheduledVisits,
           notes: d.notes || '',
           pregnancyOutcome: (d.delivery_type === 'N/A - Not Applicable' && newborn?.condition_at_birth === 'N/A - No Baby')
             ? 'Miscarriage'
@@ -391,9 +404,7 @@ class BabyService {
           apgar5: null,
           staff: 'Unassigned',
           facility: null,
-          postpartumVisitDate: null,
-          postpartumAttendedDate: null,
-          postpartumRemarks: null,
+          postpartumVisits: [],
           notes: info.notes || '',
           miscarriageInfo: info,
           pregnancyOutcome: 'Miscarriage'
@@ -523,15 +534,6 @@ class BabyService {
       ? deliveryData.complications.filter(c => c && c !== 'None')
       : [];
 
-    // Auto-schedule postpartum visit within 48 hours if not provided
-    let postpartumVisitDate = deliveryData.postpartum_visit_date;
-    if (!postpartumVisitDate && deliveryData.delivery_date) {
-      const deliveryDate = new Date(deliveryData.delivery_date);
-      const ppDate = new Date(deliveryDate);
-      ppDate.setDate(ppDate.getDate() + 2); // 48 hours after delivery
-      postpartumVisitDate = ppDate.toISOString().split('T')[0];
-    }
-
     const deliveryPayload = {
       mother_id: deliveryData.mother_id,
       station_ass: deliveryStationId,
@@ -544,7 +546,6 @@ class BabyService {
       risk_level: deliveryData.risk_level || 'Normal',
       complications,
       attending_staff: attendingStaffId,
-      postpartum_visit_date: postpartumVisitDate,
       notes: deliveryData.notes || null,
       created_by: createdBy
     };
@@ -698,43 +699,27 @@ class BabyService {
           }
         }
 
-        // Schedule postpartum visit
-        if (postpartumVisitDate) {
-          const postpartumDate = new Date(postpartumVisitDate);
-          if (!Number.isNaN(postpartumDate.getTime())) {
-            const { data: motherStation, error: motherStationError } = await supabase
-              .from('patient_basic_info')
-              .select('station_ass')
-              .eq('id', deliveryData.mother_id)
-              .single();
-            if (motherStationError) throw motherStationError;
+    }
 
-            await supabase.from('prenatal_visits').insert({
-              patient_id: deliveryData.mother_id,
-              created_by: createdBy,
-              visit_date: postpartumVisitDate,
-              visit_number: 0,
-              trimester: 0,
-              gestational_age: 'Postpartum',
-              next_appt_date: null,
-              next_appt_type: 'Postpartum Visit',
-              status: 'Scheduled',
-              assigned_staff: null,
-              assigned_station: motherStation.station_ass,
-              station_ass: null,
-              clinical_notes: 'Scheduled postpartum follow-up after delivery (within 48 hours)',
-              created_at: new Date().toISOString()
-            });
-            console.log(`✅ Scheduled postpartum visit for ${postpartumVisitDate}`);
-          }
-        }
-
+    let postpartumEmailError = null;
+    if (!deliveryId) {
+      const { data: postpartumEmail, error: postpartumEmailInvokeError } = await supabase.functions.invoke(
+        'postpartum-delivery-email',
+        { body: { delivery_id: delivery.id } }
+      );
+      if (postpartumEmailInvokeError) {
+        postpartumEmailError = postpartumEmailInvokeError.message;
+        console.error('Delivery was recorded, but postpartum email delivery failed:', postpartumEmailInvokeError);
+      } else if (!postpartumEmail?.emailSent) {
+        postpartumEmailError = postpartumEmail?.error || 'The postpartum schedule email was not sent.';
+        console.error('Delivery was recorded, but postpartum email delivery failed:', postpartumEmailError);
+      }
     }
 
     // NOTE: Newborn vaccine scheduling is handled separately by VaccinationService.scheduleNewbornVaccinations()
     // called from DeliveryOutcomes.jsx handleSave() to keep concerns separated
 
-    return { delivery_id: delivery.id, newborn_ids: newbornIds };
+    return { delivery_id: delivery.id, newborn_ids: newbornIds, postpartumEmailError };
   }
 
   async getDeliveryStats() {
@@ -841,9 +826,6 @@ class BabyService {
                 delivery_date, 
                 delivery_type, 
                 complications, 
-                postpartum_visit_date,
-                postpartum_attended_date,
-                postpartum_remarks,
                 notes,
                 stations:station_ass (station_name),
                 patient_basic_info!deliveries_mother_id_fkey (
@@ -859,6 +841,41 @@ class BabyService {
         if (error) throw error;
 
         const filtered = deliveries || [];
+        const deliveryIds = filtered.map(delivery => delivery.id);
+        const { data: postpartumVisits, error: postpartumVisitsError } = deliveryIds.length
+          ? await supabase
+            .from('postpartum_visits')
+            .select('id, delivery_id, patient_id, visit_type, scheduled_at, status, attended_date, assigned_staff, personnel_present, performed_by, assessment, notes')
+            .in('delivery_id', deliveryIds)
+            .order('scheduled_at', { ascending: true })
+          : { data: [], error: null };
+        if (postpartumVisitsError) throw postpartumVisitsError;
+
+        const performedByIds = [...new Set((postpartumVisits || [])
+          .flatMap(visit => [visit.performed_by, visit.personnel_present])
+          .filter(Boolean))];
+        const { data: performedByProfiles, error: performedByError } = performedByIds.length
+          ? await supabase
+            .from('staff_profiles')
+            .select('id, full_name')
+            .in('id', performedByIds)
+          : { data: [], error: null };
+        if (performedByError) throw performedByError;
+        const performedByNames = new Map((performedByProfiles || []).map(profile => [profile.id, profile.full_name]));
+        const visitsByDelivery = new Map();
+        (postpartumVisits || []).forEach(visit => {
+          const visits = visitsByDelivery.get(visit.delivery_id) || [];
+          visits.push({
+            ...visit,
+            status: visit.status === 'Attended'
+              ? 'Completed'
+              : visit.status === 'Scheduled' && new Date(visit.scheduled_at) < new Date()
+                ? 'Missed'
+                : visit.status,
+            performedByName: performedByNames.get(visit.personnel_present) || performedByNames.get(visit.performed_by) || null
+          });
+          visitsByDelivery.set(visit.delivery_id, visits);
+        });
 
         const motherIds = [...new Set(filtered.map(d => d.mother_id))];
         const { data: pregInfo } = await supabase
@@ -895,6 +912,7 @@ class BabyService {
             })
             .map(d => {
             const mother = d.patient_basic_info;
+            const scheduledVisits = visitsByDelivery.get(d.id) || [];
             const newborns = Array.isArray(d.newborns) ? d.newborns : [d.newborns].filter(Boolean);
             const preg = latestPregMap.get(d.mother_id) || {};
             const riskLevel = latestRiskMap.get(d.mother_id) || 'Normal';
@@ -911,15 +929,29 @@ class BabyService {
             if (hasComplications) recoveryStatus = 'Complication';
             else if (riskLevel === 'High Risk' || riskLevel === 'High') recoveryStatus = 'Monitoring';
 
-            // Determine follow-up status
-            let followUpStatus = 'Upcoming';
-            if (d.postpartum_attended_date) {
-              followUpStatus = 'Completed';
-            } else if (d.postpartum_visit_date) {
-                const fuDate = new Date(d.postpartum_visit_date);
-              fuDate.setHours(0, 0, 0, 0);
-                if (fuDate < today) followUpStatus = 'Missed';
-            }
+            const completedVisits = scheduledVisits.filter(visit => visit.status === 'Completed');
+            const outstandingVisits = scheduledVisits
+              .filter(visit => visit.status !== 'Completed' && visit.status !== 'Cancelled')
+              .sort((left, right) => new Date(left.scheduled_at) - new Date(right.scheduled_at));
+            const nextVisit = outstandingVisits[0] || null;
+            const followUpStatus = scheduledVisits.length > 0
+              && completedVisits.length === scheduledVisits.filter(visit => visit.status !== 'Cancelled').length
+              ? 'Completed'
+              : nextVisit?.status === 'Missed'
+                ? 'Missed'
+                : 'Upcoming';
+            const lastCompletedVisit = completedVisits
+              .filter(visit => visit.attended_date)
+              .sort((left, right) => new Date(right.attended_date) - new Date(left.attended_date))[0];
+            const latestAssessmentVisit = completedVisits
+              .filter(visit => visit.assessment && Object.keys(visit.assessment).length > 0)
+              .sort((left, right) => new Date(right.attended_date || right.scheduled_at) - new Date(left.attended_date || left.scheduled_at))[0];
+            const postpartumRemarks = latestAssessmentVisit
+              ? {
+                assessment: latestAssessmentVisit.assessment,
+                personnel_present: { name: latestAssessmentVisit.performedByName || 'Not recorded' }
+              }
+              : null;
 
             return {
                 id: d.id,
@@ -933,11 +965,12 @@ class BabyService {
                 babyOutcome: newborns?.[0]?.condition_at_birth || 'Healthy',
                 recoveryStatus,
                 progress: Math.min(100, Math.round((daysPP / 42) * 100)),
-                lastCheckup: d.postpartum_attended_date || null,
-                nextFollowUp: d.postpartum_visit_date || 'TBD',
-                visitDate: d.postpartum_attended_date || d.postpartum_visit_date || null,
-                postpartumAttendedDate: d.postpartum_attended_date || null,
-                postpartumRemarks: d.postpartum_remarks || null,
+                lastCheckup: lastCompletedVisit?.attended_date || null,
+                nextFollowUp: nextVisit?.scheduled_at || 'TBD',
+                visitDate: nextVisit?.scheduled_at || lastCompletedVisit?.attended_date || null,
+                postpartumAttendedDate: lastCompletedVisit?.attended_date || null,
+                postpartumRemarks,
+                scheduledVisits,
                 followUpStatus,
                 complications: d.complications && d.complications.length > 0 ? d.complications.join(', ') : 'None'
             };
@@ -948,14 +981,62 @@ class BabyService {
     }
   }
 
-  async savePostpartumVisit(deliveryId, visitData) {
+  async savePostpartumVisit(visitId, visitData) {
+    const assessment = visitData.remarks.assessment || {};
+    const parsePositiveNumber = value => {
+      const parsed = Number.parseFloat(String(value || '').replace(/[^\d.]/g, ''));
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    };
+    const parsePositiveInteger = value => {
+      const parsed = Number.parseInt(String(value || '').replace(/[^\d]/g, ''), 10);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    };
+    const [systolic, diastolic] = String(assessment.blood_pressure || '').split('/');
+    const combine = (...parts) => parts.filter(Boolean).join('; ') || null;
+    const dangerSigns = [
+      ['heavy_bleeding', 'Heavy bleeding'],
+      ['fever_infection', 'Fever or infection'],
+      ['high_blood_pressure', 'High blood pressure'],
+      ['severe_headache_vision', 'Severe headache or vision problems'],
+      ['wound_complications', 'Wound complications'],
+      ['breast_infection', 'Breast infection'],
+    ].filter(([key]) => ['yes', 'true'].includes(String(assessment[key] || '').trim().toLowerCase()))
+      .map(([, label]) => label);
+
     const { error } = await supabase
-      .from('deliveries')
+      .from('postpartum_visits')
       .update({
-        postpartum_attended_date: visitData.date,
-        postpartum_remarks: visitData.remarks,
+        attended_date: visitData.date,
+        status: 'Attended',
+        personnel_present: visitData.personnelPresent || null,
+        performed_by: visitData.performedBy || null,
+        assessment,
+        weight_kg: parsePositiveNumber(assessment.weight_kg),
+        bp_systolic: parsePositiveInteger(systolic),
+        bp_diastolic: parsePositiveInteger(diastolic),
+        temp_c: parsePositiveNumber(assessment.temperature),
+        pulse_bpm: parsePositiveInteger(assessment.pulse),
+        resp_rate_cpm: parsePositiveInteger(assessment.respiratory_rate),
+        uterine_involution: combine(assessment.fundal_height_involution, assessment.uterine_firmness, assessment.uterine_tenderness),
+        lochia_assessment: combine(assessment.lochia_amount, assessment.lochia_color_type, assessment.lochia_clots, assessment.lochia_foul_smell),
+        perineal_or_wound_condition: combine(assessment.perineal_healing, assessment.episiotomy_laceration, assessment.perineal_pain, assessment.perineal_swelling_infection),
+        pain_assessment: combine(assessment.pain_location, assessment.pain_severity, assessment.pain_management),
+        breast_assessment: combine(assessment.breast_condition, assessment.nipple_condition, assessment.breastfeeding_problems),
+        breastfeeding_status: assessment.breastfeeding_status || null,
+        urination_and_bowel_status: combine(assessment.difficulty_urinating, assessment.constipation, assessment.bowel_movement, assessment.incontinence),
+        mental_health_assessment: combine(assessment.mood, assessment.anxiety_depressive_symptoms, assessment.emotional_wellbeing, assessment.support_at_home),
+        danger_signs: dangerSigns.length ? dangerSigns : null,
+        clinical_notes: visitData.remarks.notes || null,
+        notes: visitData.remarks.notes || null,
+        advice_given: assessment.advice_given || null,
+        treatments_given: assessment.treatments_given || null,
+        medications_review: assessment.medications_review || null,
+        family_planning_counseling: assessment.family_planning_counseling || null,
+        is_referred: String(assessment.is_referred || '').toLowerCase() === 'yes',
+        referred_to: assessment.referred_to || null,
+        referral_reason: assessment.referral_reason || null,
       })
-      .eq('id', deliveryId);
+      .eq('id', visitId);
 
     if (error) throw error;
   }

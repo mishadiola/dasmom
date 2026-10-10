@@ -96,7 +96,8 @@ export const buildPregnancyHistory = (records = [], visits = [], deliveries = []
         });
         const isPostpartumVisit = visit => String(visit.next_appt_type || '').toLowerCase().includes('postpartum');
         const deliveryPostpartumDates = new Set(pregnancyDeliveries
-            .map(delivery => String(delivery.postpartum_visit_date || '').slice(0, 10))
+            .flatMap(delivery => (delivery.postpartum_visits || [])
+                .map(visit => String(visit.scheduled_date || visit.scheduled_at || '').slice(0, 10)))
             .filter(Boolean));
         const pregnancyVisits = visits.filter(visit => isPostpartumVisit(visit)
             ? deliveryPostpartumDates.has(String(visit.visit_date || '').slice(0, 10))
