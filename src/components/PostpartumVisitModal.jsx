@@ -7,20 +7,47 @@ import { useModal } from '../context/ModalContext';
 import '../styles/pages/PostpartumRecords.css';
 
 const sections = [
-    { title: 'Vital signs', fields: [['blood_pressure', 'Blood pressure'], ['weight_kg', 'Weight (kg)'], ['temperature', 'Temperature'], ['pulse', 'Pulse'], ['respiratory_rate', 'Respiratory rate']] },
-    { title: 'Uterus / abdominal recovery', fields: [['fundal_height_involution', 'Fundal height / involution'], ['uterine_firmness', 'Uterine firmness'], ['uterine_tenderness', 'Uterine tenderness']] },
-    { title: 'Vaginal bleeding (lochia)', fields: [['lochia_amount', 'Amount'], ['lochia_color_type', 'Color / type'], ['lochia_clots', 'Presence of clots'], ['lochia_foul_smell', 'Foul-smelling discharge']] },
-    { title: 'Perineum / birth injury', fields: [['perineal_healing', 'Perineal healing'], ['episiotomy_laceration', 'Episiotomy / laceration status'], ['perineal_pain', 'Pain'], ['perineal_swelling_infection', 'Swelling or signs of infection']] },
-    { title: 'Breastfeeding / breasts', fields: [['breast_condition', 'Breast condition'], ['nipple_condition', 'Nipple condition'], ['breastfeeding_status', 'Breastfeeding status'], ['breastfeeding_problems', 'Problems with breastfeeding']] },
-    { title: 'Pain', fields: [['pain_location', 'Location'], ['pain_severity', 'Severity'], ['pain_management', 'Current pain management']] },
-    { title: 'Urination & bowel function', fields: [['difficulty_urinating', 'Difficulty urinating'], ['constipation', 'Constipation'], ['bowel_movement', 'Bowel movement'], ['incontinence', 'Incontinence']] },
-    { title: 'Maternal mental / emotional status', fields: [['mood', 'Mood'], ['anxiety_depressive_symptoms', 'Anxiety / depressive symptoms'], ['emotional_wellbeing', 'Emotional wellbeing'], ['support_at_home', 'Support at home']] },
-    { title: 'Family planning / contraception', fields: [['contraception_method', 'Contraception method'], ['counseling_provided', 'Counseling provided'], ['pregnancy_spacing_plans', 'Pregnancy spacing plans']] },
-    { title: 'Postpartum complications', fields: [['heavy_bleeding', 'Heavy bleeding'], ['fever_infection', 'Fever / infection'], ['high_blood_pressure', 'High blood pressure'], ['severe_headache_vision', 'Severe headache / vision problems'], ['wound_complications', 'Wound complications'], ['breast_infection', 'Breast infection']] },
-    { title: 'Care plan and referrals', fields: [['advice_given', 'Advice given'], ['treatments_given', 'Treatments given'], ['medications_review', 'Medications reviewed'], ['family_planning_counseling', 'Family planning counseling'], ['is_referred', 'Referral needed'], ['referred_to', 'Referred to'], ['referral_reason', 'Referral reason']] },
+    { title: 'Vital signs', fields: [
+        ['bp_systolic', 'Systolic blood pressure (mmHg)', 'integer'],
+        ['bp_diastolic', 'Diastolic blood pressure (mmHg)', 'integer'],
+        ['weight_kg', 'Weight (kg)', 'number'],
+        ['temp_c', 'Temperature (°C)', 'number'],
+        ['pulse_bpm', 'Pulse (bpm)', 'integer'],
+        ['resp_rate_cpm', 'Respiratory rate (/min)', 'integer'],
+    ] },
+    { title: 'Postpartum examination', fields: [
+        ['uterine_involution', 'Uterine involution'],
+        ['lochia_assessment', 'Lochia assessment'],
+        ['perineal_or_wound_condition', 'Perineal / wound condition'],
+        ['pain_assessment', 'Pain assessment'],
+        ['breast_assessment', 'Breast assessment'],
+        ['breastfeeding_status', 'Breastfeeding status'],
+        ['urination_and_bowel_status', 'Urination and bowel status'],
+        ['mental_health_assessment', 'Mental health assessment'],
+    ] },
+    { title: 'Care plan', fields: [
+        ['clinical_notes', 'Clinical notes'],
+        ['advice_given', 'Advice given'],
+        ['treatments_given', 'Treatments given'],
+        ['medications_review', 'Medications reviewed'],
+        ['family_planning_counseling', 'Family planning counseling'],
+    ] },
 ];
 
-const selectFields = new Set(['uterine_firmness', 'lochia_amount', 'lochia_color_type', 'lochia_clots', 'lochia_foul_smell', 'breastfeeding_status', 'pain_severity', 'difficulty_urinating', 'constipation', 'bowel_movement', 'incontinence', 'mood', 'support_at_home', 'counseling_provided', 'is_referred']);
+const dangerSignOptions = [
+    'Heavy bleeding',
+    'Fever or infection',
+    'High blood pressure',
+    'Severe headache or vision problems',
+    'Wound complications',
+    'Breast infection',
+];
+
+const localDateValue = date => {
+    const local = new Date(date);
+    local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
+    return local.toISOString().slice(0, 10);
+};
 
 const PostpartumVisitModal = ({ mother, onClose, onSave }) => {
     const { user } = useContext(AuthContext);
@@ -28,7 +55,8 @@ const PostpartumVisitModal = ({ mother, onClose, onSave }) => {
     const [staff, setStaff] = useState([]);
     const [staffId, setStaffId] = useState('');
     const [visitId, setVisitId] = useState('');
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [date, setDate] = useState(localDateValue(new Date()));
+    const [status, setStatus] = useState('Attended');
     const [values, setValues] = useState({});
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -54,30 +82,35 @@ const PostpartumVisitModal = ({ mother, onClose, onSave }) => {
     const selectedVisit = scheduledVisits.find(visit => visit.id === visitId);
 
     useEffect(() => {
-        const nextVisit = mother.scheduledVisits?.find(visit => visit.status !== 'Completed' && visit.status !== 'Cancelled');
+        const nextVisit = mother.scheduledVisits?.find(visit => !['Completed', 'Cancelled'].includes(visit.status));
         setVisitId(nextVisit?.id || '');
     }, [mother.id, mother.scheduledVisits]);
 
     const handleSave = async () => {
-        if (!visitId || !date || !staffId) {
-            await customAlert({ title: 'Missing Information', text: 'Select a scheduled postpartum visit, visit date, and personnel present.', iconType: 'warning' });
+        if (!visitId || (status === 'Attended' && (!date || !staffId)) || (status === 'Missed' && !values.missed_reason?.trim())) {
+            await customAlert({ title: 'Missing Information', text: status === 'Missed' ? 'Enter a reason for the missed visit.' : 'Select a scheduled postpartum visit, visit date, and personnel present.', iconType: 'warning' });
+            return;
+        }
+        const integerVitalFields = ['bp_systolic', 'bp_diastolic', 'pulse_bpm', 'resp_rate_cpm'];
+        const invalidIntegerVital = status === 'Attended' && integerVitalFields.some(key =>
+            values[key] && (!Number.isInteger(Number(values[key])) || Number(values[key]) <= 0)
+        );
+        const decimalVitalFields = ['weight_kg', 'temp_c'];
+        const invalidDecimalVital = status === 'Attended' && decimalVitalFields.some(key =>
+            values[key] && (!Number.isFinite(Number(values[key])) || Number(values[key]) <= 0)
+        );
+        if (invalidIntegerVital || invalidDecimalVital) {
+            await customAlert({ title: 'Invalid Vital Sign', text: 'Enter positive values; blood pressure, pulse, and respiratory rate must be whole numbers.', iconType: 'warning' });
             return;
         }
         setSaving(true);
         try {
-            const selectedStaff = staff.find(item => item.id === staffId);
-            const remarks = {
-                recorded_at: new Date().toISOString(),
-                recorded_by: user?.id || null,
-                personnel_present: { id: staffId, name: selectedStaff?.full_name || user?.fullName || '' },
-                assessment: values,
-                notes: values.general_notes || '',
-            };
             await new BabyService().savePostpartumVisit(visitId, {
-                date,
-                personnelPresent: staffId,
-                performedBy: user?.id || null,
-                remarks,
+                status,
+                attendedDate: status === 'Attended' ? date : null,
+                personnelPresent: status === 'Attended' ? staffId : null,
+                performedBy: status === 'Attended' ? user?.id || null : null,
+                values,
             });
             onSave?.();
             onClose();
@@ -107,33 +140,87 @@ const PostpartumVisitModal = ({ mother, onClose, onSave }) => {
                                 ))}
                             </select>
                         </label>
-                        <label>Visit date<input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
-                        <label><UserRound size={14} /> Personnel present
-                            <select value={staffId} onChange={event => setStaffId(event.target.value)} disabled={loading || user?.role === 'staff'}>
-                                <option value="">Select personnel</option>
-                                {staff.map(item => <option key={item.id} value={item.id}>{item.full_name}</option>)}
+                        <label>Visit outcome
+                            <select value={status} onChange={event => setStatus(event.target.value)}>
+                                <option value="Attended">Attended</option>
+                                <option value="Missed">Missed</option>
+                                <option value="Cancelled">Cancelled</option>
                             </select>
                         </label>
+                        {status === 'Attended' && <label>Attended date<input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>}
+                        {status === 'Attended' && (
+                            <label><UserRound size={14} /> Personnel present
+                                <select value={staffId} onChange={event => setStaffId(event.target.value)} disabled={loading || user?.role === 'staff'}>
+                                    <option value="">Select personnel</option>
+                                    {staff.map(item => <option key={item.id} value={item.id}>{item.full_name}</option>)}
+                                </select>
+                            </label>
+                        )}
                     </div>
                     {selectedVisit?.assigned_staff && <p className="pp-readonly-note">Assigned prenatal staff: {staff.find(item => item.id === selectedVisit.assigned_staff)?.full_name || 'Assigned staff member'}</p>}
                     {user?.role === 'staff' && <p className="pp-readonly-note">The signed-in staff member is recorded as the person who entered this assessment.</p>}
-                    {sections.map(section => (
+                    {status === 'Missed' && (
+                        <label className="pp-general-remarks">Reason for missed visit
+                            <textarea rows="2" value={values.missed_reason || ''} onChange={event => update('missed_reason', event.target.value)} />
+                        </label>
+                    )}
+                    {status === 'Attended' && sections.map(section => (
                         <section className="pp-assessment-section" key={section.title}>
                             <h3><Activity size={15} /> {section.title}</h3>
                             <div className="pp-assessment-grid">
-                                {section.fields.map(([key, label]) => (
+                                {section.fields.map(([key, label, type = 'textarea']) => (
                                     <label key={key}>{label}
-                                        {selectFields.has(key) ? (
-                                            <select value={values[key] || ''} onChange={event => update(key, event.target.value)}>
-                                                <option value="">Not assessed</option><option>Normal</option><option>None</option><option>No</option><option>Yes</option><option>Mild</option><option>Moderate</option><option>Severe</option><option>Rubra</option><option>Serosa</option><option>Alba</option>
-                                            </select>
-                                        ) : <textarea rows="2" value={values[key] || ''} onChange={event => update(key, event.target.value)} />}
+                                        {type === 'number' || type === 'integer'
+                                            ? <input type="number" min="0" step={type === 'integer' ? '1' : 'any'} value={values[key] || ''} onChange={event => update(key, event.target.value)} />
+                                            : <textarea rows="2" value={values[key] || ''} onChange={event => update(key, event.target.value)} />}
                                     </label>
                                 ))}
                             </div>
                         </section>
                     ))}
-                    <label className="pp-general-remarks">General notes<textarea rows="3" value={values.general_notes || ''} onChange={event => update('general_notes', event.target.value)} /></label>
+                    {status === 'Attended' && (
+                        <>
+                            <section className="pp-assessment-section">
+                                <h3><Activity size={15} /> Danger signs</h3>
+                                <div className="pp-assessment-grid">
+                                    {dangerSignOptions.map(sign => (
+                                        <label key={sign} className="pp-danger-sign-option">
+                                            <input
+                                                type="checkbox"
+                                                checked={(values.danger_signs || []).includes(sign)}
+                                                onChange={event => update(
+                                                    'danger_signs',
+                                                    event.target.checked
+                                                        ? [...(values.danger_signs || []), sign]
+                                                        : (values.danger_signs || []).filter(value => value !== sign)
+                                                )}
+                                            />
+                                            {sign}
+                                        </label>
+                                    ))}
+                                </div>
+                            </section>
+                            <section className="pp-assessment-section">
+                                <h3><Activity size={15} /> Referral and next appointment</h3>
+                                <div className="pp-assessment-grid">
+                                    <label>Referral needed
+                                        <select value={values.is_referred ? 'true' : 'false'} onChange={event => update('is_referred', event.target.value === 'true')}>
+                                            <option value="false">No</option>
+                                            <option value="true">Yes</option>
+                                        </select>
+                                    </label>
+                                    {values.is_referred && <>
+                                        <label>Referred to<textarea rows="2" value={values.referred_to || ''} onChange={event => update('referred_to', event.target.value)} /></label>
+                                        <label>Referral reason<textarea rows="2" value={values.referral_reason || ''} onChange={event => update('referral_reason', event.target.value)} /></label>
+                                    </>}
+                                    <label>Next appointment date<input type="date" value={values.next_appt_date || ''} onChange={event => update('next_appt_date', event.target.value)} /></label>
+                                    <label>Next appointment type<input value={values.next_appt_type || ''} onChange={event => update('next_appt_type', event.target.value)} /></label>
+                                </div>
+                            </section>
+                            <label className="pp-general-remarks">Additional notes<textarea rows="3" value={values.notes || ''} onChange={event => update('notes', event.target.value)} /></label>
+                        </>
+                    )}
+                    {status === 'Cancelled' && <label className="pp-general-remarks">Cancellation notes<textarea rows="3" value={values.notes || ''} onChange={event => update('notes', event.target.value)} /></label>}
                 </div>
                 <div className="modal-footer"><button className="btn btn-outline" onClick={onClose} disabled={saving}>Cancel</button><button className="btn btn-primary" onClick={handleSave} disabled={saving || loading}>{saving ? <RefreshCw size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} {saving ? 'Saving...' : 'Save Visit'}</button></div>
             </div>

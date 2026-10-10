@@ -982,59 +982,65 @@ class BabyService {
   }
 
   async savePostpartumVisit(visitId, visitData) {
-    const assessment = visitData.remarks.assessment || {};
+    const values = visitData.values || {};
     const parsePositiveNumber = value => {
       const parsed = Number.parseFloat(String(value || '').replace(/[^\d.]/g, ''));
       return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
     };
     const parsePositiveInteger = value => {
-      const parsed = Number.parseInt(String(value || '').replace(/[^\d]/g, ''), 10);
-      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+      const parsed = Number(value);
+      return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
     };
-    const [systolic, diastolic] = String(assessment.blood_pressure || '').split('/');
-    const combine = (...parts) => parts.filter(Boolean).join('; ') || null;
-    const dangerSigns = [
-      ['heavy_bleeding', 'Heavy bleeding'],
-      ['fever_infection', 'Fever or infection'],
-      ['high_blood_pressure', 'High blood pressure'],
-      ['severe_headache_vision', 'Severe headache or vision problems'],
-      ['wound_complications', 'Wound complications'],
-      ['breast_infection', 'Breast infection'],
-    ].filter(([key]) => ['yes', 'true'].includes(String(assessment[key] || '').trim().toLowerCase()))
-      .map(([, label]) => label);
+    const status = visitData.status || 'Attended';
+    if (!['Attended', 'Missed', 'Cancelled'].includes(status)) {
+      throw new Error(`Unsupported postpartum visit status: ${status}`);
+    }
+    if (status === 'Missed' && !values.missed_reason?.trim()) {
+      throw new Error('A reason is required when marking a postpartum visit missed.');
+    }
+    if (status === 'Attended' && (!visitData.attendedDate || !visitData.personnelPresent)) {
+      throw new Error('Attended date and personnel present are required to record an attended postpartum visit.');
+    }
 
     const { error } = await supabase
       .from('postpartum_visits')
       .update({
-        attended_date: visitData.date,
-        status: 'Attended',
+        status,
+        attended_date: status === 'Attended' ? visitData.attendedDate : null,
+        missed_reason: status === 'Missed' ? values.missed_reason?.trim() || null : null,
         personnel_present: visitData.personnelPresent || null,
         performed_by: visitData.performedBy || null,
-        assessment,
-        weight_kg: parsePositiveNumber(assessment.weight_kg),
-        bp_systolic: parsePositiveInteger(systolic),
-        bp_diastolic: parsePositiveInteger(diastolic),
-        temp_c: parsePositiveNumber(assessment.temperature),
-        pulse_bpm: parsePositiveInteger(assessment.pulse),
-        resp_rate_cpm: parsePositiveInteger(assessment.respiratory_rate),
-        uterine_involution: combine(assessment.fundal_height_involution, assessment.uterine_firmness, assessment.uterine_tenderness),
-        lochia_assessment: combine(assessment.lochia_amount, assessment.lochia_color_type, assessment.lochia_clots, assessment.lochia_foul_smell),
-        perineal_or_wound_condition: combine(assessment.perineal_healing, assessment.episiotomy_laceration, assessment.perineal_pain, assessment.perineal_swelling_infection),
-        pain_assessment: combine(assessment.pain_location, assessment.pain_severity, assessment.pain_management),
-        breast_assessment: combine(assessment.breast_condition, assessment.nipple_condition, assessment.breastfeeding_problems),
-        breastfeeding_status: assessment.breastfeeding_status || null,
-        urination_and_bowel_status: combine(assessment.difficulty_urinating, assessment.constipation, assessment.bowel_movement, assessment.incontinence),
-        mental_health_assessment: combine(assessment.mood, assessment.anxiety_depressive_symptoms, assessment.emotional_wellbeing, assessment.support_at_home),
-        danger_signs: dangerSigns.length ? dangerSigns : null,
-        clinical_notes: visitData.remarks.notes || null,
-        notes: visitData.remarks.notes || null,
-        advice_given: assessment.advice_given || null,
-        treatments_given: assessment.treatments_given || null,
-        medications_review: assessment.medications_review || null,
-        family_planning_counseling: assessment.family_planning_counseling || null,
-        is_referred: String(assessment.is_referred || '').toLowerCase() === 'yes',
-        referred_to: assessment.referred_to || null,
-        referral_reason: assessment.referral_reason || null,
+        assessment: status === 'Attended'
+          ? values
+          : status === 'Missed'
+            ? { missed_reason: values.missed_reason.trim(), notes: values.notes?.trim() || '' }
+            : { notes: values.notes?.trim() || '' },
+        bp_systolic: status === 'Attended' ? parsePositiveInteger(values.bp_systolic) : null,
+        bp_diastolic: status === 'Attended' ? parsePositiveInteger(values.bp_diastolic) : null,
+        weight_kg: status === 'Attended' ? parsePositiveNumber(values.weight_kg) : null,
+        temp_c: status === 'Attended' ? parsePositiveNumber(values.temp_c) : null,
+        pulse_bpm: status === 'Attended' ? parsePositiveInteger(values.pulse_bpm) : null,
+        resp_rate_cpm: status === 'Attended' ? parsePositiveInteger(values.resp_rate_cpm) : null,
+        uterine_involution: status === 'Attended' ? values.uterine_involution?.trim() || null : null,
+        lochia_assessment: status === 'Attended' ? values.lochia_assessment?.trim() || null : null,
+        perineal_or_wound_condition: status === 'Attended' ? values.perineal_or_wound_condition?.trim() || null : null,
+        pain_assessment: status === 'Attended' ? values.pain_assessment?.trim() || null : null,
+        breast_assessment: status === 'Attended' ? values.breast_assessment?.trim() || null : null,
+        breastfeeding_status: status === 'Attended' ? values.breastfeeding_status?.trim() || null : null,
+        urination_and_bowel_status: status === 'Attended' ? values.urination_and_bowel_status?.trim() || null : null,
+        mental_health_assessment: status === 'Attended' ? values.mental_health_assessment?.trim() || null : null,
+        danger_signs: status === 'Attended' && values.danger_signs?.length ? values.danger_signs : null,
+        clinical_notes: status === 'Attended' ? values.clinical_notes?.trim() || null : null,
+        notes: values.notes?.trim() || null,
+        advice_given: status === 'Attended' ? values.advice_given?.trim() || null : null,
+        treatments_given: status === 'Attended' ? values.treatments_given?.trim() || null : null,
+        medications_review: status === 'Attended' ? values.medications_review?.trim() || null : null,
+        family_planning_counseling: status === 'Attended' ? values.family_planning_counseling?.trim() || null : null,
+        is_referred: status === 'Attended' && Boolean(values.is_referred),
+        referred_to: status === 'Attended' && values.is_referred ? values.referred_to?.trim() || null : null,
+        referral_reason: status === 'Attended' && values.is_referred ? values.referral_reason?.trim() || null : null,
+        next_appt_date: status === 'Attended' ? values.next_appt_date || null : null,
+        next_appt_type: status === 'Attended' ? values.next_appt_type?.trim() || null : null,
       })
       .eq('id', visitId);
 

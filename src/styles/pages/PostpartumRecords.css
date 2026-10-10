@@ -220,6 +220,24 @@
     margin-top: 14px;
 }
 
+.pp-assessment-grid label.pp-danger-sign-option {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 9px;
+    min-height: 36px;
+    color: var(--color-text);
+    font-weight: 500;
+}
+
+.pp-assessment-grid .pp-danger-sign-option input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    padding: 0;
+    accent-color: var(--color-rose);
+}
+
 @media (max-width: 700px) {
     .pp-visit-meta,
     .pp-assessment-grid {
