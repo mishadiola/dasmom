@@ -17,6 +17,7 @@ import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/PostpartumRecords.css';
 import { formatMotherId } from '../../utils/displayIds';
 import PostpartumVisitModal from '../../components/PostpartumVisitModal';
+import ScheduledVisitModal from '../../components/Prenatal/ScheduledVisitModal';
 
 const formatReadableDate = (dateString) => {
     if (!dateString || dateString === 'N/A' || dateString === 'Not scheduled' || dateString === 'None') return dateString;
@@ -213,6 +214,7 @@ const PostpartumRecords = () => {
 
     const [selectedMother, setSelectedMother] = useState(null);
     const [visitMother, setVisitMother] = useState(null);
+    const [selectedScheduledVisit, setSelectedScheduledVisit] = useState(null);
     const [activePopover, setActivePopover] = useState(null);
     const filterRowRef = useRef(null);
     useClickOutside(filterRowRef, () => setActivePopover(null));
@@ -619,7 +621,32 @@ const PostpartumRecords = () => {
                                             </td>
                                             <td>
                                                 <div className="pp-actions">
-                                                    {m.scheduledVisits?.some(visit => visit.status !== 'Completed' && visit.status !== 'Cancelled') && <button className="action-btn record-btn" title="Record Postpartum Visit" onClick={() => setVisitMother(m)}><ClipboardList size={15} /></button>}
+                                                    {m.scheduledVisits?.some(visit => visit.status !== 'Completed' && visit.status !== 'Cancelled') && (
+                                                        <button 
+                                                            className="action-btn record-btn" 
+                                                            title="Record Postpartum Visit" 
+                                                            onClick={() => {
+                                                                const pendingVisit = m.scheduledVisits?.find(visit => visit.status !== 'Completed' && visit.status !== 'Cancelled') || m.scheduledVisits?.[0];
+                                                                setSelectedScheduledVisit({
+                                                                    id: pendingVisit?.id || m.id,
+                                                                    patientId: m.patientId || m.id,
+                                                                    patientName: m.name,
+                                                                    type: 'Postpartum',
+                                                                    visitType: pendingVisit?.visit_type || 'Postpartum Follow-up',
+                                                                    vaccineName: pendingVisit?.visit_type || 'Postpartum Follow-up',
+                                                                    visitDate: pendingVisit?.scheduled_at || m.visitDate,
+                                                                    date: pendingVisit?.scheduled_at || m.visitDate,
+                                                                    location: m.station || 'Station not assigned',
+                                                                    assignedStation: m.station,
+                                                                    assignedStaff: pendingVisit?.assigned_staff_name || m.assignedStaff || 'Unassigned',
+                                                                    risk: m.risk || (m.recoveryStatus === 'Monitoring' ? 'Monitoring' : 'Normal'),
+                                                                    raw: pendingVisit
+                                                                });
+                                                            }}
+                                                        >
+                                                            <ClipboardList size={15} />
+                                                        </button>
+                                                    )}
                                                     <button className="action-btn view-btn" title="View Profile" onClick={() => setSelectedMother(m)}>
                                                         <Eye size={15} />
                                                     </button>
@@ -728,6 +755,12 @@ const PostpartumRecords = () => {
 
             {/* ── Detail Modal ── */}
             {selectedMother && <DetailModal mother={selectedMother} onClose={() => setSelectedMother(null)} />}
+            {selectedScheduledVisit && (
+                <ScheduledVisitModal 
+                    visit={selectedScheduledVisit} 
+                    onClose={() => setSelectedScheduledVisit(null)} 
+                />
+            )}
             {visitMother && <PostpartumVisitModal mother={visitMother} onClose={() => setVisitMother(null)} onSave={refreshRecords} />}
 
             <ExportModal 

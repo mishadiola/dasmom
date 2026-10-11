@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     X, Calendar, Clock, MapPin, User, FileText, 
     CheckCircle2, AlertCircle, ExternalLink, Plus, 
-    Activity, Users, Syringe
+    Activity, Users, Syringe, ClipboardList
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PatientService from '../../services/patientservice';
@@ -20,18 +20,36 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
 
     if (!visit) return null;
 
+    const isPostpartum = visit.type === 'Postpartum' || visit.visitType === 'Postpartum' || visit.notes === 'Postpartum follow-up';
+
     // Fetch patient visit history
     useEffect(() => {
         const fetchPatientVisits = async () => {
             try {
-                const { data, error } = await supabase
-                    .from('prenatal_visits')
-                    .select('*')
-                    .eq('patient_id', visit.patientId)
-                    .order('visit_date', { ascending: false });
-                
-                if (error) throw error;
-                setPatientVisits(data || []);
+                if (isPostpartum) {
+                    const { data, error } = await supabase
+                        .from('postpartum_visits')
+                        .select('*')
+                        .eq('patient_id', visit.patientId)
+                        .order('scheduled_at', { ascending: false });
+                    
+                    if (error) throw error;
+                    const normalized = (data || []).map(v => ({
+                        ...v,
+                        visit_date: v.attended_date || v.scheduled_at,
+                        visit_number: v.visit_type
+                    }));
+                    setPatientVisits(normalized);
+                } else {
+                    const { data, error } = await supabase
+                        .from('prenatal_visits')
+                        .select('*')
+                        .eq('patient_id', visit.patientId)
+                        .order('visit_date', { ascending: false });
+                    
+                    if (error) throw error;
+                    setPatientVisits(data || []);
+                }
             } catch (error) {
                 console.error('Error fetching patient visits:', error);
             } finally {
@@ -40,7 +58,7 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
         };
         
         if (visit.patientId) fetchPatientVisits();
-    }, [visit.patientId]);
+    }, [visit.patientId, isPostpartum]);
 
     // Fetch patient station
     useEffect(() => {
@@ -88,6 +106,31 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
     const formatDate = (dateStr) => {
         if (!dateStr) return 'N/A';
         return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    };
+
+    const formatVisitDateTime = (dateVal, timeVal) => {
+        if (!dateVal || dateVal === 'N/A' || dateVal === 'None' || dateVal === 'Not scheduled') {
+            return { date: 'Not scheduled', time: null };
+        }
+        const d = new Date(dateVal);
+        if (isNaN(d.getTime())) {
+            return { date: String(dateVal), time: timeVal || null };
+        }
+        const dateStr = d.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+        
+        let timeStr = timeVal || null;
+        if (!timeStr && typeof dateVal === 'string' && (dateVal.includes('T') || dateVal.includes(':'))) {
+            timeStr = d.toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            });
+        }
+        return { date: dateStr, time: timeStr };
     };
 
     const isUpcoming = (visitDate) => {
@@ -148,6 +191,20 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
                             >
                                 <Syringe size={18} style={{ marginRight: '8px' }} /> Record Vaccination Visit
                             </button>
+                        ) : isPostpartum ? (
+                            <button 
+                                className="btn btn-primary" 
+                                style={{ width: '100%', justifyContent: 'center', padding: '12px' }}
+                                onClick={() => {
+                                    onClose?.();
+                                    navigate(`/dashboard/postpartum/add/${visit.patientId}`, {
+                                        state: { visitId: visit.id, visit }
+                                    });
+                                }}
+                                title="Record Postpartum Visit"
+                            >
+                                <ClipboardList size={18} style={{ marginRight: '8px' }} /> Record Postpartum Visit
+                            </button>
                         ) : (
                             <button 
                                 className="btn btn-primary" 
@@ -164,17 +221,34 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
                     <div className="sv-section">
                         <h3 className="sv-section-title">Visit Details</h3>
                         <div className="sv-details-grid">
-                            <div className="sv-field">
-                                <label className="sv-label">Scheduled Date & Time</label>
-                                <div className="sv-value">
-                                    <Calendar size={16} /> {visit.visitDate || visit.date}
-                                    <Clock size={16} className="ml-2" /> {visit.time}
-                                </div>
-                            </div>
+                            {(() => {
+                                const dt = formatVisitDateTime(visit.visitDate || visit.date || visit.scheduled_at, visit.time);
+                                return (
+                                    <div className="sv-field">
+                                        <label className="sv-label">Scheduled Date & Time</label>
+                                        <div className="sv-value">
+                                            <Calendar size={16} /> {dt.date}
+                                            {dt.time && <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginLeft: '8px' }}><Clock size={16} /> {dt.time}</span>}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                             <div className="sv-field">
                                 <label className="sv-label">Location / Facility</label>
                                 <div className="sv-value">
-                                    <MapPin size={16} /> {patientStation || visit.location || 'Station not assigned'}
+                                    <MapPin size={16} /> {patientStation || visit.location || visit.assignedStation || 'Station not assigned'}
+                                </div>
+                            </div>
+                            <div className="sv-field">
+                                <label className="sv-label">Assigned Healthcare Worker</label>
+                                <div className="sv-value">
+                                    <User size={16} /> {visit.assignedStaff || 'Unassigned'}
+                                </div>
+                            </div>
+                            <div className="sv-field">
+                                <label className="sv-label">{isPostpartum ? 'Visit Type / Follow-up' : 'Gestational Age'}</label>
+                                <div className="sv-value">
+                                    {isPostpartum ? (visit.vaccineName || visit.visitType || 'Postpartum Follow-up') : (visit.ga || '28w 4d')}
                                 </div>
                             </div>
                             <div className="sv-field">
@@ -183,12 +257,6 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
                                     <span className={`sv-risk-badge ${getRiskClass(visit.risk)}`}>
                                         {visit.risk || 'Normal'}
                                     </span>
-                                </div>
-                            </div>
-                            <div className="sv-field">
-                                <label className="sv-label">Gestational Age</label>
-                                <div className="sv-value">
-                                    {visit.ga || '28w 4d'}
                                 </div>
                             </div>
                         </div>

@@ -1147,11 +1147,17 @@
     font-weight: 600;
     color: rgba(30, 24, 18, 0.7);
     margin-bottom: 2px;
+    line-height: 1.35;
+    min-height: 35px;
+    display: flex;
+    align-items: flex-start;
+    overflow-wrap: break-word;
 }
 
 .stat-sub {
     font-size: 11.5px;
     color: rgba(30, 24, 18, 0.55);
+    line-height: 1.3;
 }
 
 /* ══════════════════════════════════════════

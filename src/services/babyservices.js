@@ -852,7 +852,7 @@ class BabyService {
         if (postpartumVisitsError) throw postpartumVisitsError;
 
         const performedByIds = [...new Set((postpartumVisits || [])
-          .flatMap(visit => [visit.performed_by, visit.personnel_present])
+          .flatMap(visit => [visit.performed_by, visit.personnel_present, visit.assigned_staff])
           .filter(Boolean))];
         const { data: performedByProfiles, error: performedByError } = performedByIds.length
           ? await supabase
@@ -872,7 +872,8 @@ class BabyService {
               : visit.status === 'Scheduled' && new Date(visit.scheduled_at) < new Date()
                 ? 'Missed'
                 : visit.status,
-            performedByName: performedByNames.get(visit.personnel_present) || performedByNames.get(visit.performed_by) || null
+            performedByName: performedByNames.get(visit.personnel_present) || performedByNames.get(visit.performed_by) || null,
+            assigned_staff_name: performedByNames.get(visit.assigned_staff) || null
           });
           visitsByDelivery.set(visit.delivery_id, visits);
         });
@@ -972,6 +973,8 @@ class BabyService {
                 postpartumRemarks,
                 scheduledVisits,
                 followUpStatus,
+                assignedStaff: nextVisit?.assigned_staff_name || nextVisit?.performedByName || null,
+                risk: riskLevel || 'Normal',
                 complications: d.complications && d.complications.length > 0 ? d.complications.join(', ') : 'None'
             };
         });

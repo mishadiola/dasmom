@@ -26,7 +26,7 @@ const NAV_ITEMS = [
         section: 'Maternal Care',
         items: [
             { label: 'Patient Profiles', icon: Users, path: '/dashboard/patients' },
-            { label: 'High Risk Cases', icon: AlertTriangle, path: '/dashboard/high-risk' },
+            { label: 'Health Conditions', icon: AlertTriangle, path: '/dashboard/high-risk' },
             { label: 'Visits & Scheduling', icon: CalendarCheck, path: '/dashboard/prenatal' },
             { label: 'Delivery Outcomes', icon: Stethoscope, path: '/dashboard/deliveries' },
             { label: 'Postpartum Records', icon: FileText, path: '/dashboard/postpartum' },

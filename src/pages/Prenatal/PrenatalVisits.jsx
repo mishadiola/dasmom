@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect, useCallback, useMemo, useContext } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, useContext } from 'react';
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import PatientService from '../../services/patientservice';
 import '../../styles/components/SharedFilters.css';
@@ -22,6 +22,7 @@ import ExportModal from '../../components/ExportModal';
 import '../../styles/pages/PrenatalVisits.css';
 import Legend from '../../components/Legend/Legend';
 import { formatMotherId } from '../../utils/displayIds';
+import VisitStaffAssignment from '../../components/Prenatal/VisitStaffAssignment';
 
 const toLocalDateStr = (d) => {
     const offset = d.getTimezoneOffset() * 60000;
@@ -643,14 +644,8 @@ const PrenatalVisits = () => {
     const tabVisits = getTabVisits();
 
     const openPostpartumVisit = (visit) => {
-        const raw = visit.raw || {};
-        setPostpartumVisitMother({
-            id: visit.id,
-            patientId: visit.patientId,
-            name: visit.patientName,
-            station: raw.patient_basic_info?.stations?.station_name || raw.station || 'Assigned station',
-            stationId: raw.patient_basic_info?.station_ass || raw.stationId || null,
-            deliveryType: raw.delivery_type || 'NSD',
+        navigate(`/dashboard/postpartum/add/${visit.patientId}`, {
+            state: { visitId: visit.id, visit }
         });
     };
     
@@ -892,7 +887,7 @@ const PrenatalVisits = () => {
                                                 <div
                                                     key={item.id}
                                                     className={`schedule-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
-                                                    onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit({ ...item, type: 'Prenatal' }); }}
+                                                    onClick={(e) => { e.stopPropagation(); setSelectedVisit({ ...item, type: visitTypeTab === 'postpartum' ? 'Postpartum' : 'Prenatal' }); }}
                                                 >
                                                     <div className="schedule-details">
                                                         <span className="schedule-patient">{item.patientName}</span>
@@ -942,7 +937,7 @@ const PrenatalVisits = () => {
                                                         <div 
                                                             key={item.id} 
                                                             className={`visit-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
-                                                            onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit({ ...item, type: 'Prenatal' }); }}
+                                                            onClick={(e) => { e.stopPropagation(); setSelectedVisit({ ...item, type: visitTypeTab === 'postpartum' ? 'Postpartum' : 'Prenatal' }); }}
                                                         >
                                                             <span className="visit-patient">{item.patientName}</span>
                                                             <span className="visit-status">{visitTypeTab === 'postpartum' ? 'Postpartum' : (item.status || 'Scheduled')}</span>
@@ -988,7 +983,7 @@ const PrenatalVisits = () => {
                                                                 <div 
                                                                     key={item.id} 
                                                                     className={`visit-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
-                                                                    onClick={(e) => { e.stopPropagation(); visitTypeTab === 'postpartum' ? openPostpartumVisit(item) : setSelectedVisit({ ...item, type: 'Prenatal' }); }}
+                                                                    onClick={(e) => { e.stopPropagation(); setSelectedVisit({ ...item, type: visitTypeTab === 'postpartum' ? 'Postpartum' : 'Prenatal' }); }}
                                                                 >
                                                                     <span className="visit-patient">{item.patientName}</span>
                                                                     <span className="visit-status">{visitTypeTab === 'postpartum' ? 'Postpartum' : (item.status || 'Scheduled')}</span>
@@ -1101,39 +1096,22 @@ const PrenatalVisits = () => {
                                                 <span className="visit-date">{formatReadableDate(visit.visitDate)}</span>
                                             </td>
                                             <td onClick={event => event.stopPropagation()}>
-                                                {visit.status === 'Scheduled'
-                                                    && (visitAccess?.role === 'admin'
-                                                        || (['cho personnel', 'staff'].includes(visitAccess?.role)
-                                                            && visit.assignedStationId === visitAccess.stationId
-                                                            && (visitAccess.role === 'cho personnel' || !visit.assignedStaffId))) ? (
-                                                    <select
-                                                        value={visit.assignedStaffId || ''}
-                                                        onChange={event => handleReassignVisit(visit.id, event.target.value)}
-                                                        onMouseDown={event => event.stopPropagation()}
-                                                        aria-label={`Assigned staff for visit ${visit.visitNumber || ''}`}
-                                                    >
-                                                        <option value="" disabled={visitAccess.role === 'staff'}>Unassigned</option>
-                                                        {visit.assignedStaffId && !assignmentStaff.some(staff =>
-                                                            staff.id === visit.assignedStaffId
-                                                            && (visitAccess.role === 'admin' || staff.station_ass === visitAccess.stationId)
-                                                        ) && (
-                                                            <option value={visit.assignedStaffId} disabled>{visit.assignedStaff} (other station)</option>
-                                                        )}
-                                                        {assignmentStaff
-                                                            .filter(staff => visitAccess.role === 'admin' || staff.station_ass === visitAccess.stationId)
-                                                            .map(staff => <option key={staff.id} value={staff.id}>{staff.full_name}</option>)}
-                                                    </select>
-                                                ) : (
-                                                    <div className="p-info">
-                                                        <span className="p-id">Assigned: {visit.assignedStaff || 'Unassigned'}</span>
-                                                    </div>
-                                                )}
-                                                {(visit.assignedStation || visit.visitStation) && (
-                                                    <span className="p-id">
-                                                        {visit.assignedStation || 'Unassigned'}
-                                                        {visit.visitStation && visit.visitStation !== visit.assignedStation ? ` · Visit: ${visit.visitStation}` : ''}
-                                                    </span>
-                                                )}
+                                                <VisitStaffAssignment
+                                                    visitId={visit.id}
+                                                    visitStationId={visit.assignedStationId}
+                                                    assignedStaffId={visit.assignedStaffId}
+                                                    assignedStaffName={visit.assignedStaff}
+                                                    assignedStationName={visit.assignedStation}
+                                                    visitStationName={visit.visitStation}
+                                                    visitStatus={visit.status}
+                                                    userRole={visitAccess?.role}
+                                                    userStationId={visitAccess?.stationId}
+                                                    onAssigned={async ({ assignedStaffId, assignedStaffName }) => {
+                                                        setToast('Healthcare worker assigned successfully.');
+                                                        setTimeout(() => setToast(null), 3000);
+                                                        await fetchData();
+                                                    }}
+                                                />
                                             </td>
                                             <td>
                                                 <span className={`status-badge status-${visit.status?.toLowerCase() || 'scheduled'}`}>

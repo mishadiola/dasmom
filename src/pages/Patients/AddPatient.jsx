@@ -4,7 +4,7 @@ import { AuthContext } from '../../context/AuthContext';
 import {
     ArrowLeft, Save, X, FileText, User, Activity,
     Calendar, HeartPulse, UploadCloud, AlertTriangle,
-    CheckCircle2, XCircle, Loader2, Search, Info
+    CheckCircle2, XCircle, Loader2, Search, Info, History
 } from 'lucide-react';
 import '../../styles/pages/AddPatient.css';
 import PatientService from "../../services/patientservice";
@@ -20,14 +20,49 @@ const TABS = [
     { id: 'medical', label: 'Medical', icon: Activity },
     { id: 'prenatal', label: 'Prenatal', icon: Calendar },
 ];
-const MEDICAL_CONDITIONS = [
-    { name: 'None', risk: 'None', isExclusive: true },
-    { name: 'Hypertension', risk: 'High' },
-    { name: 'Diabetes', risk: 'High' },
-    { name: 'Heart Disease', risk: 'High' },
-    { name: 'Asthma', risk: 'Medium' },
-    { name: 'Anemia', risk: 'Medium' },
-    { name: 'Previous C-section', risk: 'High' }
+const MATERNAL_HEALTH_CATEGORIES = [
+    {
+        id: 'pre-existing',
+        theme: 'sage',
+        title: 'Pre-existing Medical Conditions',
+        subtitle: 'Diagnosed before the current pregnancy',
+        icon: Activity,
+        conditions: [
+            'Chronic Hypertension',
+            'Pre-existing Diabetes',
+            'Heart Disease',
+            'Asthma',
+            'Other Pre-existing Condition'
+        ]
+    },
+    {
+        id: 'pregnancy-related',
+        theme: 'amber',
+        title: 'Pregnancy-Related Conditions',
+        subtitle: 'Identified during current pregnancy',
+        icon: HeartPulse,
+        conditions: [
+            'Gestational Hypertension',
+            'Gestational Diabetes',
+            'Preeclampsia',
+            'Anemia During Pregnancy',
+            'Other Pregnancy-Related Condition'
+        ]
+    },
+    {
+        id: 'obstetric-history',
+        theme: 'lavender',
+        title: 'Relevant Obstetric History',
+        subtitle: 'Previous pregnancy & delivery history',
+        icon: History,
+        conditions: [
+            'Previous C-section',
+            'Previous Preterm Birth',
+            'Previous Stillbirth',
+            'Previous Miscarriage',
+            'Other Relevant Obstetric History'
+        ]
+    }
 ];
 
 // Normal ranges for vital signs
@@ -385,27 +420,33 @@ const AddPatient = () => {
         // Check for multiple pregnancy (high-risk indicator)
         const isMultipleBirth = formData.pregnancyType === 'Twins' || formData.pregnancyType === 'Multiple';
         
-        // Check selected conditions from MEDICAL_CONDITIONS
-        const selectedConditions = formData.conditions.map(conditionName => {
-            return MEDICAL_CONDITIONS.find(c => c.name === conditionName);
-        }).filter(Boolean);
+        // Check selected conditions
+        const highRiskKeywords = [
+            'chronic hypertension', 'pre-existing diabetes', 'heart disease',
+            'gestational hypertension', 'gestational diabetes', 'preeclampsia',
+            'previous stillbirth', 'previous preterm birth', 'previous c-section'
+        ];
+        const medRiskKeywords = ['asthma', 'anemia during pregnancy', 'previous miscarriage'];
+
+        const hasHighRisk = (formData.conditions || []).some(c => 
+            highRiskKeywords.some(kw => c.toLowerCase().includes(kw))
+        );
+        const hasMedRisk = (formData.conditions || []).some(c => 
+            medRiskKeywords.some(kw => c.toLowerCase().includes(kw))
+        );
+        const validConditionsCount = (formData.conditions || []).filter(c => c !== 'None' && c !== 'None Reported').length;
         
-        const selectedConditionCount = selectedConditions.length;
-        const hasHighRisk = selectedConditions.some(c => c.risk === 'High');
-        const hasMedRisk = selectedConditions.some(c => c.risk === 'Medium');
-        
-        // Check Other Conditions risk level
+        // Check Other Conditions
         const hasOtherCondition = formData.otherConditions && formData.otherConditions.trim() !== '';
-        const otherRisk = hasOtherCondition ? otherConditionRisk : null;
 
         // Check BMI
         const bmiCategory = patientService.calculateBMICategory(formData.weight, formData.height);
         const isBMIHighRisk = bmiCategory && patientService.isBMIHighRisk(bmiCategory);
 
-        // Determine overall risk (multiple pregnancy is high-risk)
-        if (isMultipleBirth || hasHighRisk || selectedConditionCount >= 2 || otherRisk === 'High' || isBMIHighRisk) {
+        // Determine overall risk
+        if (isMultipleBirth || hasHighRisk || validConditionsCount >= 2 || isBMIHighRisk) {
             risk = 'High Risk';
-        } else if (hasMedRisk || otherRisk === 'Medium') {
+        } else if (hasMedRisk || hasOtherCondition) {
             risk = 'Medium Risk';
         }
 
@@ -416,7 +457,7 @@ const AddPatient = () => {
         }
 
         setFormData(prev => ({ ...prev, riskLevel: risk }));
-    }, [formData.conditions, formData.otherConditions, formData.pregnancyType, otherConditionRisk, formData.age, formData.weight, formData.height]);
+    }, [formData.conditions, formData.otherConditions, formData.pregnancyType, formData.age, formData.weight, formData.height]);
 
     useEffect(() => {
         // Calculate BMI when weight and height change
@@ -683,29 +724,28 @@ const AddPatient = () => {
 
     const handleCheckbox = (conditionName) => {
         setFormData(prev => {
-            const current = [...prev.conditions];
+            const current = [...(prev.conditions || [])];
             
-            // Check if this is the "None" option
-            const isNone = conditionName === 'None';
+            // Check if this is the "None Reported" or "None" option
+            const isNone = conditionName === 'None Reported' || conditionName === 'None';
             
             if (isNone) {
-                // If "None" is being selected
-                if (current.includes('None')) {
-                    // Deselect "None"
-                    return { ...prev, conditions: current.filter(c => c !== 'None') };
+                // If "None Reported" is already selected, deselect it
+                if (current.includes('None Reported') || current.includes('None')) {
+                    return { ...prev, conditions: [] };
                 } else {
-                    // Select "None" and deselect all other conditions
-                    return { ...prev, conditions: ['None'] };
+                    // Select "None Reported" and clear all other selected conditions
+                    return { ...prev, conditions: ['None Reported'] };
                 }
             } else {
-                // If a regular condition is being selected
+                // If a regular condition is being toggled
                 if (current.includes(conditionName)) {
                     // Deselect this condition
                     const updated = current.filter(c => c !== conditionName);
                     return { ...prev, conditions: updated };
                 } else {
-                    // Select this condition and deselect "None" if it's selected
-                    const updated = current.filter(c => c !== 'None');
+                    // Select this condition and deselect "None Reported" / "None" if selected
+                    const updated = current.filter(c => c !== 'None' && c !== 'None Reported');
                     return { ...prev, conditions: [...updated, conditionName] };
                 }
             }
@@ -855,11 +895,15 @@ const AddPatient = () => {
         });
 
         const riskFactors = [
-            ...formData.conditions,
+            ...(formData.conditions || []).filter(c => c !== 'None' && c !== 'None Reported'),
             ...(formData.otherConditions ? [formData.otherConditions] : []),
             ...(formData.pregnancyType === 'Twins' || formData.pregnancyType === 'Multiple' ? [`${formData.pregnancyType} Pregnancy`] : []),
             ...(formData.age && (formData.age < 18 || formData.age > 35) ? [`Age ${formData.age} (${formData.age < 18 ? 'Teenage' : 'Advanced Maternal Age'})`] : []),
         ].filter(Boolean);
+
+        if (riskFactors.length === 0 && (formData.conditions || []).includes('None Reported')) {
+            riskFactors.push('None');
+        }
 
         const bmiCategory = patientService.calculateBMICategory(formData.weight, formData.height);
         if (bmiCategory && patientService.isBMIHighRisk(bmiCategory)) {
@@ -1890,89 +1934,81 @@ const AddPatient = () => {
                     {}
                     {activeTab === 'medical' && (
                         <div className="ap-section animate-fade">
-                            <h2 className="section-title">Medical Risk Assessment</h2>
+                            <h2 className="section-title">Maternal Health Conditions</h2>
 
-                            <p className="section-desc">Select all existing medical conditions. The system will auto-compute the risk level based on CHO guidelines.</p>
-                            <h3 className="section-subtitle">Pre-existing Conditions</h3>
-                            <div className="checkbox-grid">
-                                {MEDICAL_CONDITIONS.map(cond => (
-                                    <label key={cond.name} className={`custom-checkbox ${cond.isExclusive ? 'exclusive-option' : ''}`}>
-                                        <input 
-                                            type="checkbox" 
-                                            checked={formData.conditions.includes(cond.name)}
-                                            onChange={() => handleCheckbox(cond.name)} 
-                                        />
-                                        <span className="checkmark"></span> 
-                                        <span>{cond.name}</span>
-                                        {!cond.isExclusive && (
-                                            <span className={`risk-badge risk-${cond.risk.toLowerCase()}`}>
-                                                {cond.risk} Risk
-                                            </span>
-                                        )}
-                                        {cond.isExclusive && (
-                                            <span className="risk-badge" style={{background: 'rgba(109, 184, 160, 0.15)', color: '#3d8870', border: 'none'}}>
-                                                No risks
-                                            </span>
-                                        )}
-                                    </label>
-                                ))}
+                            <p className="section-desc">
+                                Select any existing or pregnancy-related health conditions and relevant obstetric history. This information will be recorded in the mother's medical profile for healthcare monitoring.
+                            </p>
+
+                            {/* None Reported: compact full-width neutral selection row */}
+                            <div className="maternal-none-row">
+                                <label className={`maternal-none-toggle ${formData.conditions.includes('None Reported') ? 'is-selected' : ''}`}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={formData.conditions.includes('None Reported')}
+                                        onChange={() => handleCheckbox('None Reported')} 
+                                    />
+                                    <span className="checkmark"></span> 
+                                    <div className="maternal-none-text">
+                                        <span className="maternal-none-title">None Reported</span>
+                                        <span className="maternal-none-desc">— No documented pre-existing conditions, pregnancy complications, or relevant obstetric history</span>
+                                    </div>
+                                </label>
                             </div>
-                            <div className="form-group mt-3">
-                                <label>Other Conditions</label>
+
+                            {/* Three Distinct Category Cards side-by-side */}
+                            <div className="maternal-cards-grid">
+                                {MATERNAL_HEALTH_CATEGORIES.map(category => {
+                                    const CategoryIcon = category.icon;
+                                    return (
+                                        <div key={category.id} className={`maternal-category-card maternal-category-card--${category.theme}`}>
+                                            <div className="maternal-category-head">
+                                                <div className="maternal-category-title-wrap">
+                                                    <span className="maternal-category-icon">
+                                                        <CategoryIcon size={16} />
+                                                    </span>
+                                                    <h3 className="maternal-category-title">{category.title}</h3>
+                                                </div>
+                                                <p className="maternal-category-desc">{category.subtitle}</p>
+                                            </div>
+
+                                            <div className="maternal-category-divider" />
+
+                                            <div className="maternal-category-options">
+                                                {category.conditions.map(name => {
+                                                    const isChecked = (formData.conditions || []).includes(name);
+                                                    return (
+                                                        <label 
+                                                            key={name} 
+                                                            className={`maternal-option-row ${isChecked ? 'is-checked' : ''}`}
+                                                        >
+                                                            <input 
+                                                                type="checkbox" 
+                                                                checked={isChecked}
+                                                                onChange={() => handleCheckbox(name)} 
+                                                            />
+                                                            <span className="checkmark"></span> 
+                                                            <span className="maternal-option-label">{name}</span>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Other Health Conditions / Clinical Notes */}
+                            <div className="maternal-notes-container">
+                                <label className="maternal-notes-title">Other Health Conditions / Clinical Notes</label>
                                 <textarea 
                                     name="otherConditions" 
-                                    rows={2} 
+                                    rows={3} 
                                     value={formData.otherConditions} 
                                     onChange={handleChange} 
-                                    placeholder="Specify other conditions here..."
+                                    placeholder="Specify other documented conditions or relevant clinical information..."
+                                    className="maternal-notes-input"
                                 />
-                                {formData.otherConditions && (
-                                    <div className="mt-2">
-                                        <label style={{fontSize: '12px', fontWeight: 600, marginBottom: '4px', display: 'block'}}>
-                                            Risk Level:
-                                        </label>
-                                        <div style={{display: 'flex', gap: '16px', flexWrap: 'wrap'}}>
-                                            <label style={{display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px'}}>
-                                                <input 
-                                                    type="radio" 
-                                                    name="otherConditionRisk"
-                                                    value="Low"
-                                                    checked={otherConditionRisk === 'Low'}
-                                                    onChange={(e) => setOtherConditionRisk(e.target.value)}
-                                                /> 
-                                                Low Risk
-                                            </label>
-                                            <label style={{display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px'}}>
-                                                <input 
-                                                    type="radio" 
-                                                    name="otherConditionRisk"
-                                                    value="Medium"
-                                                    checked={otherConditionRisk === 'Medium'}
-                                                    onChange={(e) => setOtherConditionRisk(e.target.value)}
-                                                /> 
-                                                Medium Risk
-                                            </label>
-                                            <label style={{display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px'}}>
-                                                <input 
-                                                    type="radio" 
-                                                    name="otherConditionRisk"
-                                                    value="High"
-                                                    checked={otherConditionRisk === 'High'}
-                                                    onChange={(e) => setOtherConditionRisk(e.target.value)}
-                                                /> 
-                                                High Risk
-                                            </label>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="risk-summary mt-4">
-                                <h4>Assessed Risk Level</h4>
-                                <div className={`risk-result risk-result--${formData.riskLevel.toLowerCase().split(' ')[0]}`}>
-                                    {formData.riskLevel === 'High Risk' && <AlertTriangle size={20} />}
-                                    <span>{formData.riskLevel}</span>
-                                </div>
                             </div>
                         </div>
                     )}

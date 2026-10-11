@@ -22,7 +22,7 @@ const authService = new AuthService();
 ════════════════════════════ */
 const STAT_META = [
     { id: 1, label: 'Active Pregnant Patients', key: 'totalPatients', trend: 'up', sub: 'currently registered in system', icon: HeartPulse, color: 'rose', path: '/dashboard/patients' },
-    { id: 2, label: 'High-Risk Pregnancies',   key: 'highRisk',      trend: 'up', sub: 'marked high risk',    icon: AlertTriangle, color: 'orange', path: '/dashboard/high-risk' },
+    { id: 2, label: 'Pregnancies with Health Conditions', key: 'highRisk', trend: 'up', sub: 'documented health conditions', icon: AlertTriangle, color: 'orange', path: '/dashboard/high-risk' },
     { id: 3, label: 'Newborn Records',        key: 'newborns',      trend: 'up', sub: 'birth outcomes',        icon: Baby, color: 'pink', path: '/dashboard/newborns' },
     { id: 4, label: 'Appointments Today',       key: 'apptToday',     trend: 'neutral', sub: 'scheduled today', icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal' },
 ];
@@ -82,9 +82,20 @@ const Dashboard = () => {
             const now = new Date();
             const todayStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
             
-            // Fetch high risk stats using PatientService (same logic as HighRiskCases page)
+            // Fetch health conditions / high risk stats using PatientService (matching Health Conditions page criteria)
             const archivedPatientIds = await patientService.getArchivedPatientIds();
-            const highRiskStats = await patientService.getHighRiskStats();
+            const [highRiskStats, highRiskPatients] = await Promise.all([
+                patientService.getHighRiskStats(),
+                patientService.getHighRiskPatients(),
+            ]);
+
+            const uniqueHealthConditionPatients = Array.from(
+                new Map((highRiskPatients || []).map((p) => [p.id, p])).values()
+            ).filter((p) => p.riskLevel === 'High Risk');
+
+            const healthConditionCount = (highRiskPatients && highRiskPatients.length > 0)
+                ? uniqueHealthConditionPatients.length
+                : (highRiskStats?.highRiskCount ?? 0);
             
             const [{ data: patientRows }, { data: newbornRows }, { count: apptToday }, { data: apptData }, { data: pregnancyData }] = await Promise.all([
                 supabase.from('patient_basic_info').select('id, emergency_contact'),
@@ -123,7 +134,7 @@ const Dashboard = () => {
 
             setLiveStats({
                 totalPatients: activePatientIds.size,
-                highRisk: highRiskStats?.highRiskCount ?? 0,
+                highRisk: healthConditionCount,
                 newborns: activeNewbornIds.size,
                 apptToday: apptToday ?? 0,
             });

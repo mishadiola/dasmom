@@ -29,13 +29,14 @@ import PatientsList from './pages/Patients/PatientsList';
 import PatientProfile from './pages/Patients/PatientProfile';
 import AddPatient from './pages/Patients/AddPatient';
 import HighRiskCases from './pages/HighRisk/HighRiskCases';
-import Analytics from './pages/Analytics/Analytics';
 import PrenatalVisits from './pages/Prenatal/PrenatalVisits';
 import AddPrenatalVisit from './pages/Prenatal/AddPrenatalVisit';
 import PostpartumRecords from './pages/Postpartum/PostpartumRecords';
+import AddPostpartumVisit from './pages/Postpartum/AddPostpartumVisit';
 import Vaccinations from './pages/Vaccinations/Vaccinations';
 import DeliveryOutcomes from './pages/Deliveries/DeliveryOutcomes';
 import NewbornTracking from './pages/Newborns/NewbornTracking';
+import Analytics from './pages/Analytics/Analytics';
 import StationReports from './pages/Station/StationReports';
 import Settings from './pages/Settings/Settings';
 import Inventory from './pages/Inventory/Inventory';
@@ -90,6 +91,7 @@ function App() {
             <Route path="prenatal" element={<PrenatalVisits />} />
             <Route path="prenatal/add/:patientId" element={<AddPrenatalVisit />} />
             <Route path="postpartum" element={<PostpartumRecords />} />
+            <Route path="postpartum/add/:patientId" element={<AddPostpartumVisit />} />
             <Route path="vaccinations" element={<Vaccinations />} />
             <Route path="inventory" element={<Inventory />} />
             <Route path="deliveries" element={<DeliveryOutcomes />} />

@@ -295,7 +295,7 @@ const HighRiskCases = () => {
       <div className="high-risk-page">
         <div className="loading-state">
           <div className="spinner"></div>
-          <p>Loading high‑risk dashboard...</p>
+          <p>Loading health conditions...</p>
         </div>
       </div>
     );
@@ -315,14 +315,14 @@ const HighRiskCases = () => {
                   color: 'var(--color-rose)',
                 }}
               />
-              High Risk Cases
+              Health Conditions
             </h1>
             <span className="title-statistic-badge">
               Total High-Risk Cases: <strong>{stats.totalHighRisk}</strong>
             </span>
           </div>
           <p className="page-subtitle">
-            Monitor pregnant patients with high-risk conditions and complications.
+            Monitor pregnant patients with documented medical conditions, pregnancy-related complications, and relevant obstetric factors.
           </p>
         </div>
 
@@ -443,8 +443,8 @@ const HighRiskCases = () => {
         <div className="hr-table-col">
           <div className="hr-card">
             <div className="hr-card-head">
-              <h2 style={{ color: '#dc2626' }}>
-                <AlertTriangle size={17} /> High‑Risk Monitoring
+              <h2 style={{ color: 'var(--color-rose, #b9818a)' }}>
+                <HeartPulse size={17} /> Health Condition Monitoring
               </h2>
               <span className="hr-count">{filteredPatients.length} patients</span>
             </div>
