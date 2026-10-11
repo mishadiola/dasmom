@@ -106,25 +106,45 @@
 .uv-search-bar {
     flex: 1;
     position: relative;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
 }
 
 .uv-search-bar .search-icon {
     position: absolute;
-    left: 16px;
+    left: 15px;
     top: 50%;
     transform: translateY(-50%);
     color: var(--color-text-light);
+    pointer-events: none;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .uv-search-bar input {
     width: 100%;
-    padding: 14px 14px 14px 48px;
+    height: 48px;
+    padding: 0 16px 0 44px;
     border-radius: 16px;
     border: 1px solid #eef0f4;
     font-family: var(--font);
     font-size: 14px;
+    line-height: normal;
     transition: var(--t-fast);
     background: white;
+    color: var(--color-text);
+    box-sizing: border-box;
+    text-align: left;
+    margin: 0;
+}
+
+.uv-search-bar input::placeholder {
+    color: var(--color-text-light);
+    opacity: 1;
 }
 
 .uv-search-bar input:focus {
@@ -204,7 +224,8 @@
     border-radius: 6px;
 }
 
-.uv-category-tag.maternal { background: #fff0f6; color: #e05c73; }
+.uv-category-tag.maternal,
+.uv-category-tag.mother { background: #fff0f6; color: #e05c73; }
 .uv-category-tag.newborn { background: #e3f2fd; color: #1976d2; }
 
 .uv-status-badge {
@@ -419,11 +440,32 @@
     }
     .uv-search-bar {
         width: 100% !important;
-        border-radius: 12px !important;
-        padding: 10px 16px !important;
+        position: relative !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        box-sizing: border-box !important;
+        display: flex !important;
+        align-items: center !important;
+    }
+    .uv-search-bar .search-icon {
+        left: 15px !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        width: 18px !important;
+        height: 18px !important;
     }
     .uv-search-bar input {
-        font-size: 14px !important;
+        width: 100% !important;
+        height: 46px !important;
+        padding: 0 16px 0 44px !important;
+        border-radius: 14px !important;
+        border: 1px solid #eef0f4 !important;
+        font-size: 13.5px !important;
+        text-align: left !important;
+        margin: 0 !important;
+        box-sizing: border-box !important;
+        line-height: normal !important;
     }
     .uv-filters {
         width: 100% !important;
@@ -431,14 +473,16 @@
         background: #f8f9fb !important;
         border-radius: 12px !important;
         padding: 4px !important;
+        gap: 4px !important;
         overflow-x: auto !important;
         scrollbar-width: none !important;
     }
     .uv-filters::-webkit-scrollbar { display: none !important; }
     .uv-filter-btn {
-        flex: 1 !important;
+        flex: 1 1 0% !important;
+        min-width: 0 !important;
         text-align: center !important;
-        padding: 8px !important;
+        padding: 8px 6px !important;
         font-size: 12px !important;
         border-radius: 8px !important;
         border: none !important;
@@ -447,7 +491,7 @@
         display: flex !important;
         justify-content: center !important;
         align-items: center !important;
-        gap: 6px !important;
+        gap: 5px !important;
         white-space: nowrap !important;
     }
     .uv-filter-btn.active {
@@ -476,7 +520,7 @@
         margin-bottom: 12px !important;
     }
     
-    /* Category Tag (MY VACCINE) */
+    /* Category Tag */
     .uv-category-tag {
         font-size: 10px !important;
         font-weight: 700 !important;
@@ -484,8 +528,15 @@
         letter-spacing: 0.5px !important;
         padding: 4px 8px !important;
         border-radius: 6px !important;
-        background: rgba(185, 129, 138, 0.1) !important;
-        color: var(--color-rose) !important;
+    }
+    .uv-category-tag.maternal,
+    .uv-category-tag.mother {
+        background: #fff0f6 !important;
+        color: #e05c73 !important;
+    }
+    .uv-category-tag.newborn {
+        background: #e3f2fd !important;
+        color: #1976d2 !important;
     }
 
     /* Status Badges */

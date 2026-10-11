@@ -92,36 +92,38 @@ const UserSettings = () => {
             <div className="settings-content">
 
                 {/* ── Section B: Security ── */}
-                <section className="settings-card">
+                <section className="settings-card security-card">
                     <div className="card-header">
-                        <Lock className="card-icon" size={20} />
+                        <Lock className="card-icon" size={18} />
                         <h2>{t('settings_security', 'Security')}</h2>
                     </div>
                     
-                    <div style={{ padding: '24px', borderBottom: '1px solid rgba(45, 34, 52, 0.05)' }}>
-                        <h3 style={{ fontSize: '16px', fontWeight: '600', color: 'var(--color-text)', marginBottom: '8px' }}>
+                    <div className="security-reset-block">
+                        <h3 className="settings-section-title">
                             Reset Password
                         </h3>
-                        <p style={{ color: 'var(--color-text-muted)', fontSize: '14.5px', marginBottom: '16px' }}>
+                        <p className="settings-section-desc">
                             Reset your password securely through your registered email address.
                         </p>
                         <button 
                             type="button" 
                             className="btn-update-password" 
                             onClick={() => setResetModalOpen(true)}
-                            style={{ margin: 0, width: 'auto', padding: '10px 20px' }}
                         >
                             Reset Password
                         </button>
                     </div>
 
-                    <div className="login-history" style={{ marginTop: '0', paddingTop: '24px' }}>
-                        <h3>{t('settings_login_history', 'Login History')}</h3>
+                    <div className="login-history">
+                        <h3 className="settings-section-title">{t('settings_login_history', 'Login History')}</h3>
                         <div className="history-item">
-                            <Clock size={16} />
-                            <div>
-                                <p>{t('settings_last_login', 'Last login:')} <strong>{userData.lastLogin}</strong></p>
-                                <span>{t('settings_browser', 'Browser / Web Browser')}</span>
+                            <Clock size={16} className="history-icon" />
+                            <div className="history-details">
+                                <p className="history-text">
+                                    <span className="history-label">{t('settings_last_login', 'Last login:')}</span>{' '}
+                                    <span className="history-value">{userData.lastLogin}</span>
+                                </p>
+                                <span className="history-meta">{t('settings_browser', 'Browser / Web Browser')}</span>
                             </div>
                         </div>
                     </div>
@@ -129,35 +131,43 @@ const UserSettings = () => {
 
 
                 {/* ── Section D: Support & Contact ── */}
-                <section className="settings-card">
+                <section className="settings-card support-card">
                     <div className="card-header">
-                        <HelpCircle className="card-icon" size={20} />
+                        <HelpCircle className="card-icon" size={18} />
                         <h2>{t('settings_support', 'Support & Contact')}</h2>
                     </div>
                     <div className="support-links">
                         <a href="mailto:cho3.salawag@gmail.com" className="support-item">
-                            <div className="support-icon-wrap"><Mail size={18} /></div>
+                            <div className="support-icon-wrap"><Mail size={16} /></div>
                             <div className="support-text">
                                 <h3>{t('settings_contact_cho_email', 'Contact CHO III')}</h3>
-                                <p>Email: cho3.salawag@gmail.com</p>
+                                <p className="support-info-line">
+                                    <span className="support-info-label">Email:</span>{' '}
+                                    <span className="support-info-val">cho3.salawag@gmail.com</span>
+                                </p>
                             </div>
-                            <ExternalLink size={16} />
+                            <ExternalLink size={15} className="support-arrow-icon" />
                         </a>
                         <a href="tel:09452694260" className="support-item">
-                            <div className="support-icon-wrap"><Phone size={18} /></div>
+                            <div className="support-icon-wrap"><Phone size={16} /></div>
                             <div className="support-text">
                                 <h3>{t('settings_contact_cho_phone', 'Contact CHO III')}</h3>
-                                <p>Phone: 0945 269 4260</p>
+                                <p className="support-info-line">
+                                    <span className="support-info-label">Phone:</span>{' '}
+                                    <span className="support-info-val">0945 269 4260</span>
+                                </p>
                             </div>
-                            <ExternalLink size={16} />
+                            <ExternalLink size={15} className="support-arrow-icon" />
                         </a>
                         <a href="#" className="support-item" onClick={(e) => { e.preventDefault(); setShowFaqModal(true); }}>
-                            <div className="support-icon-wrap"><Shield size={18} /></div>
+                            <div className="support-icon-wrap"><Shield size={16} /></div>
                             <div className="support-text">
                                 <h3>{t('settings_faq', 'Frequently Asked Questions')}</h3>
-                                <p>{t('settings_faq_desc', 'Find answers to common questions')}</p>
+                                <p className="support-info-line">
+                                    <span className="support-info-val">{t('settings_faq_desc', 'Find answers to common questions')}</span>
+                                </p>
                             </div>
-                            <ChevronRight size={16} />
+                            <ChevronRight size={15} className="support-arrow-icon" />
                         </a>
                     </div>
                 </section>

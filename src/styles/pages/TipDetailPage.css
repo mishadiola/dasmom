@@ -11,6 +11,13 @@
     margin: 0 auto;
     padding-bottom: 60px;
     font-family: var(--font);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.tdp-page-transitioning {
+    opacity: 0.2;
+    transform: translateY(4px);
+    pointer-events: none;
 }
 
 .tdp-not-found {
@@ -255,31 +262,115 @@
 }
 
 .tdp-section h2 {
-    font-size: 17px;
+    font-size: 18px;
     font-weight: 800;
     color: var(--color-text);
-    margin: 0 0 12px;
+    margin: 0 0 16px;
     display: flex;
     align-items: center;
     gap: 10px;
+    letter-spacing: -0.01em;
 }
 
 .tdp-section h2::before {
     content: '';
     display: block;
     width: 4px;
-    height: 20px;
+    height: 22px;
     background: var(--color-rose);
     border-radius: 4px;
     flex-shrink: 0;
 }
 
-.tdp-section p {
+.tdp-section-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.tdp-section p,
+.tdp-section .tdp-paragraph {
+    font-size: 15px;
+    color: #334155;
+    line-height: 1.7;
+    margin: 0 0 14px 0;
+    text-align: left;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+.tdp-section p:last-child,
+.tdp-section .tdp-paragraph:last-child {
+    margin-bottom: 0;
+}
+
+/* ─────────────────────────────────────────────
+   BULLET & NUMBERED LISTS
+───────────────────────────────────────────── */
+.tdp-bullet-list,
+.tdp-numbered-list {
+    margin: 6px 0 16px 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.tdp-bullet-list:last-child,
+.tdp-numbered-list:last-child {
+    margin-bottom: 0;
+}
+
+/* Custom bullet with perfect hanging indent */
+.tdp-bullet-list li {
+    position: relative;
+    padding-left: 24px;
+    font-size: 15px;
+    line-height: 1.68;
+    color: #334155;
+    text-align: left;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+.tdp-bullet-list li::before {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 10px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--color-rose, #e11d48);
+    opacity: 0.9;
+    flex-shrink: 0;
+}
+
+/* Numbered list with hanging indent */
+.tdp-numbered-list {
+    counter-reset: tdp-counter;
+}
+
+.tdp-numbered-list li {
+    counter-increment: tdp-counter;
+    position: relative;
+    padding-left: 28px;
+    font-size: 15px;
+    line-height: 1.68;
+    color: #334155;
+    text-align: left;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+.tdp-numbered-list li::before {
+    content: counter(tdp-counter) ".";
+    position: absolute;
+    left: 2px;
+    top: 0;
+    font-weight: 700;
+    color: var(--color-rose, #e11d48);
     font-size: 14px;
-    color: var(--color-text-muted);
-    line-height: 1.8;
-    margin: 0;
-    white-space: pre-line;
 }
 
 /* Callout */
@@ -391,6 +482,7 @@
 .tdp-sidebar-actions {
     display: flex;
     flex-direction: column;
+    padding: 20px;
 }
 
 .tdp-sidebar-actions h3 {
@@ -412,11 +504,9 @@
     cursor: pointer;
     transition: var(--t-fast);
     text-align: left;
-    margin-bottom: 10px;
-}
-
-.tdp-sidebar-btn:last-child {
     margin-bottom: 0;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .tdp-sidebar-btn:hover {
@@ -503,6 +593,15 @@
     justify-content: center;
     color: white;
     transition: transform 0.3s ease;
+}
+
+.tdp-related-cover.cat-newborn {
+    background: linear-gradient(135deg, #a8d5ec, #72b2d3);
+}
+
+.tdp-related-cover.cat-newborn .tdp-related-icon {
+    background: rgba(220, 238, 248, 0.4);
+    color: #1e5574;
 }
 
 .tdp-related-card:hover .tdp-related-icon {
@@ -597,9 +696,57 @@
     }
 }
 
+@media (max-width: 600px) {
+    .tdp-section {
+        padding: 20px 18px;
+        border-radius: var(--radius-md);
+    }
+
+    .tdp-section h2 {
+        font-size: 16px;
+        margin-bottom: 12px;
+    }
+
+    .tdp-section p,
+    .tdp-section .tdp-paragraph {
+        font-size: 14.5px;
+        line-height: 1.65;
+        margin-bottom: 12px;
+    }
+
+    .tdp-bullet-list,
+    .tdp-numbered-list {
+        gap: 9px;
+        margin: 4px 0 14px 0;
+    }
+
+    .tdp-bullet-list li {
+        font-size: 14.5px;
+        line-height: 1.62;
+        padding-left: 22px;
+    }
+
+    .tdp-bullet-list li::before {
+        left: 6px;
+        top: 9px;
+        width: 5px;
+        height: 5px;
+    }
+
+    .tdp-numbered-list li {
+        font-size: 14.5px;
+        line-height: 1.62;
+        padding-left: 26px;
+    }
+}
+
 @media (max-width: 480px) {
     .tdp-section {
-        padding: 20px;
+        padding: 18px 16px;
+    }
+
+    .tdp-page {
+        gap: 20px;
     }
 }
 
@@ -703,6 +850,19 @@
 }
 
 @media (max-width: 600px) {
+    .tdp-sidebar-actions {
+        padding: 16px 18px !important;
+        border-radius: 16px !important;
+    }
+    .tdp-sidebar-actions h3 {
+        margin-bottom: 10px !important;
+        font-size: 11.5px !important;
+    }
+    .tdp-sidebar-btn {
+        padding: 11px 16px !important;
+        font-size: 13px !important;
+        border-radius: 12px !important;
+    }
     .tdp-sources-section {
         padding: 24px;
     }

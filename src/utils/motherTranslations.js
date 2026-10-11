@@ -170,6 +170,7 @@ export const translations = {
         vac_progress_count: '{completed} of {total} vaccinations completed',
         vac_search: 'Search by vaccine name...',
         vac_all: 'All',
+        vac_mother: 'Mother',
         vac_maternal: 'Maternal',
         vac_newborn: 'Newborn',
         vac_my_vaccine: 'My Vaccine',
@@ -181,6 +182,9 @@ export const translations = {
         vac_scheduled: 'Scheduled:',
         vac_click_details: 'Click for details',
         vac_no_results: 'No vaccines found matching your search or filter.',
+        vac_no_mother_records: 'No maternal vaccination records found.',
+        vac_no_newborn_records: 'No newborn vaccination records found.',
+        vac_no_records: 'No vaccination records available.',
 
         // Vaccine detail modal
         vdm_vaccination_details: 'Vaccination Details',
@@ -191,6 +195,10 @@ export const translations = {
         vdm_dose: 'Dose {number}',
         vdm_notes: 'Notes',
         vdm_close: 'Close',
+
+        // Pregnancy Tips
+        tips_search_short: 'Search articles...',
+        tips_search_ph: "Search: 'vaccine', 'nutrition', 'delivery'…",
 
         // ═══════════════════════════════════════════════
         // USER ACCOUNT
@@ -489,7 +497,7 @@ export const translations = {
         tips_sources: 'Sources & References',
         tips_sources_desc: 'This information is based on the following verified sources:',
         tips_completed_read: 'You have completed reading this article.',
-        tips_also_like: 'You Might Also Like',
+        tips_also_like: 'You Might Want to Read',
         tips_read: 'Read Article',
     },
 
@@ -657,6 +665,7 @@ export const translations = {
         vac_progress_count: '{completed} sa {total} na bakuna ang natapos',
         vac_search: 'Maghanap ayon sa pangalan ng bakuna...',
         vac_all: 'Lahat',
+        vac_mother: 'Ina',
         vac_maternal: 'Pangina',
         vac_newborn: 'Bagong Silang',
         vac_my_vaccine: 'Aking Bakuna',
@@ -668,6 +677,9 @@ export const translations = {
         vac_scheduled: 'Naka-iskedyul:',
         vac_click_details: 'I-click para sa detalye',
         vac_no_results: 'Walang nahanap na bakuna na tumutugma sa iyong paghahanap o filter.',
+        vac_no_mother_records: 'Walang nahanap na tala ng bakuna para sa ina.',
+        vac_no_newborn_records: 'Walang nahanap na tala ng bakuna para sa bagong silang.',
+        vac_no_records: 'Walang magagamit na tala ng bakuna.',
 
         // Vaccine detail modal
         vdm_vaccination_details: 'Detalye ng Bakuna',
@@ -678,6 +690,10 @@ export const translations = {
         vdm_dose: 'Dosis {number}',
         vdm_notes: 'Mga Tala',
         vdm_close: 'Isara',
+
+        // Pregnancy Tips
+        tips_search_short: 'Maghanap ng artikulo...',
+        tips_search_ph: "Maghanap: 'bakuna', 'nutrisyon', 'panganganak'…",
 
         // ═══════════════════════════════════════════════
         // USER ACCOUNT
@@ -976,7 +992,7 @@ export const translations = {
         tips_sources: 'Mga Sanggunian',
         tips_sources_desc: 'Ang impormasyong ito ay hango sa mga sumusunod na beripikadong sanggunian:',
         tips_completed_read: 'Natapos mo nang basahin ang artikulong ito.',
-        tips_also_like: 'Maaari Mo Ring Magustuhan',
+        tips_also_like: 'Maaari Mong Basahin',
         tips_read: 'Basahin ang Artikulo',
     }
 };

@@ -519,7 +519,7 @@ export const CATEGORY_OVERLAY_COLORS = {
     'Mental Health & Wellness': 'rgba(169, 139, 184, 0.4)', // muted lavender
     'Prenatal Care': 'rgba(185, 130, 141, 0.4)', // dusty mauve/rose
     'Postpartum Care': 'rgba(217, 154, 130, 0.4)', // muted peach/coral
-    'Newborn Care': 'rgba(255, 182, 193, 0.4)', // soft pink
+    'Newborn Care': 'rgba(186, 222, 245, 0.45)', // soft pastel light blue overlay
 };
 
 const CAT_ICONS = {
@@ -549,6 +549,13 @@ const PregnancyTips = () => {
     const [bookmarks, setBookmarks] = useState(() => getLS(LS_BOOKMARKS));
     const [readIds, setReadIds] = useState(() => getLS(LS_READ));
     const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
+    const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth <= 600 : false);
+
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth <= 600);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     const tipOfTheDay = TIPS_DATA.find(t => t.tipOfDay) || TIPS_DATA[3];
 
@@ -627,7 +634,9 @@ const PregnancyTips = () => {
                     <input
                         type="text"
                         className="pt-search-input"
-                        placeholder={t('tips_search_ph', "Search: 'vaccine', 'nutrition', 'delivery'…")}
+                        placeholder={isMobile 
+                            ? t('tips_search_short', 'Search articles...') 
+                            : t('tips_search_ph', "Search: 'vaccine', 'nutrition', 'delivery'…")}
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                     />
@@ -653,7 +662,7 @@ const PregnancyTips = () => {
                     {CATEGORIES.map(cat => (
                         <button
                             key={cat}
-                            className={`pt-cat-btn ${activeCategory === cat ? 'active' : ''}`}
+                            className={`pt-cat-btn ${activeCategory === cat ? 'active' : ''} ${cat === 'Newborn Care' ? 'pt-cat-btn--newborn' : ''}`}
                             onClick={() => setActiveCategory(cat)}
                         >
                             {CAT_ICONS[cat]}

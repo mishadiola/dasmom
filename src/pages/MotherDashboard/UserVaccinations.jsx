@@ -7,7 +7,7 @@ import {
     Syringe, Search, Filter, Calendar, 
     CheckCircle2, Clock, AlertCircle, 
     ChevronRight, Info, Download,
-    Baby, ArrowLeft, UserRound, MapPin
+    HeartPulse, Baby, ArrowLeft, UserRound, MapPin
 } from 'lucide-react';
 import '../../styles/pages/UserVaccinations.css';
 import VaccineDetailModal from '../../components/MotherDashboard/VaccineDetailModal';
@@ -34,9 +34,22 @@ const UserVaccinations = () => {
                 if (!authUser?.id) return;
                 const patient = await ps.getPatientById(authUser.id);
                 
-                // Mothers can view newborn vaccination schedules, but do not receive vaccination records themselves.
+                const fullName = patient ? [patient.first_name, patient.middle_name, patient.last_name, patient.suffix].filter(Boolean).join(' ') : 'N/A';
+
                 let allVaccines = [];
                 
+                // Add mother's vaccines (from patient.vaccines where recipient_type === 'Mother' or not a newborn)
+                const motherVaccines = (patient?.vaccines || [])
+                    .filter(v => v.recipient_type === 'Mother' || (!v.newborn_id && Boolean(v.patient_id)))
+                    .map(v => ({
+                        ...v,
+                        personType: 'self',
+                        recipient_type: 'Mother',
+                        category: 'Mother',
+                        personName: fullName !== 'N/A' ? fullName : 'Mother'
+                    }));
+                allVaccines = allVaccines.concat(motherVaccines);
+
                 // Add children's vaccines
                 if (patient?.newborns && patient.newborns.length > 0) {
                     const pregnancyByDeliveryId = new Map(
@@ -49,16 +62,23 @@ const UserVaccinations = () => {
                             allVaccines = allVaccines.concat(newborn.vaccines.map(v => ({
                                 ...v,
                                 personType: 'child',
+                                recipient_type: 'Baby',
+                                category: 'Newborn',
                                 personName: newborn.baby_name || 'Baby',
                                 pregnancyNumber: pregnancyByDeliveryId.get(newborn.delivery_id) || null
                             })));
                         }
                     });
                 }
+
+                allVaccines.sort((left, right) => {
+                    const leftDate = left.scheduled_vaccination || left.vaccinated_date || '';
+                    const rightDate = right.scheduled_vaccination || right.vaccinated_date || '';
+                    return leftDate.localeCompare(rightDate);
+                });
                 
                 setVaccines(allVaccines);
 
-                const fullName = patient ? [patient.first_name, patient.middle_name, patient.last_name, patient.suffix].filter(Boolean).join(' ') : 'N/A';
                 setPatientInfo({
                     name: fullName || 'N/A',
                     id: patient?.patient_id || patient?.id || 'N/A',
@@ -70,12 +90,22 @@ const UserVaccinations = () => {
         };
         load();
     }, []);
+
+    const isMotherVaccine = (v) =>
+        v.recipient_type === 'Mother' || v.personType === 'self' || (!v.newborn_id && Boolean(v.patient_id));
+
     const filteredVaccines = vaccines.filter(v => {
         // Use notes as vaccine guide display name - this is the primary vaccine identifier
         const displayName = v.notes || v.vaccine_name || v.name || '';
         const matchesSearch = displayName.toLowerCase().includes(searchTerm.toLowerCase());
-        // Determine category based on person type: self = Maternal, child = Newborn
-        const matchesFilter = filter === 'All' || filter === 'Newborn';
+        const isMother = isMotherVaccine(v);
+        
+        let matchesFilter = true;
+        if (filter === 'Mother') {
+            matchesFilter = isMother;
+        } else if (filter === 'Newborn') {
+            matchesFilter = !isMother;
+        }
         return matchesSearch && matchesFilter;
     });
 
@@ -135,7 +165,9 @@ const UserVaccinations = () => {
         doc.line(margin, y, pageWidth - margin, y);
         y += 8;
 
-        const newbornVaccines = vaccines.filter(v => v.personType === 'child');
+        const isMotherRecord = (v) => isMotherVaccine(v);
+        const maternalVaccines = vaccines.filter(isMotherRecord);
+        const newbornVaccines = vaccines.filter(v => !isMotherRecord(v));
 
         const buildVaccineRows = (list) => list.map(v => {
             const displayName = v.notes || v.vaccine_name || v.name || 'Vaccine';
@@ -180,6 +212,21 @@ const UserVaccinations = () => {
             }
         };
 
+        if (maternalVaccines.length > 0) {
+            doc.setFontSize(13);
+            doc.setTextColor(40);
+            doc.text('Maternal Vaccinations', margin, y);
+            y += 8;
+
+            doc.autoTable({
+                startY: y,
+                head: tableHead,
+                body: buildVaccineRows(maternalVaccines),
+                ...tableStyles,
+            });
+            y = doc.lastAutoTable.finalY + 12;
+        }
+
         if (newbornVaccines.length > 0) {
             // Group by baby name
             const babyNames = [...new Set(newbornVaccines.map(v => v.personName))];
@@ -208,7 +255,7 @@ const UserVaccinations = () => {
             });
         }
 
-        if (newbornVaccines.length === 0) {
+        if (maternalVaccines.length === 0 && newbornVaccines.length === 0) {
             doc.setFontSize(10);
             doc.setTextColor(120);
             doc.text('No vaccination records available.', margin, y);
@@ -269,14 +316,14 @@ const UserVaccinations = () => {
                     />
                 </div>
                 <div className="uv-filters">
-                    {['All', 'Newborn'].map(f => (
+                    {['All', 'Mother', 'Newborn'].map(f => (
                         <button 
                             key={f}
                             className={`uv-filter-btn ${filter === f ? 'active' : ''}`}
                             onClick={() => setFilter(f)}
                         >
-                            {f === 'Newborn' ? <Baby size={14} /> : null}
-                            {f === 'All' ? t('vac_all') : t('vac_newborn')}
+                            {f === 'Mother' ? <HeartPulse size={14} /> : f === 'Newborn' ? <Baby size={14} /> : null}
+                            {f === 'All' ? t('vac_all') : f === 'Mother' ? t('vac_mother', 'Mother') : t('vac_newborn')}
                         </button>
                     ))}
                 </div>
@@ -286,7 +333,8 @@ const UserVaccinations = () => {
                 {filteredVaccines.length > 0 ? (
                     filteredVaccines.map((vaccine, index) => {
                         const status = vaccine.status || 'Unknown';
-                        const category = 'Newborn';
+                        const isMother = isMotherVaccine(vaccine);
+                        const category = isMother ? 'Mother' : 'Newborn';
                         // NOTES COLUMN IS THE VACCINE NAME - use it as primary display
                         const displayName = vaccine.notes || vaccine.vaccine_name || vaccine.name || 'Vaccine';
                         const desc = vaccine.description || '';
@@ -295,11 +343,13 @@ const UserVaccinations = () => {
                             <div 
                                 key={safeId} 
                                 className={`uv-vaccine-card status-${String(status).toLowerCase()}`}
-                                onClick={() => setSelectedVaccine(vaccine)}
+                                onClick={() => setSelectedVaccine({ ...vaccine, category })}
                             >
                                 <div className="uv-card-header">
-                                    <span className={`uv-category-tag ${String(category).toLowerCase()}`}>
-                                        {t('vac_baby_vaccine').replace('{name}', vaccine.personName)}
+                                    <span className={`uv-category-tag ${isMother ? 'mother' : 'newborn'}`}>
+                                        {isMother 
+                                            ? t('vac_my_vaccine', 'Mother Vaccine') 
+                                            : t('vac_baby_vaccine', "{name}'s Vaccine").replace('{name}', vaccine.personName || 'Baby')}
                                     </span>
                                     <span className={`uv-status-badge status-${String(status).toLowerCase()}`}>
                                         {getStatusIcon(status)} 
@@ -317,12 +367,10 @@ const UserVaccinations = () => {
                                         {vaccine.vaccine_inventory.brand ? ` · Brand: ${vaccine.vaccine_inventory.brand}` : ''}
                                     </p>
                                 )}
-                                {vaccine.personType === 'child' && (
-                                    <p className="uv-vaccine-person">
-                                        {t('vac_for')} <strong>{vaccine.personName}</strong>
-                                        {vaccine.pregnancyNumber && <span> · Pregnancy #{vaccine.pregnancyNumber}</span>}
-                                    </p>
-                                )}
+                                <p className="uv-vaccine-person">
+                                    {t('vac_for', 'For:')} <strong>{isMother ? (patientInfo.name && patientInfo.name !== 'N/A' ? patientInfo.name : 'Mother') : (vaccine.personName || 'Baby')}</strong>
+                                    {!isMother && vaccine.pregnancyNumber && <span> · Pregnancy #{vaccine.pregnancyNumber}</span>}
+                                </p>
                                 <p className="uv-vaccine-desc">{desc}</p>
                                 <div className="uv-vaccine-schedule">
                                     <div className="uv-schedule-item">
@@ -358,7 +406,16 @@ const UserVaccinations = () => {
                 ) : (
                     <div className="uv-no-results">
                         <Info size={40} />
-                        <p>{t('vac_no_results')}</p>
+                        <p>
+                            {searchTerm 
+                                ? t('vac_no_results', 'No vaccines found matching your search or filter.') 
+                                : filter === 'Mother'
+                                    ? t('vac_no_mother_records', 'No maternal vaccination records found.')
+                                    : filter === 'Newborn'
+                                        ? t('vac_no_newborn_records', 'No newborn vaccination records found.')
+                                        : t('vac_no_records', 'No vaccination records available.')
+                            }
+                        </p>
                     </div>
                 )}
             </div>

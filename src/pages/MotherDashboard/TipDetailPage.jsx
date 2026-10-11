@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
     ArrowLeft, BookOpen, Bookmark, BookmarkCheck,
     CheckCircle2, Clock, ChevronRight, Heart,
-    Star, Share2, ShieldCheck, ExternalLink
+    Star, ShieldCheck, ExternalLink
 } from 'lucide-react';
 import { TIPS_DATA, CATEGORY_IMAGES, CATEGORY_COLOR_CLASSES } from './PregnancyTips';
 import { useLanguage } from '../../context/LanguageContext';
@@ -18,6 +18,91 @@ const getLS = (key) => {
 };
 const setLS = (key, val) => localStorage.setItem(key, JSON.stringify(val));
 
+/**
+ * Parses article text into structured paragraphs, bullet lists, and numbered lists.
+ * Preserves all original wording and punctuation without losing any content.
+ */
+const renderArticleBody = (bodyText) => {
+    if (!bodyText || typeof bodyText !== 'string') return null;
+
+    // Normalize Windows CRLF newlines to \n
+    const normalized = bodyText.replace(/\r\n/g, '\n').trim();
+    if (!normalized) return null;
+
+    // Regex matchers for list items
+    const bulletRegex = /^[\u2022\u2023\u25E6\u2043\u2219\*\-]\s*(.*)$/;
+    const numberedRegex = /^(\d+[\.\)])\s+(.*)$/;
+
+    // Break into logical blocks by double (or more) newlines first
+    const rawBlocks = normalized.split(/\n{2,}/);
+    const elements = [];
+
+    rawBlocks.forEach((block, blockIdx) => {
+        const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+        if (lines.length === 0) return;
+
+        let currentListType = null; // 'ul' | 'ol'
+        let currentListItems = [];
+
+        const flushCurrentList = () => {
+            if (currentListType && currentListItems.length > 0) {
+                const listKey = `b${blockIdx}-list-${elements.length}`;
+                if (currentListType === 'ul') {
+                    elements.push(
+                        <ul key={listKey} className="tdp-bullet-list">
+                            {currentListItems.map((item, itemIdx) => (
+                                <li key={itemIdx}>{item}</li>
+                            ))}
+                        </ul>
+                    );
+                } else if (currentListType === 'ol') {
+                    elements.push(
+                        <ol key={listKey} className="tdp-numbered-list">
+                            {currentListItems.map((item, itemIdx) => (
+                                <li key={itemIdx}>{item}</li>
+                            ))}
+                        </ol>
+                    );
+                }
+                currentListType = null;
+                currentListItems = [];
+            }
+        };
+
+        lines.forEach((line, lineIdx) => {
+            const bulletMatch = line.match(bulletRegex);
+            const numberedMatch = line.match(numberedRegex);
+
+            if (bulletMatch) {
+                if (currentListType && currentListType !== 'ul') {
+                    flushCurrentList();
+                }
+                currentListType = 'ul';
+                currentListItems.push(bulletMatch[1]);
+            } else if (numberedMatch) {
+                if (currentListType && currentListType !== 'ol') {
+                    flushCurrentList();
+                }
+                currentListType = 'ol';
+                currentListItems.push(numberedMatch[2]);
+            } else {
+                // Regular line or standalone text
+                flushCurrentList();
+                elements.push(
+                    <p key={`b${blockIdx}-p-${lineIdx}`} className="tdp-paragraph">
+                        {line}
+                    </p>
+                );
+            }
+        });
+
+        // Flush any remaining list at end of block
+        flushCurrentList();
+    });
+
+    return elements;
+};
+
 const TipDetailPage = () => {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -27,16 +112,48 @@ const TipDetailPage = () => {
 
     const [bookmarks, setBookmarks] = useState(() => getLS(LS_BOOKMARKS));
     const [readIds, setReadIds] = useState(() => getLS(LS_READ));
+    const [isTransitioning, setIsTransitioning] = useState(false);
 
-    // Mark as read on mount
+    // Scroll to top of both window and any parent scrollable containers
+    const scrollToTop = () => {
+        // 1. Window scroll
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+        if (document.documentElement) document.documentElement.scrollTop = 0;
+        if (document.body) document.body.scrollTop = 0;
+
+        // 2. DashboardLayout or mother layout scrollable containers
+        const scrollContainers = document.querySelectorAll(
+            '.page-content, #main-content, .dashboard-main, .main-layout, .mother-layout-content'
+        );
+        scrollContainers.forEach(container => {
+            if (container) {
+                container.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+                container.scrollTop = 0;
+            }
+        });
+    };
+
+    // Reset scroll and mark as read whenever article ID changes
     useEffect(() => {
         if (!tip) return;
+
+        // Immediate scroll reset
+        scrollToTop();
+
+        // Brief subtle transition state
+        setIsTransitioning(true);
+        const timer = setTimeout(() => {
+            setIsTransitioning(false);
+            scrollToTop();
+        }, 120);
+
         if (!readIds.includes(id)) {
             const updated = [...readIds, id];
             setReadIds(updated);
             setLS(LS_READ, updated);
         }
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        return () => clearTimeout(timer);
     }, [id]);
 
     if (!tip) {
@@ -62,13 +179,19 @@ const TipDetailPage = () => {
         setLS(LS_BOOKMARKS, updated);
     };
 
-    // Related articles: same category, exclude current
+    // Related articles: same category prioritized, exclude current
     const related = TIPS_DATA
-        .filter(t => t.id !== id && (t.category === tip.category || Math.random() > 0.5))
+        .filter(t => t.id !== id && (t.category === tip.category || t.id !== id))
         .slice(0, 3);
 
+    const handleSelectRelated = (relatedId) => {
+        if (relatedId === id) return;
+        setIsTransitioning(true);
+        navigate(`/mother-home/user-tips/${relatedId}`);
+    };
+
     return (
-        <div className="tdp-page">
+        <div className={`tdp-page ${isTransitioning ? 'tdp-page-transitioning' : ''}`}>
             {/* ── Breadcrumb ── */}
             <nav className="tdp-breadcrumb">
                 <button className="tdp-back" onClick={() => navigate('/mother-home/user-tips')}>
@@ -105,7 +228,9 @@ const TipDetailPage = () => {
                     {tip.fullContent.map((section, i) => (
                         <div key={i} className="tdp-section">
                             <h2>{section.heading}</h2>
-                            <p>{section.body}</p>
+                            <div className="tdp-section-content">
+                                {renderArticleBody(section.body)}
+                            </div>
                         </div>
                     ))}
 
@@ -169,9 +294,6 @@ const TipDetailPage = () => {
                             {isBookmarked ? <BookmarkCheck size={15} /> : <Bookmark size={15} />}
                             {isBookmarked ? t('tips_saved_bookmarks') : t('tips_save_later')}
                         </button>
-                        <button className="tdp-sidebar-btn">
-                            <Share2 size={15} /> {t('tips_share_article')}
-                        </button>
                     </div>
                 </aside>
             </div>
@@ -184,7 +306,7 @@ const TipDetailPage = () => {
                         <div
                             key={rel.id}
                             className="tdp-related-card"
-                            onClick={() => navigate(`/mother-home/user-tips/${rel.id}`)}
+                            onClick={() => handleSelectRelated(rel.id)}
                         >
                             <div className={`tdp-related-cover ${CATEGORY_COLOR_CLASSES[rel.category] || rel.colorClass}`}>
                                 {CATEGORY_IMAGES[rel.category] && (
