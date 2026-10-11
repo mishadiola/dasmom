@@ -120,17 +120,17 @@ const HighRiskCases = () => {
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
       const uniquePatients = Array.from(new Map(enriched.map((item) => [item.id, item])).values());
-      const highRiskOnly = uniquePatients.filter((item) => item.riskLevel === 'High Risk');
+      const patientsWithConditions = uniquePatients.filter((item) => item.hasHealthConditions);
 
       setStats({
         ...statsData,
-        totalHighRisk: highRiskOnly.length,
+        totalWithConditions: patientsWithConditions.length,
         criticalToday: 0,
         missedFollowups: 0,
         needsImmediate: 0,
       });
-      setPatients(highRiskOnly);
-      console.log('Loaded high‑risk:', highRiskOnly.length, 'patients');
+      setPatients(patientsWithConditions);
+      console.log('Loaded health conditions:', patientsWithConditions.length, 'patients');
     } catch (err) {
       console.error('Error loading high risk data:', err);
     } finally {
@@ -238,16 +238,15 @@ const HighRiskCases = () => {
         'Station': p.station || 'Unassigned',
         'Age': p.age || 'N/A',
         'Gestation': p.weeks ? `${p.weeks} weeks` : 'N/A',
-        'Risk Level': p.riskLevel || 'High Risk',
-        'Conditions': p.condition || '',
+        'Documented Health Conditions': p.condition || 'None Reported',
         'Next Appointment': p.nextVisit || 'Initial'
     }));
 
     if (format === 'excel') {
         const worksheet = XLSX.utils.json_to_sheet(exportData);
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'High Risk Cases');
-        XLSX.writeFile(workbook, 'high_risk_cases.xlsx');
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Health Conditions');
+        XLSX.writeFile(workbook, 'health_conditions.xlsx');
     } else if (format === 'pdf') {
         try {
             const jsPDF = (await import('jspdf')).default;
@@ -255,19 +254,18 @@ const HighRiskCases = () => {
             
             const doc = new jsPDF('landscape');
             
-            const tableColumn = ["Patient ID", "Name", "Station", "Age", "Gestation", "Risk Level", "Conditions", "Next Appt"];
+            const tableColumn = ["Patient ID", "Name", "Station", "Age", "Gestation", "Documented Health Conditions", "Next Appt"];
             const tableRows = exportData.map(obj => [
                 obj['Patient ID'],
                 obj['Name'],
                 obj['Station'],
                 obj['Age'],
                 obj['Gestation'],
-                obj['Risk Level'],
-                obj['Conditions'],
+                obj['Documented Health Conditions'],
                 obj['Next Appointment']
             ]);
 
-            doc.text("High Risk Cases List", 14, 15);
+            doc.text("Patients with Health Conditions", 14, 15);
             
             autoTable(doc, {
                 head: [tableColumn],
@@ -277,7 +275,7 @@ const HighRiskCases = () => {
                 headStyles: { fillColor: [147, 111, 199] }
             });
 
-            doc.save("high_risk_cases.pdf");
+            doc.save("health_conditions.pdf");
         } catch (error) {
             console.error("Error generating PDF:", error);
         }
@@ -285,8 +283,7 @@ const HighRiskCases = () => {
   };
 
   const getRowClass = (p) => {
-    if (p.riskLevel === 'High Risk') return 'row-high-risk';
-    if (p.riskLevel === 'Medium Risk') return 'row-moderate-risk';
+    if (p.hasHealthConditions) return 'row-high-risk';
     return 'row-monitor';
   };
 
@@ -318,7 +315,7 @@ const HighRiskCases = () => {
               Health Conditions
             </h1>
             <span className="title-statistic-badge">
-              Total High-Risk Cases: <strong>{stats.totalHighRisk}</strong>
+              Patients with Health Conditions: <strong>{stats.totalWithConditions ?? stats.totalHighRisk}</strong>
             </span>
           </div>
           <p className="page-subtitle">
@@ -456,7 +453,7 @@ const HighRiskCases = () => {
                     <th className="row-number-header">#</th>
                     <th>Patient Profile</th>
                     <th>Gestation</th>
-                    <th>Conditions / Complications</th>
+                    <th>Documented Health Conditions</th>
                     <th>Due Date</th>
                     <th>BP</th>
                     <th>Next Visit</th>
@@ -518,20 +515,12 @@ const HighRiskCases = () => {
                           </span>
                         </td>
                         <td>
-                          <span
-                            className={
-                              p.riskLevel === 'High Risk' ? 'text-critical font-bold' : ''
-                            }
-                          >
+                          <span>
                             {p.bp || 'No Data'}
                           </span>
                         </td>
                         <td>
-                          <span
-                            className={
-                              p.riskLevel === 'High Risk' ? 'text-critical font-bold' : ''
-                            }
-                          >
+                          <span>
                             {p.nextVisit || 'Initial'}
                           </span>
                         </td>
@@ -541,7 +530,7 @@ const HighRiskCases = () => {
                     <tr>
                       <td colSpan="7" className="hr-empty">
                         <AlertTriangle size={28} />
-                        <p>No high‑risk patients found matching your criteria.</p>
+                        <p>No patients with documented health conditions found matching your criteria.</p>
                       </td>
                     </tr>
                   )}

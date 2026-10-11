@@ -467,7 +467,7 @@ const MyVitals = () => {
                                         <CheckCircle2 size={20} />
                                         <div className="v-alert-text">
                                             <h4>{t('vitals_steady_weight_title')}</h4>
-                                            <p>No current high-risk vital findings were identified.</p>
+                                            <p>No current critical vital findings were identified.</p>
                                         </div>
                                     </div>
                                 )}

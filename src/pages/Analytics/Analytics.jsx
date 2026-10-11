@@ -69,9 +69,9 @@ const TRIMESTERS = [
 ];
 
 const RISK_LEVELS = [
-    { value: 'All', label: 'All Risks' },
-    { value: 'Low', label: 'Low Risk' },
-    { value: 'High', label: 'High Risk' }
+    { value: 'All', label: 'All Patients' },
+    { value: 'Low', label: 'None Reported' },
+    { value: 'High', label: 'With Health Conditions' }
 ];
 
 const normalizeStation = stationName => stationName || 'Unassigned';
@@ -648,8 +648,8 @@ const Analytics = () => {
         insights.push({
             id: 'ins-1',
             priority: 'critical',
-            relatedMetric: 'Maternal High-Risk Distribution',
-            title: `High-risk pregnancies changed by ${riskPercentChange} compared to last week.`,
+            relatedMetric: 'Health Conditions Monitoring',
+            title: `Pregnancies with health conditions changed by ${riskPercentChange} compared to last week.`,
             recommendation: 'Deploy mobile ultrasound vans and increase home visitation schedules for warning-level mothers.'
         });
 
@@ -739,7 +739,7 @@ const Analytics = () => {
             if (preg) {
                 const assessment = riskService.getPregnancyRisk(pat, preg, v);
                 detail = {
-                    risk: assessment.isHighRisk ? 'High Risk' : 'Low Risk',
+                    risk: assessment.isHighRisk ? 'With Health Conditions' : 'None Reported',
                     status: 'Pregnant',
                     risk_factors: assessment.riskFactors.join(', ')
                 };
@@ -865,7 +865,7 @@ const Analytics = () => {
         
         const kpiOverview = [
             { 'Intelligence Metric': 'Total Managed Patients', 'Value / Rate': data.totalPregnant },
-            { 'Intelligence Metric': 'High-Risk Cases', 'Value / Rate': data.highRisk },
+            { 'Intelligence Metric': 'Patients with Health Conditions', 'Value / Rate': data.highRisk },
             { 'Intelligence Metric': 'Teenage Pregnancies', 'Value / Rate': data.teenage },
             { 'Intelligence Metric': 'Advanced Maternal Age Cases', 'Value / Rate': data.advancedAge },
             { 'Intelligence Metric': 'Deliveries Count (This Period)', 'Value / Rate': data.deliveries },
@@ -881,7 +881,7 @@ const Analytics = () => {
             return {
                 'Station Area': s.name,
                 'Active Patients': s.patients,
-                'High Risk Count': s.highRisk,
+                'Patients with Health Conditions': s.highRisk,
                 'Vaccination Rate (%)': vRate,
                 'Postpartum Compliance (%)': s.compliancePP,
                 'Missed Visits': s.missedAppt
@@ -1037,7 +1037,7 @@ const Analytics = () => {
         const station = filters.station;
         if (station === 'All Stations') {
             return {
-                concern: "High-risk pregnancies increased by 12% this quarter across all sectors.",
+                concern: "Pregnancies with health conditions increased by 12% this quarter across all sectors.",
                 action: "Prioritize monitoring and outreach in stations with elevated risk and missed visits."
             };
         }
@@ -1054,7 +1054,7 @@ const Analytics = () => {
         
         if (stData.highRisk > 10 || mRate > 8) {
             return {
-                concern: `${station} exhibits elevated risk profiles with ${stData.highRisk} high-risk cases and a ${mRate}% missed appointment rate.`,
+                concern: `${station} exhibits elevated clinical monitoring need with ${stData.highRisk} documented condition cases and a ${mRate}% missed appointment rate.`,
                 action: `Deploy immediate home care visitation cards and prioritize outreach for registered mothers in ${station}.`
             };
         } else if (vRate < 80) {
@@ -1126,7 +1126,7 @@ const Analytics = () => {
 
         return {
             best: { name: best?.name, val: `${best?.compliancePP}% PP Compliance` },
-            risk: { name: riskBurden?.name, val: `${riskBurden?.highRisk} High-Risk Cases` },
+            risk: { name: riskBurden?.name, val: `${riskBurden?.highRisk} With Health Conditions` },
             vacc: { name: lowestVacc?.name, val: `${lowestVacc ? Math.round((lowestVacc.completedVacc / Math.max(1, lowestVacc.totalVacc)) * 100) : 76}% Coverage` },
             missed: { name: highestMissed?.name, val: `${highestMissed?.missedAppt} Missed Appts` },
             postpartum: { name: bestPostpartum?.name, val: `${bestPostpartum?.compliancePP}% Compliance` }
@@ -1248,7 +1248,7 @@ const Analytics = () => {
                     </div>
 
                     <div className="filter-item">
-                        <label htmlFor="risk-select">Risk Level</label>
+                        <label htmlFor="risk-select">Health Conditions</label>
                         <div className="select-wrapper">
                             <AlertCircle size={15} />
                             <select 
@@ -1370,8 +1370,8 @@ const Analytics = () => {
                             </div>
                             <div className="kpi-card-body">
                                 <span className="kpi-val">{activeData.highRisk}</span>
-                                <h3 className="kpi-label">High-Risk Pregnancies</h3>
-                                <span className="kpi-sub">Critical warning states</span>
+                                <h3 className="kpi-label">Pregnancies with Health Conditions</h3>
+                                <span className="kpi-sub">Documented health conditions</span>
                             </div>
                         </motion.div>
 
@@ -1421,7 +1421,7 @@ const Analytics = () => {
                             <div className="card-header-compact">
                                 <div>
                                     <h2 className="section-header-title">Pregnancy Trend</h2>
-                                    <p className="section-header-subtitle">Pregnancy, high-risk cases, and deliveries over time</p>
+                                    <p className="section-header-subtitle">Pregnancy, documented conditions, and deliveries over time</p>
                                 </div>
                                 <div className="chart-legend">
                                     <span className="legend-item">
@@ -1430,7 +1430,7 @@ const Analytics = () => {
                                     </span>
                                     <span className="legend-item">
                                         <span className="legend-dot color-risk"></span>
-                                        High-Risk ({activeData.highRisk} cases)
+                                        Health Conditions ({activeData.highRisk} cases)
                                     </span>
                                     <span className="legend-item">
                                         <span className="legend-dot color-del"></span>
@@ -1504,7 +1504,7 @@ const Analytics = () => {
                         </div>
                         <div className="kpi-card glass-card tier-critical">
                             <div className="kpi-card-header"><div className="kpi-icon-circle"><AlertTriangle size={20} /></div></div>
-                            <div className="kpi-card-body"><span className="kpi-val">{activeData.highRisk}</span><h3 className="kpi-label">High-Risk Pregnancies</h3></div>
+                            <div className="kpi-card-body"><span className="kpi-val">{activeData.highRisk}</span><h3 className="kpi-label">Pregnancies with Health Conditions</h3></div>
                         </div>
                         <div className="kpi-card glass-card tier-warning">
                             <div className="kpi-card-header"><div className="kpi-icon-circle"><Users size={20} /></div></div>
@@ -1518,8 +1518,8 @@ const Analytics = () => {
 
                     <section className="analytics-section risk-monitoring-grid">
                         <div className="glass-card risk-panel-left risk-panel-focal">
-                            <h2 className="panel-title">Risk Distribution</h2>
-                            <p className="panel-subtitle">Categorization of active pregnancies</p>
+                            <h2 className="panel-title">Health Conditions Distribution</h2>
+                            <p className="panel-subtitle">Documented status of active pregnancies</p>
                             <div className="doughnut-chart-container enlarged-donut-wrapper">
                                 {activeData.totalPregnant === 0 ? (
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#88987b', textAlign: 'center', padding: '20px' }}>
@@ -1542,9 +1542,9 @@ const Analytics = () => {
                                                 <text x="100" y="115" textAnchor="middle" className="doughnut-center-lbl" style={{ fontSize: '11px' }}>Mothers</text>
                                             </svg>
                                             <div className="doughnut-legend expanded-legend">
-                                                <div className="d-legend-item"><span className="d-dot col-sage"></span><span className="d-lbl">Low Risk: <strong>{lowPct}%</strong></span></div>
-                                                <div className="d-legend-item"><span className="d-dot col-yellow"></span><span className="d-lbl">Moderate Risk: <strong>{modPct}%</strong></span></div>
-                                                <div className="d-legend-item"><span className="d-dot col-rose"></span><span className="d-lbl">High Risk: <strong className="color-red">{hrPct}%</strong></span></div>
+                                                <div className="d-legend-item"><span className="d-dot col-sage"></span><span className="d-lbl">None Reported: <strong>{lowPct}%</strong></span></div>
+                                                <div className="d-legend-item"><span className="d-dot col-yellow"></span><span className="d-lbl">Monitored: <strong>{modPct}%</strong></span></div>
+                                                <div className="d-legend-item"><span className="d-dot col-rose"></span><span className="d-lbl">With Health Conditions: <strong className="color-red">{hrPct}%</strong></span></div>
                                             </div>
                                         </>
                                     );
@@ -1591,8 +1591,8 @@ const Analytics = () => {
                                     <>
                                         {activeData.highRisk > 0 && (
                                             <div className="alert-card priority-high alert-operational-card">
-                                                <div className="alert-card-head"><span className="alert-priority-tag font-bold text-critical">CRITICAL ALERT</span><AlertTriangle size={14} /></div>
-                                                <p className="alert-card-text"><strong>{activeData.highRisk} High-risk {activeData.highRisk === 1 ? 'patient' : 'patients'}</strong> require immediate medical follow-up.</p>
+                                                <div className="alert-card-head"><span className="alert-priority-tag font-bold text-critical">CLINICAL ALERT</span><AlertTriangle size={14} /></div>
+                                                <p className="alert-card-text"><strong>{activeData.highRisk} {activeData.highRisk === 1 ? 'Patient' : 'Patients'} with documented health conditions</strong> require ongoing medical follow-up.</p>
                                                 <button className="alert-btn-action" onClick={() => navigate('/patients')}>View Patients</button>
                                             </div>
                                         )}

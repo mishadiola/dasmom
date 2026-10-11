@@ -1573,19 +1573,13 @@ async getSlotCount(dateStr, timeSlot) {
         if (pregnancy.pregn_postp?.toLowerCase() !== 'pregnant') return false;
         if (!includeArchived && archivedPatientIds.has(patientId)) return false;
         if (deliveredPatients.has(patientId)) return false;
-        return this.getPregnancyRisk(
-          {
-            ...patientMap.get(patientId),
-            height_cm: patientMap.get(patientId)?.height_cm || heightByPatientMap.get(patientId),
-          },
-          pregnancy,
-          latestVisitMap.get(patientId) || null
-        ).isHighRisk;
+        const visit = latestVisitMap.get(patientId);
+        return visit && this.hasDocumentedHealthConditions(visit.risk_factors);
       }).length;
 
       return { highRiskCount };
     } catch (err) {
-      console.error('Error fetching high risk stats:', err);
+      console.error('Error fetching health conditions stats:', err);
       return { highRiskCount: 0 };
     }
   }
@@ -1684,10 +1678,9 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         height_cm: visit.patient_basic_info?.height_cm || heightByPatientMap.get(visit.patient_id),
       };
       const pregnancy = latestPregMap.get(visit.patient_id) || {};
-      const riskAssessment = this.getPregnancyRisk(patient, pregnancy, visit);
-      const ageNum = riskAssessment.age;
-      const isHighRisk = riskAssessment.isHighRisk;
-      const finalRisk = riskAssessment.riskLevel;
+      const documentedConditions = this.getDocumentedHealthConditions(visit.risk_factors);
+      const hasHealthConditions = documentedConditions.length > 0;
+      const conditionDisplay = documentedConditions.join(', ') || 'None Reported';
 
       const gestationalAge = visit.gestational_age ? parseInt(visit.gestational_age) || 0 : 0;
       const weeks = gestationalAge;
@@ -1700,7 +1693,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         edd.setDate(edd.getDate() + 280);
       }
 
-      const conditionDisplay = riskAssessment.riskFactors.join(', ') || 'High-risk pregnancy';
+      const ageNum = this.calculateAge(patient.date_of_birth);
 
       return {
         id: patient.id || visit.patient_id,
@@ -1714,9 +1707,11 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         age: ageNum,
         type: 'Mother',
         created_at: patient.created_at,
-        riskLevel: finalRisk,
+        riskLevel: hasHealthConditions ? 'Health Conditions Documented' : 'None Reported',
+        hasHealthConditions,
         condition: conditionDisplay,
-        gravida: riskAssessment.gravida,
+        conditionsList: documentedConditions,
+        gravida: pregnancy.gravida || null,
         lmd: lmd ? lmd.toISOString().split('T')[0] : null,
         edd: edd ? edd.toISOString().split('T')[0] : null,
         bp: visit.bp_systolic && visit.bp_diastolic ? `${visit.bp_systolic}/${visit.bp_diastolic}` : null,
@@ -1728,8 +1723,8 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           : null,
         weight_kg: visit.weight_kg || null,
         height_cm: visit.height_cm || null,
-        pregnancyType: riskAssessment.pregnancyType,
-        isMultipleBirth: riskAssessment.pregnancyType.toLowerCase() !== 'singleton',
+        pregnancyType: pregnancy.pregnancy_type || 'Singleton',
+        isMultipleBirth: pregnancy.pregnancy_type && pregnancy.pregnancy_type.toLowerCase() !== 'singleton' && pregnancy.pregnancy_type.toLowerCase() !== 'undetermined',
         nextVisit: visit.next_appt_date
           ? new Date(visit.next_appt_date).toLocaleDateString('en-US', {
               month: 'short',
@@ -1739,9 +1734,9 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           : 'Initial',
         weeks,
       };
-    }).filter(p => p.riskLevel === 'High Risk');
+    }).filter(p => p.hasHealthConditions);
   } catch (err) {
-    console.error('Error fetching high risk patients:', err);
+    console.error('Error fetching patients with health conditions:', err);
     return [];
   }
 }
@@ -2159,9 +2154,9 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       civilStatus: patientData.civil_status,
       philhealth: patientData.philhealthnumber,
       bloodType: patientData.blood_type || patientData.bloodtype || 'Unknown',
-      emergencyContact,
-      medicalConditions: latestAttendedVisit?.risk_factors ? latestAttendedVisit.risk_factors.split(',').map(s=>s.trim()).filter(Boolean) : [],
-      risk: latestAttendedVisit?.calculated_risk || 'Low Risk',
+      medicalConditions: this.getDocumentedHealthConditions(latestAttendedVisit?.risk_factors),
+      hasHealthConditions: this.hasDocumentedHealthConditions(latestAttendedVisit?.risk_factors),
+      risk: this.hasDocumentedHealthConditions(latestAttendedVisit?.risk_factors) ? 'With Health Conditions' : 'None Reported',
       gravida: preg.gravida || 0,
       para: preg.para || 0,
       miscarriageInfo: preg.miscarriage_info || null,
@@ -3028,6 +3023,91 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     }
   }
 
+  getDocumentedHealthConditions(riskFactorsInput) {
+    if (!riskFactorsInput) return [];
+    let factorList = [];
+    if (Array.isArray(riskFactorsInput)) {
+      factorList = riskFactorsInput;
+    } else {
+      const str = String(riskFactorsInput).trim();
+      try {
+        const parsed = JSON.parse(str);
+        if (Array.isArray(parsed)) factorList = parsed;
+        else factorList = str.split(',');
+      } catch {
+        factorList = str.split(',');
+      }
+    }
+
+    return factorList
+      .map(item => String(item || '').trim())
+      .filter(trimmed => {
+        if (!trimmed) return false;
+        const lower = trimmed.toLowerCase();
+
+        // 1. Exclude "None", "None Reported", null/empty placeholders
+        if (
+          lower === 'none' ||
+          lower === 'none reported' ||
+          lower === 'no documented conditions' ||
+          lower === 'n/a' ||
+          lower === 'normal' ||
+          lower === 'healthy' ||
+          lower === 'null' ||
+          lower === 'undefined'
+        ) {
+          return false;
+        }
+
+        // 2. Obstetric History alone must NOT count as an active health condition
+        const obstetricPatterns = [
+          /^previous c-section/i,
+          /^previous c section/i,
+          /^c-section/i,
+          /^cesarean/i,
+          /^previous preterm birth/i,
+          /^preterm birth/i,
+          /^previous stillbirth/i,
+          /^stillbirth/i,
+          /^previous miscarriage/i,
+          /^miscarriage/i,
+          /^other relevant obstetric history/i,
+          /^obstetric history/i,
+          /^gravida\b/i,
+          /^para\b/i,
+        ];
+        if (obstetricPatterns.some(pattern => pattern.test(trimmed))) {
+          return false;
+        }
+
+        // 3. Demographics, pregnancy type, vital sign measurements alone (do not count as documented medical conditions)
+        const nonConditionPatterns = [
+          /^age\b/i,
+          /^teenage/i,
+          /^advanced maternal age/i,
+          /^singleton/i,
+          /^twins/i,
+          /^multiple/i,
+          /bmi$/i,
+          /^(high|low|normal|elevated)\s+bp$/i,
+          /^hypertension\s*\((high|low)\)$/i,
+          /^hypotension/i,
+          /^fever$/i,
+          /^hypothermia$/i,
+          /^abnormal (pulse|respiratory rate|fetal heart rate)$/i,
+        ];
+        if (nonConditionPatterns.some(pattern => pattern.test(trimmed))) {
+          return false;
+        }
+
+        return true;
+      });
+  }
+
+  hasDocumentedHealthConditions(riskFactorsInput) {
+    return this.getDocumentedHealthConditions(riskFactorsInput).length > 0;
+  }
+
   async getStationReports() {
     try {
       const { role, stationId } = await this.getCurrentUserAccess();
@@ -3063,6 +3143,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           name: stationName,
           totalPatients: 0,
           highRisk: 0,
+          withHealthConditions: 0,
           recentDeliveries: 0,
           vaccCoverage: 0,
           newborns: 0,
@@ -3089,6 +3170,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
             name: stationName,
             totalPatients: 0,
             highRisk: 0,
+            withHealthConditions: 0,
             recentDeliveries: 0,
             vaccCoverage: 0,
             newborns: 0,
@@ -3129,17 +3211,23 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       const { data: visits, error: visitsError } = await this.supabase
         .from('prenatal_visits')
         .select('patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm, trimester')
-        .eq('status', 'Attended')
         .order('visit_date', { ascending: false });
 
       if (visitsError) throw visitsError;
 
       const latestAttendedVisitMap = new Map();
+      const patientVisitsMap = new Map();
       (visits || []).forEach(v => {
         if (!v.patient_id) return;
-        const existing = latestAttendedVisitMap.get(v.patient_id);
-        if (!existing || new Date(v.visit_date) > new Date(existing.visit_date)) {
-          latestAttendedVisitMap.set(v.patient_id, v);
+        if (!patientVisitsMap.has(v.patient_id)) {
+          patientVisitsMap.set(v.patient_id, []);
+        }
+        patientVisitsMap.get(v.patient_id).push(v);
+        if (v.status === 'Attended') {
+          const existing = latestAttendedVisitMap.get(v.patient_id);
+          if (!existing || new Date(v.visit_date) > new Date(existing.visit_date)) {
+            latestAttendedVisitMap.set(v.patient_id, v);
+          }
         }
       });
 
@@ -3195,6 +3283,42 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           const latestVisit = latestAttendedVisitMap.get(patientId);
           const riskAssessment = this.getPregnancyRisk(patient, latestPreg, latestVisit);
           if (riskAssessment.isHighRisk) station.highRisk++;
+
+          // Documented health conditions check (pregnant patients with at least one documented health condition)
+          const pVisits = patientVisitsMap.get(patientId) || [];
+          const primaryVisit = pVisits[0] || latestVisit;
+          let hasHealthCond = false;
+
+          if (primaryVisit && primaryVisit.risk_factors) {
+            const primaryRf = String(primaryVisit.risk_factors).trim();
+            const primaryLower = primaryRf.toLowerCase();
+            if (primaryLower === 'none reported' || primaryLower === 'none' || primaryLower === 'no documented conditions') {
+              hasHealthCond = false;
+            } else {
+              hasHealthCond = this.hasDocumentedHealthConditions(primaryRf);
+              if (!hasHealthCond) {
+                // If primary visit had only vitals/demographics and not "None Reported", check other visits
+                for (let vi = 1; vi < pVisits.length; vi++) {
+                  if (pVisits[vi].risk_factors && this.hasDocumentedHealthConditions(pVisits[vi].risk_factors)) {
+                    hasHealthCond = true;
+                    break;
+                  }
+                }
+              }
+            }
+          } else if (pVisits.length > 0) {
+            for (const v of pVisits) {
+              if (v.risk_factors && this.hasDocumentedHealthConditions(v.risk_factors)) {
+                hasHealthCond = true;
+                break;
+              }
+            }
+          }
+
+          if (hasHealthCond) {
+            station.withHealthConditions++;
+          }
+
           const patientSupplements = (supplements || []).filter(s => s.patient_id === patientId && s.status === 'Completed');
           if (patientSupplements.length > 0) station.totalSupplementsGiven++;
         }
@@ -3220,6 +3344,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
       const stationsReport = Array.from(stationMap.values()).map(station => {
         station.totalPatients = station.totalPregnantPatients;
+        station.withHealthConditions = station.withHealthConditions || 0;
         station.newbornVaccCoverage = station.newborns > 0
           ? Math.round((station.totalNewbornVaccinated / station.newborns) * 100)
           : 0;
@@ -3233,13 +3358,13 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         if (highRiskPercent >= 30 || station.vaccCoverage < 70) {
           station.riskStatus = 'Critical';
           station.alerts = [];
-          if (highRiskPercent >= 30) station.alerts.push(`High risk rate: ${highRiskPercent.toFixed(0)}%`);
+          if (highRiskPercent >= 30) station.alerts.push(`High rate of health conditions: ${highRiskPercent.toFixed(0)}%`);
           if (station.vaccCoverage < 70) station.alerts.push(`Vaccination coverage critically low (${station.vaccCoverage}%)`);
           if (station.suppCoverage < 70) station.alerts.push(`Supplement coverage below 70%`);
         } else if (highRiskPercent >= 15 || station.vaccCoverage < 80) {
           station.riskStatus = 'Monitor';
           station.alerts = [];
-          if (highRiskPercent >= 15) station.alerts.push(`${station.highRisk} high-risk pregnancies`);
+          if (highRiskPercent >= 15) station.alerts.push(`${station.withHealthConditions} pregnancies with health conditions`);
           if (station.vaccCoverage < 80) station.alerts.push(`Vaccination coverage below 80%`);
         } else {
           station.riskStatus = 'Normal';

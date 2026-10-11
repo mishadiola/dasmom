@@ -673,9 +673,9 @@ const AddPrenatalVisit = () => {
                                 <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--color-text)' }}>G{formData.gravida} P{formData.para}</span>
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingLeft: '24px' }}>
-                                <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Risk Level</span>
-                                <span className={`risk-tag risk-${formData.calculatedRisk?.replace(' ', '-').toLowerCase() || 'normal'}`} style={{ margin: 0, display: 'inline-block', width: 'fit-content' }}>
-                                    {formData.calculatedRisk}
+                                <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Health Conditions</span>
+                                <span className={`risk-tag ${patient?.hasHealthConditions || (formData.riskFactors && formData.riskFactors.some(f => f && f !== 'None')) ? 'risk-high' : 'risk-normal'}`} style={{ margin: 0, display: 'inline-block', width: 'fit-content' }}>
+                                    {patient?.hasHealthConditions || (formData.riskFactors && formData.riskFactors.some(f => f && f !== 'None')) ? 'Documented Conditions' : 'None Reported'}
                                 </span>
                             </div>
                         </div>
@@ -810,7 +810,7 @@ const AddPrenatalVisit = () => {
                         {activeTab === 'danger' && (
                             <section className="apv-section alert-section" style={{ margin: 0 }}>
                                 <h3 className="section-head text-danger"><AlertTriangle size={18} /> Danger Signs / Risk Factors observed</h3>
-                                <p className="section-sub">Select any applicable symptoms. System will auto-flag patient as High Risk.</p>
+                                <p className="section-sub">Select any applicable symptoms to document health conditions and clinical risk factors.</p>
 
                                 <div className="risk-tags">
                                     {RISK_FACTORS.map(factor => (

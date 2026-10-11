@@ -8,7 +8,7 @@ import {
     AlertTriangle, HeartPulse, Filter, Clock, ChevronLeft,
     ChevronRight, Calendar as CalendarIcon, Users, MapPin, X,
     CheckCircle2, Zap, RotateCcw, ArchiveRestore,
-    Download
+    Download, CalendarPlus
 } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
 import ScheduledVisitModal from '../../components/Prenatal/ScheduledVisitModal';
@@ -23,6 +23,7 @@ import '../../styles/pages/PrenatalVisits.css';
 import Legend from '../../components/Legend/Legend';
 import { formatMotherId } from '../../utils/displayIds';
 import VisitStaffAssignment from '../../components/Prenatal/VisitStaffAssignment';
+import ActionTooltip from '../../components/Common/ActionTooltip';
 
 const toLocalDateStr = (d) => {
     const offset = d.getTimezoneOffset() * 60000;
@@ -154,12 +155,16 @@ const PrenatalVisits = () => {
     const [visitAccess, setVisitAccess] = useState(null);
     const [assignmentStaff, setAssignmentStaff] = useState([]);
 
-    // Add Visit modal states
+    // Manage Visits selection modal state
+    const [showManageModal, setShowManageModal] = useState(false);
+
+    // Schedule a Visit modal states
     const [showAddVisitModal, setShowAddVisitModal] = useState(false);
     const [allPatients, setAllPatients] = useState([]);
     const [manualVisits, setManualVisits] = useState([]);
     const [isAddingVisit, setIsAddingVisit] = useState(false);
     const [addVisitForm, setAddVisitForm] = useState({
+        visit_category: 'Prenatal', // 'Prenatal' | 'Postpartum' | 'Vaccination'
         visit_type: 'emergency',
         patient_id: '',
         visit_date: new Date().toISOString().split('T')[0],
@@ -170,6 +175,19 @@ const PrenatalVisits = () => {
         related_emergency_id: ''
     });
 
+    // Reschedule a Visit modal states
+    const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+    const [rescheduleSearch, setRescheduleSearch] = useState('');
+    const [selectedRescheduleVisitId, setSelectedRescheduleVisitId] = useState('');
+    const [rescheduleForm, setRescheduleForm] = useState({
+        new_date: '',
+        new_time: '',
+        station_id: '',
+        reason: ''
+    });
+    const [isRescheduling, setIsRescheduling] = useState(false);
+    const [stationsList, setStationsList] = useState([]);
+
     const patientService = useMemo(() => new PatientService(), []);
 
     useEffect(() => {
@@ -179,6 +197,13 @@ const PrenatalVisits = () => {
                 const access = await patientService.getCurrentUserAccess();
                 if (!active) return;
                 setVisitAccess(access);
+
+                const { data: stationsData } = await patientService.supabase
+                    .from('stations')
+                    .select('id, station_name')
+                    .order('station_name');
+                if (active && stationsData) setStationsList(stationsData);
+
                 if (access.role === 'staff') {
                     const staff = await patientService.getAssignableStaffByStationId(access.stationId);
                     if (active) setAssignmentStaff(staff);
@@ -474,6 +499,123 @@ const PrenatalVisits = () => {
         setIsAddingVisit(false);
     };
 
+    const handleConfirmReschedule = async (e) => {
+        e.preventDefault();
+        if (!selectedRescheduleVisitId) {
+            setToast('Please select a visit to reschedule.');
+            setTimeout(() => setToast(null), 3000);
+            return;
+        }
+
+        const visitToResched = eligibleVisitsToReschedule.find(v => v.id === selectedRescheduleVisitId);
+        if (!visitToResched) {
+            setToast('Selected visit was not found.');
+            setTimeout(() => setToast(null), 3000);
+            return;
+        }
+
+        if (!rescheduleForm.new_date) {
+            setToast('Please select a new visit date.');
+            setTimeout(() => setToast(null), 3000);
+            return;
+        }
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        if (rescheduleForm.new_date < todayStr) {
+            setToast('Cannot reschedule to a past date.');
+            setTimeout(() => setToast(null), 3000);
+            return;
+        }
+
+        setIsRescheduling(true);
+        try {
+            // Check capacity limit: up to 30 appointments/day (25 regular, 5 rescheduled; maxPerDay = 30)
+            const isFull = await patientService.checkScheduleOverlap(
+                rescheduleForm.new_date,
+                visitToResched.patientId,
+                30
+            );
+
+            if (isFull) {
+                setToast(`Daily capacity reached for ${formatReadableDate(rescheduleForm.new_date)} (max 30 appointments/day). Please choose another date.`);
+                setTimeout(() => setToast(null), 4500);
+                setIsRescheduling(false);
+                return;
+            }
+
+            const auditNote = rescheduleForm.reason?.trim()
+                ? `Rescheduled to ${rescheduleForm.new_date}${rescheduleForm.new_time ? ' at ' + rescheduleForm.new_time : ''}. Reason: ${rescheduleForm.reason.trim()}`
+                : `Rescheduled to ${rescheduleForm.new_date}${rescheduleForm.new_time ? ' at ' + rescheduleForm.new_time : ''}`;
+
+            if (visitToResched.isPostpartum) {
+                const updatePayload = {
+                    scheduled_at: rescheduleForm.new_date,
+                    status: 'Scheduled',
+                    notes: auditNote
+                };
+                if (rescheduleForm.station_id) {
+                    updatePayload.station_ass = rescheduleForm.station_id;
+                }
+                const { error: ppError } = await patientService.supabase
+                    .from('postpartum_visits')
+                    .update(updatePayload)
+                    .eq('id', visitToResched.id);
+                if (ppError) throw ppError;
+            } else if (visitToResched.isManual) {
+                // Update local storage manual visit
+                const updatedManual = manualVisits.map(mv => {
+                    if (mv.id === visitToResched.id) {
+                        return {
+                            ...mv,
+                            visit_date: rescheduleForm.new_date,
+                            visit_time: rescheduleForm.new_time || mv.visit_time,
+                            notes: mv.notes ? `${mv.notes} | ${auditNote}` : auditNote
+                        };
+                    }
+                    return mv;
+                });
+                if (user?.id) {
+                    localStorage.setItem(`dasmom_manual_visits_${user.id}`, JSON.stringify(updatedManual));
+                }
+                setManualVisits(updatedManual);
+            } else {
+                // Prenatal visits table
+                const updatePayload = {
+                    visit_date: rescheduleForm.new_date,
+                    status: 'Scheduled'
+                };
+                if (rescheduleForm.station_id) {
+                    updatePayload.assigned_station = rescheduleForm.station_id;
+                    updatePayload.station_ass = rescheduleForm.station_id;
+                }
+                const { error: pvError } = await patientService.supabase
+                    .from('prenatal_visits')
+                    .update(updatePayload)
+                    .eq('id', visitToResched.id);
+                if (pvError) throw pvError;
+            }
+
+            await fetchData();
+            setShowRescheduleModal(false);
+            setSelectedRescheduleVisitId('');
+            setRescheduleForm({
+                new_date: '',
+                new_time: '',
+                station_id: '',
+                reason: ''
+            });
+
+            setToast('Appointment successfully rescheduled!');
+            setTimeout(() => setToast(null), 3000);
+        } catch (error) {
+            console.error('Error rescheduling visit:', error);
+            setToast('Failed to reschedule appointment: ' + (error.message || 'Unknown error'));
+            setTimeout(() => setToast(null), 3500);
+        } finally {
+            setIsRescheduling(false);
+        }
+    };
+
 
 
     const handlePrev = () => {
@@ -579,12 +721,15 @@ const PrenatalVisits = () => {
             activeRows = filteredVisits;
         }
 
-        const allEntries = activeRows.map(v => ({
-            id: v.id,
-            patientId: v.patientId,
-            patientName: v.patientName,
-            risk: allPatients.find(p => p.id === v.patientId)?.riskLevel || 'Unknown',
-            assignedStaffId: v.assignedStaffId || null,
+        const allEntries = activeRows.map(v => {
+            const pat = allPatients.find(p => p.id === v.patientId);
+            return {
+                id: v.id,
+                patientId: v.patientId,
+                patientName: v.patientName,
+                hasHealthConditions: pat?.hasHealthConditions,
+                risk: pat?.hasHealthConditions ? 'Documented Conditions' : 'None Reported',
+                assignedStaffId: v.assignedStaffId || null,
             assignedStaff: v.assignedStaff || null,
             assignedStationId: v.assignedStationId || null,
             assignedStation: v.assignedStation || null,
@@ -594,9 +739,10 @@ const PrenatalVisits = () => {
             visitDate: v.visitDateOnly || v.visitDate,
             status: v.status,
             attendedDate: v.attendedDate || v.vaccinatedDate,
-            visitDateTime: new Date(v.visitDateOnly || v.visitDate || today)
-            , raw: v.raw || v
-        }));
+            visitDateTime: new Date(v.visitDateOnly || v.visitDate || today),
+            raw: v.raw || v
+        };
+        });
 
         const upcoming = allEntries.filter(v => 
             (v.status === 'Scheduled' || v.status === 'Pending') && 
@@ -642,6 +788,76 @@ const PrenatalVisits = () => {
     };
 
     const tabVisits = getTabVisits();
+
+    // Eligible existing appointments for rescheduling:
+    // Only pending/scheduled or missed upcoming visits that haven't been completed/attended
+    const eligibleVisitsToReschedule = useMemo(() => {
+        const list = [];
+        
+        // From prenatal visits table
+        (visitsTable || []).forEach(v => {
+            if (['Scheduled', 'Pending', 'Missed'].includes(v.status) && !v.attendedDate) {
+                list.push({
+                    id: v.id,
+                    patientId: v.patientId,
+                    patientName: v.patientName,
+                    visitType: v.type || 'Prenatal Checkup',
+                    currentDate: v.visitDateOnly || v.visitDate,
+                    currentTime: v.visitTime || null,
+                    station: v.assignedStation || v.visitStation || 'Unassigned',
+                    stationId: v.assignedStationId || v.visitStationId || '',
+                    isPostpartum: false,
+                    isManual: false
+                });
+            }
+        });
+
+        // From postpartum visits
+        (postpartumTable || []).forEach(v => {
+            if (['Scheduled', 'Pending', 'Missed'].includes(v.status) && !v.attendedDate) {
+                list.push({
+                    id: v.id,
+                    patientId: v.patientId,
+                    patientName: v.patientName,
+                    visitType: v.vaccineName || 'Postpartum Follow-up',
+                    currentDate: v.visitDateOnly || v.visitDate,
+                    currentTime: null,
+                    station: v.assignedStation || 'Unassigned',
+                    stationId: v.assignedStationId || '',
+                    isPostpartum: true,
+                    isManual: false
+                });
+            }
+        });
+
+        // From manual visits
+        (manualVisits || []).forEach(mv => {
+            list.push({
+                id: mv.id,
+                patientId: mv.patient_id,
+                patientName: mv.patient_name,
+                visitType: mv.visit_type === 'emergency' ? 'Emergency Visit' : 'Follow-up Visit',
+                currentDate: mv.visit_date,
+                currentTime: mv.visit_time,
+                station: 'Unassigned',
+                stationId: '',
+                isPostpartum: false,
+                isManual: true
+            });
+        });
+
+        return list;
+    }, [visitsTable, postpartumTable, manualVisits]);
+
+    const filteredEligibleVisits = useMemo(() => {
+        if (!rescheduleSearch.trim()) return eligibleVisitsToReschedule;
+        const q = rescheduleSearch.toLowerCase();
+        return eligibleVisitsToReschedule.filter(v =>
+            v.patientName?.toLowerCase().includes(q) ||
+            v.patientId?.toLowerCase().includes(q) ||
+            v.visitType?.toLowerCase().includes(q)
+        );
+    }, [eligibleVisitsToReschedule, rescheduleSearch]);
 
     const openPostpartumVisit = (visit) => {
         navigate(`/dashboard/postpartum/add/${visit.patientId}`, {
@@ -787,21 +1003,9 @@ const PrenatalVisits = () => {
                     <button
                         className="btn btn-primary"
                         style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-                        onClick={() => {
-                            setAddVisitForm({
-                                visit_type: 'emergency',
-                                patient_id: '',
-                                visit_date: new Date().toISOString().split('T')[0],
-                                visit_time: '',
-                                assigned_staff: user?.fullName || user?.email?.split('@')[0] || '',
-                                reason: '',
-                                notes: '',
-                                related_emergency_id: ''
-                            });
-                            setShowAddVisitModal(true);
-                        }}
+                        onClick={() => setShowManageModal(true)}
                     >
-                        <Plus size={16} /> Add Visit
+                        <Plus size={16} /> Manage Visits
                     </button>
                 </div>
             </div>
@@ -1062,7 +1266,7 @@ const PrenatalVisits = () => {
                                 <tr>
                                     <th style={{ textAlign: 'center', width: '50px' }}>#</th>
                                     <th>Patient Name</th>
-                                    <th>Risk Level</th>
+                                    <th>Health Conditions</th>
                                     <th>Date</th>
                                     <th>Assigned Staff</th>
                                     <th>Status</th>
@@ -1088,8 +1292,8 @@ const PrenatalVisits = () => {
                                                 </div>
                                             </td>
                                             <td>
-                                                <span className={`risk-tag risk-${visit.risk?.replace(' ', '-').toLowerCase() || 'normal'}`}>
-                                                    {visit.risk?.toLowerCase()}
+                                                <span className={`risk-tag ${visit.hasHealthConditions ? 'risk-high' : 'risk-normal'}`}>
+                                                    {visit.hasHealthConditions ? 'Documented Conditions' : 'None Reported'}
                                                 </span>
                                             </td>
                                             <td>
@@ -1119,7 +1323,11 @@ const PrenatalVisits = () => {
                                                 </span>
                                             </td>
                                             <td className="text-right">
-                                                <div className="row-actions" style={{ justifyContent: 'flex-end' }}><button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '13px' }} onClick={(e) => { e.stopPropagation(); setSelectedVisit({ ...visit, type: 'Prenatal' }); }} title="Manage Visit">Manage Visit</button></div>
+                                                <div className="row-actions" style={{ justifyContent: 'flex-end' }}>
+                                                    <ActionTooltip text="Manage Visit" align="center">
+                                                        <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '13px' }} onClick={(e) => { e.stopPropagation(); setSelectedVisit({ ...visit, type: 'Prenatal' }); }}>Manage Visit</button>
+                                                    </ActionTooltip>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))
@@ -1192,15 +1400,21 @@ const PrenatalVisits = () => {
                                             </td>
                                             <td className="text-right">
                                                 <div className="row-actions">
-                                                    <button className="action-btn-text action-btn-secondary" onClick={() => setSelectedVisit({ ...visit, type: 'Postpartum' })} title="View" style={{ padding: '6px 8px', minWidth: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                        <Eye size={14} />
-                                                    </button>
-                                                    <button className="action-btn-text action-btn-primary" onClick={() => openPostpartumVisit(visit)} title="Record Postpartum Visit">
-                                                        <Plus size={14} /> Record
-                                                    </button>
-                                                    <button className="action-btn-text action-btn-accent" onClick={() => navigate(`/dashboard/patients/${visit.patientId}`)} title="View Patient Profile">
-                                                        <Users size={14} /> Profile
-                                                    </button>
+                                                    <ActionTooltip text="View Details">
+                                                        <button className="action-btn-text action-btn-secondary" onClick={() => setSelectedVisit({ ...visit, type: 'Postpartum' })} style={{ padding: '6px 8px', minWidth: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                            <Eye size={14} />
+                                                        </button>
+                                                    </ActionTooltip>
+                                                    <ActionTooltip text="Record Postpartum Visit">
+                                                        <button className="action-btn-text action-btn-primary" onClick={() => openPostpartumVisit(visit)}>
+                                                            <Plus size={14} /> Record
+                                                        </button>
+                                                    </ActionTooltip>
+                                                    <ActionTooltip text="View Patient Profile">
+                                                        <button className="action-btn-text action-btn-accent" onClick={() => navigate(`/dashboard/patients/${visit.patientId}`)}>
+                                                            <Users size={14} /> Profile
+                                                        </button>
+                                                    </ActionTooltip>
                                                 </div>
                                             </td>
                                         </tr>
@@ -1265,6 +1479,88 @@ const PrenatalVisits = () => {
                 )}
             </div>
 
+            {/* ── MANAGE VISITS SELECTION MODAL ── */}
+            {showManageModal && (
+                <div className="modal-overlay" onClick={() => setShowManageModal(false)}>
+                    <div
+                        className="modal-content mv-selection-modal"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="modal-header mv-modal-header">
+                            <div>
+                                <h2 className="mv-modal-title">Manage Visits</h2>
+                                <p className="mv-modal-desc">Choose whether to create a new appointment or modify an existing schedule.</p>
+                            </div>
+                            <button
+                                type="button"
+                                className="mv-modal-close"
+                                onClick={() => setShowManageModal(false)}
+                                aria-label="Close"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="mv-selection-grid">
+                            <div
+                                className="mv-option-card"
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => {
+                                    setShowManageModal(false);
+                                    setAddVisitForm({
+                                        visit_category: 'Prenatal',
+                                        visit_type: 'emergency',
+                                        patient_id: '',
+                                        visit_date: new Date().toISOString().split('T')[0],
+                                        visit_time: '',
+                                        assigned_staff: user?.fullName || user?.email?.split('@')[0] || '',
+                                        reason: '',
+                                        notes: '',
+                                        related_emergency_id: ''
+                                    });
+                                    setShowAddVisitModal(true);
+                                }}
+                            >
+                                <div className="mv-option-icon mv-option-icon--schedule">
+                                    <CalendarPlus size={24} />
+                                </div>
+                                <div>
+                                    <h3 className="mv-option-title">Schedule a Visit</h3>
+                                    <p className="mv-option-desc">Create a new appointment for a patient.</p>
+                                </div>
+                            </div>
+
+                            <div
+                                className="mv-option-card"
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => {
+                                    setShowManageModal(false);
+                                    setSelectedRescheduleVisitId('');
+                                    setRescheduleSearch('');
+                                    setRescheduleForm({
+                                        new_date: '',
+                                        new_time: '',
+                                        station_id: '',
+                                        reason: ''
+                                    });
+                                    setShowRescheduleModal(true);
+                                }}
+                            >
+                                <div className="mv-option-icon mv-option-icon--reschedule">
+                                    <RotateCcw size={24} />
+                                </div>
+                                <div>
+                                    <h3 className="mv-option-title">Reschedule a Visit</h3>
+                                    <p className="mv-option-desc">Change the scheduled date or time of an existing appointment.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── SCHEDULE A VISIT MODAL (Formerly Add Visit) ── */}
             {showAddVisitModal && (
                 <div className="modal-overlay" onClick={() => setShowAddVisitModal(false)}>
                     <div
@@ -1273,8 +1569,8 @@ const PrenatalVisits = () => {
                         style={{ maxWidth: '600px' }}
                     >
                         <div className="modal-header">
-                            <h2>Add Manual Visit</h2>
-                            <p>Schedule an Emergency or Follow-up visit for a patient.</p>
+                            <h2>Schedule a Visit</h2>
+                            <p>Schedule an appointment or checkup for a patient.</p>
                         </div>
                         <form onSubmit={handleAddVisitSubmit}>
                             <div className="modal-body" style={{ padding: '24px 32px' }}>
@@ -1283,8 +1579,22 @@ const PrenatalVisits = () => {
                                 <div style={{ marginBottom: '24px', paddingBottom: '24px', borderBottom: '1px solid #eee' }}>
                                     <h4 style={{ fontSize: '13px', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: '700', marginBottom: '16px', letterSpacing: '0.5px' }}>Visit Information</h4>
                                     
+                                    <div className="form-group" style={{ marginBottom: '16px' }}>
+                                        <label>Type of Visit <span style={{ color: '#e05c73' }}>*</span></label>
+                                        <select
+                                            required
+                                            value={addVisitForm.visit_category}
+                                            onChange={e => setAddVisitForm({ ...addVisitForm, visit_category: e.target.value })}
+                                            className="form-control"
+                                        >
+                                            <option value="Prenatal">Prenatal</option>
+                                            <option value="Postpartum">Postpartum</option>
+                                            <option value="Vaccination">Vaccination</option>
+                                        </select>
+                                    </div>
+
                                     <div className="form-group">
-                                        <label>Visit Type <span style={{ color: '#e05c73' }}>*</span></label>
+                                        <label>Visit Classification <span style={{ color: '#e05c73' }}>*</span></label>
                                         <select
                                             required
                                             value={addVisitForm.visit_type}
@@ -1379,7 +1689,7 @@ const PrenatalVisits = () => {
                                             required
                                             value={addVisitForm.reason}
                                             onChange={e => setAddVisitForm({ ...addVisitForm, reason: e.target.value })}
-                                            placeholder="e.g. Severe abdominal pain"
+                                            placeholder="e.g. Routine checkup or abdominal pain"
                                             style={{ border: '2px solid rgba(147, 111, 199, 0.2)', padding: '12px', fontSize: '14px', backgroundColor: '#fdfbfe' }}
                                         />
                                     </div>
@@ -1410,6 +1720,196 @@ const PrenatalVisits = () => {
                                     disabled={isAddingVisit}
                                 >
                                     {isAddingVisit ? 'Saving...' : 'Save Visit'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ── RESCHEDULE A VISIT MODAL ── */}
+            {showRescheduleModal && (
+                <div className="modal-overlay" onClick={() => setShowRescheduleModal(false)}>
+                    <div
+                        className="modal-content"
+                        onClick={e => e.stopPropagation()}
+                        style={{ maxWidth: '640px' }}
+                    >
+                        <div className="modal-header">
+                            <h2>Reschedule a Visit</h2>
+                            <p>Select an existing appointment and choose a new date and time.</p>
+                        </div>
+                        <form onSubmit={handleConfirmReschedule}>
+                            <div className="modal-body" style={{ padding: '24px 32px' }}>
+                                
+                                {/* SECTION 1: Select Visit to Reschedule */}
+                                <div style={{ marginBottom: '22px', paddingBottom: '20px', borderBottom: '1px solid #eee' }}>
+                                    <h4 style={{ fontSize: '13px', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: '700', marginBottom: '14px', letterSpacing: '0.5px' }}>
+                                        Select Visit to Reschedule <span style={{ color: '#e05c73' }}>*</span>
+                                    </h4>
+
+                                    <div style={{ position: 'relative', marginBottom: '10px' }}>
+                                        <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#888' }} />
+                                        <input
+                                            type="text"
+                                            placeholder="Filter visits by patient name, ID, or type..."
+                                            value={rescheduleSearch}
+                                            onChange={e => setRescheduleSearch(e.target.value)}
+                                            style={{
+                                                width: '100%',
+                                                padding: '8px 12px 8px 34px',
+                                                borderRadius: '10px',
+                                                border: '1px solid #ddd',
+                                                fontSize: '13px',
+                                                background: '#f8f9fb'
+                                            }}
+                                        />
+                                    </div>
+
+                                    <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1.5px solid #eee', borderRadius: '12px', background: '#fff' }}>
+                                        {filteredEligibleVisits.length > 0 ? (
+                                            filteredEligibleVisits.map(v => {
+                                                const isSelected = selectedRescheduleVisitId === v.id;
+                                                return (
+                                                    <div
+                                                        key={v.id}
+                                                        onClick={() => {
+                                                            setSelectedRescheduleVisitId(v.id);
+                                                            setRescheduleForm(prev => ({
+                                                                ...prev,
+                                                                station_id: v.stationId || prev.station_id,
+                                                                new_date: v.currentDate || prev.new_date
+                                                            }));
+                                                        }}
+                                                        style={{
+                                                            padding: '10px 14px',
+                                                            borderBottom: '1px solid #f1f3f7',
+                                                            cursor: 'pointer',
+                                                            background: isSelected ? 'rgba(185, 129, 138, 0.08)' : '#fff',
+                                                            borderLeft: isSelected ? '4px solid var(--color-rose)' : '4px solid transparent',
+                                                            transition: 'all 0.15s'
+                                                        }}
+                                                    >
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                            <strong style={{ fontSize: '13.5px', color: 'var(--color-text)' }}>{v.patientName}</strong>
+                                                            <span style={{ fontSize: '11px', background: 'rgba(122, 79, 168, 0.1)', color: '#7a4fa8', padding: '2px 8px', borderRadius: '10px', fontWeight: 600 }}>
+                                                                {v.visitType}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '14px', fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                                                            <span>📅 {formatReadableDate(v.currentDate)} {v.currentTime ? `(${v.currentTime})` : ''}</span>
+                                                            <span>📍 {v.station}</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        ) : (
+                                            <div style={{ padding: '24px', textAlign: 'center', color: '#999', fontSize: '13px' }}>
+                                                No eligible scheduled appointments found.
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Display chosen visit summary */}
+                                    {selectedRescheduleVisitId && (() => {
+                                        const v = eligibleVisitsToReschedule.find(item => item.id === selectedRescheduleVisitId);
+                                        if (!v) return null;
+                                        return (
+                                            <div className="mv-summary-box">
+                                                <div className="mv-summary-row">
+                                                    <span>Patient:</span>
+                                                    <span className="mv-summary-val">{v.patientName} ({formatMotherId(v.patientId)})</span>
+                                                </div>
+                                                <div className="mv-summary-row">
+                                                    <span>Visit Type:</span>
+                                                    <span className="mv-summary-val">{v.visitType}</span>
+                                                </div>
+                                                <div className="mv-summary-row">
+                                                    <span>Current Schedule:</span>
+                                                    <span className="mv-summary-val">{formatReadableDate(v.currentDate)} {v.currentTime || ''}</span>
+                                                </div>
+                                                <div className="mv-summary-row">
+                                                    <span>Current Station:</span>
+                                                    <span className="mv-summary-val">{v.station}</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+
+                                {/* SECTION 2: Reschedule To */}
+                                <div style={{ marginBottom: '22px', paddingBottom: '20px', borderBottom: '1px solid #eee' }}>
+                                    <h4 style={{ fontSize: '13px', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: '700', marginBottom: '14px', letterSpacing: '0.5px' }}>
+                                        Reschedule To
+                                    </h4>
+
+                                    <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                        <div className="form-group">
+                                            <label>New Visit Date <span style={{ color: '#e05c73' }}>*</span></label>
+                                            <input
+                                                type="date"
+                                                required
+                                                min={new Date().toISOString().split('T')[0]}
+                                                value={rescheduleForm.new_date}
+                                                onChange={e => setRescheduleForm({ ...rescheduleForm, new_date: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>New Visit Time</label>
+                                            <input
+                                                type="time"
+                                                value={rescheduleForm.new_time}
+                                                onChange={e => setRescheduleForm({ ...rescheduleForm, new_time: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="form-group" style={{ marginTop: '12px' }}>
+                                        <label>Visit Station / Facility</label>
+                                        <select
+                                            value={rescheduleForm.station_id}
+                                            onChange={e => setRescheduleForm({ ...rescheduleForm, station_id: e.target.value })}
+                                            className="form-control"
+                                        >
+                                            <option value="">— Keep existing station assignment —</option>
+                                            {stationsList.map(st => (
+                                                <option key={st.id} value={st.id}>{st.station_name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {/* SECTION 3: Reason for Rescheduling */}
+                                <div>
+                                    <h4 style={{ fontSize: '13px', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: '700', marginBottom: '12px', letterSpacing: '0.5px' }}>
+                                        Reason for Rescheduling
+                                    </h4>
+                                    <div className="form-group" style={{ marginBottom: 0 }}>
+                                        <label>Reason (Optional)</label>
+                                        <textarea
+                                            rows={2}
+                                            value={rescheduleForm.reason}
+                                            onChange={e => setRescheduleForm({ ...rescheduleForm, reason: e.target.value })}
+                                            placeholder="e.g. Patient requested schedule adjustment, inclement weather, station conflict..."
+                                            style={{ width: '100%', padding: '8px 12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '13px', resize: 'vertical' }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="modal-footer">
+                                <button
+                                    type="button"
+                                    className="btn btn-outline"
+                                    onClick={() => setShowRescheduleModal(false)}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="btn btn-primary"
+                                    disabled={isRescheduling || !selectedRescheduleVisitId}
+                                >
+                                    {isRescheduling ? 'Rescheduling...' : 'Confirm Reschedule'}
                                 </button>
                             </div>
                         </form>

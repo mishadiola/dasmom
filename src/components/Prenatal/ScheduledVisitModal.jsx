@@ -187,7 +187,6 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
                                         patientType: visit.patientType || 'Mother'
                                     } 
                                 })}
-                                title="Record Vaccination Visit"
                             >
                                 <Syringe size={18} style={{ marginRight: '8px' }} /> Record Vaccination Visit
                             </button>
@@ -201,7 +200,6 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
                                         state: { visitId: visit.id, visit }
                                     });
                                 }}
-                                title="Record Postpartum Visit"
                             >
                                 <ClipboardList size={18} style={{ marginRight: '8px' }} /> Record Postpartum Visit
                             </button>
@@ -210,7 +208,6 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
                                 className="btn btn-primary" 
                                 style={{ width: '100%', justifyContent: 'center', padding: '12px' }}
                                 onClick={() => navigate(`/dashboard/prenatal/add/${visit.patientId}`)}
-                                title="Record Prenatal Visit"
                             >
                                 <Plus size={18} style={{ marginRight: '8px' }} /> Record Prenatal Visit
                             </button>
@@ -252,10 +249,10 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
                                 </div>
                             </div>
                             <div className="sv-field">
-                                <label className="sv-label">Maternal Risk Level</label>
+                                <label className="sv-label">Health Conditions</label>
                                 <div className="sv-value">
-                                    <span className={`sv-risk-badge ${getRiskClass(visit.risk)}`}>
-                                        {visit.risk || 'Normal'}
+                                    <span className={`sv-risk-badge ${visit.risk && !visit.risk.toLowerCase().includes('low') && !visit.risk.toLowerCase().includes('normal') ? 'sv-risk-high' : 'sv-risk-normal'}`}>
+                                        {visit.risk && !visit.risk.toLowerCase().includes('low') && !visit.risk.toLowerCase().includes('normal') ? 'Documented Conditions' : 'None Reported'}
                                     </span>
                                 </div>
                             </div>
@@ -268,7 +265,6 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
                             className="btn btn-outline"
                             style={{ flex: 1, justifyContent: 'center' }}
                             onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
-                            title="View Visit History"
                         >
                             <Activity size={14} style={{ marginRight: '8px' }} /> {isHistoryExpanded ? 'Hide History' : 'View History'}
                         </button>
@@ -276,7 +272,6 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
                             className="btn btn-outline"
                             style={{ flex: 1, justifyContent: 'center' }}
                             onClick={() => navigate(`/dashboard/patients/${visit.patientId}`)}
-                            title="View Patient Profile"
                         >
                             <Users size={14} style={{ marginRight: '8px' }} /> View Profile
                         </button>

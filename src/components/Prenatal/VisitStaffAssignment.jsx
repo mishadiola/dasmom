@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { UserRoundPlus, Edit2, X, Check } from 'lucide-react';
 import PatientService from '../../services/patientservice';
+import ActionTooltip from '../Common/ActionTooltip';
 import '../Patient/PatientStaffAssignment.css';
 import './VisitStaffAssignment.css';
 
@@ -133,26 +134,29 @@ const VisitStaffAssignment = ({
             {assignedStaffName || 'Assigned Staff'}
           </span>
           {canEdit && (
-            <button
-              type="button"
-              className="visit-staff-assignment__edit-btn"
-              onClick={openAssignment}
-              title="Reassign healthcare worker"
-              aria-label="Reassign healthcare worker"
-            >
-              <Edit2 size={12} />
-            </button>
+            <ActionTooltip text="Reassign Healthcare Worker">
+              <button
+                type="button"
+                className="visit-staff-assignment__edit-btn"
+                onClick={openAssignment}
+                aria-label="Reassign healthcare worker"
+              >
+                <Edit2 size={12} />
+              </button>
+            </ActionTooltip>
           )}
         </div>
       ) : canAssign ? (
-        <button
-          type="button"
-          className="patient-staff-assignment__button visit-staff-assignment__btn"
-          onClick={openAssignment}
-          title="Assign healthcare worker to this visit"
-        >
-          <UserRoundPlus size={14} /> Assign Healthcare Worker
-        </button>
+        <ActionTooltip text="Assign Healthcare Worker" align="left">
+          <button
+            type="button"
+            className="patient-staff-assignment__button visit-staff-assignment__btn"
+            onClick={openAssignment}
+            aria-label="Assign healthcare worker to this visit"
+          >
+            <UserRoundPlus size={14} /> Assign Healthcare Worker
+          </button>
+        </ActionTooltip>
       ) : (
         <span className="visit-staff-assignment__unassigned">Unassigned</span>
       )}

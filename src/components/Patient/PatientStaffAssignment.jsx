@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { UserRoundPlus } from 'lucide-react';
 import PatientService from '../../services/patientservice';
+import ActionTooltip from '../Common/ActionTooltip';
 import './PatientStaffAssignment.css';
 
 const PatientStaffAssignment = ({
@@ -74,9 +75,11 @@ const PatientStaffAssignment = ({
       ) : canAssign ? (
         <>
           {!isOpen ? (
-            <button type="button" className="patient-staff-assignment__button" onClick={openAssignment}>
-              <UserRoundPlus size={14} /> Assign Healthcare Worker
-            </button>
+            <ActionTooltip text="Assign Healthcare Worker" align="left">
+              <button type="button" className="patient-staff-assignment__button" onClick={openAssignment}>
+                <UserRoundPlus size={14} /> Assign Healthcare Worker
+              </button>
+            </ActionTooltip>
           ) : (
             <div className="patient-staff-assignment__form">
               <select

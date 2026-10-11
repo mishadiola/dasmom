@@ -15,6 +15,7 @@ import PatientStaffAssignment from '../../components/Patient/PatientStaffAssignm
 import { formatMotherId } from '../../utils/displayIds';
 import PostpartumVisitModal from '../../components/PostpartumVisitModal';
 import { formatDate } from '../../utils/formatters';
+import ActionTooltip from '../../components/Common/ActionTooltip';
 
 // Helper function for readable date formatting
 const formatReadableDate = (dateString) => {
@@ -285,7 +286,7 @@ const PatientProfile = () => {
                 <div class="header">
                     <h1 class="patient-name">${p.name}</h1>
                     <p class="patient-info">Patient ID: ${getShortPatientId(p.id)} | Age: ${p.age} years | Station: ${p.station}</p>
-                    <p class="patient-info">Risk Level: <span class="risk-badge">${(p.risk || 'Normal').toUpperCase()}</span></p>
+                    <p class="patient-info">Health Conditions: <span class="risk-badge">${p.hasHealthConditions ? 'WITH CONDITIONS' : 'NONE REPORTED'}</span></p>
                     <p class="patient-info">Generated on: ${formatDate(new Date())}</p>
                 </div>
 
@@ -361,8 +362,8 @@ const PatientProfile = () => {
                             <span class="info-value">${p.lmp || 'N/A'}</span>
                         </div>
                         <div class="info-item">
-                            <span class="info-label">Risk Level:</span>
-                            <span class="info-value">${(p.risk || 'Normal').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}</span>
+                            <span class="info-label">Health Conditions:</span>
+                            <span class="info-value">${p.hasHealthConditions ? ((p.documentedConditions && p.documentedConditions.length > 0) ? p.documentedConditions.join(', ') : 'Documented Conditions') : 'None Reported'}</span>
                         </div>
                     </div>
                 </div>
@@ -660,11 +661,17 @@ const PatientProfile = () => {
                         )}
                     </div>
                     <div className="header-actions">
-                        <button className="btn btn-outline" title="Print Record" onClick={handlePrintProfile}><Printer size={16} /></button>
-                        <button className="btn btn-outline" title="Edit Patient" onClick={handleEditPatient}><Edit size={16} /></button>
-                        <button className="btn btn-primary" onClick={() => p.pregnancyStatus === 'Postpartum' ? setShowPostpartumVisitModal(true) : navigate(`/dashboard/prenatal/add/${p.id}`)}>
-                            <Edit size={16} /> Record Visit
-                        </button>
+                        <ActionTooltip text="Print Record">
+                            <button className="btn btn-outline" onClick={handlePrintProfile}><Printer size={16} /></button>
+                        </ActionTooltip>
+                        <ActionTooltip text="Edit Patient">
+                            <button className="btn btn-outline" onClick={handleEditPatient}><Edit size={16} /></button>
+                        </ActionTooltip>
+                        <ActionTooltip text="Record Visit">
+                            <button className="btn btn-primary" onClick={() => p.pregnancyStatus === 'Postpartum' ? setShowPostpartumVisitModal(true) : navigate(`/dashboard/prenatal/add/${p.id}`)}>
+                                <Edit size={16} /> Record Visit
+                            </button>
+                        </ActionTooltip>
                     </div>
                 </div>
             </div>
@@ -806,10 +813,10 @@ const PatientProfile = () => {
                                             <span className="gpa-value">{p.para || 0}</span>
                                             <span className="gpa-sub">Births</span>
                                         </div>
-                                        <div className={`gpa-box box-risk-${(p.risk || 'normal').toLowerCase().split(' ')[0]}`}>
-                                            <span className="gpa-label">Risk Level</span>
-                                            <span className="gpa-value str">{(p.risk || 'Normal').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}</span>
-                                            <span className="gpa-sub">Calculated</span>
+                                        <div className={`gpa-box box-risk-${p.hasHealthConditions ? 'high' : 'normal'}`}>
+                                            <span className="gpa-label">Health Conditions</span>
+                                            <span className="gpa-value str">{p.hasHealthConditions ? 'Documented' : 'None'}</span>
+                                            <span className="gpa-sub">Medical Status</span>
                                         </div>
                                     </div>
                                 </div>
@@ -885,12 +892,12 @@ const PatientProfile = () => {
                                             <span className="track-hero-sub">Recovery in progress</span>
                                         </div>
                                     </div>
-                                    <div className={`tracking-hero-card risk-card-${(p.risk || 'normal').toLowerCase().split(' ')[0]}`}>
-                                        <span className="track-icon-wrap"><AlertTriangle size={24} /></span>
+                                    <div className={`tracking-hero-card ${p.hasHealthConditions ? 'risk-card-high' : 'risk-card-normal'}`}>
+                                        <span className="track-icon-wrap"><HeartPulse size={24} /></span>
                                         <div className="track-hero-content">
-                                            <span className="track-hero-label">Risk Level</span>
-                                            <span className="track-hero-val">{(p.risk || 'Normal').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}</span>
-                                            <span className="track-hero-sub">Based on delivery outcome</span>
+                                            <span className="track-hero-label">Health Conditions</span>
+                                            <span className="track-hero-val">{p.hasHealthConditions ? 'Documented' : 'None Reported'}</span>
+                                            <span className="track-hero-sub">Based on medical record</span>
                                         </div>
                                     </div>
                                 </div>
@@ -947,12 +954,12 @@ const PatientProfile = () => {
                                             <span className="track-hero-sub">Week {p.weeks} of Pregnancy</span>
                                         </div>
                                     </div>
-                                    <div className={`tracking-hero-card risk-card-${(p.risk || 'normal').toLowerCase().split(' ')[0]}`}>
-                                        <span className="track-icon-wrap"><AlertTriangle size={24} /></span>
+                                    <div className={`tracking-hero-card ${p.hasHealthConditions ? 'risk-card-high' : 'risk-card-normal'}`}>
+                                        <span className="track-icon-wrap"><HeartPulse size={24} /></span>
                                         <div className="track-hero-content">
-                                            <span className="track-hero-label">Assessed Risk Level</span>
-                                            <span className="track-hero-val">{(p.risk || 'Normal').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}</span>
-                                            <span className="track-hero-sub">{p.medicalConditions?.length || 0} Risk Factors Detected</span>
+                                            <span className="track-hero-label">Health Conditions</span>
+                                            <span className="track-hero-val">{p.hasHealthConditions ? 'Documented' : 'None Reported'}</span>
+                                            <span className="track-hero-sub">{p.documentedConditions?.length || (p.hasHealthConditions ? 1 : 0)} Documented Condition(s)</span>
                                         </div>
                                     </div>
                                 </div>
@@ -1370,8 +1377,8 @@ const PatientProfile = () => {
                                                     <p style={{ fontWeight: '600', color: '#1e293b', margin: 0, fontSize: '14px', lineHeight: '1.3' }}>{delivery.gestational_age || 'N/A'}</p>
                                                 </div>
                                                 <div style={{ padding: '0 12px' }}>
-                                                    <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Risk Level</label>
-                                                    <p style={{ fontWeight: '600', color: '#1e293b', margin: 0, fontSize: '14px', lineHeight: '1.3' }}>{(delivery.risk_level || 'Normal').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}</p>
+                                                    <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Health Conditions</label>
+                                                    <p style={{ fontWeight: '600', color: '#1e293b', margin: 0, fontSize: '14px', lineHeight: '1.3' }}>{(delivery.risk_level && delivery.risk_level.toLowerCase().includes('high')) || delivery.complications?.length > 0 ? 'Documented Conditions' : 'None Reported'}</p>
                                                 </div>
                                                 <div style={{ padding: '0 0 0 12px' }}>
                                                     <label style={{ fontSize: '10.5px', color: '#8a7f83', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display: 'block', marginBottom: '6px' }}>Delivery Station</label>

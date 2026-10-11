@@ -23,6 +23,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import ExportModal from '../../components/ExportModal';
+import ActionTooltip from '../../components/Common/ActionTooltip';
 
 const inventoryService = new InventoryService();
 
@@ -999,18 +1000,37 @@ const Vaccinations = () => {
     const [newbornVaccinationModal, setNewbornVaccinationModal] = useState(null);  // null | newborn object
     const [expirationSummaryModal, setExpirationSummaryModal] = useState(null);      // null | 'vaccine' | 'supplement'
     const [expandedRows, setExpandedRows] = useState({});
+    const [expandedItemRows, setExpandedItemRows] = useState(new Set());
     const [sortField, setSortField] = useState('');
     const [sortAsc, setSortAsc] = useState(true);
+
+    const toggleItemRowExpanded = (rowKey) => {
+        setExpandedItemRows(prev => {
+            const next = new Set(prev);
+            if (next.has(rowKey)) {
+                next.delete(rowKey);
+            } else {
+                next.add(rowKey);
+            }
+            return next;
+        });
+    };
 
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1);
     const { settings } = useSystemSettings();
     const itemsPerPage = settings?.tables?.rowsPerPage || 10;
 
-    // Reset pagination on filter changes
+    // Reset pagination and collapsible item states on tab, search, or filter changes
     useEffect(() => {
         setCurrentPage(1);
-    }, [activeTab, searchTerm, filters]);
+        setExpandedItemRows(new Set());
+    }, [activeTab, searchTerm, filters, dateFilter, customDateFrom, customDateTo]);
+
+    // Also reset collapsible rows when changing pages
+    useEffect(() => {
+        setExpandedItemRows(new Set());
+    }, [currentPage]);
 
     const fetchData = async () => {
         try {
@@ -1449,6 +1469,7 @@ const Vaccinations = () => {
 
         patientMap.set(patientKey, {
             ...record,
+            patientKey,
             records: [record],
             itemNames: [record.itemName],
             itemTypes: [record.itemType],
@@ -1876,24 +1897,72 @@ const Vaccinations = () => {
                                                 <span className={`type-badge type-${item.type.toLowerCase()}`}>{item.type}</span>
                                             </td>
                                             <td className="col-item">
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                    {item.records.map(record => (
-                                                        <div key={record.id}>
-                                                            <strong>{record.scheduledVaccination}</strong>
-                                                            {record.actualVaccine && (
-                                                                <small style={{ display: 'block' }}>
-                                                                    Actual: {record.actualVaccine.vaccine_name}
-                                                                    {record.actualVaccine.brand ? ` · Brand: ${record.actualVaccine.brand}` : ''}
-                                                                    {record.dose ? ` · ${record.dose}` : ''}
-                                                                    {record.vaccinatedBy ? ` · By: ${record.vaccinatedBy}` : ''}
-                                                                </small>
+                                                {(() => {
+                                                    const rowKey = item.patientKey || `${item.type}:${item.patientId || item.id}`;
+                                                    const isExpanded = expandedItemRows.has(rowKey);
+                                                    const allRecords = item.records || [];
+                                                    const hasMoreThanTwo = allRecords.length > 2;
+                                                    const firstTwoRecords = allRecords.slice(0, 2);
+                                                    const remainingRecords = allRecords.slice(2);
+                                                    const remainingCount = remainingRecords.length;
+
+                                                    return (
+                                                        <div className="vacc-col-item-wrap">
+                                                            <div className="vacc-items-list">
+                                                                {firstTwoRecords.map((record, rIdx) => (
+                                                                    <div key={record.id || `${rowKey}-first-${rIdx}`} className="vacc-item-entry">
+                                                                        <strong>{record.scheduledVaccination || record.itemName}</strong>
+                                                                        {record.actualVaccine && (
+                                                                            <small style={{ display: 'block' }}>
+                                                                                Actual: {record.actualVaccine.vaccine_name}
+                                                                                {record.actualVaccine.brand ? ` · Brand: ${record.actualVaccine.brand}` : ''}
+                                                                                {record.dose ? ` · ${record.dose}` : ''}
+                                                                                {record.vaccinatedBy ? ` · By: ${record.vaccinatedBy}` : ''}
+                                                                            </small>
+                                                                        )}
+                                                                    </div>
+                                                                ))}
+
+                                                                {hasMoreThanTwo && isExpanded && (
+                                                                    <div className="vacc-items-expandable">
+                                                                        {remainingRecords.map((record, rIdx) => (
+                                                                            <div key={record.id || `${rowKey}-rem-${rIdx}`} className="vacc-item-entry">
+                                                                                <strong>{record.scheduledVaccination || record.itemName}</strong>
+                                                                                {record.actualVaccine && (
+                                                                                    <small style={{ display: 'block' }}>
+                                                                                        Actual: {record.actualVaccine.vaccine_name}
+                                                                                        {record.actualVaccine.brand ? ` · Brand: ${record.actualVaccine.brand}` : ''}
+                                                                                        {record.dose ? ` · ${record.dose}` : ''}
+                                                                                        {record.vaccinatedBy ? ` · By: ${record.vaccinatedBy}` : ''}
+                                                                                    </small>
+                                                                                )}
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            {hasMoreThanTwo && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="vacc-show-more-btn"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        toggleItemRowExpanded(rowKey);
+                                                                    }}
+                                                                    aria-expanded={isExpanded}
+                                                                >
+                                                                    <span>{isExpanded ? 'Show Less' : `Show More (${remainingCount} more)`}</span>
+                                                                    {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                                                                </button>
                                                             )}
+
+                                                            <span className={item.itemType === 'vaccine' ? 'badge-vaccine' : item.itemType === 'supplement' ? 'badge-supplement' : 'badge-vaccine'} style={{ alignSelf: 'flex-start' }}>
+                                                                {item.itemType === 'mixed' ? 'Vaccines & Supplements' : item.itemType === 'vaccine' ? 'Vaccine' : 'Supplement'}
+                                                            </span>
                                                         </div>
-                                                    ))}
-                                                    <span className={item.itemType === 'vaccine' ? 'badge-vaccine' : item.itemType === 'supplement' ? 'badge-supplement' : 'badge-vaccine'} style={{ alignSelf: 'flex-start' }}>
-                                                        {item.itemType === 'mixed' ? 'Vaccines & Supplements' : item.itemType === 'vaccine' ? 'Vaccine' : 'Supplement'}
-                                                    </span>
-                                                </div>
+                                                    );
+                                                })()}
                                             </td>
                                             <td className="col-date">
                                                 {activeTab === 'administered' ? (
@@ -1913,15 +1982,18 @@ const Vaccinations = () => {
                                             </td>
                                             <td className="col-actions">
                                                 <div className="row-actions">
-                                                    <button className="action-btn view-btn" title="View Patient Profile"><User size={13} /></button>
+                                                    <ActionTooltip text="View Patient Profile">
+                                                        <button className="action-btn view-btn" onClick={() => item.type === 'Mother' ? navigate(`/dashboard/patients/${item.patientId}`) : navigate(`/dashboard/patients/${item.records?.[0]?.motherId || item.patientId}`)}><User size={13} /></button>
+                                                    </ActionTooltip>
                                                     {activeTab !== 'administered' && (
-                                                        <button 
-                                                            className="action-btn record-btn" 
-                                                            title="Record vaccination or supplement"
-                                                            onClick={() => setRecordModal({ mode: item.itemTypes.includes('vaccine') ? 'vaccine' : 'supplement', initialPatientType: item.type, initialPatientName: item.patientName })}
-                                                        >
-                                                            <Plus size={13} />
-                                                        </button>
+                                                        <ActionTooltip text="Record Vaccination or Supplement">
+                                                            <button 
+                                                                className="action-btn record-btn" 
+                                                                onClick={() => setRecordModal({ mode: item.itemTypes.includes('vaccine') ? 'vaccine' : 'supplement', initialPatientType: item.type, initialPatientName: item.patientName })}
+                                                            >
+                                                                <Plus size={13} />
+                                                            </button>
+                                                        </ActionTooltip>
                                                     )}
                                                 </div>
                                             </td>

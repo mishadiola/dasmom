@@ -20,6 +20,7 @@ import {
 } from '../../utils/systemSettings';
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import ResetPasswordModal from '../../components/ResetPasswordModal';
+import ActionTooltip from '../../components/Common/ActionTooltip';
 
 /* ════════════════════════════
    MOCK DATA
@@ -530,12 +531,16 @@ const ManageStationsModal = ({ onClose, onSuccess, initialStations }) => {
                                             <>
                                                 <span style={{ fontWeight: '500', fontSize: '14px' }}>{formatStationName(station)}</span>
                                                 <div style={{ display: 'flex', gap: '6px' }}>
-                                                    <button type="button" onClick={() => { setEditingStation(station); setEditName(station); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'var(--color-text-muted)' }} title="Edit Station" disabled={submitting}>
-                                                        <Edit2 size={16} />
-                                                    </button>
-                                                    <button type="button" onClick={() => setDeletingStation(station)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#f66' }} title="Delete Station" disabled={submitting}>
-                                                        <Trash2 size={16} />
-                                                    </button>
+                                                    <ActionTooltip text="Edit Station">
+                                                        <button type="button" onClick={() => { setEditingStation(station); setEditName(station); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'var(--color-text-muted)' }} disabled={submitting}>
+                                                            <Edit2 size={16} />
+                                                        </button>
+                                                    </ActionTooltip>
+                                                    <ActionTooltip text="Delete Station">
+                                                        <button type="button" onClick={() => setDeletingStation(station)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#f66' }} disabled={submitting}>
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </ActionTooltip>
                                                 </div>
                                             </>
                                         )}
@@ -1106,20 +1111,30 @@ const UserAccountsTab = () => {
                                     </td>
                                     <td>
                                         <div className="row-actions">
-                                            <button className="action-btn edit-btn" title="Edit" onClick={() => { setSelectedStaff(u); setShowEditModal(true); }}><Edit2 size={13} /></button>
-                                            <button className="action-btn key-btn" title="Reset Password"><Key size={13} /></button>
-                                            <button className={`action-btn ${u.status === 'Active' ? 'deact-btn' : 'act-btn'}`} title={u.status === 'Active' ? 'Deactivate' : 'Activate'} onClick={() => handleToggleDeactivation(u)}>
-                                                {u.status === 'Active' ? <ToggleRight size={13} /> : <ToggleLeft size={13} />}
-                                            </button>
+                                            <ActionTooltip text="Edit Staff">
+                                                <button className="action-btn edit-btn" onClick={() => { setSelectedStaff(u); setShowEditModal(true); }}><Edit2 size={13} /></button>
+                                            </ActionTooltip>
+                                            <ActionTooltip text="Reset Password">
+                                                <button className="action-btn key-btn"><Key size={13} /></button>
+                                            </ActionTooltip>
+                                            <ActionTooltip text={u.status === 'Active' ? 'Deactivate' : 'Activate'}>
+                                                <button className={`action-btn ${u.status === 'Active' ? 'deact-btn' : 'act-btn'}`} onClick={() => handleToggleDeactivation(u)}>
+                                                    {u.status === 'Active' ? <ToggleRight size={13} /> : <ToggleLeft size={13} />}
+                                                </button>
+                                            </ActionTooltip>
                                             {u.role !== 'Super Admin' && (
                                                 (u.archiveStatus || 'active') === 'archived' ? (
-                                                    <button className="action-btn restore-btn" title="Restore" onClick={() => handleRestore(u.id)}>
-                                                        <ArchiveRestore size={13} />
-                                                    </button>
+                                                    <ActionTooltip text="Restore Staff">
+                                                        <button className="action-btn restore-btn" onClick={() => handleRestore(u.id)}>
+                                                            <ArchiveRestore size={13} />
+                                                        </button>
+                                                    </ActionTooltip>
                                                 ) : (
-                                                    <button className="action-btn archive-btn" title="Archive" onClick={() => handleArchive(u.id)}>
-                                                        <Archive size={13} />
-                                                    </button>
+                                                    <ActionTooltip text="Archive Staff">
+                                                        <button className="action-btn archive-btn" onClick={() => handleArchive(u.id)}>
+                                                            <Archive size={13} />
+                                                        </button>
+                                                    </ActionTooltip>
                                                 )
                                             )}
                                         </div>

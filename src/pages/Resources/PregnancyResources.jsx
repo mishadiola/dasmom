@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { TIPS_DATA } from '../MotherDashboard/PregnancyTips';
 import '../../styles/pages/PregnancyResources.css';
+import ActionTooltip from '../../components/Common/ActionTooltip';
 
 const CATEGORIES = [
     'All', 'Nutrition', 'Prenatal Care', 'Postpartum Care',
@@ -202,28 +203,34 @@ const PregnancyResources = () => {
                                     <td>{res.dateAdded}</td>
                                     <td>
                                         <div className="pr-table-actions">
-                                            <button className="pr-icon-btn" title="View Preview">
-                                                <Eye size={14} />
-                                            </button>
-                                            <button className="pr-icon-btn" title="Edit">
-                                                <Edit2 size={14} />
-                                            </button>
+                                            <ActionTooltip text="View Preview">
+                                                <button className="pr-icon-btn">
+                                                    <Eye size={14} />
+                                                </button>
+                                            </ActionTooltip>
+                                            <ActionTooltip text="Edit Resource">
+                                                <button className="pr-icon-btn">
+                                                    <Edit2 size={14} />
+                                                </button>
+                                            </ActionTooltip>
                                             {res.archiveStatus === 'archived' ? (
-                                                <button
-                                                    className="pr-icon-btn pr-icon-btn--restore"
-                                                    title="Restore"
-                                                    onClick={() => handleRestore(res.id)}
-                                                >
-                                                    <ArchiveRestore size={14} />
-                                                </button>
+                                                <ActionTooltip text="Restore Resource">
+                                                    <button
+                                                        className="pr-icon-btn pr-icon-btn--restore"
+                                                        onClick={() => handleRestore(res.id)}
+                                                    >
+                                                        <ArchiveRestore size={14} />
+                                                    </button>
+                                                </ActionTooltip>
                                             ) : (
-                                                <button
-                                                    className="pr-icon-btn pr-icon-btn--archive"
-                                                    title="Archive"
-                                                    onClick={() => handleArchive(res.id)}
-                                                >
-                                                    <Archive size={14} />
-                                                </button>
+                                                <ActionTooltip text="Archive Resource">
+                                                    <button
+                                                        className="pr-icon-btn pr-icon-btn--archive"
+                                                        onClick={() => handleArchive(res.id)}
+                                                    >
+                                                        <Archive size={14} />
+                                                    </button>
+                                                </ActionTooltip>
                                             )}
                                         </div>
                                     </td>
@@ -254,25 +261,29 @@ const PregnancyResources = () => {
                                     <Clock size={12} /> {res.dateAdded}
                                 </div>
                                 <div className="pr-table-actions">
-                                    <button className="pr-icon-btn" title="Edit">
-                                        <Edit2 size={14} />
-                                    </button>
+                                    <ActionTooltip text="Edit Resource">
+                                        <button className="pr-icon-btn">
+                                            <Edit2 size={14} />
+                                        </button>
+                                    </ActionTooltip>
                                     {res.archiveStatus === 'archived' ? (
-                                        <button
-                                            className="pr-icon-btn pr-icon-btn--restore"
-                                            title="Restore"
-                                            onClick={() => handleRestore(res.id)}
-                                        >
-                                            <ArchiveRestore size={14} />
-                                        </button>
+                                        <ActionTooltip text="Restore Resource">
+                                            <button
+                                                className="pr-icon-btn pr-icon-btn--restore"
+                                                onClick={() => handleRestore(res.id)}
+                                            >
+                                                <ArchiveRestore size={14} />
+                                            </button>
+                                        </ActionTooltip>
                                     ) : (
-                                        <button
-                                            className="pr-icon-btn pr-icon-btn--archive"
-                                            title="Archive"
-                                            onClick={() => handleArchive(res.id)}
-                                        >
-                                            <Archive size={14} />
-                                        </button>
+                                        <ActionTooltip text="Archive Resource">
+                                            <button
+                                                className="pr-icon-btn pr-icon-btn--archive"
+                                                onClick={() => handleArchive(res.id)}
+                                            >
+                                                <Archive size={14} />
+                                            </button>
+                                        </ActionTooltip>
                                     )}
                                 </div>
                             </div>

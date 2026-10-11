@@ -17,6 +17,7 @@ import { useModal } from '../../context/ModalContext';
 import Legend from '../../components/Legend/Legend';
 import { formatMotherId } from '../../utils/displayIds';
 import ExportModal from '../../components/ExportModal';
+import ActionTooltip from '../../components/Common/ActionTooltip';
 
 // Helper function to extract first 4 numeric digits from patient ID
 const getShortPatientId = (id) => {
@@ -29,23 +30,15 @@ const toTitleCase = (str) => {
     return str.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
 };
 
-// Helper functions for Risk Level display and classes
-const formatRiskDisplay = (risk) => {
-    if (!risk) return 'Low Risk';
-    const lower = risk.toLowerCase();
-    if (lower.includes('high')) return 'High Risk';
-    if (lower.includes('medium') || lower.includes('monitor')) return 'Medium Risk';
-    if (lower.includes('low') || lower.includes('normal')) return 'Low Risk';
-    return risk.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+// Helper functions for Health Conditions display and classes
+const formatConditionDisplay = (patient) => {
+    if (!patient) return 'None Reported';
+    return patient.hasHealthConditions ? 'With Health Conditions' : 'None Reported';
 };
 
-const getRiskClass = (risk) => {
-    if (!risk) return 'risk-low';
-    const lower = risk.toLowerCase();
-    if (lower.includes('high')) return 'risk-high';
-    if (lower.includes('medium') || lower.includes('monitor')) return 'risk-medium';
-    if (lower.includes('low') || lower.includes('normal')) return 'risk-low';
-    return `risk-${lower.split(' ')[0]}`;
+const getConditionClass = (patient) => {
+    if (!patient) return 'condition-none';
+    return patient.hasHealthConditions ? 'condition-present' : 'condition-none';
 };
 
 const EMPTY_VITALS = {
@@ -406,13 +399,11 @@ const PatientsList = () => {
 
         const matchesTri = filters.trimesters.length === 0 || filters.trimesters.includes(String(p.trimester || 1));
         
-        const normalizedRisk = (p.risk || 'Low Risk').toLowerCase();
-        let derivedRisk = 'Normal';
-        if (normalizedRisk.includes('high')) derivedRisk = 'High';
-        else if (normalizedRisk.includes('medium') || normalizedRisk.includes('monitor')) derivedRisk = 'Monitor';
-        else if (normalizedRisk.includes('low') || normalizedRisk.includes('normal')) derivedRisk = 'Normal';
-        
-        const matchesRisk = filters.risks.length === 0 || filters.risks.includes(derivedRisk);
+        const matchesRisk = filters.risks.length === 0 || (
+            filters.risks.includes('with_conditions') && p.hasHealthConditions
+        ) || (
+            filters.risks.includes('none') && !p.hasHealthConditions
+        );
         const matchesType = filters.patientType === 'All' || (p.patientType || p.type) === filters.patientType;
         const matchesStation = filters.stations.length === 0 || filters.stations.includes(p.station);
         const matchesAssignment = filters.assignmentStatus === 'All'
@@ -529,7 +520,11 @@ const PatientsList = () => {
             'Station': p.station || 'Unassigned',
             'Age': p.age || 'N/A',
             'Gestation': p.weeks ? `${p.weeks} weeks (T${p.trimester || 1})` : 'N/A',
-            'Risk Level': p.risk || 'Normal',
+            'Health Conditions': p.hasHealthConditions ? (
+                (p.documentedConditions && p.documentedConditions.length > 0) 
+                    ? p.documentedConditions.join(', ') 
+                    : 'With Health Conditions'
+            ) : 'None Reported',
             'Total Visits': p.totalVisits || 0,
             'Next Appointment': p.nextAppt || 'No upcoming appt'
         }));
@@ -552,7 +547,7 @@ const PatientsList = () => {
                     doc.text(`Period: ${reportPeriodText}`, 14, 22);
                 }
                 
-                const tableColumn = ["Patient ID", "Name", "Type", "Station", "Age", "Gestation", "Risk", "Total Visits", "Next Appt"];
+                const tableColumn = ["Patient ID", "Name", "Type", "Station", "Age", "Gestation", "Health Conditions", "Total Visits", "Next Appt"];
                 const tableRows = exportData.map(obj => [
                     obj['Patient ID'],
                     obj['Name'],
@@ -560,7 +555,7 @@ const PatientsList = () => {
                     obj['Station'],
                     obj['Age'],
                     obj['Gestation'],
-                    obj['Risk Level'],
+                    obj['Health Conditions'],
                     obj['Total Visits'],
                     obj['Next Appointment']
                 ]);
@@ -741,12 +736,19 @@ const PatientsList = () => {
                                     ))}
                                 </div>
                                 
-                                <div className="popover-title" style={{ marginTop: '12px' }}>Risk Level</div>
+                                <div className="popover-title" style={{ marginTop: '12px' }}>Health Conditions</div>
                                 <div className="popover-options">
-                                    {['Normal', 'Monitor', 'High'].map(risk => (
-                                        <label key={risk} className="popover-checkbox-label">
-                                            <input type="checkbox" checked={filters.risks.includes(risk)} onChange={() => toggleArrayFilter('risks', risk)} />
-                                            {risk === 'Normal' ? 'Low Risk' : risk === 'Monitor' ? 'Medium Risk' : 'High Risk'}
+                                    {[
+                                        { id: 'with_conditions', label: 'With Health Conditions' },
+                                        { id: 'none', label: 'None Reported' }
+                                    ].map(item => (
+                                        <label key={item.id} className="popover-checkbox-label">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={filters.risks.includes(item.id)} 
+                                                onChange={() => toggleArrayFilter('risks', item.id)} 
+                                            />
+                                            {item.label}
                                         </label>
                                     ))}
                                 </div>
@@ -938,11 +940,10 @@ const PatientsList = () => {
                                 ]
                             },
                             {
-                                title: "Risk Level",
+                                title: "Health Conditions",
                                 items: [
-                                    { label: "Low Risk", className: "risk-badge risk-low" },
-                                    { label: "Medium Risk", className: "risk-badge risk-medium" },
-                                    { label: "High Risk", className: "risk-badge risk-high" }
+                                    { label: "With Health Conditions", className: "risk-badge condition-present" },
+                                    { label: "None Reported", className: "risk-badge condition-none" }
                                 ]
                             }
                         ]}
@@ -961,7 +962,7 @@ const PatientsList = () => {
                                 <th>Station</th>
                                 <th>Age</th>
                                 <th>Gestation</th>
-                                <th>Risk Level</th>
+                                <th>Health Conditions</th>
                                 <th>Visits</th>
                                 <th>Next Appt</th>
                                 <th>Actions</th>
@@ -1019,18 +1020,18 @@ const PatientsList = () => {
                                         <td>
                                             <div>
                                                 <span 
-                                                    className={`risk-badge ${getRiskClass(p.risk)}`}
+                                                    className={`risk-badge ${p.hasHealthConditions ? 'condition-present' : 'condition-none'}`}
                                                     onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/${p.id}?from=patients&tab=history`); }}
                                                     style={{ cursor: 'pointer', transition: 'opacity 0.2s' }}
                                                     onMouseOver={(e) => { e.target.style.opacity = '0.75'; }}
                                                     onMouseOut={(e) => { e.target.style.opacity = '1'; }}
                                                     title="View Medical History"
                                                 >
-                                                    {formatRiskDisplay(p.risk)}
+                                                    {p.hasHealthConditions ? 'With Health Conditions' : 'None Reported'}
                                                 </span>
-                                                {(p.riskFactors || []).filter(f => f && f.toLowerCase() !== 'none').length > 0 && (
+                                                {p.hasHealthConditions && (p.documentedConditions || p.riskFactors || []).filter(f => f && f.toLowerCase() !== 'none').length > 0 && (
                                                     <div className="risk-factors">
-                                                        {(p.riskFactors || []).filter(f => f && f.toLowerCase() !== 'none').join(', ')}
+                                                        {(p.documentedConditions || p.riskFactors || []).filter(f => f && f.toLowerCase() !== 'none').join(', ')}
                                                     </div>
                                                 )}
                                             </div>
@@ -1065,42 +1066,42 @@ const PatientsList = () => {
 
                                         <td>
                                             <div className="actions-group">
-                                                <div className="action-tooltip-wrap" data-tooltip="View Profile">
+                                                <ActionTooltip text="View Profile">
                                                     <button type="button" className="action-btn view-btn" onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/${p.id}?from=patients`); }}>
                                                         <Eye size={16} />
                                                     </button>
-                                                </div>
+                                                </ActionTooltip>
 
-                                                <div className="action-tooltip-wrap" data-tooltip="Record Vitals">
+                                                <ActionTooltip text="Record Vitals">
                                                     <button type="button" className="action-btn vitals-btn" onClick={(e) => { e.stopPropagation(); openVitalsModal(p.id); }} disabled={modalLoading.vitals}>
                                                         <Activity size={16} />
                                                     </button>
-                                                </div>
+                                                </ActionTooltip>
 
-                                                <div className="action-tooltip-wrap" data-tooltip="Edit Patient">
+                                                <ActionTooltip text="Edit Patient">
                                                     <button type="button" className="action-btn edit-btn" onClick={(e) => { e.stopPropagation(); openEditModal(p.id); }} disabled={modalLoading.edit}>
                                                         <Edit size={16} />
                                                     </button>
-                                                </div>
+                                                </ActionTooltip>
 
                                                 {(p.archiveStatus || 'active') === 'archived' ? (
-                                                    <div className="action-tooltip-wrap" data-tooltip="Restore Patient">
+                                                    <ActionTooltip text="Restore Patient">
                                                         <button type="button" className="action-btn restore-btn" onClick={(e) => {
                                                             e.stopPropagation();
                                                             handleRestore(p.id);
                                                         }}>
                                                             <ArchiveRestore size={16} />
                                                         </button>
-                                                    </div>
+                                                    </ActionTooltip>
                                                 ) : (
-                                                    <div className="action-tooltip-wrap" data-tooltip="Archive Patient">
+                                                    <ActionTooltip text="Archive Patient">
                                                         <button type="button" className="action-btn archive-btn" onClick={(e) => {
                                                             e.stopPropagation();
                                                             handleArchive(p.id);
                                                         }}>
                                                             <Archive size={16} />
                                                         </button>
-                                                    </div>
+                                                    </ActionTooltip>
                                                 )}
                                             </div>
                                         </td>

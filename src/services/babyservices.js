@@ -749,7 +749,7 @@ class BabyService {
           color: 'orange'
         },
         {
-          label: 'High-Risk Deliveries',
+          label: 'Deliveries with Health Conditions',
           value: highRiskCount,
           color: 'rose'
         }
@@ -761,7 +761,7 @@ class BabyService {
         { label: 'Total Deliveries', value: 0, color: 'lilac' },
         { label: 'Normal vs CS', value: '0 / 0', color: 'sage' },
         { label: 'Complications', value: 0, color: 'orange' },
-        { label: 'High-Risk Deliveries', value: 0, color: 'rose' }
+        { label: 'Deliveries with Health Conditions', value: 0, color: 'rose' }
       ];
     }
   }

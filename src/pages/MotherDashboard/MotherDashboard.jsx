@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
     Calendar, Clock, Heart, Activity, 
     Baby, Star, ChevronRight, Bell,
-    CheckCircle2, AlertCircle, Phone, MessageCircle, Mail,
+    CheckCircle2, AlertCircle, Phone, MessageCircle, Facebook,
     Sparkles, ArrowRight, ChevronLeft, Info, TrendingUp, Droplet, Thermometer
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -537,9 +537,15 @@ const MotherDashboard = () => {
                                 <Phone size={16} />
                                 {t('dash_call_cho')}
                             </a>
-                            <a href="mailto:cho3.salawag@gmail.com" className="support-btn support-btn-secondary" style={{ textDecoration: 'none' }}>
-                                <Mail size={16} />
-                                {t('dash_email_cho')}
+                            <a 
+                                href="https://www.facebook.com/Cho3dasmarinas/" 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="support-btn support-btn-secondary" 
+                                style={{ textDecoration: 'none' }}
+                            >
+                                <Facebook size={16} />
+                                {t('dash_fb_cho') || 'Visit Facebook Page'}
                             </a>
                         </div>
                     </div>

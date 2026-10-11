@@ -27,95 +27,6 @@
 }
 
 /* ════════════════════════════════════════════
-   FILTER BAR
-════════════════════════════════════════════ */
-.st-filter-bar {
-    background: #ffffff;
-    border-radius: 16px;
-    padding: 20px 28px;
-    border: 1px solid rgba(185, 129, 138, 0.12);
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-    display: flex;
-    align-items: center;
-    gap: 24px;
-    flex-wrap: wrap;
-}
-
-.st-filter-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.st-filter-group label {
-    font-size: 11.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--color-text-muted);
-}
-
-.st-filter-group select {
-    padding: 9px 36px 9px 14px;
-    border-radius: 10px;
-    border: 1.5px solid rgba(185, 129, 138, 0.18);
-    font-size: 13.5px;
-    font-weight: 600;
-    font-family: var(--font);
-    background: #faf8f9;
-    cursor: pointer;
-    outline: none;
-    color: var(--color-text);
-    transition: var(--t-fast);
-    appearance: none;
-    -webkit-appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236e6278' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 12px center;
-    min-width: 180px;
-}
-
-.st-filter-group select:focus {
-    border-color: var(--color-rose);
-    box-shadow: var(--shadow-focus);
-    background-color: #fff;
-}
-
-.st-filter-legend {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    flex-wrap: wrap;
-}
-
-.st-legend-item {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--color-text-muted);
-    white-space: nowrap;
-}
-
-.st-legend-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
-}
-
-.st-legend-dot--green { background: #7bae5e; }
-.st-legend-dot--amber { background: #d4a03c; }
-.st-legend-dot--red { background: #c7586a; }
-
-.st-legend-value {
-    font-weight: 700;
-    color: var(--color-text);
-}
-
-/* ════════════════════════════════════════════
    ANALYTICS CHART CARDS — GRID
 ════════════════════════════════════════════ */
 .st-charts-grid {
@@ -129,7 +40,7 @@
     border-radius: 16px;
     border: 1px solid rgba(185, 129, 138, 0.12);
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-    padding: 22px 24px 20px;
+    padding: 20px 24px 18px;
     display: flex;
     flex-direction: column;
     transition: var(--t-fast);
@@ -143,7 +54,7 @@
     display: flex;
     align-items: flex-start;
     gap: 12px;
-    margin-bottom: 18px;
+    margin-bottom: 14px;
 }
 
 .st-chart-icon {
@@ -215,29 +126,88 @@
     padding: 24px;
 }
 
-.st-age-report-header,
-.st-age-filters {
+.st-age-report-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 16px;
     flex-wrap: wrap;
-}
-
-.st-age-report-header {
-    justify-content: space-between;
     margin-bottom: 20px;
 }
 
 .st-age-filters {
-    padding: 16px;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(130px, 1fr));
+    gap: 16px;
+    padding: 16px 20px;
     background: #faf8f9;
-    border: 1px solid #f0edf1;
+    border: 1px solid rgba(185, 129, 138, 0.16);
     border-radius: 12px;
-    margin-bottom: 20px;
+    margin-bottom: 22px;
 }
 
-.st-age-filters .st-filter-group select {
-    min-width: 155px;
+.st-age-filters .st-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.st-age-filters .st-filter-group label {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--color-text-muted, #71717a);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    line-height: 1.2;
+}
+
+.st-select-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+.st-select-wrapper select {
+    width: 100%;
+    height: 38px;
+    padding: 0 32px 0 12px;
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text, #27272a);
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.st-select-wrapper select:hover {
+    border-color: #cbd5e1;
+    background-color: #fdfbfb;
+}
+
+.st-select-wrapper select:focus {
+    border-color: var(--color-rose, #b9818a);
+    box-shadow: 0 0 0 3px rgba(185, 129, 138, 0.15);
+    background-color: #ffffff;
+}
+
+.st-select-arrow {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    color: #64748b;
+    flex-shrink: 0;
 }
 
 .st-age-content {
@@ -353,8 +323,7 @@
 .st-hbar-chart {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    flex: 1;
+    gap: 7px;
 }
 
 .st-hbar-row {
@@ -376,7 +345,7 @@
 
 .st-hbar-track {
     flex: 1;
-    height: 14px;
+    height: 13px;
     background: #f3f1f4;
     border-radius: 7px;
     overflow: hidden;
@@ -409,7 +378,7 @@
     gap: 6px;
     font-size: 10.5px;
     color: var(--color-text-light);
-    margin-top: 10px;
+    margin-top: 8px;
     font-weight: 600;
 }
 
@@ -426,9 +395,9 @@
     display: flex;
     align-items: flex-end;
     gap: 6px;
-    height: 190px;
-    min-height: 190px;
-    padding-top: 8px;
+    height: 160px;
+    min-height: 160px;
+    padding-top: 4px;
 }
 
 .st-vbar-col {
@@ -436,17 +405,17 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 5px;
+    gap: 4px;
 }
 
 .st-vbar-bar-wrap {
-    height: 140px;
-    flex: 0 0 140px;
+    height: 115px;
+    flex: 0 0 115px;
     width: 100%;
     display: flex;
     align-items: flex-end;
     justify-content: center;
-    min-height: 140px;
+    min-height: 115px;
 }
 
 .st-vbar-bar {
@@ -490,63 +459,105 @@
     white-space: nowrap;
 }
 
-/* ── High-Risk Featured Card ── */
+/* ── Pregnancies with Health Conditions Featured Card ── */
 .st-chart-card--risk {
     position: relative;
 }
 
-.st-risk-hero {
-    text-align: center;
-    padding: 8px 0 14px;
+.st-chart-header--split {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 12px;
 }
 
-.st-risk-number {
-    font-size: 48px;
+.st-chart-header-left {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    min-width: 0;
+    flex: 1;
+}
+
+.st-risk-header-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(199, 88, 106, 0.08);
+    border: 1px solid rgba(199, 88, 106, 0.2);
+    padding: 6px 14px;
+    border-radius: 12px;
+    flex-shrink: 0;
+}
+
+.st-risk-summary-count {
+    font-size: 24px;
     font-weight: 800;
-    color: #7a3b5c;
+    color: #943848;
     line-height: 1;
-    letter-spacing: -2px;
+    letter-spacing: -0.5px;
 }
 
-.st-risk-label {
-    font-size: 14px;
+.st-risk-summary-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.st-risk-summary-label {
+    font-size: 11.5px;
     font-weight: 700;
-    color: var(--color-text);
-    margin-top: 4px;
+    color: var(--color-text, #27272a);
+    line-height: 1.2;
+    white-space: nowrap;
 }
 
-.st-risk-sub {
-    font-size: 12px;
-    color: var(--color-text-muted);
-    font-weight: 500;
+.st-risk-summary-sub {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #8a4054;
+    line-height: 1.2;
 }
 
 .st-risk-dist-title {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.6px;
     color: var(--color-text-muted);
-    margin-bottom: 10px;
+    margin: 2px 0 6px 0;
+    text-align: left;
+}
+
+.st-vbar-chart--health {
+    height: 122px;
+    min-height: 122px;
+    padding-top: 4px;
+}
+
+.st-vbar-bar-wrap--health {
+    height: 82px;
+    flex: 0 0 82px;
+    min-height: 82px;
 }
 
 .st-risk-warning {
-    margin-top: 14px;
+    margin-top: 8px;
     background: rgba(199, 88, 106, 0.06);
-    border-radius: 10px;
-    padding: 10px 14px;
+    border-radius: 8px;
+    padding: 6px 12px;
     display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    font-size: 11.5px;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
     font-weight: 500;
     color: #8a4054;
-    line-height: 1.45;
+    line-height: 1.35;
 }
 
 .st-risk-warning svg {
     flex-shrink: 0;
-    margin-top: 1px;
 }
 
 /* ════════════════════════════════════════════
@@ -884,33 +895,6 @@
 .st-tri-pill--3rd {
     background: rgba(239, 195, 161, 0.3);
     color: #8a6640;
-}
-
-/* ── Status Pills ── */
-.st-status-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 11.5px;
-    font-weight: 700;
-    padding: 4px 12px;
-    border-radius: 20px;
-    white-space: nowrap;
-}
-
-.st-status--healthy {
-    background: rgba(123, 174, 94, 0.12);
-    color: #4a7a30;
-}
-
-.st-status--attention {
-    background: rgba(212, 160, 60, 0.12);
-    color: #8a6a20;
-}
-
-.st-status--critical {
-    background: rgba(199, 88, 106, 0.12);
-    color: #943848;
 }
 
 /* ── Action Buttons ── */
@@ -1508,27 +1492,6 @@
         gap: 20px;
     }
 
-    .st-filter-bar {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 16px;
-        padding: 18px 20px;
-    }
-
-    .st-filter-group {
-        width: 100%;
-    }
-
-    .st-filter-group select {
-        width: 100%;
-        min-width: unset;
-    }
-
-    .st-filter-legend {
-        margin-left: 0;
-        justify-content: flex-start;
-    }
-
     .st-summary-card {
         padding: 20px;
     }
@@ -1565,11 +1528,8 @@
     }
 
     .st-age-filters {
-        align-items: stretch;
-    }
-
-    .st-age-filters .st-filter-group {
-        flex: 1 1 calc(50% - 16px);
+        grid-template-columns: repeat(2, 1fr);
+        gap: 14px;
     }
 }
 
@@ -1619,12 +1579,24 @@
         font-size: 8px;
     }
 
+    .st-chart-header--split {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .st-risk-header-summary {
+        align-self: flex-start;
+    }
+
     .st-age-report {
         padding: 16px;
     }
 
-    .st-age-filters .st-filter-group {
-        flex-basis: 100%;
+    .st-age-filters {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        padding: 14px;
     }
 }
 

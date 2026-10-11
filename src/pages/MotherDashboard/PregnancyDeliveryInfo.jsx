@@ -380,7 +380,7 @@ const PregnancyDeliveryInfo = () => {
                                         <p>Time: {delivery.delivery_time || 'Not recorded'}</p>
                                         <p>Type: {delivery.delivery_type || 'Not recorded'} · Mode: {delivery.delivery_mode || 'Not recorded'}</p>
                                         <p>Gestational age: {delivery.gestational_age || 'Not recorded'}</p>
-                                        <p>Risk level: {delivery.risk_level || 'Not recorded'}</p>
+                                        <p>Health conditions: {delivery.risk_level?.includes('High') || (Array.isArray(delivery.complications) && delivery.complications.length > 0) ? 'With Documented Conditions' : 'None Reported'}</p>
                                         <p>Complications: {Array.isArray(delivery.complications)
                                             ? delivery.complications.join(', ') || 'None recorded'
                                             : typeof delivery.complications === 'object' && delivery.complications
@@ -408,7 +408,7 @@ const PregnancyDeliveryInfo = () => {
                                         <p>Birth length: {newborn.birth_length != null ? `${newborn.birth_length} cm` : 'Not recorded'}</p>
                                         <p>Head circumference: {newborn.head_circumference != null ? `${newborn.head_circumference} cm` : 'Not recorded'}</p>
                                         <p>Condition at birth: {newborn.condition_at_birth || newborn.condition || 'Not recorded'}</p>
-                                        <p>Risk level: {newborn.risk_level || 'Not recorded'}</p>
+                                        <p>Health conditions: {newborn.risk_level?.includes('High') ? 'Monitored Conditions' : 'Normal / None Reported'}</p>
                                         <p>Apgar score: {newborn.apgar_1min ?? 'Not recorded'} at 1 minute · {newborn.apgar_5min ?? 'Not recorded'} at 5 minutes</p>
                                         {isNewbornVaccinationEligible(newborn) && (
                                             <div>

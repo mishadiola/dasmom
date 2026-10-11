@@ -91,7 +91,7 @@ const Dashboard = () => {
 
             const uniqueHealthConditionPatients = Array.from(
                 new Map((highRiskPatients || []).map((p) => [p.id, p])).values()
-            ).filter((p) => p.riskLevel === 'High Risk');
+            );
 
             const healthConditionCount = (highRiskPatients && highRiskPatients.length > 0)
                 ? uniqueHealthConditionPatients.length
@@ -388,9 +388,9 @@ const Dashboard = () => {
                             role="button"
                             tabIndex={0}
                             onKeyDown={e => { if(e.key === 'Enter') navigate('/dashboard/high-risk') }}
-                            aria-label="View high-risk patients"
+                            aria-label="View patients with health conditions"
                         >
-                            {liveStats.highRisk} high-risk alerts
+                            {liveStats.highRisk} patients with documented health conditions
                         </strong> requiring attention.
                     </p>
                 </div>
@@ -400,7 +400,7 @@ const Dashboard = () => {
                         {[
                             { label: 'Register Pregnancy', icon: Plus, color: 'rose', path: '/dashboard/patients/add' },
                             { label: 'View Schedules', icon: CalendarCheck, color: 'sage', path: '/dashboard/prenatal', state: { openBooking: true } },
-                            { label: 'High Risk Patients', icon: AlertTriangle, color: 'blue', path: '/dashboard/high-risk' },
+                            { label: 'Health Conditions', icon: AlertTriangle, color: 'blue', path: '/dashboard/high-risk' },
                             { label: 'Log Delivery', icon: Baby, color: 'pink', path: '/dashboard/deliveries', state: { openRecordDelivery: true } },
                             { label: 'Issue Vaccine', icon: Syringe, color: 'orange', path: '/dashboard/vaccinations', state: { openRecordVaccination: true } },
                             { label: 'Generate Report', icon: FileText, color: 'purple', path: '/dashboard/analytics' },

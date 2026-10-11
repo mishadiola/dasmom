@@ -22,6 +22,7 @@ import { formatTime12Hour, isNewbornVaccinationEligible } from '../../utils/preg
 import { useModal } from '../../context/ModalContext';
 import Legend from '../../components/Legend/Legend';
 import { formatMotherId } from '../../utils/displayIds';
+import ActionTooltip from '../../components/Common/ActionTooltip';
 
 const COMPLICATION_OPTIONS = ['None', 'Hemorrhage', 'Infection', 'Preeclampsia', 'Placenta Previa', 'Preterm'];
 const DELIVERY_TYPES = ['NSD', 'CS', 'Breech'];
@@ -173,7 +174,7 @@ const DeliveryOutcomes = () => {
         const nsdCount = periodDeliveries.filter(d => d.deliveryType === 'NSD').length;
         const csCount = periodDeliveries.filter(d => d.deliveryType === 'CS').length;
         const complicationCount = periodDeliveries.filter(d => d.complications && d.complications !== 'None').length;
-        const highRiskCount = periodDeliveries.filter(d => d.riskLevel === 'High Risk' || d.riskLevel === 'High').length;
+        const highRiskCount = periodDeliveries.filter(d => (d.riskLevel && d.riskLevel.includes('High')) || (d.complications && d.complications !== 'None')).length;
 
         return {
             activePeriodText: text,
@@ -181,7 +182,7 @@ const DeliveryOutcomes = () => {
                 { label: 'Total Deliveries', value: totalDeliveries, color: 'lilac' },
                 { label: 'Normal vs CS', value: `${nsdCount} / ${csCount}`, color: 'sage' },
                 { label: 'Complications', value: complicationCount, color: 'orange' },
-                { label: 'High-Risk Deliveries', value: highRiskCount, color: 'rose' }
+                { label: 'Deliveries with Health Conditions', value: highRiskCount, color: 'rose' }
             ]
         };
     }, [deliveries, periodFilter, appliedCustomDateRange]);
@@ -250,7 +251,7 @@ const DeliveryOutcomes = () => {
             'Delivery Date': d.deliveryDate,
             'Delivery Time': formatTime12Hour(d.deliveryTime) || '',
             'Delivery Type': formatDeliveryType(d.deliveryType),
-            'Risk Level': d.riskLevel,
+            'Health Conditions': d.riskLevel ? (d.riskLevel.includes('High') || (d.complications && d.complications !== 'None') ? 'With Health Conditions' : 'None Reported') : 'None Reported',
             'Complications': d.complications || 'None',
             'Baby Name': d.babyName || '',
             'Baby Outcome': d.babyOutcome,
@@ -288,7 +289,7 @@ const DeliveryOutcomes = () => {
                     { wch: 15 }, // Delivery Date
                     { wch: 15 }, // Delivery Time
                     { wch: 15 }, // Delivery Type
-                    { wch: 15 }, // Risk Level
+                    { wch: 20 }, // Health Conditions
                     { wch: 20 }, // Complications
                     { wch: 20 }, // Baby Name
                     { wch: 15 }, // Baby Outcome
@@ -384,7 +385,7 @@ const DeliveryOutcomes = () => {
                 if (cardFilter === 'complications') {
                     matchCard = d.complications && d.complications !== 'None';
                 } else if (cardFilter === 'highrisk') {
-                    matchCard = d.riskLevel === 'High Risk' || d.riskLevel === 'High';
+                    matchCard = (d.riskLevel && d.riskLevel.includes('High')) || (d.complications && d.complications !== 'None');
                 }
                 // 'total' and 'type' show all records (type just focuses attention, no exclusion)
 
@@ -939,9 +940,15 @@ const DeliveryOutcomes = () => {
                                             <td>{d.staff}</td>
                                             <td>
                                                 <div className="row-actions">
-                                                    <button className="action-btn view-btn" title="View" onClick={() => navigate(`/dashboard/patients/${d.patientId}`)}><Eye size={13} /></button>
-                                                    <button className="action-btn new-pregnancy-btn" title="New Pregnancy" onClick={() => handleNewPregnancy(d.patientId)}><RefreshCw size={13} /></button>
-                                                    <button className="action-btn edit-btn" title="Edit" onClick={() => { setSelectedDelivery(d); setShowModal(true); }}><Edit2 size={13} /></button>
+                                                    <ActionTooltip text="View Profile">
+                                                        <button className="action-btn view-btn" onClick={() => navigate(`/dashboard/patients/${d.patientId}`)}><Eye size={13} /></button>
+                                                    </ActionTooltip>
+                                                    <ActionTooltip text="New Pregnancy">
+                                                        <button className="action-btn new-pregnancy-btn" onClick={() => handleNewPregnancy(d.patientId)}><RefreshCw size={13} /></button>
+                                                    </ActionTooltip>
+                                                    <ActionTooltip text="Edit Record">
+                                                        <button className="action-btn edit-btn" onClick={() => { setSelectedDelivery(d); setShowModal(true); }}><Edit2 size={13} /></button>
+                                                    </ActionTooltip>
                                                 </div>
                                             </td>
                                         </tr>
@@ -1641,7 +1648,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
                             </div>
                             <div className="form-group"><label>Patient ID</label><input value={form.patientId} readOnly className="readonly-field" /></div>
                             <div className="form-group"><label>Station</label><input value={form.station} readOnly className="readonly-field" /></div>
-                            <div className="form-group"><label>Risk Level</label><input value={form.riskLevel} readOnly className="readonly-field" /></div>
+                            <div className="form-group"><label>Health Conditions</label><input value={form.riskLevel?.includes('High') ? 'With Health Conditions' : 'None Reported'} readOnly className="readonly-field" /></div>
                             <div className="form-group"><label>Pregnancy Type</label><input value={form.pregnancyType} readOnly className="readonly-field" /></div>
                             <div className="form-group"><label>Gestational Age</label><input value={form.gestationalAge} onChange={e => updateForm('gestationalAge', e.target.value)} /></div>
                         </div>
@@ -1882,8 +1889,8 @@ const ViewDeliveryModal = ({ show, onClose, delivery }) => {
                                     <span>{delivery.station}</span>
                                 </div>
                                 <div className="view-field">
-                                    <label>Risk Level:</label>
-                                    <span>{delivery.riskLevel}</span>
+                                    <label>Health Conditions:</label>
+                                    <span>{delivery.riskLevel?.includes('High') || (delivery.complications && delivery.complications !== 'None') ? 'With Health Conditions' : 'None Reported'}</span>
                                 </div>
                             </div>
                         </div>

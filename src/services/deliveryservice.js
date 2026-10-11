@@ -71,7 +71,7 @@ export default class DeliveryService {
                 { label: 'Total Deliveries', value: total, color: 'lilac' },
                 { label: 'Normal vs CS', value: `${nsd} / ${cs}`, color: 'sage' },
                 { label: 'Complications', value: complications, color: 'orange' },
-                { label: 'High-Risk Deliveries', value: highRiskCount, color: 'rose' },
+                { label: 'Deliveries with Health Conditions', value: highRiskCount, color: 'rose' },
             ];
         } catch (err) {
             console.error('Error in getDeliveryStats:', err);
@@ -79,7 +79,7 @@ export default class DeliveryService {
                 { label: 'Total Deliveries', value: 0, color: 'lilac' },
                 { label: 'Normal vs CS', value: '0 / 0', color: 'sage' },
                 { label: 'Complications', value: 0, color: 'orange' },
-                { label: 'High-Risk Deliveries', value: 0, color: 'rose' },
+                { label: 'Deliveries with Health Conditions', value: 0, color: 'rose' },
             ];
         }
     }

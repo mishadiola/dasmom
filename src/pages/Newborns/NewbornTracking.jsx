@@ -17,6 +17,7 @@ import '../../styles/pages/NewbornTracking.css';
 import Legend from '../../components/Legend/Legend';
 import { MapPin, Activity } from 'lucide-react';
 import { formatNewbornId } from '../../utils/displayIds';
+import ActionTooltip from '../../components/Common/ActionTooltip';
 
 /* ════════════════════════════
    CALENDAR HELPERS
@@ -960,12 +961,16 @@ const NewbornTracking = () => {
                                         </td>
                                         <td>
                                             <div className="row-actions registry-actions">
-                                                <button className="action-btn-text action-btn-secondary" title="View Profile" onClick={() => navigate(`/dashboard/patients/${b.motherId}`)}>
-                                                    <Eye size={13} /> View Profile
-                                                </button>
-                                                <button className="action-btn-text action-btn-primary" title="View Vaccination History" onClick={() => setSelectedBaby(b)}>
-                                                    <Syringe size={13} /> View History
-                                                </button>
+                                                <ActionTooltip text="View Profile">
+                                                    <button className="action-btn-text action-btn-secondary" onClick={() => navigate(`/dashboard/patients/${b.motherId}`)}>
+                                                        <Eye size={13} /> View Profile
+                                                    </button>
+                                                </ActionTooltip>
+                                                <ActionTooltip text="View Vaccination History">
+                                                    <button className="action-btn-text action-btn-primary" onClick={() => setSelectedBaby(b)}>
+                                                        <Syringe size={13} /> View History
+                                                    </button>
+                                                </ActionTooltip>
                                             </div>
                                         </td>
                                     </tr>

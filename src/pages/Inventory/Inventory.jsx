@@ -42,6 +42,7 @@ import { isBatchExpired, getInventoryStatus } from '../../utils/inventoryUtils';
 import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/Inventory.css';
 import { formatDate } from '../../utils/formatters';
+import ActionTooltip from '../../components/Common/ActionTooltip';
 
 
 const inventoryService = new InventoryService();
@@ -1784,56 +1785,59 @@ const Inventory = () => {
                       </td>
                       {isAdmin && <td style={{ textAlign: 'right' }}>
                         <div className="action-btns">
-                          <button
-                            className="action-btn edit-btn"
-                            title="Update Stock"
-                            onClick={() => {
-                              setForm({
-                                ...form,
-                                quantity: item.total_quantity,
-                                max_stock: item.total_max_stock,
-                              });
-                              setShowUpdateModal({
-                                table:
-                                  activeTab === 'vaccines'
-                                    ? 'vaccine_inventory'
-                                    : 'supplement_inventory',
-                                item: item.items[0], // Use first item for editing
-                              });
-                            }}
-                          >
-                            <Edit2 size={13} />
-                          </button>
+                          <ActionTooltip text="Update Stock">
+                            <button
+                              className="action-btn edit-btn"
+                              onClick={() => {
+                                setForm({
+                                  ...form,
+                                  quantity: item.total_quantity,
+                                  max_stock: item.total_max_stock,
+                                });
+                                setShowUpdateModal({
+                                  table:
+                                    activeTab === 'vaccines'
+                                      ? 'vaccine_inventory'
+                                      : 'supplement_inventory',
+                                  item: item.items[0], // Use first item for editing
+                                });
+                              }}
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                          </ActionTooltip>
                           {item.items.some(i => i.status === 'archived') ? (
-                            <button
-                              className="action-btn restore-btn"
-                              title="Restore All Items"
-                              onClick={() => {
-                                // Restore all archived items in this group
-                                const archivedItems = item.items.filter(i => i.status === 'archived');
-                                handleRestore(
-                                  activeTab === 'vaccines' ? 'vaccine_inventory' : 'supplement_inventory',
-                                  archivedItems.map(i => i.id)
-                                );
-                              }}
-                            >
-                              <ArchiveRestore size={13} />
-                            </button>
+                            <ActionTooltip text="Restore All Items">
+                              <button
+                                className="action-btn restore-btn"
+                                onClick={() => {
+                                  // Restore all archived items in this group
+                                  const archivedItems = item.items.filter(i => i.status === 'archived');
+                                  handleRestore(
+                                    activeTab === 'vaccines' ? 'vaccine_inventory' : 'supplement_inventory',
+                                    archivedItems.map(i => i.id)
+                                  );
+                                }}
+                              >
+                                <ArchiveRestore size={13} />
+                              </button>
+                            </ActionTooltip>
                           ) : (
-                            <button
-                              className="action-btn archive-btn"
-                              title="Archive All Items"
-                              onClick={() => {
-                                // Archive all active items in this group
-                                const activeItems = item.items.filter(i => (i.status || 'active') !== 'archived');
-                                handleArchive(
-                                  activeTab === 'vaccines' ? 'vaccine_inventory' : 'supplement_inventory',
-                                  activeItems.map(i => i.id)
-                                );
-                              }}
-                            >
-                              <Archive size={13} />
-                            </button>
+                            <ActionTooltip text="Archive All Items">
+                              <button
+                                className="action-btn archive-btn"
+                                onClick={() => {
+                                  // Archive all active items in this group
+                                  const activeItems = item.items.filter(i => (i.status || 'active') !== 'archived');
+                                  handleArchive(
+                                    activeTab === 'vaccines' ? 'vaccine_inventory' : 'supplement_inventory',
+                                    activeItems.map(i => i.id)
+                                  );
+                                }}
+                              >
+                                <Archive size={13} />
+                              </button>
+                            </ActionTooltip>
                           )}
                         </div>
                       </td>}

@@ -26,7 +26,7 @@ const NAV_ITEMS = [
         section: 'Maternal Care',
         items: [
             { label: 'Patient Profiles', icon: Users, path: '/dashboard/patients' },
-            { label: 'Health Conditions', icon: AlertTriangle, path: '/dashboard/high-risk' },
+            { label: 'Health Conditions', icon: HeartPulse, path: '/dashboard/high-risk' },
             { label: 'Visits & Scheduling', icon: CalendarCheck, path: '/dashboard/prenatal' },
             { label: 'Delivery Outcomes', icon: Stethoscope, path: '/dashboard/deliveries' },
             { label: 'Postpartum Records', icon: FileText, path: '/dashboard/postpartum' },
@@ -220,8 +220,8 @@ const DashboardLayout = () => {
                         });
                 }
 
-                // Fetch high-risk patients from prenatal_visits (calculated_risk is in prenatal_visits, not pregnancy_info)
-                const { data: highRiskPatients } = await supabase
+                // Fetch patients with documented health conditions from prenatal_visits
+                const { data: conditionPatients } = await supabase
                     .from('prenatal_visits')
                     .select(`
                         id,
@@ -233,12 +233,12 @@ const DashboardLayout = () => {
                     .not('calculated_risk', 'is', null)
                     .limit(3);
 
-                if (highRiskPatients && highRiskPatients.length > 0) {
-                    highRiskPatients.forEach(patient => {
+                if (conditionPatients && conditionPatients.length > 0) {
+                    conditionPatients.forEach(patient => {
                         notifList.push({
                             category: 'patients',
                             type: 'alert',
-                            text: `${patient.patient_basic_info.first_name} ${patient.patient_basic_info.last_name} - ${patient.calculated_risk}`,
+                            text: `${patient.patient_basic_info.first_name} ${patient.patient_basic_info.last_name} - Health Condition Documented`,
                             time: patient.patient_basic_info.stations?.station_name || 'Station not assigned',
                             targetPath: '/dashboard/patients',
                             targetState: { highlightPatientId: patient.patient_id }

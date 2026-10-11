@@ -1862,3 +1862,177 @@ padding-right: 16px;
 .pv-clickable-row:hover {
     background: #f8f9fb;
 }
+
+/* ══════════════════════════════════════════
+   MANAGE VISITS SELECTION MODAL & RESCHEDULE
+══════════════════════════════════════════ */
+.modal-content.mv-selection-modal {
+    width: 100%;
+    max-width: 540px;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: calc(100dvh - 32px) !important;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+    margin: auto;
+    border-radius: 24px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+}
+
+.mv-modal-header {
+    padding: 24px 28px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px solid #f0f2f5;
+    background: #ffffff;
+    flex-shrink: 0;
+}
+
+.mv-modal-title {
+    font-size: 20px;
+    font-weight: 800;
+    margin: 0;
+    color: var(--color-text, #1e1812);
+}
+
+.mv-modal-desc {
+    font-size: 13.5px;
+    color: var(--color-text-muted, #736d71);
+    margin: 4px 0 0;
+    line-height: 1.4;
+}
+
+.mv-modal-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-muted, #736d71);
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.mv-modal-close:hover {
+    background: rgba(185, 129, 138, 0.1);
+    color: var(--color-text, #1e1812);
+}
+
+.mv-selection-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    padding: 20px 24px 24px;
+    background: #ffffff;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 580px) {
+    .modal-content.mv-selection-modal {
+        max-width: calc(100% - 24px);
+        margin: auto;
+    }
+
+    .mv-modal-header {
+        padding: 20px 20px 14px;
+    }
+
+    .mv-selection-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        padding: 16px 20px 20px;
+    }
+}
+
+.mv-option-card {
+    background: #fdfbfe;
+    border: 1.5px solid rgba(185, 129, 138, 0.18);
+    border-radius: 18px;
+    padding: 22px 20px;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    cursor: pointer;
+    transition: all 0.22s ease;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+.mv-option-card:hover {
+    border-color: var(--color-rose);
+    background: #ffffff;
+    box-shadow: 0 8px 24px rgba(185, 129, 138, 0.16);
+    transform: translateY(-2px);
+}
+
+.mv-option-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+}
+
+.mv-option-icon--schedule {
+    background: rgba(185, 129, 138, 0.12);
+    color: var(--color-rose-dark, #8c5364);
+}
+
+.mv-option-icon--reschedule {
+    background: rgba(122, 79, 168, 0.12);
+    color: #7a4fa8;
+}
+
+.mv-option-card:hover .mv-option-icon {
+    transform: scale(1.08);
+}
+
+.mv-option-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-text, #1e1812);
+    margin: 0;
+}
+
+.mv-option-desc {
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--color-text-muted, #736d71);
+    margin: 0;
+}
+
+.mv-summary-box {
+    background: #fbf9fb;
+    border: 1px solid rgba(185, 129, 138, 0.18);
+    border-radius: 14px;
+    padding: 14px 18px;
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mv-summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12.5px;
+    color: var(--color-text-muted);
+}
+
+.mv-summary-val {
+    font-weight: 700;
+    color: var(--color-text);
+}
+

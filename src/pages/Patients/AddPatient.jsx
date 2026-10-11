@@ -234,7 +234,7 @@ const AddPatient = () => {
         pregnancyStatus: 'Pregnant', gravida: '', para: '',
         lmp: '', edd: '', gestationalAge: '', pregnancyType: 'Not Yet Determined',
         plannedDeliveryPlace: 'Hospital',
-        conditions: [], otherConditions: '', riskLevel: 'Low Risk',
+        conditions: [], otherConditions: '', riskLevel: 'None Reported',
         retained_staff: '',
         attending_staff: '',
         scheduleTemplate: 'Standard Prenatal Schedule',
@@ -415,49 +415,22 @@ const AddPatient = () => {
     }, [formData.lmp]);
 
     useEffect(() => {
-        let risk = 'Low Risk';
-        
-        // Check for multiple pregnancy (high-risk indicator)
+        // Documented health conditions check
         const isMultipleBirth = formData.pregnancyType === 'Twins' || formData.pregnancyType === 'Multiple';
-        
-        // Check selected conditions
-        const highRiskKeywords = [
-            'chronic hypertension', 'pre-existing diabetes', 'heart disease',
-            'gestational hypertension', 'gestational diabetes', 'preeclampsia',
-            'previous stillbirth', 'previous preterm birth', 'previous c-section'
-        ];
-        const medRiskKeywords = ['asthma', 'anemia during pregnancy', 'previous miscarriage'];
+        const cleanConditions = (formData.conditions || []).filter(c => {
+            if (!c) return false;
+            const lower = c.trim().toLowerCase();
+            return lower !== 'none' && lower !== 'none reported' && lower !== 'normal';
+        });
+        const hasOtherCondition = Boolean(formData.otherConditions && formData.otherConditions.trim() !== '');
+        const hasDocumented = isMultipleBirth || cleanConditions.length > 0 || hasOtherCondition;
 
-        const hasHighRisk = (formData.conditions || []).some(c => 
-            highRiskKeywords.some(kw => c.toLowerCase().includes(kw))
-        );
-        const hasMedRisk = (formData.conditions || []).some(c => 
-            medRiskKeywords.some(kw => c.toLowerCase().includes(kw))
-        );
-        const validConditionsCount = (formData.conditions || []).filter(c => c !== 'None' && c !== 'None Reported').length;
-        
-        // Check Other Conditions
-        const hasOtherCondition = formData.otherConditions && formData.otherConditions.trim() !== '';
-
-        // Check BMI
-        const bmiCategory = patientService.calculateBMICategory(formData.weight, formData.height);
-        const isBMIHighRisk = bmiCategory && patientService.isBMIHighRisk(bmiCategory);
-
-        // Determine overall risk
-        if (isMultipleBirth || hasHighRisk || validConditionsCount >= 2 || isBMIHighRisk) {
-            risk = 'High Risk';
-        } else if (hasMedRisk || hasOtherCondition) {
-            risk = 'Medium Risk';
-        }
-
-        // Age-based risk: <18 or >35 is high risk
-        const age = parseInt(formData.age);
-        if (!isNaN(age) && (age < 18 || age > 35)) {
-            risk = 'High Risk';
-        }
-
-        setFormData(prev => ({ ...prev, riskLevel: risk }));
-    }, [formData.conditions, formData.otherConditions, formData.pregnancyType, formData.age, formData.weight, formData.height]);
+        setFormData(prev => ({ 
+            ...prev, 
+            hasHealthConditions: hasDocumented,
+            riskLevel: hasDocumented ? 'With Health Conditions' : 'None Reported' 
+        }));
+    }, [formData.conditions, formData.otherConditions, formData.pregnancyType]);
 
     useEffect(() => {
         // Calculate BMI when weight and height change
@@ -468,38 +441,9 @@ const AddPatient = () => {
                 const heightM = heightCm / 100;
                 const bmi = (weightKg / (heightM * heightM)).toFixed(1);
                 setFormData(prev => ({ ...prev, bmi: bmi.toString() }));
-                
-                // Check if BMI indicates high-risk (underweight < 18.5 or overweight >= 25)
-                const bmiValue = parseFloat(bmi);
-                const isBMIHighRisk = bmiValue < 18.5 || bmiValue >= 25;
-                
-                // Update risk level if BMI is high-risk
-                if (isBMIHighRisk) {
-                    setFormData(prev => ({ ...prev, riskLevel: 'High Risk' }));
-                }
             }
         }
     }, [formData.weight, formData.height]);
-
-    useEffect(() => {
-        // Check BP for high-risk indicators
-        if (formData.bp) {
-            const bpMatch = formData.bp.match(/^(\d+)[/\\s](\d+)$/);
-            if (bpMatch) {
-                const systolic = parseInt(bpMatch[1]);
-                const diastolic = parseInt(bpMatch[2]);
-                
-                // High-risk BP ranges for pregnancy:
-                // Hypertension: >= 140/90
-                // Hypotension: < 90/60
-                const isHighRisk = (systolic >= 140 || diastolic >= 90) || (systolic < 90 || diastolic < 60);
-                
-                if (isHighRisk) {
-                    setFormData(prev => ({ ...prev, riskLevel: 'High Risk' }));
-                }
-            }
-        }
-    }, [formData.bp]);
 
     // Sync schedule template recommendation when risk level changes
     useEffect(() => {
@@ -2050,22 +1994,22 @@ const AddPatient = () => {
                                     )}
                                 </div>
                                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                                    <div className={`prenatal-risk-info-card risk-info--${formData.riskLevel === 'High Risk' ? 'high' : 'low'}`}>
-                                        {formData.riskLevel === 'High Risk' ? (
+                                    <div className={`prenatal-risk-info-card risk-info--${formData.hasHealthConditions ? 'high' : 'low'}`}>
+                                        {formData.hasHealthConditions ? (
                                             <>
                                                 <div className="card-header">
-                                                    <AlertTriangle size={18} className="icon-high" />
-                                                    <h3>Referral Recommended</h3>
+                                                    <HeartPulse size={18} className="icon-high" />
+                                                    <h3>Documented Health Conditions</h3>
                                                 </div>
                                                 <div className="card-body">
                                                     <p className="risk-status-text">
-                                                        This patient has been classified as <strong>High Risk</strong> based on the medical assessment.
+                                                        This patient has <strong>documented health conditions</strong> that require ongoing clinical monitoring.
                                                     </p>
                                                     <p className="risk-instruction-text">
-                                                        High-risk pregnancies require additional monitoring beyond the standard prenatal schedule provided by this system.
+                                                        Patients with documented health conditions may require specialized maternal monitoring alongside the standard prenatal schedule.
                                                     </p>
                                                     <p className="risk-action-text">
-                                                        Refer the patient to the appropriate physician or healthcare facility for additional prenatal checkups and specialized maternal care when necessary.
+                                                        Coordinate with the attending healthcare provider for specialized care or referrals when appropriate.
                                                     </p>
                                                 </div>
                                             </>
@@ -2077,7 +2021,7 @@ const AddPatient = () => {
                                                 </div>
                                                 <div className="card-body">
                                                     <p className="risk-status-text">
-                                                        This patient is classified as <strong>{formData.riskLevel === 'Medium Risk' ? 'Medium Risk' : 'Low Risk'}</strong> based on the medical assessment.
+                                                        No chronic or pregnancy-related health conditions are currently documented.
                                                     </p>
                                                     <p className="risk-instruction-text">
                                                         The standard prenatal visit schedule will be automatically generated based on the patient's LMP.

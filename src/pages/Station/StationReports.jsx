@@ -4,13 +4,14 @@ import {
     Search, Filter, Plus, X, MapPin, Users, AlertTriangle,
     Baby, Syringe, Pill, TrendingUp, TrendingDown, Download,
     Eye, ChevronDown, ChevronUp, CheckCircle2, AlertCircle,
-    FileText, Activity, Heart, BarChart3, Clock, Building2, Stethoscope
+    FileText, Activity, Heart, HeartPulse, BarChart3, Clock, Building2, Stethoscope
 } from 'lucide-react';
 import '../../styles/pages/StationReports.css';
 import PatientService from '../../services/patientservice';
 import Legend from '../../components/Legend/Legend';
 import supabase from '../../config/supabaseclient';
 import ExportModal from '../../components/ExportModal';
+import ActionTooltip from '../../components/Common/ActionTooltip';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -21,7 +22,6 @@ import 'jspdf-autotable';
 const StationReports = () => {
     const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
-    const [filters, setFilters] = useState({ risk: 'All', vacc: 'All' });
     const [selectedStation, setSelectedStation] = useState(null);
     const [expandedRow, setExpandedRow] = useState(null);
     const [showCharts, setShowCharts] = useState(true);
@@ -30,7 +30,7 @@ const StationReports = () => {
     const [loading, setLoading] = useState(true);
     const [summaryStats, setSummaryStats] = useState([
         { label: 'Total Pregnant Patients', value: 0, color: 'sage', icon: Users, path: '/dashboard/patients', filter: null },
-        { label: 'High-Risk Pregnancies', value: 0, color: 'rose', icon: AlertTriangle, path: '/dashboard/high-risk', filter: null },
+        { label: 'Pregnancies with Health Conditions', value: 0, color: 'rose', icon: HeartPulse, path: '/dashboard/high-risk', filter: null },
         { label: 'Total Deliveries (Month)', value: 0, color: 'orange', icon: Heart, path: '/dashboard/deliveries', filter: null },
         { label: 'Vaccination Coverage', value: '0%', color: 'lilac', icon: Syringe, path: '/dashboard/inventory', filter: 'vaccines' },
         { label: 'Supplements Distributed', value: 0, color: 'pink', icon: Pill, path: '/dashboard/inventory', filter: 'supplements' },
@@ -86,7 +86,7 @@ const StationReports = () => {
 
             // Calculate summary stats from station data
             const totalPregnant = data.reduce((sum, s) => sum + s.totalPatients, 0);
-            const totalHighRisk = data.reduce((sum, s) => sum + s.highRisk, 0);
+            const totalWithHealthConditions = data.reduce((sum, s) => sum + (s.withHealthConditions || 0), 0);
             const totalDeliveries = data.reduce((sum, s) => sum + s.recentDeliveries, 0);
             const avgVaccCoverage = data.length > 0
                 ? Math.round(data.reduce((sum, s) => sum + s.vaccCoverage, 0) / data.length)
@@ -95,7 +95,7 @@ const StationReports = () => {
 
             setSummaryStats([
                 { label: 'Total Pregnant Patients', value: totalPregnant, color: 'sage', icon: Users, path: '/dashboard/patients', filter: null },
-                { label: 'High-Risk Pregnancies', value: totalHighRisk, color: 'rose', icon: AlertTriangle, path: '/dashboard/high-risk', filter: null },
+                { label: 'Pregnancies with Health Conditions', value: totalWithHealthConditions, color: 'rose', icon: HeartPulse, path: '/dashboard/high-risk', filter: null },
                 { label: 'Total Deliveries (Month)', value: totalDeliveries, color: 'orange', icon: Heart, path: '/dashboard/deliveries', filter: null },
                 { label: 'Vaccination Coverage', value: `${avgVaccCoverage}%`, color: 'lilac', icon: Syringe, path: '/dashboard/inventory', filter: 'vaccines' },
                 { label: 'Supplements Distributed', value: totalSupplements, color: 'pink', icon: Pill, path: '/dashboard/inventory', filter: 'supplements' },
@@ -108,31 +108,11 @@ const StationReports = () => {
         }
     };
 
-    const handleFilter = (k, v) => setFilters(prev => ({ ...prev, [k]: v }));
-
-    const filtered = stations.filter(b => {
-        const s = searchTerm.toLowerCase();
-        const matchSearch = b.name.toLowerCase().includes(s);
-        const matchRisk = filters.risk === 'All' || b.riskStatus === filters.risk;
-        const matchVacc = filters.vacc === 'All' ||
-            (filters.vacc === 'High' && b.vaccCoverage >= 90) ||
-            (filters.vacc === 'Low' && b.vaccCoverage < 90);
-        return matchSearch && matchRisk && matchVacc;
-    });
+    const filtered = searchTerm
+        ? stations.filter(b => b.name.toLowerCase().includes(searchTerm.toLowerCase()))
+        : stations;
 
     const getCoverageClass = (v) => v >= 90 ? 'green' : v >= 80 ? 'amber' : 'red';
-
-    const getStatusLabel = (r) => {
-        if (r === 'Critical') return 'Critical';
-        if (r === 'Monitor') return 'Needs Attention';
-        return 'Healthy';
-    };
-
-    const getStatusClass = (r) => {
-        if (r === 'Critical') return 'st-status--critical';
-        if (r === 'Monitor') return 'st-status--attention';
-        return 'st-status--healthy';
-    };
 
     const [showExportModal, setShowExportModal] = useState(false);
 
@@ -141,7 +121,7 @@ const StationReports = () => {
         const exportData = stations.map(s => ({
             'Station': s.name,
             'Total Patients': s.totalPatients,
-            'High-Risk': s.highRisk,
+            'With Health Conditions': s.withHealthConditions,
             'Deliveries (Month)': s.recentDeliveries,
             'Newborns': s.newborns,
             'Vaccination Coverage (%)': s.vaccCoverage,
@@ -203,7 +183,7 @@ const StationReports = () => {
     // Calculate derived summary values
     const totalStations = stations.length;
     const totalPatients = stations.reduce((sum, s) => sum + s.totalPatients, 0);
-    const totalHighRisk = stations.reduce((sum, s) => sum + s.highRisk, 0);
+    const totalWithConditions = stations.reduce((sum, s) => sum + (s.withHealthConditions || 0), 0);
     const totalDeliveries = stations.reduce((sum, s) => sum + s.recentDeliveries, 0);
     const totalNewborns = stations.reduce((sum, s) => sum + s.newborns, 0);
 
@@ -250,11 +230,11 @@ const StationReports = () => {
                     </div>
                     <div className="st-summary-item" onClick={() => navigate('/dashboard/high-risk')} role="button" tabIndex={0}>
                         <div className="st-summary-icon st-summary-icon--rose">
-                            <AlertTriangle size={20} />
+                            <HeartPulse size={20} />
                         </div>
                         <div className="st-summary-text">
-                            <span className="st-summary-value">{totalHighRisk}</span>
-                            <span className="st-summary-label">High-Risk Cases</span>
+                            <span className="st-summary-value">{totalWithConditions}</span>
+                            <span className="st-summary-label">Pregnancies with Health Conditions</span>
                         </div>
                     </div>
                     <div className="st-summary-item" onClick={() => navigate('/dashboard/deliveries')} role="button" tabIndex={0}>
@@ -278,46 +258,6 @@ const StationReports = () => {
                 </div>
             )}
 
-            {/* ── Charts Section ── */}
-            {showCharts && <ChartsSection stations={stations} />}
-
-            <PregnancyAgeReport rows={pregnancyAgeRows} />
-
-            {/* ── Filter Bar ── */}
-            <div className="st-filter-bar">
-                <div className="st-filter-group">
-                    <label>Risk Level</label>
-                    <select value={filters.risk} onChange={e => handleFilter('risk', e.target.value)}>
-                        <option value="All">All Risk Levels</option>
-                        <option value="Normal">Normal</option>
-                        <option value="Monitor">Monitor</option>
-                        <option value="Critical">Critical</option>
-                    </select>
-                </div>
-                <div className="st-filter-group">
-                    <label>Coverage Level</label>
-                    <select value={filters.vacc} onChange={e => handleFilter('vacc', e.target.value)}>
-                        <option value="All">All Coverage Levels</option>
-                        <option value="High">High Coverage (≥90%)</option>
-                        <option value="Low">Low Coverage (&lt;90%)</option>
-                    </select>
-                </div>
-                <div className="st-filter-legend">
-                    <div className="st-legend-item">
-                        <span className="st-legend-dot st-legend-dot--green"></span>
-                        <span className="st-legend-value">≥90%</span> Target Met
-                    </div>
-                    <div className="st-legend-item">
-                        <span className="st-legend-dot st-legend-dot--amber"></span>
-                        <span className="st-legend-value">80–89%</span> Low
-                    </div>
-                    <div className="st-legend-item">
-                        <span className="st-legend-dot st-legend-dot--red"></span>
-                        <span className="st-legend-value">&lt;80%</span> Critical
-                    </div>
-                </div>
-            </div>
-
             {/* ── Station Overview Table ── */}
             {loading ? (
                 <div className="st-loading-card">
@@ -337,11 +277,11 @@ const StationReports = () => {
                             <Legend
                                 categories={[
                                     {
-                                        title: "Status",
+                                        title: "Coverage Level",
                                         items: [
-                                            { label: "Healthy", className: "chip-normal" },
-                                            { label: "Needs Attention", className: "chip-monitor" },
-                                            { label: "Critical", className: "chip-critical" }
+                                            { label: "≥90% Target Met", style: { background: "rgba(123, 174, 94, 0.15)", color: "#4a7a30", fontWeight: 700 } },
+                                            { label: "80–89% Low", style: { background: "rgba(212, 160, 60, 0.15)", color: "#8a6a20", fontWeight: 700 } },
+                                            { label: "<80% Critical", style: { background: "rgba(199, 88, 106, 0.15)", color: "#943848", fontWeight: 700 } }
                                         ]
                                     }
                                 ]}
@@ -356,13 +296,12 @@ const StationReports = () => {
                                 <tr>
                                     <th>Station</th>
                                     <th>Total Patients</th>
-                                    <th>High-Risk</th>
+                                    <th>With Health Conditions</th>
                                     <th>Deliveries</th>
                                     <th>Vaccination Coverage</th>
                                     <th>Newborns</th>
                                     <th>Supplement Coverage</th>
                                     <th>Trimester Mix</th>
-                                    <th>Status</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -383,7 +322,7 @@ const StationReports = () => {
                                                     </div>
                                                 </td>
                                                 <td><span className="st-num">{b.totalPatients.toLocaleString()}</span></td>
-                                                <td><span className="st-num st-num--risk">{b.highRisk}</span></td>
+                                                <td><span className="st-num">{b.withHealthConditions}</span></td>
                                                 <td><span className="st-num">{b.recentDeliveries}</span></td>
                                                 <td>
                                                     <div className="st-coverage-cell">
@@ -406,25 +345,21 @@ const StationReports = () => {
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <span className={`st-status-pill ${getStatusClass(b.riskStatus)}`}>
-                                                        {getStatusLabel(b.riskStatus)}
-                                                    </span>
-                                                </td>
-                                                <td>
-                                                    <button
-                                                        className="st-action-btn"
-                                                        title="View Detail"
-                                                        onClick={() => setSelectedStation(b)}
-                                                    >
-                                                        <Eye size={15} />
-                                                    </button>
+                                                    <ActionTooltip text="View Details">
+                                                        <button
+                                                            className="st-action-btn"
+                                                            onClick={() => setSelectedStation(b)}
+                                                        >
+                                                            <Eye size={15} />
+                                                        </button>
+                                                    </ActionTooltip>
                                                 </td>
                                             </tr>
 
                                             {/* Expanded inline view */}
                                             {expandedRow === b.id && (
                                                 <tr className="st-expanded-row">
-                                                    <td colSpan="10">
+                                                    <td colSpan="9">
                                                         <div className="expand-detail">
                                                             <div className="expand-col">
                                                                 <h4>📅 Trimesters</h4>
@@ -461,9 +396,9 @@ const StationReports = () => {
 
                                 {filtered.length === 0 && (
                                     <tr>
-                                        <td colSpan="10" className="st-empty">
+                                        <td colSpan="9" className="st-empty">
                                             <MapPin size={30} />
-                                            <p>No stations match your filters.</p>
+                                            <p>No stations found.</p>
                                         </td>
                                     </tr>
                                 )}
@@ -472,6 +407,11 @@ const StationReports = () => {
                     </div>
                 </div>
             )}
+
+            {/* ── Charts Section ── */}
+            {showCharts && <ChartsSection stations={stations} />}
+
+            <PregnancyAgeReport rows={pregnancyAgeRows} />
 
             {/* ── Footer Timestamp ── */}
             <div className="st-footer-timestamp">
@@ -544,35 +484,47 @@ const PregnancyAgeReport = ({ rows }) => {
             <div className="st-age-filters">
                 <div className="st-filter-group">
                     <label>Period</label>
-                    <select value={filters.period} onChange={event => updateFilter('period', event.target.value)}>
-                        <option value="All">All Time</option>
-                        <option value="Month">This Month</option>
-                        <option value="Week">This Week</option>
-                        <option value="Year">This Year</option>
-                    </select>
+                    <div className="st-select-wrapper">
+                        <select value={filters.period} onChange={event => updateFilter('period', event.target.value)}>
+                            <option value="All">All Time</option>
+                            <option value="Month">This Month</option>
+                            <option value="Week">This Week</option>
+                            <option value="Year">This Year</option>
+                        </select>
+                        <ChevronDown size={14} className="st-select-arrow" />
+                    </div>
                 </div>
                 <div className="st-filter-group">
                     <label>Station</label>
-                    <select value={filters.station} onChange={event => updateFilter('station', event.target.value)}>
-                        <option value="All">All Stations</option>
-                        {stationOptions.map(station => <option key={station} value={station}>{station}</option>)}
-                    </select>
+                    <div className="st-select-wrapper">
+                        <select value={filters.station} onChange={event => updateFilter('station', event.target.value)}>
+                            <option value="All">All Stations</option>
+                            {stationOptions.map(station => <option key={station} value={station}>{station}</option>)}
+                        </select>
+                        <ChevronDown size={14} className="st-select-arrow" />
+                    </div>
                 </div>
                 <div className="st-filter-group">
                     <label>Outcome</label>
-                    <select value={filters.outcome} onChange={event => updateFilter('outcome', event.target.value)}>
-                        <option value="All">All Outcomes</option>
-                        <option value="Successful">Successful</option>
-                        <option value="Unsuccessful">Unsuccessful</option>
-                        <option value="Pending">Pending</option>
-                    </select>
+                    <div className="st-select-wrapper">
+                        <select value={filters.outcome} onChange={event => updateFilter('outcome', event.target.value)}>
+                            <option value="All">All Outcomes</option>
+                            <option value="Successful">Successful</option>
+                            <option value="Unsuccessful">Unsuccessful</option>
+                            <option value="Pending">Pending</option>
+                        </select>
+                        <ChevronDown size={14} className="st-select-arrow" />
+                    </div>
                 </div>
                 <div className="st-filter-group">
                     <label>Delivery Type</label>
-                    <select value={filters.deliveryType} onChange={event => updateFilter('deliveryType', event.target.value)}>
-                        <option value="All">All Delivery Types</option>
-                        {deliveryTypeOptions.map(type => <option key={type} value={type}>{type}</option>)}
-                    </select>
+                    <div className="st-select-wrapper">
+                        <select value={filters.deliveryType} onChange={event => updateFilter('deliveryType', event.target.value)}>
+                            <option value="All">All Delivery Types</option>
+                            {deliveryTypeOptions.map(type => <option key={type} value={type}>{type}</option>)}
+                        </select>
+                        <ChevronDown size={14} className="st-select-arrow" />
+                    </div>
                 </div>
             </div>
 
@@ -629,8 +581,8 @@ const PregnancyAgeReport = ({ rows }) => {
 const ChartsSection = ({ stations }) => {
     const coverageClass = (v) => v >= 90 ? 'green' : v >= 80 ? 'amber' : 'red';
     const maxPatients = stations.length > 0 ? Math.max(...stations.map(b => b.totalPatients)) : 1;
-    const maxHighRisk = stations.length > 0 ? Math.max(...stations.map(b => b.highRisk)) : 1;
-    const totalHighRisk = stations.reduce((sum, s) => sum + s.highRisk, 0);
+    const totalWithConditions = stations.reduce((sum, s) => sum + (s.withHealthConditions || 0), 0);
+    const maxWithConditions = stations.length > 0 ? Math.max(...stations.map(b => b.withHealthConditions || 0), 1) : 1;
 
     // Sort stations by vaccination coverage descending for coverage charts
     const sortedByVacc = [...stations].sort((a, b) => b.vaccCoverage - a.vaccCoverage);
@@ -668,42 +620,50 @@ const ChartsSection = ({ stations }) => {
                 </div>
             </div>
 
-            {/* Chart 2: High-Risk Cases */}
+            {/* Chart 2: Pregnancies with Health Conditions */}
             <div className="st-chart-card st-chart-card--risk">
-                <div className="st-chart-header">
-                    <div className="st-chart-icon st-chart-icon--risk">
-                        <AlertTriangle size={18} />
+                <div className="st-chart-header st-chart-header--split">
+                    <div className="st-chart-header-left">
+                        <div className="st-chart-icon st-chart-icon--risk">
+                            <HeartPulse size={18} />
+                        </div>
+                        <div className="st-chart-title-group">
+                            <h3 className="st-chart-title">Pregnancies with Health Conditions</h3>
+                            <p className="st-chart-subtitle">Total pregnant patients with documented health conditions across all stations</p>
+                        </div>
                     </div>
-                    <div className="st-chart-title-group">
-                        <h3 className="st-chart-title">HIGH-RISK CASES</h3>
-                        <p className="st-chart-subtitle">Total high-risk cases across all stations</p>
+                    <div className="st-risk-header-summary">
+                        <span className="st-risk-summary-count">{totalWithConditions}</span>
+                        <div className="st-risk-summary-meta">
+                            <span className="st-risk-summary-label">Pregnancies with Health Conditions</span>
+                            <span className="st-risk-summary-sub">Across {stations.length} stations</span>
+                        </div>
                     </div>
                 </div>
                 <div className="st-chart-body">
-                    <div className="st-risk-hero">
-                        <div className="st-risk-number">{totalHighRisk}</div>
-                        <div className="st-risk-label">High-Risk Cases</div>
-                        <div className="st-risk-sub">Across {stations.length} stations</div>
-                    </div>
                     <div className="st-risk-dist-title">Distribution by Station</div>
-                    <div className="st-vbar-chart" style={{ minHeight: '80px' }}>
-                        {stations.map(b => (
-                            <div key={b.id} className="st-vbar-col">
-                                <div className="st-vbar-bar-wrap" style={{ minHeight: '60px' }}>
-                                    <div
-                                        className="st-vbar-bar st-vbar-bar--rose"
-                                        style={{ height: `${maxHighRisk > 0 ? Math.round((b.highRisk / maxHighRisk) * 100) : 0}%` }}
-                                        title={`${b.name}: ${b.highRisk}`}
-                                    />
+                    <div className="st-vbar-chart st-vbar-chart--health">
+                        {stations.map(b => {
+                            const count = b.withHealthConditions || 0;
+                            const heightPercent = maxWithConditions > 0 ? Math.round((count / maxWithConditions) * 100) : 0;
+                            return (
+                                <div key={b.id} className="st-vbar-col">
+                                    <div className="st-vbar-bar-wrap st-vbar-bar-wrap--health">
+                                        <div
+                                            className="st-vbar-bar st-vbar-bar--rose"
+                                            style={{ height: `${heightPercent}%` }}
+                                            title={`${b.name}: ${count}`}
+                                        />
+                                    </div>
+                                    <span className="st-vbar-val">{count}</span>
+                                    <span className="st-vbar-label">{b.name.split('–')[0].trim()}</span>
                                 </div>
-                                <span className="st-vbar-val">{b.highRisk}</span>
-                                <span className="st-vbar-label">{b.name.split('–')[0].trim()}</span>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                     <div className="st-risk-warning">
-                        <AlertCircle size={14} />
-                        <span>High-risk mothers need priority monitoring and follow-up care.</span>
+                        <HeartPulse size={13} />
+                        <span>Pregnant patients with documented health conditions across CHO III stations.</span>
                     </div>
                 </div>
             </div>
@@ -783,7 +743,7 @@ const DetailModal = ({ station, onClose, navigate }) => {
         const exportData = [{
             'Station': station.name,
             'Total Patients': station.totalPatients,
-            'High-Risk': station.highRisk,
+            'With Health Conditions': station.withHealthConditions || 0,
             'Deliveries (Month)': station.recentDeliveries,
             'NSD': station.deliveryTypes?.nsd || 0,
             'CS': station.deliveryTypes?.cs || 0,
@@ -875,7 +835,7 @@ const DetailModal = ({ station, onClose, navigate }) => {
                         <div>
                             <div className="detail-stats-grid">
                                 <div className="detail-stat"><span>Total Patients</span><strong>{station.totalPatients}</strong></div>
-                                <div className="detail-stat detail-stat--rose"><span>High-Risk</span><strong>{station.highRisk}</strong></div>
+                                <div className="detail-stat detail-stat--rose"><span>With Health Conditions</span><strong>{station.withHealthConditions || 0}</strong></div>
                                 <div className="detail-stat detail-stat--blue"><span>1st Trimester</span><strong>{station.trimester.first}</strong></div>
                                 <div className="detail-stat detail-stat--yellow"><span>2nd Trimester</span><strong>{station.trimester.second}</strong></div>
                                 <div className="detail-stat detail-stat--purple"><span>3rd Trimester</span><strong>{station.trimester.third}</strong></div>

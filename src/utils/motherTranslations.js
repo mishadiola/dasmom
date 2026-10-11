@@ -73,7 +73,7 @@ export const translations = {
         dash_support_subtitle: "Need immediate help? We're here for you.",
         dash_support_text: 'Facing an emergency or have urgent questions? Contact City Health Office 3 directly.',
         dash_call_cho: 'Call CHO III',
-        dash_email_cho: 'Email CHO III',
+        dash_fb_cho: 'Visit Facebook Page',
         dash_with: 'With:',
         dash_health_station: 'Health Station',
 
@@ -568,7 +568,7 @@ export const translations = {
         dash_support_subtitle: 'Kailangan ng agarang tulong? Nandito kami para sa iyo.',
         dash_support_text: 'May emergency o kagyat na tanong? Makipag-ugnayan sa City Health Office 3.',
         dash_call_cho: 'Tumawag sa CHO III',
-        dash_email_cho: 'Mag-email sa CHO III',
+        dash_fb_cho: 'Visit Facebook Page',
         dash_with: 'Kasama:',
         dash_health_station: 'Health Station',
 
