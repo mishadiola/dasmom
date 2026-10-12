@@ -1049,6 +1049,7 @@ const Vaccinations = () => {
                     status,
                     vaccinated_date,
                     scheduled_vaccination,
+                    reschedule_reason,
                     vaccinated_by,
                     assigned_staff,
                     notes,
@@ -1184,6 +1185,7 @@ const Vaccinations = () => {
                     staff: staffMap.get(record.created_by) || 'Unknown',
                     vaccinatedBy: staffMap.get(record.vaccinated_by) || staffMap.get(record.assigned_staff) || null,
                     notes: record.notes,
+                    rescheduleReason: record.reschedule_reason || null,
                     status: record.status || (vaccinationDate ? 'Completed' : 'Pending')
                 };
             });
@@ -1920,6 +1922,7 @@ const Vaccinations = () => {
                                                                                 {record.vaccinatedBy ? ` · By: ${record.vaccinatedBy}` : ''}
                                                                             </small>
                                                                         )}
+                                                                        {record.rescheduleReason && <small style={{ display: 'block' }}>Reschedule reason: {record.rescheduleReason}</small>}
                                                                     </div>
                                                                 ))}
 
@@ -1936,6 +1939,7 @@ const Vaccinations = () => {
                                                                                         {record.vaccinatedBy ? ` · By: ${record.vaccinatedBy}` : ''}
                                                                                     </small>
                                                                                 )}
+                                                                                {record.rescheduleReason && <small style={{ display: 'block' }}>Reschedule reason: {record.rescheduleReason}</small>}
                                                                             </div>
                                                                         ))}
                                                                     </div>

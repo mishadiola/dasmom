@@ -15,6 +15,10 @@ Deploy the functions after setting those secrets, including `google-account-chec
 
 The `postpartum_visits` migration enables RLS and creates four visits for every new delivery: 24 hours, 3 days, 7 days, and 6 weeks after birth. Run the migration before deploying `postpartum-delivery-email`. That Edge Function uses the existing Brevo secrets to send the mother her congratulations and schedule; the delivery workflow reports a mail failure without discarding the recorded delivery or its visits.
 
+## Visit rescheduling notifications
+
+Apply `20261012145000_visit_rescheduling_metadata.sql` before deploying the frontend and `visit-reschedule-email`. The migration adds dedicated rescheduling metadata to prenatal visits, postpartum visits, and maternal/newborn vaccination records; existing clinical and general notes are left unchanged. The notification function uses the existing `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, and optional `BREVO_SENDER_NAME` secrets configured for the other email functions. Rescheduling changes only the selected visit's scheduled date and rescheduling metadata; no prenatal rebalance or schedule-shifting function is called.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

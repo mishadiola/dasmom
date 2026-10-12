@@ -257,6 +257,12 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
                                 </div>
                             </div>
                         </div>
+                        {visit.reschedule_reason && (
+                            <div className="sv-field" style={{ marginTop: '12px' }}>
+                                <label className="sv-label">Reason for rescheduling</label>
+                                <div className="sv-value">{visit.reschedule_reason}</div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Secondary Actions */}

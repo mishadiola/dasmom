@@ -1003,6 +1003,7 @@ export default class PatientService {
         performed_by,
         assigned_station,
         station_ass,
+        reschedule_reason,
         calculated_risk,
         risk_factors,
         patient_basic_info!inner(first_name, last_name, middle_name)
@@ -1059,6 +1060,7 @@ export default class PatientService {
       visitStationId: visit.station_ass,
       assignedStation: stationNameById[visit.assigned_station] || null,
       visitStation: stationNameById[visit.station_ass] || null,
+      reschedule_reason: visit.reschedule_reason,
       trimester: visit.trimester,
       risk: visit.calculated_risk || 'Normal',
       riskFactors: visit.risk_factors || ''
