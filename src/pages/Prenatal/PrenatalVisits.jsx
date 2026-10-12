@@ -175,6 +175,8 @@ const PrenatalVisits = () => {
     const [visitCategoryTab, setVisitCategoryTab] = useState('upcoming'); // 'upcoming' | 'missed' | 'completed'
     const [visitAccess, setVisitAccess] = useState(null);
     const [assignmentStaff, setAssignmentStaff] = useState([]);
+    const [assignmentStations, setAssignmentStations] = useState([]);
+    const [loadingAssignmentStaff, setLoadingAssignmentStaff] = useState(false);
 
     // Manage Visits selection modal state
     const [showManageModal, setShowManageModal] = useState(false);
@@ -191,6 +193,7 @@ const PrenatalVisits = () => {
         visit_date: new Date().toISOString().split('T')[0],
         visit_time: '',
         assigned_staff: '',
+        assigned_station: '',
         reason: '',
         notes: '',
         related_emergency_id: ''
@@ -219,18 +222,19 @@ const PrenatalVisits = () => {
                 if (!active) return;
                 setVisitAccess(access);
 
-                if (access.role === 'staff') {
-                    const staff = await patientService.getAssignableStaffByStationId(access.stationId);
-                    if (active) setAssignmentStaff(staff);
-                    return;
+                const { data: stations, error: stationError } = await patientService.supabase
+                    .from('stations')
+                    .select('id, station_name')
+                    .order('station_name');
+                if (stationError) throw stationError;
+                if (!active) return;
+                setAssignmentStations(stations || []);
+                if (access.stationId) {
+                    setAddVisitForm(current => ({
+                        ...current,
+                        assigned_station: current.assigned_station || access.stationId
+                    }));
                 }
-                if (!['cho personnel', 'admin'].includes(access.role)) return;
-                const { data, error } = await patientService.supabase
-                    .from('staff_profiles')
-                    .select('id, full_name, station_ass')
-                    .order('full_name');
-                if (error) throw error;
-                if (active) setAssignmentStaff(data || []);
             } catch (error) {
                 console.error('Could not load prenatal assignment options:', error);
             }
@@ -238,6 +242,29 @@ const PrenatalVisits = () => {
         loadAssignmentOptions();
         return () => { active = false; };
     }, [patientService]);
+
+    useEffect(() => {
+        let active = true;
+        const loadStaffForSelectedStation = async () => {
+            const stationId = addVisitForm.assigned_station;
+            if (!stationId || !['admin', 'staff', 'cho personnel'].includes(visitAccess?.role)) {
+                setAssignmentStaff([]);
+                return;
+            }
+            setLoadingAssignmentStaff(true);
+            try {
+                const staff = await patientService.getAssignableStaffByStationId(stationId);
+                if (active) setAssignmentStaff(staff);
+            } catch (error) {
+                console.error('Could not load staff for the selected station:', error);
+                if (active) setAssignmentStaff([]);
+            } finally {
+                if (active) setLoadingAssignmentStaff(false);
+            }
+        };
+        loadStaffForSelectedStation();
+        return () => { active = false; };
+    }, [addVisitForm.assigned_station, patientService, visitAccess?.role]);
 
     const getVisibleDays = (date, view) => {
         const d = new Date(date);
@@ -361,6 +388,7 @@ const PrenatalVisits = () => {
                 setAllPatients((data || []).map(p => ({
                     id: p.id,
                     name: p.fullName || `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.name || p.id,
+                    stationId: p.stationId || null,
                     lmp: p.lmp || null,
                     edd: p.edd || null,
                     pregnancyStatus: p.pregnancyStatus || '', riskLevel: p.risk || 'Unknown'
@@ -523,21 +551,38 @@ const PrenatalVisits = () => {
         return () => { active = false; };
     }, [patientService.supabase]);
 
-    // Auto-fill assigned staff from auth context
-    useEffect(() => {
-        if (user) {
-            setAddVisitForm(prev => ({
-                ...prev,
-                assigned_staff: user.fullName || user.email?.split('@')[0] || prev.assigned_staff
-            }));
-        }
-    }, [user]);
-
     const handleAddVisitSubmit = (e) => {
         e.preventDefault();
+        const role = visitAccess?.role;
+        if (!['admin', 'staff', 'cho personnel'].includes(role)) {
+            setToast('Your account is not authorized to schedule visits.');
+            setTimeout(() => setToast(null), 3500);
+            return;
+        }
+        const mayAssignOutsideOwnStation = role === 'admin';
+        if (!addVisitForm.assigned_station) {
+            setToast('Select an assigned station for this visit.');
+            setTimeout(() => setToast(null), 3500);
+            return;
+        }
+        if (!mayAssignOutsideOwnStation
+            && addVisitForm.assigned_station !== visitAccess?.stationId
+            && addVisitForm.assigned_staff) {
+            setToast('Staff and CHO personnel can only assign a worker when the visit station is their own station.');
+            setTimeout(() => setToast(null), 4000);
+            return;
+        }
+        if (addVisitForm.assigned_staff
+            && !assignmentStaff.some(staff => staff.id === addVisitForm.assigned_staff)) {
+            setToast('Select a healthcare worker from the assigned station.');
+            setTimeout(() => setToast(null), 3500);
+            return;
+        }
         setIsAddingVisit(true);
 
         const patient = allPatients.find(p => p.id === addVisitForm.patient_id);
+        const assignedStaff = assignmentStaff.find(staff => staff.id === addVisitForm.assigned_staff);
+        const assignedStation = assignmentStations.find(station => station.id === addVisitForm.assigned_station);
         const newRecord = {
             id: `manual-${Date.now()}`,
             visit_type: addVisitForm.visit_type, // 'emergency' | 'follow_up'
@@ -545,7 +590,10 @@ const PrenatalVisits = () => {
             patient_name: patient?.name || addVisitForm.patient_id,
             visit_date: addVisitForm.visit_date,
             visit_time: addVisitForm.visit_time,
-            assigned_staff: addVisitForm.assigned_staff,
+            assigned_staff: assignedStaff?.id || null,
+            assigned_staff_name: assignedStaff?.full_name || null,
+            assigned_station: assignedStation?.id || null,
+            assigned_station_name: assignedStation?.station_name || null,
             reason: addVisitForm.reason,
             notes: addVisitForm.notes,
             related_emergency_id: addVisitForm.visit_type === 'follow_up' ? addVisitForm.related_emergency_id : '',
@@ -565,7 +613,8 @@ const PrenatalVisits = () => {
             patient_id: '',
             visit_date: new Date().toISOString().split('T')[0],
             visit_time: '',
-            assigned_staff: user?.fullName || user?.email?.split('@')[0] || '',
+            assigned_staff: '',
+            assigned_station: '',
             reason: '',
             notes: '',
             related_emergency_id: ''
@@ -1242,6 +1291,7 @@ const PrenatalVisits = () => {
                                                     <div className="schedule-details">
                                                         <span className="schedule-patient">{mv.patient_name}</span>
                                                         <span className="visit-type-badge badge-manual-type badge-{mv.visit_type}">{mv.visit_type === 'emergency' ? 'Emergency' : 'Follow-up'}</span>
+                                                        <span className="schedule-id">Station: {mv.assigned_station_name || 'Unassigned'} · Staff: {mv.assigned_staff_name || 'Unassigned'}</span>
                                                     </div>
                                                     <span className="visit-type-badge" style={{ background: mv.visit_type === 'emergency' ? 'rgba(224,92,115,0.15)' : 'rgba(147,111,199,0.15)', color: mv.visit_type === 'emergency' ? '#c94070' : '#7a4fa8', fontWeight: 600, fontSize: '11px', padding: '2px 8px', borderRadius: '10px' }}>
                                                         {mv.visit_type === 'emergency' ? 'Emergency' : 'Follow-up'}
@@ -1646,7 +1696,8 @@ const PrenatalVisits = () => {
                                         patient_id: '',
                                         visit_date: new Date().toISOString().split('T')[0],
                                         visit_time: '',
-                                        assigned_staff: user?.fullName || user?.email?.split('@')[0] || '',
+                                        assigned_staff: '',
+                                        assigned_station: visitAccess?.stationId || '',
                                         reason: '',
                                         notes: '',
                                         related_emergency_id: ''
@@ -1743,7 +1794,17 @@ const PrenatalVisits = () => {
                                         <SearchableDropdown
                                             patients={allPatients}
                                             value={addVisitForm.patient_id}
-                                            onChange={val => setAddVisitForm({ ...addVisitForm, patient_id: val, related_emergency_id: '' })}
+                                            onChange={val => {
+                                                const selected = allPatients.find(patient => patient.id === val);
+                                                setAddVisitForm({
+                                                    ...addVisitForm,
+                                                    patient_id: val,
+                                                    related_emergency_id: '',
+                                                    assigned_station: selected?.stationId || addVisitForm.assigned_station,
+                                                    assigned_staff: ''
+                                                });
+                                                setAssignmentStaff([]);
+                                            }}
                                         />
                                     </div>
 
@@ -1800,13 +1861,55 @@ const PrenatalVisits = () => {
                                     <h4 style={{ fontSize: '13px', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: '700', marginBottom: '16px', letterSpacing: '0.5px' }}>Assignment</h4>
                                     
                                     <div className="form-group">
+                                        <label>Assigned Station <span style={{ color: '#e05c73' }}>*</span></label>
+                                        <select
+                                            required
+                                            value={addVisitForm.assigned_station}
+                                            onChange={event => {
+                                                setAddVisitForm({
+                                                    ...addVisitForm,
+                                                    assigned_station: event.target.value,
+                                                    assigned_staff: ''
+                                                });
+                                                setAssignmentStaff([]);
+                                            }}
+                                            className="form-control"
+                                        >
+                                            <option value="">Select assigned station</option>
+                                            {assignmentStations.map(station => (
+                                                <option key={station.id} value={station.id}>{station.station_name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="form-group">
                                         <label>Assigned Healthcare Staff</label>
-                                        <input
-                                            type="text"
+                                        <select
                                             value={addVisitForm.assigned_staff}
-                                            onChange={e => setAddVisitForm({ ...addVisitForm, assigned_staff: e.target.value })}
-                                            placeholder="Enter staff name"
-                                        />
+                                            onChange={event => setAddVisitForm({ ...addVisitForm, assigned_staff: event.target.value })}
+                                            disabled={!addVisitForm.assigned_station
+                                                || loadingAssignmentStaff
+                                                || (visitAccess?.role !== 'admin' && addVisitForm.assigned_station !== visitAccess?.stationId)
+                                                || assignmentStaff.length === 0}
+                                            className="form-control"
+                                        >
+                                            <option value="">
+                                                {loadingAssignmentStaff
+                                                    ? 'Loading staff for station...'
+                                                    : addVisitForm.assigned_station && visitAccess?.role !== 'admin' && addVisitForm.assigned_station !== visitAccess?.stationId
+                                                        ? 'Workers can only be assigned at your own station'
+                                                        : 'Select healthcare staff (optional)'}
+                                            </option>
+                                            {assignmentStaff.map(staff => (
+                                                <option key={staff.id} value={staff.id}>{staff.full_name}</option>
+                                            ))}
+                                        </select>
+                                        {visitAccess?.role !== 'admin'
+                                            && addVisitForm.assigned_station
+                                            && addVisitForm.assigned_station !== visitAccess?.stationId && (
+                                            <small style={{ display: 'block', marginTop: 6, color: '#a16207' }}>
+                                                You selected a different station. A healthcare worker cannot be assigned by staff or CHO personnel.
+                                            </small>
+                                        )}
                                     </div>
                                 </div>
 
@@ -2026,6 +2129,7 @@ const PrenatalVisits = () => {
                     visit={selectedVisit}
                     onClose={() => setSelectedVisit(null)}
                     onUpdateStatus={handleUpdateVisitStatus}
+                    onScheduleChanged={fetchData}
                 />
             )}
 

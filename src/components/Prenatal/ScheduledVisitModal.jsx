@@ -9,14 +9,16 @@ import PatientService from '../../services/patientservice';
 import '../../styles/components/ScheduledVisitModal.css';
 import supabase from '../../config/supabaseclient';
 import { formatMotherId } from '../../utils/displayIds';
+import VisitScheduleManager from '../VisitScheduleManager';
 
-const ScheduledVisitModal = ({ visit, onClose }) => {
+const ScheduledVisitModal = ({ visit, onClose, onScheduleChanged }) => {
     const navigate = useNavigate();
     const patientService = useMemo(() => new PatientService(), []);
     const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
     const [patientVisits, setPatientVisits] = useState([]);
     const [loadingVisits, setLoadingVisits] = useState(true);
     const [patientStation, setPatientStation] = useState('');
+    const [showScheduleManager, setShowScheduleManager] = useState(false);
 
     if (!visit) return null;
 
@@ -281,6 +283,13 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
                         >
                             <Users size={14} style={{ marginRight: '8px' }} /> View Profile
                         </button>
+                        <button
+                            className="btn btn-outline"
+                            style={{ flex: 1, justifyContent: 'center' }}
+                            onClick={() => setShowScheduleManager(true)}
+                        >
+                            <Calendar size={14} style={{ marginRight: '8px' }} /> Manage Schedule
+                        </button>
                     </div>
 
                     {/* Visit History Section (Expandable) */}
@@ -349,6 +358,13 @@ const ScheduledVisitModal = ({ visit, onClose }) => {
                         </div>
                     )}
                 </div>
+                {showScheduleManager && (
+                    <VisitScheduleManager
+                        patientId={visit.patientId}
+                        onClose={() => setShowScheduleManager(false)}
+                        onChanged={onScheduleChanged}
+                    />
+                )}
             </div>
         </div>
     );

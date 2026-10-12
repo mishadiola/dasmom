@@ -14,6 +14,7 @@ import EditPatientModal from '../../components/Patient/EditPatientModal';
 import PatientStaffAssignment from '../../components/Patient/PatientStaffAssignment';
 import { formatMotherId } from '../../utils/displayIds';
 import PostpartumVisitModal from '../../components/PostpartumVisitModal';
+import VisitScheduleManager from '../../components/VisitScheduleManager';
 import { formatDate } from '../../utils/formatters';
 import ActionTooltip from '../../components/Common/ActionTooltip';
 
@@ -163,6 +164,7 @@ const PatientProfile = () => {
     const [editModalOpen, setEditModalOpen] = useState(false);
 
     const [showPostpartumVisitModal, setShowPostpartumVisitModal] = useState(false);
+    const [showVisitScheduleManager, setShowVisitScheduleManager] = useState(false);
 
     const handleBack = () => {
         if (from === 'high-risk') {
@@ -670,6 +672,11 @@ const PatientProfile = () => {
                         <ActionTooltip text="Record Visit">
                             <button className="btn btn-primary" onClick={() => p.pregnancyStatus === 'Postpartum' ? setShowPostpartumVisitModal(true) : navigate(`/dashboard/prenatal/add/${p.id}`)}>
                                 <Edit size={16} /> Record Visit
+                            </button>
+                        </ActionTooltip>
+                        <ActionTooltip text="Manage visit schedule">
+                            <button className="btn btn-outline" onClick={() => setShowVisitScheduleManager(true)}>
+                                <CalendarCheck size={16} /> Manage schedule
                             </button>
                         </ActionTooltip>
                     </div>
@@ -1500,6 +1507,16 @@ const PatientProfile = () => {
                             setP(data);
                         };
                         fetchPatient();
+                    }}
+                />
+            )}
+            {showVisitScheduleManager && (
+                <VisitScheduleManager
+                    patientId={p.id}
+                    onClose={() => setShowVisitScheduleManager(false)}
+                    onChanged={async () => {
+                        const updatedPatient = await new PatientService().getPatientById(p.id);
+                        setP(updatedPatient);
                     }}
                 />
             )}

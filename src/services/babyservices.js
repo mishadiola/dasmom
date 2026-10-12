@@ -520,8 +520,7 @@ class BabyService {
     const deliveryPregnancy = getPregnancyForDelivery(
       pregnancyRows || [],
       deliveryData.delivery_date,
-      existingPregnancyId,
-      deliveryData.delivery_time
+      existingPregnancyId
     ) || (existingPregnancyId ? { id: existingPregnancyId } : null);
     if (!deliveryPregnancy) {
       throw new Error('Could not match this delivery to a pregnancy record. Verify the mother and pregnancy dates.');

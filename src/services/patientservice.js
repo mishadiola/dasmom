@@ -183,7 +183,9 @@ export default class PatientService {
       })
       .map((visit, index) => ({
         ...visit,
-        visitNumber: index + 1
+        visitNumber: Number.isInteger(Number(visit.visitNumber)) && Number(visit.visitNumber) > 0
+          ? Number(visit.visitNumber)
+          : index + 1
       }));
   }
 
@@ -806,6 +808,24 @@ export default class PatientService {
       : [];
 
     if (validSchedule.length === 0) return;
+    const requestedDates = new Set();
+    for (const visit of validSchedule) {
+      if (requestedDates.has(visit.date)) {
+        throw new Error(`Only one prenatal visit can be scheduled on ${visit.date}.`);
+      }
+      requestedDates.add(visit.date);
+    }
+
+    const { data: existingVisits, error: existingVisitsError } = await this.supabase
+      .from('prenatal_visits')
+      .select('visit_date')
+      .eq('patient_id', patientId)
+      .eq('status', 'Scheduled')
+      .in('visit_date', [...requestedDates]);
+    if (existingVisitsError) throw existingVisitsError;
+    const existingDates = new Set((existingVisits || []).map(visit => String(visit.visit_date).slice(0, 10)));
+    const newSchedule = validSchedule.filter(visit => !existingDates.has(visit.date));
+    if (newSchedule.length === 0) return;
 
     const { data: patientRecord, error: patientError } = await this.supabase
       .from('patient_basic_info')
@@ -815,16 +835,16 @@ export default class PatientService {
     if (patientError) throw patientError;
 
     // Check for daily capacity before inserting (auto-schedule uses 30 slots/day)
-    for (const visit of validSchedule) {
+    for (const visit of newSchedule) {
       const isFull = await this.checkScheduleOverlap(visit.date, patientId, maxPerDay);
       if (isFull) {
         throw new Error(`Schedule conflict: ${visit.date} is already full (${maxPerDay} prenatal auto-schedule slots reached). Please choose a different date.`);
       }
     }
 
-    const rows = validSchedule.map((visit, index) => {
+    const rows = newSchedule.map((visit, index) => {
       // Calculate next_appt_date: the following visit in the schedule
-      const nextVisit = validSchedule[index + 1];
+      const nextVisit = newSchedule[index + 1];
       const nextApptDate = nextVisit ? nextVisit.date : null;
 
       return {
@@ -852,7 +872,7 @@ export default class PatientService {
     console.log('✅ Inserted prenatal schedule:', rows);
   }
 
-  async rebalancePrenatalSchedule(patientId, lmp, attendedDate, maxPerDay = 35, pregnancyVisitIds = null, currentVisitId = null) {
+  async rebalancePrenatalSchedule(patientId, lmp, attendedDate, maxPerDay = 35, pregnancyVisitIds = null, currentVisitId = null, previewOnly = false) {
     try {
       const lmpDate = new Date(lmp);
       if (Number.isNaN(lmpDate.getTime())) {
@@ -938,6 +958,13 @@ export default class PatientService {
               index > activeSchedule.findIndex(item => item.id === visit.id)
             )?.date || null
       }));
+      if (previewOnly) {
+        return {
+          current: futureVisits,
+          proposed: updates,
+          futureVisitIds: futureVisits.map(visit => visit.id)
+        };
+      }
       const { error: rebalanceError } = await this.supabase.rpc('rebalance_prenatal_visits', {
         p_current_visit_id: currentVisitId,
         p_schedule: updates,
@@ -1400,13 +1427,9 @@ export default class PatientService {
           ? this.getEarliestTodayOrFutureVisitDate(patientData.schedulePreview)
           : today);
       
-      safeSchedulePreview = (Array.isArray(patientData.schedulePreview) ? patientData.schedulePreview : [])
-        .filter((v) => {
-          if (!v || !v.date) return false;
-          const visitDate = new Date(v.date);
-          const firstDate = new Date(firstVisitDate);
-          return !Number.isNaN(visitDate.getTime()) && visitDate > firstDate;
-        });
+      safeSchedulePreview = this.filterScheduleAfterToday(
+        Array.isArray(patientData.schedulePreview) ? patientData.schedulePreview : []
+      );
       
       const nextScheduledVisit = safeSchedulePreview.find(v => {
         return Number(v.visitNumber) > 1 && v.date && new Date(v.date) > new Date(firstVisitDate);

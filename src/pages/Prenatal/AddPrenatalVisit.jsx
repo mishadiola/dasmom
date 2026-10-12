@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
     ArrowLeft, ArrowRight, ChevronRight, Save, X, Activity, Baby, HeartPulse,
     Thermometer, AlertTriangle, Calculator,
-    Stethoscope, FileText, CheckCircle2, XCircle, CalendarCheck, MapPin
+    Stethoscope, FileText, CheckCircle2, XCircle, CalendarCheck, MapPin, Plus, Trash2
 } from 'lucide-react';
 import PatientService from '../../services/patientservice';
 import { AuthContext } from '../../context/AuthContext';
@@ -61,6 +61,9 @@ const AddPrenatalVisit = () => {
     const saveInFlightRef = useRef(false);
     const [isSaving, setIsSaving] = useState(false);
     const [rebalanceRemainingSchedule, setRebalanceRemainingSchedule] = useState(false);
+    const [rebalanceReview, setRebalanceReview] = useState(null);
+    const [rebalanceNewDate, setRebalanceNewDate] = useState('');
+    const [isApplyingRebalance, setIsApplyingRebalance] = useState(false);
 
     useEffect(() => {
         let active = true;
@@ -531,17 +534,27 @@ const AddPrenatalVisit = () => {
             }
 
             if (isOffSchedule && rebalanceRemainingSchedule) {
-                await patientService.rebalancePrenatalSchedule(
+                const proposal = await patientService.rebalancePrenatalSchedule(
                     patientId,
                     formData.lmp,
                     rowVisitDate,
                     35,
                     [...currentPregnancyVisitIds, currentVisitId],
-                    currentVisitId
+                    currentVisitId,
+                    true
                 );
+                setRebalanceReview({
+                    ...proposal,
+                    patientId,
+                    currentVisitId,
+                    attendedDate: rowVisitDate,
+                    lmp: formData.lmp
+                });
+                setToast({ type: 'success', message: 'Visit recorded. Review and confirm the proposed schedule before it is changed.' });
+                return;
             }
 
-            console.log(`Patient ${patientId} visit ${rowVisitNumber} recorded${rebalanceRemainingSchedule ? '; remaining schedule rebalanced' : ''}.`);
+            console.log(`Patient ${patientId} visit ${rowVisitNumber} recorded.`);
 
             window.scrollTo(0, 0);
             setToast({ type: 'success', message: 'Prenatal visit successfully recorded!' });
@@ -553,6 +566,142 @@ const AddPrenatalVisit = () => {
             saveInFlightRef.current = false;
             setIsSaving(false);
         }
+    };
+
+    const updateProposedVisitDate = (visitKey, date) => {
+        if (!rebalanceReview || !date) return;
+        const todayDate = new Date().toISOString().slice(0, 10);
+        if (date <= rebalanceReview.attendedDate || date < todayDate) {
+            setToast({ type: 'error', message: 'Rebalanced visits must be scheduled after the completed visit and not in the past.' });
+            return;
+        }
+        if (rebalanceReview.proposed.some(visit =>
+            (visit.id || visit.localId) !== visitKey && visit.status !== 'Cancelled' && visit.date === date
+        )) {
+            setToast({ type: 'error', message: 'Only one prenatal visit can be scheduled on a date.' });
+            return;
+        }
+        const week = patientService.calculateWeeksAtDate(rebalanceReview.lmp, date);
+        setRebalanceReview(current => ({
+            ...current,
+            proposed: current.proposed.map(visit => (visit.id || visit.localId) === visitKey
+                ? { ...visit, date, week, trimester: patientService.getTrimesterFromWeek(week) }
+                : visit)
+        }));
+    };
+
+    const addProposedVisit = () => {
+        if (!rebalanceReview || !rebalanceNewDate) return;
+        if (rebalanceNewDate <= rebalanceReview.attendedDate || rebalanceNewDate < new Date().toISOString().slice(0, 10)) {
+            setToast({ type: 'error', message: 'Add a future visit date after the completed visit.' });
+            return;
+        }
+        if (rebalanceReview.proposed.some(visit => visit.status !== 'Cancelled' && visit.date === rebalanceNewDate)) {
+            setToast({ type: 'error', message: 'Only one prenatal visit can be scheduled on a date.' });
+            return;
+        }
+        const earliestScheduled = rebalanceReview.proposed
+            .filter(visit => visit.status !== 'Cancelled' && visit.date)
+            .sort((left, right) => left.date.localeCompare(right.date))[0];
+        if (earliestScheduled && rebalanceNewDate < earliestScheduled.date) {
+            setToast({ type: 'error', message: 'Add the visit after the first remaining scheduled visit so the completed visit history remains unchanged.' });
+            return;
+        }
+        const week = patientService.calculateWeeksAtDate(rebalanceReview.lmp, rebalanceNewDate);
+        setRebalanceReview(current => ({
+            ...current,
+            proposed: [...current.proposed, {
+                new: true,
+                localId: crypto.randomUUID(),
+                date: rebalanceNewDate,
+                week,
+                trimester: patientService.getTrimesterFromWeek(week),
+                type: 'Additional prenatal visit',
+                status: 'Scheduled',
+                visitNumber: Math.max(1, ...current.proposed.map(visit => Number(visit.visitNumber) || 0)) + 1
+            }]
+        }));
+        setRebalanceNewDate('');
+    };
+
+    const removeProposedVisit = visit => {
+        if (!rebalanceReview) return;
+        setRebalanceReview(current => ({
+            ...current,
+            proposed: visit.new
+                ? current.proposed.filter(item => item !== visit)
+                : current.proposed.map(item => item.id === visit.id ? { ...item, status: 'Cancelled' } : item)
+        }));
+    };
+
+    const confirmRebalancedSchedule = async () => {
+        if (!rebalanceReview) return;
+        setIsApplyingRebalance(true);
+        let rebalanceApplied = false;
+        try {
+            const active = rebalanceReview.proposed
+                .filter(visit => visit.status !== 'Cancelled')
+                .sort((left, right) => left.date.localeCompare(right.date));
+            if (active.some(visit => !visit.date || visit.date <= rebalanceReview.attendedDate)) {
+                throw new Error('Every remaining visit must have a date after the completed visit.');
+            }
+            if (new Set(active.map(visit => visit.date)).size !== active.length) {
+                throw new Error('Only one prenatal visit can be scheduled on a date.');
+            }
+            const withNextDates = rebalanceReview.proposed.map(visit => ({
+                ...visit,
+                nextApptDate: visit.status === 'Cancelled' ? null
+                    : active.find((nextVisit, index) => index > active.findIndex(item =>
+                        (item.id || item.localId) === (visit.id || visit.localId)
+                    ))?.date || null
+            }));
+            const existingSchedule = withNextDates
+                .filter(visit => !visit.new)
+                .sort((left, right) => {
+                    if (left.status === 'Cancelled') return 1;
+                    if (right.status === 'Cancelled') return -1;
+                    return left.date.localeCompare(right.date);
+                });
+            const { error } = await patientService.supabase.rpc('rebalance_prenatal_visits', {
+                p_current_visit_id: rebalanceReview.currentVisitId,
+                p_schedule: existingSchedule,
+                p_future_visit_ids: rebalanceReview.futureVisitIds
+            });
+            if (error) throw error;
+            rebalanceApplied = true;
+
+            const additions = active.filter(visit => visit.new);
+            if (additions.length) {
+                const assignedStaff = (patient?.currentPregnancy?.visits || [])
+                    .find(visit => visit.status === 'Scheduled' && visit.assigned_staff)?.assigned_staff || null;
+                await patientService.insertPrenatalSchedule(
+                    patientId,
+                    additions,
+                    user?.id,
+                    { retained_staff: assignedStaff },
+                    35
+                );
+            }
+            setRebalanceReview(null);
+            setToast({ type: 'success', message: 'The reviewed prenatal schedule was saved.' });
+            setTimeout(() => navigate('/dashboard/prenatal'), 1200);
+        } catch (error) {
+            console.error('Could not save the reviewed prenatal schedule:', error);
+            setToast({
+                type: 'error',
+                message: rebalanceApplied
+                    ? `Existing visits were rebalanced, but an added visit could not be saved: ${error.message}. Refresh before retrying.`
+                    : `Could not save the reviewed schedule: ${error.message}`
+            });
+        } finally {
+            setIsApplyingRebalance(false);
+        }
+    };
+
+    const keepCurrentSchedule = () => {
+        setRebalanceReview(null);
+        setToast({ type: 'success', message: 'Visit recorded; the existing future schedule was kept unchanged.' });
+        setTimeout(() => navigate('/dashboard/prenatal'), 1200);
     };
 
     // Derived flags for UI
@@ -920,7 +1069,7 @@ const AddPrenatalVisit = () => {
                                     <span style={{ fontSize: '13px', whiteSpace: 'nowrap' }}>Adjust Remaining Visits</span>
                                 </label>
                                 <small style={{ display: 'block', color: 'var(--color-text-muted)', lineHeight: '1.4' }}>
-                                    Automatically adjust the dates and visit numbers of the remaining scheduled prenatal visits based on this visit.
+                                    Review a proposed schedule based on this visit before any remaining dates are changed.
                                 </small>
                             </div>
                         )}
@@ -994,6 +1143,66 @@ const AddPrenatalVisit = () => {
                 </div>
 
             </form>
+            {rebalanceReview && (
+                <div className="modal-overlay" role="presentation">
+                    <section className="modal-content" role="dialog" aria-modal="true" aria-labelledby="rebalance-review-title"
+                        onClick={event => event.stopPropagation()} style={{ maxWidth: 900, maxHeight: '90vh', overflowY: 'auto' }}>
+                        <header className="modal-header">
+                            <h2 id="rebalance-review-title">Review Prenatal Schedule Rebalance</h2>
+                            <p>The completed visit has been saved. The remaining schedule will stay unchanged until you confirm below.</p>
+                        </header>
+                        <div className="modal-body" style={{ padding: 20 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
+                                <section>
+                                    <h3>Current future schedule</h3>
+                                    {rebalanceReview.current.map(visit => (
+                                        <div key={visit.id} style={{ padding: 8, borderBottom: '1px solid #e2e8f0' }}>
+                                            Visit {visit.visit_number} · {visit.visit_date}
+                                        </div>
+                                    ))}
+                                    {rebalanceReview.current.length === 0 && <p>No eligible future visits.</p>}
+                                </section>
+                                <section>
+                                    <h3>Proposed schedule (editable)</h3>
+                                    {rebalanceReview.proposed.map((visit, index) => (
+                                        <div key={visit.id || `new-${index}`} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center', padding: 8, borderBottom: '1px solid #e2e8f0', opacity: visit.status === 'Cancelled' ? 0.55 : 1 }}>
+                                            <div>
+                                                <label>{visit.new ? 'Additional visit' : `Visit ${visit.visitNumber || ''}`}
+                                                    <input
+                                                        type="date"
+                                                        min={new Date().toISOString().slice(0, 10)}
+                                                        value={visit.date || ''}
+                                                        disabled={visit.status === 'Cancelled'}
+                                                        onChange={event => updateProposedVisitDate(visit.id || visit.localId, event.target.value)}
+                                                    />
+                                                </label>
+                                                {visit.status === 'Cancelled' && <div>Removed from proposed schedule</div>}
+                                            </div>
+                                            {visit.status !== 'Cancelled' && (
+                                                <button type="button" className="btn btn-outline" onClick={() => removeProposedVisit(visit)}>
+                                                    <Trash2 size={14} /> Remove
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+                                    <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'end' }}>
+                                        <label>Add visit between existing visits
+                                            <input type="date" min={new Date().toISOString().slice(0, 10)} value={rebalanceNewDate} onChange={event => setRebalanceNewDate(event.target.value)} />
+                                        </label>
+                                        <button type="button" className="btn btn-outline" onClick={addProposedVisit} disabled={!rebalanceNewDate}><Plus size={14} /> Add</button>
+                                    </div>
+                                </section>
+                            </div>
+                        </div>
+                        <footer className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: 16 }}>
+                            <button type="button" className="btn btn-outline" disabled={isApplyingRebalance} onClick={keepCurrentSchedule}>Keep current schedule</button>
+                            <button type="button" className="btn btn-primary" disabled={isApplyingRebalance} onClick={confirmRebalancedSchedule}>
+                                {isApplyingRebalance ? 'Saving…' : 'Confirm and save schedule'}
+                            </button>
+                        </footer>
+                    </section>
+                </div>
+            )}
         </div>
     );
 };

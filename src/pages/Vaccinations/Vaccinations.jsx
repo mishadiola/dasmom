@@ -1043,7 +1043,9 @@ const Vaccinations = () => {
                 .from('vaccinations')
                 .select(`
                     id,
+                    patient_id,
                     newborn_id,
+                    delivery_id,
                     vaccine_inventory_id,
                     dose_number,
                     status,
@@ -1058,7 +1060,7 @@ const Vaccinations = () => {
                     staff_profiles!vaccinations_created_by_fkey (full_name),
                     vaccine_inventory (vaccine_name, brand, unit, doses, batch, expiration_date)
                 `)
-                .not('newborn_id', 'is', null)
+                .or('patient_id.not.is.null,newborn_id.not.is.null')
                 .order('created_at', { ascending: false });
             console.log('💉 Fetched vaccination records:', vaccRecords?.length || 0);
             const { data: suppRecords } = await supabase.from('supplements').select('*').order('created_at', { ascending: false });
@@ -1143,10 +1145,11 @@ const Vaccinations = () => {
                     type = 'Newborn';
                     patientId = record.newborn_id;
                 } else {
-                    patientName = 'Unknown';
-                    station = 'Unknown';
-                    type = 'Unknown';
-                    patientId = 'Unknown';
+                    const motherInfo = patientMap.get(record.patient_id);
+                    patientName = motherInfo?.name || 'Unknown Mother';
+                    station = motherInfo?.station || 'Unknown';
+                    type = 'Mother';
+                    patientId = record.patient_id;
                 }
 
                 const vaccineName = record.vaccine_inventory?.vaccine_name || null;
@@ -1723,7 +1726,7 @@ const Vaccinations = () => {
                                 <div className="popover-title">Patient Type</div>
                                 <div className="popover-options">
                                     <button className={`popover-opt-btn ${filters.patientType === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('patientType', 'All'); setActivePopover(null); }}>All Patient Types</button>
-                                    <button className={`popover-opt-btn ${filters.patientType === 'Mother' ? 'selected' : ''}`} onClick={() => { handleFilter('patientType', 'Mother'); setActivePopover(null); }}>Mother (Supplements)</button>
+                                    <button className={`popover-opt-btn ${filters.patientType === 'Mother' ? 'selected' : ''}`} onClick={() => { handleFilter('patientType', 'Mother'); setActivePopover(null); }}>Mother</button>
                                     <button className={`popover-opt-btn ${filters.patientType === 'Newborn' ? 'selected' : ''}`} onClick={() => { handleFilter('patientType', 'Newborn'); setActivePopover(null); }}>Newborn</button>
                                 </div>
                             </div>

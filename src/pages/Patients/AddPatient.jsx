@@ -4,7 +4,7 @@ import { AuthContext } from '../../context/AuthContext';
 import {
     ArrowLeft, Save, X, FileText, User, Activity,
     Calendar, HeartPulse, UploadCloud, AlertTriangle,
-    CheckCircle2, XCircle, Loader2, Search, Info, History
+    CheckCircle2, XCircle, Loader2, Search, Info, History, Plus, Trash2
 } from 'lucide-react';
 import '../../styles/pages/AddPatient.css';
 import PatientService from "../../services/patientservice";
@@ -109,6 +109,7 @@ const AddPatient = () => {
     const [doctorList, setDoctorList] = useState([]);
     const [schedulePreview, setSchedulePreview] = useState([]);
     const [loadingSchedule, setLoadingSchedule] = useState(false);
+    const [newScheduleDate, setNewScheduleDate] = useState('');
 
     // New states for Registration Mode (UI only)
     const [registrationMode, setRegistrationMode] = useState('new'); // 'new' | 'existing'
@@ -123,6 +124,53 @@ const AddPatient = () => {
     const [suggestedSort, setSuggestedSort] = useState('recent'); // 'recent', 'oldest', 'az', 'za'
     const [suggestedStation, setSuggestedStation] = useState('All');
     const [suggestedPeriod, setSuggestedPeriod] = useState('All Time'); // 'All Time', 'This Year', 'Last Year'
+
+    const updateScheduledVisit = (index, date) => {
+        if (!date) return;
+        if (date < new Date().toISOString().slice(0, 10)) {
+            setToast({ type: 'error', message: 'A scheduled prenatal visit cannot be moved into the past.' });
+            return;
+        }
+        if (schedulePreview.some((visit, visitIndex) => visitIndex !== index && visit.date === date)) {
+            setToast({ type: 'error', message: 'A prenatal visit is already scheduled on that date.' });
+            return;
+        }
+        const week = patientService.calculateWeeksAtDate(formData.lmp, date);
+        setSchedulePreview(current => current
+            .map((visit, visitIndex) => visitIndex === index
+                ? { ...visit, date, week, trimester: patientService.getTrimesterFromWeek(week) }
+                : visit)
+            .sort((left, right) => left.date.localeCompare(right.date))
+            .map((visit, visitIndex) => ({ ...visit, visitNumber: visitIndex + 2 })));
+    };
+
+    const addScheduledVisit = () => {
+        if (!newScheduleDate || !formData.lmp) return;
+        const today = new Date().toISOString().slice(0, 10);
+        if (newScheduleDate < today) {
+            setToast({ type: 'error', message: 'A scheduled prenatal visit cannot be added in the past.' });
+            return;
+        }
+        if (schedulePreview.some(visit => visit.date === newScheduleDate)) {
+            setToast({ type: 'error', message: 'A prenatal visit is already scheduled on that date.' });
+            return;
+        }
+        const week = patientService.calculateWeeksAtDate(formData.lmp, newScheduleDate);
+        setSchedulePreview(current => [...current, {
+            date: newScheduleDate,
+            week,
+            trimester: patientService.getTrimesterFromWeek(week),
+            type: 'Routine Prenatal'
+        }].sort((left, right) => left.date.localeCompare(right.date))
+            .map((visit, index) => ({ ...visit, visitNumber: index + 2 })));
+        setNewScheduleDate('');
+    };
+
+    const removeScheduledVisit = (index) => {
+        setSchedulePreview(current => current
+            .filter((_, visitIndex) => visitIndex !== index)
+            .map((visit, visitIndex) => ({ ...visit, visitNumber: visitIndex + 2 })));
+    };
 
     const fetchSuggestedMothers = async () => {
         setLoadingSuggestions(true);
@@ -769,7 +817,7 @@ const AddPatient = () => {
 
         let requiredPregnancy = ['gravida', 'para', 'lmp'];
 
-        const requiredVitals = ['weight', 'height', 'bp', 'temp', 'pulse', 'bloodType'];
+        const requiredVitals = ['weight', 'height', 'bp', 'temp', 'pulse'];
 
         const isEmptyValue = (value) => value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
 
@@ -832,11 +880,7 @@ const AddPatient = () => {
             ? upcomingVisit.date
             : todayDateOnly;
 
-        const filteredSchedulePreview = patientService.filterScheduleAfterToday(schedulePreview).filter((v) => {
-            const visitDate = new Date(v.date);
-            const firstDate = new Date(autoFirstVisitDate);
-            return !Number.isNaN(visitDate.getTime()) && visitDate > firstDate;
-        });
+        const filteredSchedulePreview = patientService.filterScheduleAfterToday(schedulePreview);
 
         const riskFactors = [
             ...(formData.conditions || []).filter(c => c !== 'None' && c !== 'None Reported'),
@@ -989,7 +1033,7 @@ const AddPatient = () => {
         } else if (activeTab === 'medical') {
             // No strict required fields in medical
         } else if (activeTab === 'prenatal') {
-            const requiredVitals = ['weight', 'height', 'bp', 'temp', 'pulse', 'bloodType'];
+            const requiredVitals = ['weight', 'height', 'bp', 'temp', 'pulse'];
             checkFields(requiredVitals);
         }
 
@@ -1971,16 +2015,39 @@ const AddPatient = () => {
 
                             <div className="form-grid-2">
                                 <div className="form-group">
-                                    <label>Auto-Scheduled Visits Preview</label>
+                                    <label>
+                                        Auto-Scheduled Visits Preview
+                                        {schedulePreview.length > 0 && (
+                                            <span style={{ marginLeft: 8, color: '#64748b', fontWeight: 500 }}>
+                                                {schedulePreview.length} future visits ({schedulePreview.length + 1} total including registration visit)
+                                            </span>
+                                        )}
+                                    </label>
                                     {formData.lmp && !loadingSchedule ? (
                                         schedulePreview.length > 0 ? (
                                             <div className="visit-calendar visit-calendar--preview">
                                                 {schedulePreview.map((visit, i) => (
-                                                    <div key={i} className={`calendar-day trimester-${visit.trimester}`}>
-                                                        <div className="day-number">{new Date(visit.date).getDate()}</div>
+                                                    <div key={`${visit.date}-${i}`} className={`calendar-day trimester-${visit.trimester}`}>
+                                                        <label className="date-label" style={{ display: 'grid', gap: '6px' }}>
+                                                            Visit {visit.visitNumber}
+                                                            <input
+                                                                type="date"
+                                                                value={visit.date}
+                                                                min={new Date().toISOString().slice(0, 10)}
+                                                                aria-label={`Date for prenatal visit ${visit.visitNumber}`}
+                                                                onChange={event => updateScheduledVisit(i, event.target.value)}
+                                                            />
+                                                        </label>
                                                         <div className="week-label">{visit.week}w</div>
-                                                        <div className="date-label">{new Date(visit.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
-                                                        <div className="visit-number">Visit {visit.visitNumber}</div>
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-outline"
+                                                            aria-label={`Remove prenatal visit ${visit.visitNumber}`}
+                                                            onClick={() => removeScheduledVisit(i)}
+                                                            style={{ padding: '4px 8px', marginTop: '6px' }}
+                                                        >
+                                                            <Trash2 size={14} /> Remove
+                                                        </button>
                                                     </div>
                                                 ))}
                                             </div>
@@ -1991,6 +2058,22 @@ const AddPatient = () => {
                                         <div>Loading calendar...</div>
                                     ) : (
                                         <div className="no-lmp">Enter LMP to see the 8-visit calendar</div>
+                                    )}
+                                    {formData.lmp && !loadingSchedule && (
+                                        <div style={{ display: 'flex', alignItems: 'end', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+                                            <label className="form-group" style={{ margin: 0 }}>
+                                                Add prenatal visit
+                                                <input
+                                                    type="date"
+                                                    value={newScheduleDate}
+                                                    min={new Date().toISOString().slice(0, 10)}
+                                                    onChange={event => setNewScheduleDate(event.target.value)}
+                                                />
+                                            </label>
+                                            <button type="button" className="btn btn-outline" onClick={addScheduledVisit} disabled={!newScheduleDate}>
+                                                <Plus size={15} /> Add visit
+                                            </button>
+                                        </div>
                                     )}
                                 </div>
                                 <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -2180,7 +2263,7 @@ const AddPatient = () => {
                                     )}
                                 </div>
                                 <div className="form-group">
-                                    <label>Blood Type <span className="req">*</span></label>
+                                    <label>Blood Type</label>
                                     <select 
                                         name="bloodType" 
                                         value={formData.bloodType} 
@@ -2198,11 +2281,6 @@ const AddPatient = () => {
                                         <option value="O-">O−</option>
                                         <option value="Unknown">Unknown / Not yet determined</option>
                                     </select>
-                                    {missingFields.includes('bloodType') && (
-                                        <span className="field-error-msg" style={{color: 'var(--color-rose)', fontSize: '11px', marginTop: '4px', display: 'block'}}>
-                                            Blood type is required.
-                                        </span>
-                                    )}
                                 </div>
                             </div>
                             <div className="form-grid-3">

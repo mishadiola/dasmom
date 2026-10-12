@@ -11,21 +11,15 @@ export const getLatestPregnancyRecord = (records = []) => {
 export const getPregnancyStatus = (record) =>
     String(record?.pregn_postp || record?.miscarriage_info?.outcome || 'Unknown').trim();
 
-export const getPregnancyForDelivery = (records = [], deliveryDate, pregnancyId = null, deliveryTime = null) => {
+export const getPregnancyForDelivery = (records = [], deliveryDate, pregnancyId = null) => {
     if (pregnancyId) return records.find(record => record.id === pregnancyId) || null;
 
     const datePart = String(deliveryDate || '').slice(0, 10);
-    const deliveryInstant = new Date(
-        deliveryTime && String(deliveryTime).includes('T')
-            ? deliveryTime
-            : `${datePart}T${deliveryTime || '23:59:59'}`
-    ).getTime();
-    if (!Number.isFinite(deliveryInstant)) return null;
+    if (!Number.isFinite(new Date(`${datePart}T00:00:00`).getTime())) return null;
 
     const recordsWithLmp = records.filter(record => {
-        const lmpTime = new Date(record.lmd || '').getTime();
-        const createdTime = new Date(record.created_at || 0).getTime() || 0;
-        return Number.isFinite(lmpTime) && lmpTime <= deliveryInstant && createdTime <= deliveryInstant;
+        const lmpDate = String(record.lmd || '').slice(0, 10);
+        return Number.isFinite(new Date(`${lmpDate}T00:00:00`).getTime()) && lmpDate <= datePart;
     });
     if (recordsWithLmp.length > 0) {
         const latestLmp = Math.max(...recordsWithLmp.map(record => new Date(record.lmd).getTime()));
@@ -37,10 +31,11 @@ export const getPregnancyForDelivery = (records = [], deliveryDate, pregnancyId 
         return getLatestPregnancyRecord(samePregnancy.filter(record => !record.miscarriage_info));
     }
 
-    return getLatestPregnancyRecord(records.filter(record =>
-        String(record.pregn_postp || '').toLowerCase() === 'pregnant'
-        && new Date(record.created_at || 0).getTime() <= deliveryInstant
-    ));
+    return getLatestPregnancyRecord(records.filter(record => {
+        if (String(record.pregn_postp || '').toLowerCase() !== 'pregnant') return false;
+        const lmpDate = String(record.lmd || '').slice(0, 10);
+        return !lmpDate || !Number.isFinite(new Date(`${lmpDate}T00:00:00`).getTime()) || lmpDate <= datePart;
+    }));
 };
 
 export const isNewbornVaccinationEligible = (newborn) => {
@@ -86,8 +81,7 @@ export const buildPregnancyHistory = (records = [], visits = [], deliveries = []
             const deliveryPregnancy = getPregnancyForDelivery(
                 records,
                 delivery.delivery_date,
-                null,
-                delivery.delivery_time
+                null
             );
             if (deliveryPregnancy) {
                 return group.records.some(groupRecord => groupRecord.id === deliveryPregnancy.id);

@@ -1554,8 +1554,8 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
                     : result.postpartumEmailError
                         ? `Delivery recorded, but the postpartum schedule email could not be sent: ${result.postpartumEmailError}`
                     : hasEligibleNewborn
-                        ? 'Delivery recorded and vaccinations scheduled for eligible newborns successfully!'
-                        : 'Delivery recorded successfully!');
+                        ? 'Delivery recorded, maternal tetanus vaccinations and eligible newborn vaccinations scheduled successfully!'
+                        : 'Delivery recorded and maternal tetanus vaccinations scheduled successfully!');
             setTimeout(() => { setSaveSuccessMsg(''); onClose(); }, 1800);
         } catch (err) {
             console.error('Save failed:', err);
