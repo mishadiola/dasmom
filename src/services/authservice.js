@@ -2,11 +2,24 @@
 import supabase from '../config/supabaseclient';
 import { getRoleConfig } from '../config/roleConfig';
 import { DASMOM_APP_URL } from '../config/appConfig';
+import { isAndroidApp, secureStorage } from './secureStorage';
+import motherOfflineDataService from './motherOfflineDataService';
 
 const DUPLICATE_EMAIL_MESSAGE = 'Email already exists. Please use a different email address.';
 const normalizeRoleName = role => String(role || '').trim().toLowerCase().replace(/_/g, ' ');
+const authProfileKey = userId => `dasmom.auth_profile.${userId}`;
 let cachedAuthUser = null;
 let authUserLookupPromise = null;
+
+const isNetworkError = error => {
+  const message = String(error?.message || error || '').toLowerCase();
+  return error instanceof TypeError
+    || !error?.status && (message.includes('network')
+      || message.includes('fetch')
+      || message.includes('timeout')
+      || message.includes('timed out')
+      || message.includes('offline'));
+};
 
 export default class AuthService {
   constructor() {
@@ -222,7 +235,8 @@ export default class AuthService {
     if (checkError) throw checkError;
     if (!check?.allowed) throw new Error(check?.error || 'This email is not registered for a DasMom account.');
 
-    localStorage.setItem('dasmom_google_email', normalizedEmail);
+    if (isAndroidApp()) await secureStorage.set('dasmom.google_email', normalizedEmail);
+    else localStorage.setItem('dasmom_google_email', normalizedEmail);
     const { error } = await this.supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo },
@@ -300,10 +314,35 @@ export default class AuthService {
       isDeactivated: Boolean(userData.is_deactivated),
       displayName: profile.displayName,
       fullName: profile.fullName,
+      authMode: 'online',
     };
 
     this.saveUser(this._currentUser);
+    await this.persistMotherProfile(this._currentUser);
     return this._currentUser;
+  }
+
+  async persistMotherProfile(user) {
+    if (!isAndroidApp() || !user?.id || !['mother', 'patient'].includes(user.role)) return;
+    await secureStorage.set(authProfileKey(user.id), JSON.stringify(user));
+  }
+
+  async getCachedMotherProfile(userId) {
+    if (!isAndroidApp() || !userId) return null;
+    const stored = await secureStorage.get(authProfileKey(userId));
+    if (!stored) return null;
+    try {
+      const user = JSON.parse(stored);
+      if (user?.id !== userId || !['mother', 'patient'].includes(user.role) || user.isDeactivated) return null;
+      return { ...user, authMode: 'offline_authenticated' };
+    } catch (error) {
+      console.error('Could not read the saved mother profile:', error);
+      throw new Error('The saved account profile is damaged. Connect to the internet and sign in again.');
+    }
+  }
+
+  async clearCachedMotherProfile(userId) {
+    if (isAndroidApp() && userId) await secureStorage.remove(authProfileKey(userId));
   }
 
   async fetchProfileName(userId, role) {
@@ -392,6 +431,14 @@ export default class AuthService {
       return null;
     }
     const authUser = session.user;
+    if (isAndroidApp() && !navigator.onLine) {
+      const cachedUser = await this.getCachedMotherProfile(authUser.id);
+      if (cachedUser) {
+        const offlineUser = { ...cachedUser, authMode: 'offline_authenticated' };
+        this.saveUser(offlineUser);
+        return offlineUser;
+      }
+    }
 
     let userData;
     try {
@@ -401,11 +448,19 @@ export default class AuthService {
           .select('id, email_address, usertype, is_archived, is_deactivated')
           .eq('id', authUser.id)
           .maybeSingle(),
-        this.defaultTimeout
+        isAndroidApp() ? 5000 : this.defaultTimeout
       );
+      if (res.error) throw res.error;
       userData = res.data || res;
     } catch (err) {
       console.error('users lookup timed out or failed:', err);
+      if (isAndroidApp() && isNetworkError(err)) {
+        const cachedUser = await this.getCachedMotherProfile(authUser.id);
+        if (cachedUser) {
+          this.saveUser(cachedUser);
+          return cachedUser;
+        }
+      }
       this._currentUser = null;
       throw err;
     }
@@ -421,7 +476,7 @@ export default class AuthService {
       return null;
     }
 
-    let role = 'user';
+    let role;
     try {
       const typeRes = await this._withTimeout(
         this.supabase
@@ -429,12 +484,27 @@ export default class AuthService {
           .select('user_type')
           .eq('id', userData.usertype)
           .maybeSingle(),
-        5000
+        isAndroidApp() ? 3500 : 5000
       );
+      if (typeRes.error) throw typeRes.error;
       const typeData = typeRes.data || typeRes;
       if (typeData?.user_type) role = normalizeRoleName(typeData.user_type);
+      else if (isAndroidApp()) throw new Error('No role is assigned to this account.');
+      else role = 'user';
     } catch (err) {
       console.error('user_type lookup timed out or failed:', err);
+      if (isAndroidApp() && isNetworkError(err)) {
+        const cachedUser = await this.getCachedMotherProfile(authUser.id);
+        if (cachedUser) {
+          this.saveUser(cachedUser);
+          return cachedUser;
+        }
+      }
+      if (isAndroidApp()) {
+        this._currentUser = null;
+        throw err;
+      }
+      role = 'user';
     }
 
     const profile = await this.fetchProfileName(userData.id, role);
@@ -449,16 +519,30 @@ export default class AuthService {
       displayName: profile.displayName,
       fullName: profile.fullName,
       station: profile.assigned_station,
+      authMode: 'online',
     };
 
     this.saveUser(this._currentUser);
+    await this.persistMotherProfile(this._currentUser);
     return this._currentUser;
   }
 
   async logout() {
-    await this.supabase.auth.signOut();
+    const currentUser = this._currentUser || cachedAuthUser;
+    if (currentUser?.id && ['mother', 'patient'].includes(currentUser.role)) {
+      await motherOfflineDataService.removePatient(currentUser.id);
+      await this.clearCachedMotherProfile(currentUser.id);
+    }
+    if (isAndroidApp()) await this.supabase.auth.signOut({ scope: 'local' });
+    else await this.supabase.auth.signOut();
     this.clearUser();
     console.log('User logged out');
+  }
+
+  async clearOfflineMotherData(userId) {
+    if (!isAndroidApp() || !userId) return;
+    await motherOfflineDataService.removePatient(userId);
+    await this.clearCachedMotherProfile(userId);
   }
 
   // Keep user in-memory only; do not persist to localStorage

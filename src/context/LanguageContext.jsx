@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { isAndroidApp } from '../services/secureStorage';
 import { translations } from '../utils/motherTranslations';
 
 const LanguageContext = createContext(null);
@@ -7,6 +8,7 @@ const LS_KEY = 'dasmom_language';
 
 export const LanguageProvider = ({ children }) => {
     const [language, setLanguage] = useState(() => {
+        if (isAndroidApp()) return 'en';
         try {
             return localStorage.getItem(LS_KEY) || 'en';
         } catch {
@@ -15,6 +17,7 @@ export const LanguageProvider = ({ children }) => {
     });
 
     useEffect(() => {
+        if (isAndroidApp()) return;
         try {
             localStorage.setItem(LS_KEY, language);
         } catch {

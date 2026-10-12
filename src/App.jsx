@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
 import { AuthProvider } from './context/AuthContext';
@@ -6,6 +6,8 @@ import { ModalProvider } from './context/ModalContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { SystemSettingsProvider } from './context/SystemSettingsContext';
 import ProtectedRoute from './routes/ProtectedRoute';
+import { AuthContext } from './context/AuthContext';
+import { isAndroidApp } from './services/secureStorage';
 
 import Landing from './pages/Landing/Landing';
 import Login from './pages/Login/Login';
@@ -57,6 +59,24 @@ function AnalyticsTracker() {
   return null;
 }
 
+function AndroidMotherRouteGate({ children }) {
+  const { user, isAuthLoading } = useContext(AuthContext);
+  const location = useLocation();
+
+  if (!isAndroidApp()) return children;
+  if (isAuthLoading) return null;
+
+  const isMother = ['mother', 'patient'].includes(String(user?.role || '').toLowerCase());
+  const allowedPath = location.pathname === '/mother-login'
+    || location.pathname === '/reset-password'
+    || location.pathname === '/mother-home'
+    || location.pathname.startsWith('/mother-home/');
+  if (!allowedPath) {
+    return <Navigate to={isMother ? '/mother-home' : '/mother-login'} replace />;
+  }
+  return children;
+}
+
 function App() {
   return (
     <AuthProvider>
@@ -65,6 +85,7 @@ function App() {
       <SystemSettingsProvider>
         <BrowserRouter>
           <AnalyticsTracker />
+          <AndroidMotherRouteGate>
           <Routes>
 
           {/* PUBLIC ROUTES */}
@@ -130,6 +151,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
 
         </Routes>
+        </AndroidMotherRouteGate>
         </BrowserRouter>
       </SystemSettingsProvider>
         </ModalProvider>

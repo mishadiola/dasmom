@@ -4,6 +4,8 @@ import InventoryService from './inventoryservice';
 import { isBatchExpired } from '../utils/inventoryUtils';
 import { buildPregnancyHistory, getLatestPregnancyRecord, getPregnancyStatus } from '../utils/pregnancyUtils';
 import { numberPrenatalVisitsChronologically } from '../utils/prenatalVisitNumbering';
+import { isAndroidApp } from './secureStorage';
+import motherOfflineDataService from './motherOfflineDataService';
 
 const inventoryService = new InventoryService();
 const TIME_SLOTS_8TO4 = [
@@ -1972,13 +1974,67 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
   }
 
   async getPatientById(patientId) {
+    if (!isAndroidApp()) return this._getPatientByIdOnline(patientId);
+
+    const { data, error } = await this.supabase.auth.getSession();
+    if (error) throw error;
+    const session = data?.session;
+    if (session?.user?.id !== patientId) return this._getPatientByIdOnline(patientId);
+
+    await motherOfflineDataService.retainMother(patientId);
+    const cachedPatient = await motherOfflineDataService.getPatient(patientId);
+    if (cachedPatient && !navigator.onLine) {
+      window.dispatchEvent(new CustomEvent('dasmom:offline-data-synced'));
+      return cachedPatient;
+    }
+
+    let timeoutId;
+    const onlineRequest = this._getPatientByIdOnline(patientId).then(async patient => {
+      if (patient) await motherOfflineDataService.savePatient(patientId, patient);
+      else await motherOfflineDataService.removePatient(patientId);
+      window.dispatchEvent(new CustomEvent('dasmom:offline-data-synced'));
+      return patient;
+    });
+    try {
+      return await Promise.race([
+        onlineRequest,
+        new Promise((_, reject) => {
+          timeoutId = setTimeout(() => {
+            const error = new Error('DasMom could not be reached before the health-record sync timed out.');
+            error.code = 'OFFLINE_TIMEOUT';
+            reject(error);
+          }, 8000);
+        })
+      ]);
+    } catch (error) {
+      const message = String(error?.message || error || '').toLowerCase();
+      const networkFailure = error instanceof TypeError
+        || !error?.status && (error.code === 'OFFLINE_TIMEOUT'
+          || message.includes('network')
+          || message.includes('fetch')
+          || message.includes('timed out')
+          || message.includes('offline'));
+      if (!networkFailure) throw error;
+      if (cachedPatient) return cachedPatient;
+      const unavailableError = new Error('Your saved health records are not available offline yet. Connect to the internet and open this page to sync them.');
+      window.dispatchEvent(new CustomEvent('dasmom:offline-data-error', {
+        detail: { message: unavailableError.message }
+      }));
+      throw unavailableError;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  async _getPatientByIdOnline(patientId) {
     // Fetch patient basic info
-    const { data: patientData } = await this.supabase
+    const { data: patientData, error: patientError } = await this.supabase
       .from('patient_basic_info')
       .select('*, stations:station_ass (station_name)')
       .eq('id', patientId)
       .single();
 
+    if (patientError) throw patientError;
     if (!patientData) return null;
 
     const { data: userData, error: userError } = await this.supabase

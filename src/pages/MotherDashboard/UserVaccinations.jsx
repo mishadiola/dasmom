@@ -89,6 +89,8 @@ const UserVaccinations = () => {
             }
         };
         load();
+        window.addEventListener('online', load);
+        return () => window.removeEventListener('online', load);
     }, []);
 
     const isMotherVaccine = (v) =>

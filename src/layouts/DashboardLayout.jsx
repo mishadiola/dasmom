@@ -63,6 +63,7 @@ const DashboardLayout = () => {
     const [notifOpen, setNotifOpen] = useState(false);
     const [notifications, setNotifications] = useState([]);
     const [notifCount, setNotifCount] = useState(0);
+    const [offlineDataError, setOfflineDataError] = useState('');
     const [userMenuOpen, setUserMenuOpen] = useState(false);
     const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
     const userMenuRef = useRef(null);
@@ -70,12 +71,25 @@ const DashboardLayout = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { user, logout: authLogout } = useContext(AuthContext);
-    const { confirm } = useModal();
+    const { confirm, alert } = useModal();
     const { language, toggleLanguage, t } = useLanguage();
     const patientService = new PatientService();
 
     // Determine if we are in User View based on path
     const isUserView = location.pathname.startsWith('/mother-home');
+
+    useEffect(() => {
+        const onUnavailable = event => setOfflineDataError(event.detail?.message || 'Saved health records are unavailable offline.');
+        const onAvailable = () => {
+            setOfflineDataError('');
+        };
+        window.addEventListener('dasmom:offline-data-error', onUnavailable);
+        window.addEventListener('dasmom:offline-data-synced', onAvailable);
+        return () => {
+            window.removeEventListener('dasmom:offline-data-error', onUnavailable);
+            window.removeEventListener('dasmom:offline-data-synced', onAvailable);
+        };
+    }, []);
 
     // Click outside to close user menu
     useEffect(() => {
@@ -311,8 +325,17 @@ const DashboardLayout = () => {
         });
         
         if (confirmed) {
-            await authLogout();
-            navigate(isUserView ? '/mother-login' : '/');
+            try {
+                await authLogout();
+                navigate(isUserView ? '/mother-login' : '/');
+            } catch (error) {
+                console.error('Failed to log out:', error);
+                await alert({
+                    title: 'Could Not Log Out',
+                    text: 'DasMom could not cancel this account’s pending device reminders. Please retry before switching accounts.',
+                    iconType: 'warning'
+                });
+            }
         }
     };
 
@@ -606,6 +629,11 @@ const DashboardLayout = () => {
 
                 {/* ── Page Content ── */}
                 <main className="page-content" id="main-content" tabIndex={-1}>
+                    {isUserView && offlineDataError && (
+                        <div role="alert" className="mother-offline-error-banner">
+                            {offlineDataError}
+                        </div>
+                    )}
                     <Outlet />
                 </main>
 

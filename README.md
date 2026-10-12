@@ -19,12 +19,26 @@ The `postpartum_visits` migration enables RLS and creates four visits for every 
 
 Apply `20261012145000_visit_rescheduling_metadata.sql` before deploying the frontend and `visit-reschedule-email`. The migration adds dedicated rescheduling metadata to prenatal visits, postpartum visits, and maternal/newborn vaccination records; existing clinical and general notes are left unchanged. The notification function uses the existing `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, and optional `BREVO_SENDER_NAME` secrets configured for the other email functions. Rescheduling changes only the selected visit's scheduled date and rescheduling metadata; no prenatal rebalance or schedule-shifting function is called.
 
+## Mother visit reminders (Android)
+
+The Android mother app stores its own reminder ledger in the on-device SQLite database `dasmom_visit_notifications`. It reads the existing `prenatal_visits`, `postpartum_visits`, `newborns`, and `vaccinations` records and schedules 7-day, 3-day, and 1-day reminders using Capacitor Local Notifications. Reminder dates use the `Asia/Manila` calendar and are set for 9:00 AM local time; after native scheduling, Android can deliver them without network access or the app running. Run `npx cap sync android` after installing/updating Capacitor plugins.
+
+Android reboot recovery is supplied by the Local Notifications plugin's boot receivers. Notification permission is required, and Android may delay alerts when battery restrictions apply or when exact-alarm access is unavailable. If the app is force-stopped in Android settings, the operating system may not deliver alarms until the app is launched again. The mother dashboard reports permission, sync, and scheduling failures; reminders are counted as active only after the native pending-notification list confirms them.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
 - [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+
+## Android mother offline access
+
+The Android build opens on the mother login and does not expose staff/admin routes; the web app's staff/admin routes are unchanged. Supabase auth sessions are persisted through `@aparajita/capacitor-secure-storage`, which encrypts Android values with AES-GCM using a key held by Android Keystore. Passwords are never saved. Users upgrading from the older WebView-storage build must sign in online once; the old browser-stored session is removed and is not migrated. Thereafter, a previously signed-in mother can reopen the app offline using the last server-validated mother profile only while that account's secure Supabase session remains on the device. Server-side revocation, deactivation, and appointment changes cannot be detected until the device reconnects.
+
+After the mother's authorized records are successfully downloaded, the app saves the assembled patient record in the app-private SQLite database `dasmom_mother_records`. Mother screens load that record when offline and refresh it from Supabase on launch or when connectivity returns. The cache is keyed to the authenticated mother's own ID, other accounts' cached records are removed when switching accounts, and an explicit logout clears the local session, cached profile, patient record, and that mother's reminder schedules. The SQLite file uses Android's app-private storage; it is not separately SQLCipher-encrypted.
+
+Offline access is available only after at least one successful online sign-in and record sync on that device. A newly installed app cannot authenticate a mother or display records for the first time without internet access. Reminder delivery is still handled by Android's native notification scheduler and requires notification permission.
 
 ## React Compiler
 

@@ -8,15 +8,19 @@ import {
 import { TIPS_DATA, CATEGORY_IMAGES, CATEGORY_COLOR_CLASSES } from './PregnancyTips';
 import { useLanguage } from '../../context/LanguageContext';
 import '../../styles/pages/TipDetailPage.css';
+import { isAndroidApp } from '../../services/secureStorage';
 
 const LS_BOOKMARKS = 'pt_bookmarks';
 const LS_READ = 'pt_read';
 
 const getLS = (key) => {
+    if (isAndroidApp()) return [];
     try { return JSON.parse(localStorage.getItem(key)) || []; }
     catch { return []; }
 };
-const setLS = (key, val) => localStorage.setItem(key, JSON.stringify(val));
+const setLS = (key, val) => {
+    if (!isAndroidApp()) localStorage.setItem(key, JSON.stringify(val));
+};
 
 /**
  * Parses article text into structured paragraphs, bullet lists, and numbered lists.

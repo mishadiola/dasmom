@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { isAndroidApp, supabaseSecureStorage } from '../services/secureStorage'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseKey = import.meta.env.VITE_SUPABASE_KEY
@@ -7,9 +8,20 @@ if (!supabaseUrl || !supabaseKey) {
     throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_KEY. Add them to your .env and restart the dev server.')
 }
 
+if (isAndroidApp() && typeof window !== 'undefined') {
+    try {
+        const projectId = new URL(supabaseUrl).hostname.split('.')[0]
+        window.localStorage.removeItem(`sb-${projectId}-auth-token`)
+        window.localStorage.removeItem('dasmom_google_email')
+    } catch (error) {
+        console.error('Could not remove legacy WebView authentication data on Android:', error)
+    }
+}
+
 const supabase = createClient(supabaseUrl, supabaseKey, {
     auth: {
-        lockAcquireTimeout: 30000
+        lockAcquireTimeout: 30000,
+        ...(isAndroidApp() ? { storage: supabaseSecureStorage } : {})
     }
 })
 

@@ -9,6 +9,31 @@
     padding-bottom: 90px;
 }
 
+.visit-reminder-status {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 16px 0;
+    padding: 12px 14px;
+    border: 1px solid #e5b7a3;
+    border-radius: 12px;
+    background: #fff8f3;
+    color: #70462f;
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
+.visit-reminder-status.is-active {
+    border-color: #b8d6c1;
+    background: #f3faf5;
+    color: #315d3d;
+}
+
+.visit-reminder-status svg {
+    flex: 0 0 auto;
+    margin-top: 1px;
+}
+
 /* ── Welcome Banner ── */
 .mother-welcome-banner {
     background: linear-gradient(135deg,

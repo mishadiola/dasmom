@@ -13,6 +13,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
+import { isAndroidApp } from '../../services/secureStorage';
 
 const toLocalDateStr = (d) => {
     const offset = d.getTimezoneOffset() * 60000;
@@ -118,35 +119,43 @@ const MyAppointments = () => {
                 const currentPregnancy = patient.currentPregnancy;
                 const currentStatus = String(patient.pregnancyRecord?.pregn_postp || patient.pregnancyRecord?.status || currentPregnancy?.status || patient.pregnancyStatus || '').toLowerCase();
                 const isPostpartum = currentStatus === 'postpartum';
-                const [prenatalResult, postpartumResult] = await Promise.all([
-                    patientService.supabase
-                        .from('prenatal_visits')
-                        .select('id, visit_date, visit_number, next_appt_type, status, assigned_staff, clinical_notes, missed_reason')
-                        .eq('patient_id', authUser.id)
-                        .order('visit_date', { ascending: true }),
-                    patientService.supabase
-                        .from('postpartum_visits')
-                        .select('id, visit_type, scheduled_date, scheduled_at, attended_date, status, assigned_staff, assessment, notes')
-                        .eq('patient_id', authUser.id)
-                        .order('scheduled_date', { ascending: true })
-                ]);
-                if (prenatalResult.error) throw prenatalResult.error;
-                if (postpartumResult.error) throw postpartumResult.error;
-                const prenatalVisits = prenatalResult.data || [];
-                const postpartumVisits = postpartumResult.data || [];
-                const postpartumStaffIds = [...new Set((postpartumVisits || [])
-                    .map(visit => visit.assigned_staff)
-                    .filter(Boolean))];
-                const prenatalStaffIds = [...new Set(prenatalVisits.map(visit => visit.assigned_staff).filter(Boolean))];
-                const staffIds = [...new Set([...postpartumStaffIds, ...prenatalStaffIds])];
-                const { data: postpartumStaff, error: postpartumStaffError } = staffIds.length
-                    ? await patientService.supabase
-                        .from('staff_profiles')
-                        .select('id, full_name')
-                        .in('id', staffIds)
-                    : { data: [], error: null };
-                if (postpartumStaffError) throw postpartumStaffError;
-                const postpartumStaffNames = new Map((postpartumStaff || []).map(staff => [staff.id, staff.full_name]));
+                let prenatalVisits;
+                let postpartumVisits;
+                let postpartumStaffNames = new Map();
+                if (isAndroidApp()) {
+                    prenatalVisits = patient.visits || [];
+                    postpartumVisits = (patient.deliveries || [])
+                        .flatMap(delivery => delivery.postpartum_visits || []);
+                } else {
+                    const [prenatalResult, postpartumResult] = await Promise.all([
+                        patientService.supabase
+                            .from('prenatal_visits')
+                            .select('id, visit_date, visit_number, next_appt_type, status, assigned_staff, clinical_notes, missed_reason')
+                            .eq('patient_id', authUser.id)
+                            .order('visit_date', { ascending: true }),
+                        patientService.supabase
+                            .from('postpartum_visits')
+                            .select('id, delivery_id, visit_type, scheduled_date, scheduled_at, attended_date, status, assigned_staff, assessment, notes')
+                            .eq('patient_id', authUser.id)
+                            .order('scheduled_date', { ascending: true })
+                    ]);
+                    if (prenatalResult.error) throw prenatalResult.error;
+                    if (postpartumResult.error) throw postpartumResult.error;
+                    prenatalVisits = prenatalResult.data || [];
+                    postpartumVisits = postpartumResult.data || [];
+                    const staffIds = [...new Set([
+                        ...prenatalVisits.map(visit => visit.assigned_staff),
+                        ...postpartumVisits.map(visit => visit.assigned_staff)
+                    ].filter(Boolean))];
+                    const { data: staffProfiles, error: staffError } = staffIds.length
+                        ? await patientService.supabase
+                            .from('staff_profiles')
+                            .select('id, full_name')
+                            .in('id', staffIds)
+                        : { data: [], error: null };
+                    if (staffError) throw staffError;
+                    postpartumStaffNames = new Map((staffProfiles || []).map(staff => [staff.id, staff.full_name]));
+                }
                 const pregnancyNumberByVisitId = new Map((patient.pregnancyHistory || [])
                     .flatMap(pregnancy => (pregnancy.visits || []).map(visit => [visit.id, pregnancy.pregnancyNumber])));
                 const visitAppts = prenatalVisits
@@ -159,7 +168,7 @@ const MyAppointments = () => {
                             ? 'Missed'
                             : visit.status || 'Scheduled',
                         location: sanitizeUUID(patient.station, 'Health Station'),
-                        staffName: postpartumStaffNames.get(visit.assigned_staff) || null,
+                        staffName: visit.assigned_staff_name || postpartumStaffNames.get(visit.assigned_staff) || null,
                         notes: visit.missed_reason || visit.clinical_notes || visit.next_appt_type || '',
                         pregnancyNumber: pregnancyNumberByVisitId.get(visit.id),
                         color: 'green'
@@ -202,7 +211,7 @@ const MyAppointments = () => {
                             type: visit.visit_type,
                             status,
                             location: sanitizeUUID(patient.station, 'Health Station'),
-                            staffName: postpartumStaffNames.get(visit.assigned_staff) || null,
+                            staffName: visit.assigned_staff_name || postpartumStaffNames.get(visit.assigned_staff) || null,
                             notes: status === 'Completed'
                                 ? t('appt_postpartum_attended')
                                 : status === 'Missed'
@@ -225,8 +234,10 @@ const MyAppointments = () => {
             }
         };
         loadAppointments();
+        window.addEventListener('online', loadAppointments);
         return () => {
             active = false;
+            window.removeEventListener('online', loadAppointments);
             if (appointmentChannel) {
                 new PatientService().supabase.removeChannel(appointmentChannel);
             }

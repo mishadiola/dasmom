@@ -54,7 +54,9 @@ const PregnancyDeliveryInfo = () => {
             }
         };
         loadRecords();
+        window.addEventListener('online', loadRecords);
         return () => {
+            window.removeEventListener('online', loadRecords);
             if (channel) supabase.removeChannel(channel);
         };
     }, []);

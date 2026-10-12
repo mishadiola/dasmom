@@ -7,8 +7,6 @@ export default function ProtectedRoute({ pageKey, children }) {
   const { user, isAuthLoading } = useContext(AuthContext); 
   const location = useLocation();
 
-  console.log('ProtectedRoute: checking access', { pageKey, user, isAuthLoading });
-
   if (isAuthLoading) {
     return null;
   }
@@ -21,10 +19,12 @@ export default function ProtectedRoute({ pageKey, children }) {
     return <Navigate to={redirectPath} replace state={{ from: location }} />;
   }
   const userRole = (user.role || 'user').toLowerCase();
+  if (pageKey === 'mother' && !['mother', 'patient'].includes(userRole)) {
+    return <Navigate to="/" replace />;
+  }
   const config = getRoleConfig(userRole) || { allowedPages: [], redirect: '/' };
 
   if (!config.allowedPages.includes(pageKey)) {
-    console.log(`Access denied for ${userRole} on ${pageKey}`);
     return <Navigate to={config.redirect} replace />;
   }
 

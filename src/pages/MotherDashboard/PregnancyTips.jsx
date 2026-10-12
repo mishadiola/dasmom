@@ -8,6 +8,7 @@ import {
 import '../../styles/pages/PregnancyTips.css';
 import tipsSilhouette from '../../assets/images/tips-silhouette.png';
 import { useLanguage } from '../../context/LanguageContext';
+import { isAndroidApp } from '../../services/secureStorage';
 
 // ─── Full Tips Data ────────────────────────────────────────────────────
 export const TIPS_DATA = [
@@ -535,10 +536,13 @@ const LS_BOOKMARKS = 'pt_bookmarks';
 const LS_READ = 'pt_read';
 
 const getLS = (key) => {
+    if (isAndroidApp()) return [];
     try { return JSON.parse(localStorage.getItem(key)) || []; }
     catch { return []; }
 };
-const setLS = (key, val) => localStorage.setItem(key, JSON.stringify(val));
+const setLS = (key, val) => {
+    if (!isAndroidApp()) localStorage.setItem(key, JSON.stringify(val));
+};
 
 // ─── Component ────────────────────────────────────────────────────────
 const PregnancyTips = () => {

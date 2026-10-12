@@ -83,6 +83,8 @@ const MyVitals = () => {
             }
         };
         loadVitals();
+        window.addEventListener('online', loadVitals);
+        return () => window.removeEventListener('online', loadVitals);
     }, []);
 
     const CURRENT_VITALS = vitalsData.visits?.[0] || {};

@@ -1,3 +1,5 @@
+import { isAndroidApp } from '../services/secureStorage';
+
 const STORAGE_KEY = 'dasmom.systemSettings';
 
 export const DEFAULT_SYSTEM_SETTINGS = {
@@ -18,6 +20,7 @@ const cloneDefaults = () => JSON.parse(JSON.stringify(DEFAULT_SYSTEM_SETTINGS));
 
 export const getSystemSettings = () => {
     if (typeof window === 'undefined') return cloneDefaults();
+    if (isAndroidApp()) return cloneDefaults();
 
     try {
         const stored = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || '{}');
@@ -42,6 +45,10 @@ export const saveSystemSettings = (settings) => {
     };
 
     if (typeof window !== 'undefined') {
+        if (isAndroidApp()) {
+            window.dispatchEvent(new CustomEvent('dasmom:system-settings-changed', { detail: nextSettings }));
+            return nextSettings;
+        }
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextSettings));
         window.dispatchEvent(new CustomEvent('dasmom:system-settings-changed', { detail: nextSettings }));
     }

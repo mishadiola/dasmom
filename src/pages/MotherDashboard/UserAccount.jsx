@@ -99,6 +99,8 @@ const UserAccount = () => {
         };
 
         loadUserData();
+        window.addEventListener('online', loadUserData);
+        return () => window.removeEventListener('online', loadUserData);
     }, []);
 
     const handleLogout = async () => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { 
     Calendar, Clock, Heart, Activity, 
     Baby, Star, ChevronRight, Bell,
@@ -15,10 +15,13 @@ import supabase from '../../config/supabaseclient';
 import pregnancySilhouette from '../../assets/images/pregnancy-silhouette.png';
 import { calculateEDD, calculateTimeRemaining, calculateGestationalAge, getTrimester, isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
 import { useLanguage } from '../../context/LanguageContext';
+import { AuthContext } from '../../context/AuthContext';
+import { isAndroidApp } from '../../services/secureStorage';
 
 const MotherDashboard = () => {
     const navigate = useNavigate();
     const { t } = useLanguage();
+    const { visitNotificationStatus } = useContext(AuthContext);
     const [expandedHealth, setExpandedHealth] = useState(false);
     const [currentTipIndex, setCurrentTipIndex] = useState(0);
     const [showSupportModal, setShowSupportModal] = useState(false);
@@ -46,15 +49,23 @@ const MotherDashboard = () => {
                 const authUser = await auth.getAuthUser();
                 if (!authUser?.id) return;
 
-                if (!welcomeChecked && (authUser.role === 'mother' || authUser.role === 'patient')) {
+                if (!welcomeChecked
+                    && navigator.onLine
+                    && authUser.authMode !== 'offline_authenticated'
+                    && (authUser.role === 'mother' || authUser.role === 'patient')) {
                     welcomeChecked = true;
-                    const { data: welcomeData, error: welcomeError } = await supabase.functions.invoke('mother-welcome', {
+                    const welcomeRequest = supabase.functions.invoke('mother-welcome', {
                         body: { action: 'claim' },
                     });
-                    if (welcomeError) {
-                        console.error('Error checking first-login welcome status:', welcomeError);
-                    } else if (welcomeData?.showWelcome) {
-                        setShowWelcome(true);
+                    if (isAndroidApp()) {
+                        welcomeRequest.then(({ data, error }) => {
+                            if (error) console.error('Error checking first-login welcome status:', error);
+                            else if (data?.showWelcome) setShowWelcome(true);
+                        }).catch(error => console.error('Error checking first-login welcome status:', error));
+                    } else {
+                        const { data: welcomeData, error: welcomeError } = await welcomeRequest;
+                        if (welcomeError) console.error('Error checking first-login welcome status:', welcomeError);
+                        else if (welcomeData?.showWelcome) setShowWelcome(true);
                     }
                 }
 
@@ -258,7 +269,9 @@ const MotherDashboard = () => {
         };
 
         load();
+        window.addEventListener('online', load);
         return () => {
+            window.removeEventListener('online', load);
             if (channel) supabase.removeChannel(channel);
         };
     }, []);
@@ -320,6 +333,18 @@ const MotherDashboard = () => {
                     </div>
                 </div>
             </div>
+
+            {visitNotificationStatus?.message && visitNotificationStatus.state !== 'initializing'
+                && visitNotificationStatus.state !== 'unsupported' && (
+                    <div
+                        className={`visit-reminder-status ${visitNotificationStatus.state === 'active' || visitNotificationStatus.state === 'empty' ? 'is-active' : 'is-warning'}`}
+                        role="status"
+                        aria-live="polite"
+                    >
+                        <Bell size={18} aria-hidden="true" />
+                        <span>{visitNotificationStatus.message}</span>
+                    </div>
+                )}
 
             <div className="dashboard-content-layout">
                 {/* ── Row 1: Appt and EDD ── */}

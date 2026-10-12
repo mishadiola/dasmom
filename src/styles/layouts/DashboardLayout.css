@@ -695,6 +695,17 @@
     background: #f4f6f9;
 }
 
+.mother-offline-error-banner {
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    border: 1px solid #e4a4a4;
+    border-radius: 10px;
+    background: #fff0f0;
+    color: #7d2828;
+    font-size: 14px;
+    line-height: 1.45;
+}
+
 /* ══════════════════════════════════════════
    GLOBAL PAGE HEADER (For all dashboard pages)
 ══════════════════════════════════════════ */
@@ -1489,4 +1500,3 @@
         opacity: 0.25;
     }
 }
-
