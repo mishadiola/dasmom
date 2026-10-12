@@ -152,6 +152,9 @@ const VisitScheduleManager = ({ patientId, onClose, onChanged }) => {
                 .maybeSingle();
             if (updateError) throw updateError;
             if (!data) throw new Error('This visit is no longer eligible to change. Refresh the schedule and try again.');
+            if (visit.category === 'prenatal') {
+                await service.resequencePrenatalVisitNumbers(patientId);
+            }
             try {
                 const { data: notification, error: notificationError } = await service.supabase.functions.invoke('visit-reschedule-email', {
                     body: {
@@ -235,7 +238,7 @@ const VisitScheduleManager = ({ patientId, onClose, onChanged }) => {
                     trimester: service.getTrimesterFromWeek(week), gestational_age: `${week}w`,
                     next_appt_type: label.trim() || 'Additional prenatal visit', status: 'Scheduled',
                     assigned_station: patient.station_ass
-                });
+                }).select('id').single();
             } else if (kind === 'postpartum') {
                 const latest = visits.filter(visit => visit.category === 'postpartum')
                     .reduce((max, visit) => Math.max(max, Number(visit.visit_number) || 0), 0);
@@ -244,7 +247,7 @@ const VisitScheduleManager = ({ patientId, onClose, onChanged }) => {
                     scheduled_date: date, scheduled_at: preserveManilaTime(date), visit_type: label.trim() || 'Additional follow-up',
                     status: 'Scheduled', assigned_station: delivery.station_ass || patient.station_ass,
                     station_ass: delivery.station_ass || patient.station_ass, created_by: userId
-                });
+                }).select('id').single();
             } else {
                 const targetId = kind === 'newborn_vaccination' ? newbornId : patientId;
                 const targetColumn = kind === 'newborn_vaccination' ? 'newborn_id' : 'patient_id';
@@ -257,10 +260,35 @@ const VisitScheduleManager = ({ patientId, onClose, onChanged }) => {
                 });
             }
             if (result.error) throw result.error;
+            const notificationWarnings = [];
+            if (kind === 'prenatal') {
+                try {
+                    await service.resequencePrenatalVisitNumbers(patientId);
+                } catch (numberingError) {
+                    console.error('Prenatal visit saved, but visit numbers could not be updated:', numberingError);
+                    notificationWarnings.push('Visit numbers could not be updated.');
+                }
+            } else if (kind === 'postpartum') {
+                try {
+                    await service.resequencePostpartumVisitNumbers(delivery.id);
+                } catch (numberingError) {
+                    console.error('Postpartum visit saved, but visit numbers could not be updated:', numberingError);
+                    notificationWarnings.push('Visit numbers could not be updated.');
+                }
+            }
+            if (kind === 'prenatal' || kind === 'postpartum') {
+                try {
+                    await service.sendScheduledVisitNotification(kind, result.data.id);
+                } catch (emailError) {
+                    console.error('Visit was saved, but its email notification failed:', emailError);
+                    notificationWarnings.push('The email notification could not be sent.');
+                }
+            }
             setDate('');
             setLabel('');
             await load();
             onChanged?.();
+            if (notificationWarnings.length) setError(`Visit saved. ${notificationWarnings.join(' ')}`);
         } catch (insertError) {
             console.error('Could not add a scheduled visit:', insertError);
             setError(insertError.message || 'Could not add this visit.');

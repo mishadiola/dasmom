@@ -1111,6 +1111,7 @@ const PatientProfile = () => {
                                                     {visitStatus === 'next-after-attended' && <span className="timeline-badge-next">Next Appointment</span>}
                                                     <div className="timeline-meta-row">
                                                         <span className="timeline-type">Visit #{v.visit_number}</span>
+                                                        {v.next_appt_type && <span className="timeline-tag">{v.next_appt_type}</span>}
                                                         <span className="timeline-tag">{getOrdinalSuffix(v.trimester)} Trim.</span>
                                                     </div>
                                                 </div>

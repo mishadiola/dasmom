@@ -104,7 +104,10 @@ const AddPrenatalVisit = () => {
                 gestationalAge: patient.weeks ? `${patient.weeks}w` : '',
                 trimester: patient.trimester || '',
                 visitDate: new Date().toISOString().split('T')[0],
-                visitNumber: patientService.getPrenatalVisitNumberForWeek(patient.weeks || 0),
+                visitNumber: nextScheduledVisit?.visit_number
+                    || pregnancyVisits.filter(visit =>
+                        String(visit.visit_date).slice(0, 10) <= today
+                    ).length + 1,
                 attendingMidwife: nextScheduledVisit?.assigned_staff || '',
                 healthFacility: userAccess.role === 'admin'
                     ? patient.station || ''
@@ -533,6 +536,8 @@ const AddPrenatalVisit = () => {
                 console.log(`Inserted new visit ${rowVisitNumber}`);
             }
 
+            await patientService.resequencePrenatalVisitNumbers(patientId);
+
             if (isOffSchedule && rebalanceRemainingSchedule) {
                 const proposal = await patientService.rebalancePrenatalSchedule(
                     patientId,
@@ -568,6 +573,19 @@ const AddPrenatalVisit = () => {
         }
     };
 
+    const renumberProposedVisits = proposed => {
+        const active = proposed
+            .filter(visit => visit.status !== 'Cancelled' && visit.date)
+            .sort((left, right) => left.date.localeCompare(right.date));
+        const numbersByKey = new Map(active.map((visit, index) => [
+            visit.id || visit.localId,
+            index + 1
+        ]));
+        return proposed.map(visit => visit.status === 'Cancelled'
+            ? visit
+            : { ...visit, visitNumber: numbersByKey.get(visit.id || visit.localId) ?? visit.visitNumber });
+    };
+
     const updateProposedVisitDate = (visitKey, date) => {
         if (!rebalanceReview || !date) return;
         const todayDate = new Date().toISOString().slice(0, 10);
@@ -584,9 +602,9 @@ const AddPrenatalVisit = () => {
         const week = patientService.calculateWeeksAtDate(rebalanceReview.lmp, date);
         setRebalanceReview(current => ({
             ...current,
-            proposed: current.proposed.map(visit => (visit.id || visit.localId) === visitKey
+            proposed: renumberProposedVisits(current.proposed.map(visit => (visit.id || visit.localId) === visitKey
                 ? { ...visit, date, week, trimester: patientService.getTrimesterFromWeek(week) }
-                : visit)
+                : visit))
         }));
     };
 
@@ -610,7 +628,7 @@ const AddPrenatalVisit = () => {
         const week = patientService.calculateWeeksAtDate(rebalanceReview.lmp, rebalanceNewDate);
         setRebalanceReview(current => ({
             ...current,
-            proposed: [...current.proposed, {
+            proposed: renumberProposedVisits([...current.proposed, {
                 new: true,
                 localId: crypto.randomUUID(),
                 date: rebalanceNewDate,
@@ -618,8 +636,8 @@ const AddPrenatalVisit = () => {
                 trimester: patientService.getTrimesterFromWeek(week),
                 type: 'Additional prenatal visit',
                 status: 'Scheduled',
-                visitNumber: Math.max(1, ...current.proposed.map(visit => Number(visit.visitNumber) || 0)) + 1
-            }]
+                visitNumber: 1
+            }])
         }));
         setRebalanceNewDate('');
     };
@@ -628,9 +646,9 @@ const AddPrenatalVisit = () => {
         if (!rebalanceReview) return;
         setRebalanceReview(current => ({
             ...current,
-            proposed: visit.new
+            proposed: renumberProposedVisits(visit.new
                 ? current.proposed.filter(item => item !== visit)
-                : current.proposed.map(item => item.id === visit.id ? { ...item, status: 'Cancelled' } : item)
+                : current.proposed.map(item => item.id === visit.id ? { ...item, status: 'Cancelled' } : item))
         }));
     };
 
@@ -642,6 +660,10 @@ const AddPrenatalVisit = () => {
             const active = rebalanceReview.proposed
                 .filter(visit => visit.status !== 'Cancelled')
                 .sort((left, right) => left.date.localeCompare(right.date));
+            const activeIndexes = new Map(active.map((visit, index) => [
+                visit.id || visit.localId,
+                index
+            ]));
             if (active.some(visit => !visit.date || visit.date <= rebalanceReview.attendedDate)) {
                 throw new Error('Every remaining visit must have a date after the completed visit.');
             }
@@ -650,6 +672,9 @@ const AddPrenatalVisit = () => {
             }
             const withNextDates = rebalanceReview.proposed.map(visit => ({
                 ...visit,
+                ...(visit.status === 'Cancelled' ? {} : {
+                    visitNumber: (activeIndexes.get(visit.id || visit.localId) ?? 0) + 1
+                }),
                 nextApptDate: visit.status === 'Cancelled' ? null
                     : active.find((nextVisit, index) => index > active.findIndex(item =>
                         (item.id || item.localId) === (visit.id || visit.localId)
@@ -682,6 +707,7 @@ const AddPrenatalVisit = () => {
                     35
                 );
             }
+            await patientService.resequencePrenatalVisitNumbers(patientId);
             setRebalanceReview(null);
             setToast({ type: 'success', message: 'The reviewed prenatal schedule was saved.' });
             setTimeout(() => navigate('/dashboard/prenatal'), 1200);

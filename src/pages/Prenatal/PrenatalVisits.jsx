@@ -184,19 +184,16 @@ const PrenatalVisits = () => {
     // Schedule a Visit modal states
     const [showAddVisitModal, setShowAddVisitModal] = useState(false);
     const [allPatients, setAllPatients] = useState([]);
-    const [manualVisits, setManualVisits] = useState([]);
     const [isAddingVisit, setIsAddingVisit] = useState(false);
     const [addVisitForm, setAddVisitForm] = useState({
-        visit_category: 'Prenatal', // 'Prenatal' | 'Postpartum' | 'Vaccination'
+        visit_category: 'Prenatal',
         visit_type: 'emergency',
         patient_id: '',
         visit_date: new Date().toISOString().split('T')[0],
-        visit_time: '',
         assigned_staff: '',
         assigned_station: '',
         reason: '',
-        notes: '',
-        related_emergency_id: ''
+        notes: ''
     });
 
     // Reschedule a Visit modal states
@@ -213,6 +210,15 @@ const PrenatalVisits = () => {
 
     const patientService = useMemo(() => new PatientService(), []);
     const canReschedule = ['admin', 'staff', 'cho personnel'].includes(visitAccess?.role);
+    const patientsForVisitCategory = useMemo(() => allPatients.filter(patient => (
+        addVisitForm.visit_category === 'Postpartum'
+            ? patient.hasDelivery
+            : !patient.hasDelivery && String(patient.pregnancyStatus).toLowerCase() === 'pregnant'
+    )), [addVisitForm.visit_category, allPatients]);
+    const selectedAddVisitPatient = allPatients.find(patient => patient.id === addVisitForm.patient_id);
+    const assignableVisitStaff = addVisitForm.visit_category === 'Postpartum' && selectedAddVisitPatient?.assignedStaffId
+        ? assignmentStaff.filter(staff => staff.id === selectedAddVisitPatient.assignedStaffId)
+        : assignmentStaff;
 
     useEffect(() => {
         let active = true;
@@ -380,31 +386,42 @@ const PrenatalVisits = () => {
         };
     }, [calendarView, currentDate, fetchData, patientService.supabase]);
 
-    // Load patients list and manual visits on mount
+    // Load patients and their latest delivery so the category and patient list stay in sync.
     useEffect(() => {
         const loadPatients = async () => {
             try {
-                const data = await patientService.getAllPatients();
+                const [data, { data: deliveries, error }] = await Promise.all([
+                    patientService.getAllPatients(),
+                    patientService.supabase
+                        .from('deliveries')
+                        .select('id, mother_id, delivery_date, station_ass')
+                        .order('delivery_date', { ascending: false })
+                ]);
+                if (error) throw error;
+                const latestDeliveryByPatient = new Map();
+                (deliveries || []).forEach(delivery => {
+                    if (delivery.mother_id && !latestDeliveryByPatient.has(delivery.mother_id)) {
+                        latestDeliveryByPatient.set(delivery.mother_id, delivery);
+                    }
+                });
                 setAllPatients((data || []).map(p => ({
                     id: p.id,
                     name: p.fullName || `${p.first_name || ''} ${p.last_name || ''}`.trim() || p.name || p.id,
                     stationId: p.stationId || null,
+                    assignedStaffId: p.assignedStaffId || null,
                     lmp: p.lmp || null,
                     edd: p.edd || null,
-                    pregnancyStatus: p.pregnancyStatus || '', riskLevel: p.risk || 'Unknown'
+                    pregnancyStatus: p.pregnancyStatus || '',
+                    riskLevel: p.risk || 'Unknown',
+                    delivery: latestDeliveryByPatient.get(p.id) || null,
+                    hasDelivery: latestDeliveryByPatient.has(p.id)
                 })));
             } catch (e) {
                 console.error('Failed to load patients for Add Visit modal:', e);
             }
         };
         loadPatients();
-
-        const manualVisitsKey = user?.id ? `dasmom_manual_visits_${user.id}` : null;
-        const stored = manualVisitsKey ? localStorage.getItem(manualVisitsKey) : null;
-        if (stored) {
-            try { setManualVisits(JSON.parse(stored)); } catch (_) {}
-        }
-    }, [patientService, user?.id]);
+    }, [patientService]);
 
     useEffect(() => {
         const loadPostpartumFollowUps = async () => {
@@ -551,7 +568,7 @@ const PrenatalVisits = () => {
         return () => { active = false; };
     }, [patientService.supabase]);
 
-    const handleAddVisitSubmit = (e) => {
+    const handleAddVisitSubmit = async (e) => {
         e.preventDefault();
         const role = visitAccess?.role;
         if (!['admin', 'staff', 'cho personnel'].includes(role)) {
@@ -578,51 +595,187 @@ const PrenatalVisits = () => {
             setTimeout(() => setToast(null), 3500);
             return;
         }
+        const patient = patientsForVisitCategory.find(p => p.id === addVisitForm.patient_id);
+        if (!patient) {
+            setToast('Select a patient who matches the selected visit category.');
+            setTimeout(() => setToast(null), 3500);
+            return;
+        }
+        if (addVisitForm.visit_category === 'Postpartum'
+            && addVisitForm.assigned_staff
+            && patient.assignedStaffId !== addVisitForm.assigned_staff) {
+            setToast("Postpartum visits can only be assigned to the patient's assigned prenatal healthcare worker.");
+            setTimeout(() => setToast(null), 4000);
+            return;
+        }
         setIsAddingVisit(true);
 
-        const patient = allPatients.find(p => p.id === addVisitForm.patient_id);
-        const assignedStaff = assignmentStaff.find(staff => staff.id === addVisitForm.assigned_staff);
-        const assignedStation = assignmentStations.find(station => station.id === addVisitForm.assigned_station);
-        const newRecord = {
-            id: `manual-${Date.now()}`,
-            visit_type: addVisitForm.visit_type, // 'emergency' | 'follow_up'
-            patient_id: addVisitForm.patient_id,
-            patient_name: patient?.name || addVisitForm.patient_id,
-            visit_date: addVisitForm.visit_date,
-            visit_time: addVisitForm.visit_time,
-            assigned_staff: assignedStaff?.id || null,
-            assigned_staff_name: assignedStaff?.full_name || null,
-            assigned_station: assignedStation?.id || null,
-            assigned_station_name: assignedStation?.station_name || null,
-            reason: addVisitForm.reason,
-            notes: addVisitForm.notes,
-            related_emergency_id: addVisitForm.visit_type === 'follow_up' ? addVisitForm.related_emergency_id : '',
-            created_at: new Date().toISOString()
-        };
+        try {
+            const postInsertWarnings = [];
+            const assignedStaff = assignmentStaff.find(staff => staff.id === addVisitForm.assigned_staff);
+            const assignedStation = assignmentStations.find(station => station.id === addVisitForm.assigned_station);
+            const visitLabel = `${addVisitForm.visit_type === 'emergency' ? 'Emergency Visit' : 'Follow-up Visit'}: ${addVisitForm.reason.trim()}`;
 
-        const updated = [newRecord, ...manualVisits];
-        if (user?.id) {
-            localStorage.setItem(`dasmom_manual_visits_${user.id}`, JSON.stringify(updated));
+            if (addVisitForm.visit_category === 'Prenatal') {
+                const [pregnancyResult, latestVisitResult, duplicateResult] = await Promise.all([
+                    patientService.supabase.from('pregnancy_info')
+                        .select('lmd')
+                        .eq('patient_id', patient.id)
+                        .order('created_at', { ascending: false })
+                        .limit(1)
+                        .maybeSingle(),
+                    patientService.supabase.from('prenatal_visits')
+                        .select('visit_number')
+                        .eq('patient_id', patient.id)
+                        .order('visit_number', { ascending: false })
+                        .limit(1)
+                        .maybeSingle(),
+                    patientService.supabase.from('prenatal_visits')
+                        .select('id')
+                        .eq('patient_id', patient.id)
+                        .eq('visit_date', addVisitForm.visit_date)
+                        .eq('status', 'Scheduled')
+                        .limit(1)
+                        .maybeSingle()
+                ]);
+                const queryError = pregnancyResult.error || latestVisitResult.error || duplicateResult.error;
+                if (queryError) throw queryError;
+                if (!pregnancyResult.data?.lmd) {
+                    throw new Error('The selected patient does not have a current pregnancy record.');
+                }
+                if (duplicateResult.data) {
+                    throw new Error('This patient already has a scheduled prenatal visit on that date.');
+                }
+
+                const gestationalWeek = patientService.calculateWeeksAtDate(pregnancyResult.data.lmd, addVisitForm.visit_date);
+                const { data: insertedVisit, error } = await patientService.supabase.from('prenatal_visits').insert({
+                    patient_id: patient.id,
+                    created_by: user?.id || null,
+                    visit_date: addVisitForm.visit_date,
+                    visit_number: Number(latestVisitResult.data?.visit_number || 0) + 1,
+                    trimester: patientService.getTrimesterFromWeek(gestationalWeek),
+                    gestational_age: `${gestationalWeek}w`,
+                    next_appt_type: visitLabel,
+                    clinical_notes: addVisitForm.notes.trim() || null,
+                    status: 'Scheduled',
+                    assigned_staff: assignedStaff?.id || null,
+                    assigned_station: assignedStation?.id || null
+                }).select('id').single();
+                if (error) throw error;
+                try {
+                    await patientService.resequencePrenatalVisitNumbers(patient.id);
+                } catch (numberingError) {
+                    console.error('Prenatal visit saved, but visit numbers could not be updated:', numberingError);
+                    postInsertWarnings.push('Visit numbers could not be updated.');
+                }
+                try {
+                    await patientService.sendScheduledVisitNotification('prenatal', insertedVisit.id);
+                } catch (emailError) {
+                    console.error('Prenatal visit was saved, but its email notification failed:', emailError);
+                    postInsertWarnings.push('The email notification could not be sent.');
+                }
+                await fetchData();
+            } else {
+                if (!patient.delivery?.id) {
+                    throw new Error('A delivery record is required before scheduling a postpartum visit.');
+                }
+                const [latestVisitResult, duplicateResult] = await Promise.all([
+                    patientService.supabase.from('postpartum_visits')
+                        .select('visit_number')
+                        .eq('delivery_id', patient.delivery.id)
+                        .order('visit_number', { ascending: false })
+                        .limit(1)
+                        .maybeSingle(),
+                    patientService.supabase.from('postpartum_visits')
+                        .select('id')
+                        .eq('delivery_id', patient.delivery.id)
+                        .eq('scheduled_date', addVisitForm.visit_date)
+                        .eq('status', 'Scheduled')
+                        .limit(1)
+                        .maybeSingle()
+                ]);
+                const queryError = latestVisitResult.error || duplicateResult.error;
+                if (queryError) throw queryError;
+                if (duplicateResult.data) {
+                    throw new Error('This patient already has a scheduled postpartum visit on that date.');
+                }
+
+                const { data: insertedVisit, error } = await patientService.supabase
+                    .from('postpartum_visits')
+                    .insert({
+                        delivery_id: patient.delivery.id,
+                        patient_id: patient.id,
+                        visit_number: Number(latestVisitResult.data?.visit_number || 0) + 1,
+                        scheduled_date: addVisitForm.visit_date,
+                        scheduled_at: `${addVisitForm.visit_date}T00:00:00+08:00`,
+                        visit_type: visitLabel,
+                        status: 'Scheduled',
+                        assigned_staff: assignedStaff?.id || null,
+                        assigned_station: assignedStation?.id || null,
+                        station_ass: patient.delivery.station_ass || null,
+                        created_by: user?.id || null,
+                        notes: addVisitForm.notes.trim() || null
+                    })
+                    .select('id, delivery_id, patient_id, visit_type, scheduled_date, attended_date, status, assigned_staff, station_ass')
+                    .single();
+                if (error) throw error;
+                try {
+                    await patientService.resequencePostpartumVisitNumbers(patient.delivery.id);
+                } catch (numberingError) {
+                    console.error('Postpartum visit saved, but visit numbers could not be updated:', numberingError);
+                    postInsertWarnings.push('Visit numbers could not be updated.');
+                }
+                try {
+                    await patientService.sendScheduledVisitNotification('postpartum', insertedVisit.id);
+                } catch (emailError) {
+                    console.error('Postpartum visit was saved, but its email notification failed:', emailError);
+                    postInsertWarnings.push('The email notification could not be sent.');
+                }
+
+                setPostpartumTable(current => [{
+                    id: insertedVisit.id,
+                    deliveryId: insertedVisit.delivery_id,
+                    patientId: insertedVisit.patient_id,
+                    patientName: patient.name,
+                    vaccineName: insertedVisit.visit_type,
+                    doseText: '',
+                    assignedStaffId: insertedVisit.assigned_staff || null,
+                    assignedStaff: assignedStaff?.full_name || null,
+                    visitDate: insertedVisit.scheduled_date,
+                    visitDateOnly: insertedVisit.scheduled_date,
+                    status: insertedVisit.status,
+                    attendedDate: insertedVisit.attended_date || null,
+                    assignedStationId: insertedVisit.station_ass || null,
+                    assignedStation: patient.delivery.station_ass
+                        ? assignmentStations.find(station => station.id === patient.delivery.station_ass)?.station_name || null
+                        : null,
+                    notes: 'Postpartum follow-up',
+                    raw: insertedVisit
+                }, ...current]);
+            }
+
+            setShowAddVisitModal(false);
+            setAddVisitForm({
+                visit_category: 'Prenatal',
+                visit_type: 'emergency',
+                patient_id: '',
+                visit_date: new Date().toISOString().split('T')[0],
+                assigned_staff: '',
+                assigned_station: visitAccess?.stationId || '',
+                reason: '',
+                notes: ''
+            });
+            setToast(postInsertWarnings.length
+                ? `Visit saved. ${postInsertWarnings.join(' ')}`
+                : 'Visit scheduled successfully. An email notification was sent.');
+            setTimeout(() => setToast(null), 3000);
+        } catch (error) {
+            console.error('Failed to schedule visit:', error);
+            setToast(`Failed to schedule visit: ${error.message || 'Please try again.'}`);
+            setTimeout(() => setToast(null), 5000);
+        } finally {
+            setIsAddingVisit(false);
         }
-        setManualVisits(updated);
-
-        // Reset form
-        setShowAddVisitModal(false);
-        setAddVisitForm({
-            visit_type: 'emergency',
-            patient_id: '',
-            visit_date: new Date().toISOString().split('T')[0],
-            visit_time: '',
-            assigned_staff: '',
-            assigned_station: '',
-            reason: '',
-            notes: '',
-            related_emergency_id: ''
-        });
-
-        setToast('Visit added successfully!');
-        setTimeout(() => setToast(null), 3000);
-        setIsAddingVisit(false);
     };
 
     const handleConfirmReschedule = async (e) => {
@@ -734,6 +887,14 @@ const PrenatalVisits = () => {
             }
 
             let message = 'Rescheduled successfully.';
+            if (visit.kind === 'prenatal') {
+                try {
+                    await patientService.resequencePrenatalVisitNumbers(visit.patientId);
+                } catch (numberingError) {
+                    console.error('Visit was rescheduled, but prenatal visit numbers could not be updated:', numberingError);
+                    message += ' Visit numbers could not be updated.';
+                }
+            }
             try {
                 const { data: notification, error: notificationError } = await patientService.supabase.functions.invoke(
                     'visit-reschedule-email',
@@ -1255,7 +1416,6 @@ const PrenatalVisits = () => {
                                 const dayItems = visitTypeTab === 'postpartum'
                                     ? postpartumTable.filter(v => v.visitDateOnly === day.date)
                                     : visitsTable.filter(v => v.visitDateOnly === day.date);
-                                const dayManual = visitTypeTab === 'prenatal' ? manualVisits.filter(v => v.visit_date === day.date) : [];
 
                                 return (
                                     <div key={day.date} className={`day-schedule-card ${day.date === TODAY ? 'day-today' : ''}`}>
@@ -1265,7 +1425,7 @@ const PrenatalVisits = () => {
                                                 {day.date === TODAY && <span className="today-badge">TODAY</span>}
                                             </h3>
                                             <span className="day-schedule-count">
-                                                {dayItems.length + dayManual.length} schedule{dayItems.length + dayManual.length !== 1 ? 's' : ''}
+                                                {dayItems.length} schedule{dayItems.length !== 1 ? 's' : ''}
                                             </span>
                                         </div>
                                         <div className="day-schedule-list">
@@ -1285,19 +1445,7 @@ const PrenatalVisits = () => {
                                                     </span>
                                                 </div>
                                             ))}
-                                            {dayItems.length === 0 && dayManual.length === 0 && <div className="no-schedules">No schedules for this day</div>}
-                                            {dayManual.map(mv => (
-                                                <div key={mv.id} className={`schedule-item manual-visit-item manual-${mv.visit_type}`}>
-                                                    <div className="schedule-details">
-                                                        <span className="schedule-patient">{mv.patient_name}</span>
-                                                        <span className="visit-type-badge badge-manual-type badge-{mv.visit_type}">{mv.visit_type === 'emergency' ? 'Emergency' : 'Follow-up'}</span>
-                                                        <span className="schedule-id">Station: {mv.assigned_station_name || 'Unassigned'} · Staff: {mv.assigned_staff_name || 'Unassigned'}</span>
-                                                    </div>
-                                                    <span className="visit-type-badge" style={{ background: mv.visit_type === 'emergency' ? 'rgba(224,92,115,0.15)' : 'rgba(147,111,199,0.15)', color: mv.visit_type === 'emergency' ? '#c94070' : '#7a4fa8', fontWeight: 600, fontSize: '11px', padding: '2px 8px', borderRadius: '10px' }}>
-                                                        {mv.visit_type === 'emergency' ? 'Emergency' : 'Follow-up'}
-                                                    </span>
-                                                </div>
-                                            ))}
+                                            {dayItems.length === 0 && <div className="no-schedules">No schedules for this day</div>}
                                         </div>
                                     </div>
                                 );
@@ -1311,7 +1459,6 @@ const PrenatalVisits = () => {
                                         const dayItems = visitTypeTab === 'postpartum'
                                             ? postpartumTable.filter(v => v.visitDateOnly === day.date)
                                             : visitsTable.filter(v => v.visitDateOnly === day.date);
-                                        const dayManual = visitTypeTab === 'prenatal' ? manualVisits.filter(mv => mv.visit_date === day.date) : [];
 
                                         return (
                                             <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`} onClick={() => { setCalendarView('day'); setCurrentDate(new Date(day.date)); }}>
@@ -1331,13 +1478,7 @@ const PrenatalVisits = () => {
                                                             <span className="visit-status">Assigned: {item.assignedStaff || 'Unassigned'}</span>
                                                         </div>
                                                     ))}
-                                                    {dayManual.map(mv => (
-                                                        <div key={mv.id} className={`visit-item manual-${mv.visit_type}`}>
-                                                            <span className="visit-patient">{mv.patient_name}</span>
-                                                            <span className="visit-type-badge" style={{ background: mv.visit_type === 'emergency' ? 'rgba(224,92,115,0.15)' : 'rgba(147,111,199,0.15)', color: mv.visit_type === 'emergency' ? '#c94070' : '#7a4fa8', fontWeight: 600, fontSize: '10px', padding: '1px 6px', borderRadius: '8px' }}>{mv.visit_type === 'emergency' ? 'Emergency' : 'Follow-up'}</span>
-                                                        </div>
-                                                    ))}
-                                                    {dayItems.length === 0 && dayManual.length === 0 && (
+                                                    {dayItems.length === 0 && (
                                                         <div className="no-visits">No schedules</div>
                                                     )}
                                                 </div>
@@ -1357,7 +1498,6 @@ const PrenatalVisits = () => {
                                                 const dayItems = visitTypeTab === 'postpartum'
                                                     ? postpartumTable.filter(v => v.visitDateOnly === day.date)
                                                     : visitsTable.filter(v => v.visitDateOnly === day.date);
-                                                const dayManual = visitTypeTab === 'prenatal' ? manualVisits.filter(mv => mv.visit_date === day.date) : [];
 
                                                 return (
                                                     <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`} onClick={() => { setCalendarView('day'); setCurrentDate(new Date(day.date)); }}>
@@ -1377,13 +1517,7 @@ const PrenatalVisits = () => {
                                                                     <span className="visit-status">Assigned: {item.assignedStaff || 'Unassigned'}</span>
                                                                 </div>
                                                             ))}
-                                                            {dayManual.map(mv => (
-                                                                <div key={mv.id} className={`visit-item manual-${mv.visit_type}`}>
-                                                                    <span className="visit-patient">{mv.patient_name}</span>
-                                                                    <span className="visit-type-badge" style={{ background: mv.visit_type === 'emergency' ? 'rgba(224,92,115,0.15)' : 'rgba(147,111,199,0.15)', color: mv.visit_type === 'emergency' ? '#c94070' : '#7a4fa8', fontWeight: 600, fontSize: '11px', padding: '1px 6px', borderRadius: '8px' }}>{mv.visit_type === 'emergency' ? 'Emergency' : 'Follow-up'}</span>
-                                                                </div>
-                                                            ))}
-                                                            {dayItems.length === 0 && dayManual.length === 0 && (
+                                                            {dayItems.length === 0 && (
                                                                 <div className="no-visits">No schedules</div>
                                                             )}
                                                         </div>
@@ -1695,12 +1829,10 @@ const PrenatalVisits = () => {
                                         visit_type: 'emergency',
                                         patient_id: '',
                                         visit_date: new Date().toISOString().split('T')[0],
-                                        visit_time: '',
                                         assigned_staff: '',
                                         assigned_station: visitAccess?.stationId || '',
                                         reason: '',
-                                        notes: '',
-                                        related_emergency_id: ''
+                                        notes: ''
                                     });
                                     setShowAddVisitModal(true);
                                 }}
@@ -1767,12 +1899,28 @@ const PrenatalVisits = () => {
                                         <select
                                             required
                                             value={addVisitForm.visit_category}
-                                            onChange={e => setAddVisitForm({ ...addVisitForm, visit_category: e.target.value })}
+                                            onChange={e => {
+                                                const category = e.target.value;
+                                                const currentPatient = allPatients.find(patient => patient.id === addVisitForm.patient_id);
+                                                const remainsEligible = category === 'Postpartum'
+                                                    ? currentPatient?.hasDelivery
+                                                    : currentPatient && !currentPatient.hasDelivery
+                                                        && String(currentPatient.pregnancyStatus).toLowerCase() === 'pregnant';
+                                                setAddVisitForm({
+                                                    ...addVisitForm,
+                                                    visit_category: category,
+                                                    patient_id: remainsEligible ? addVisitForm.patient_id : '',
+                                                    assigned_station: remainsEligible
+                                                        ? addVisitForm.assigned_station
+                                                        : visitAccess?.stationId || '',
+                                                    assigned_staff: ''
+                                                });
+                                                setAssignmentStaff([]);
+                                            }}
                                             className="form-control"
                                         >
                                             <option value="Prenatal">Prenatal</option>
                                             <option value="Postpartum">Postpartum</option>
-                                            <option value="Vaccination">Vaccination</option>
                                         </select>
                                     </div>
 
@@ -1781,7 +1929,7 @@ const PrenatalVisits = () => {
                                         <select
                                             required
                                             value={addVisitForm.visit_type}
-                                            onChange={e => setAddVisitForm({ ...addVisitForm, visit_type: e.target.value, related_emergency_id: '' })}
+                                            onChange={e => setAddVisitForm({ ...addVisitForm, visit_type: e.target.value })}
                                             className="form-control"
                                         >
                                             <option value="emergency">Emergency Visit</option>
@@ -1792,15 +1940,20 @@ const PrenatalVisits = () => {
                                     <div className="form-group">
                                         <label>Patient <span style={{ color: '#e05c73' }}>*</span></label>
                                         <SearchableDropdown
-                                            patients={allPatients}
+                                            patients={patientsForVisitCategory}
                                             value={addVisitForm.patient_id}
                                             onChange={val => {
-                                                const selected = allPatients.find(patient => patient.id === val);
+                                                const selected = patientsForVisitCategory.find(patient => patient.id === val);
+                                                const visitCategory = selected
+                                                    ? selected.hasDelivery ? 'Postpartum' : 'Prenatal'
+                                                    : addVisitForm.visit_category;
                                                 setAddVisitForm({
                                                     ...addVisitForm,
                                                     patient_id: val,
-                                                    related_emergency_id: '',
-                                                    assigned_station: selected?.stationId || addVisitForm.assigned_station,
+                                                    visit_category: visitCategory,
+                                                    assigned_station: selected?.delivery?.station_ass
+                                                        || selected?.stationId
+                                                        || addVisitForm.assigned_station,
                                                     assigned_staff: ''
                                                 });
                                                 setAssignmentStaff([]);
@@ -1808,51 +1961,14 @@ const PrenatalVisits = () => {
                                         />
                                     </div>
 
-                                    {addVisitForm.visit_type === 'follow_up' && (
-                                        <div className="form-group">
-                                            <label>Related Emergency Visit <span style={{ color: '#e05c73' }}>*</span></label>
-                                            <select
-                                                required
-                                                value={addVisitForm.related_emergency_id}
-                                                onChange={e => setAddVisitForm({ ...addVisitForm, related_emergency_id: e.target.value })}
-                                                className="form-control"
-                                            >
-                                                <option value="">— Select emergency visit —</option>
-                                                {manualVisits
-                                                    .filter(v => v.patient_id === addVisitForm.patient_id && v.visit_type === 'emergency')
-                                                    .map(v => (
-                                                        <option key={v.id} value={v.id}>
-                                                            Emergency Visit – {formatReadableDate(v.visit_date)}
-                                                        </option>
-                                                    ))}
-                                            </select>
-                                            {manualVisits.filter(v => v.patient_id === addVisitForm.patient_id && v.visit_type === 'emergency').length === 0 && (
-                                                <span style={{ color: '#e8b84b', fontSize: '11px', marginTop: '4px', display: 'block' }}>
-                                                    No previous emergency visits recorded for this patient.
-                                                </span>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                        <div className="form-group">
-                                            <label>Visit Date <span style={{ color: '#e05c73' }}>*</span></label>
-                                            <input
-                                                type="date"
-                                                required
-                                                value={addVisitForm.visit_date}
-                                                onChange={e => setAddVisitForm({ ...addVisitForm, visit_date: e.target.value })}
-                                            />
-                                        </div>
-                                        <div className="form-group">
-                                            <label>Visit Time <span style={{ color: '#e05c73' }}>*</span></label>
-                                            <input
-                                                type="time"
-                                                required
-                                                value={addVisitForm.visit_time}
-                                                onChange={e => setAddVisitForm({ ...addVisitForm, visit_time: e.target.value })}
-                                            />
-                                        </div>
+                                    <div className="form-group">
+                                        <label>Visit Date <span style={{ color: '#e05c73' }}>*</span></label>
+                                        <input
+                                            type="date"
+                                            required
+                                            value={addVisitForm.visit_date}
+                                            onChange={e => setAddVisitForm({ ...addVisitForm, visit_date: e.target.value })}
+                                        />
                                     </div>
                                 </div>
 
@@ -1889,7 +2005,7 @@ const PrenatalVisits = () => {
                                             disabled={!addVisitForm.assigned_station
                                                 || loadingAssignmentStaff
                                                 || (visitAccess?.role !== 'admin' && addVisitForm.assigned_station !== visitAccess?.stationId)
-                                                || assignmentStaff.length === 0}
+                                                || assignableVisitStaff.length === 0}
                                             className="form-control"
                                         >
                                             <option value="">
@@ -1899,7 +2015,7 @@ const PrenatalVisits = () => {
                                                         ? 'Workers can only be assigned at your own station'
                                                         : 'Select healthcare staff (optional)'}
                                             </option>
-                                            {assignmentStaff.map(staff => (
+                                            {assignableVisitStaff.map(staff => (
                                                 <option key={staff.id} value={staff.id}>{staff.full_name}</option>
                                             ))}
                                         </select>

@@ -75,20 +75,40 @@ const MyAppointments = () => {
     }, []);
 
     useEffect(() => {
+        let active = true;
+        let appointmentChannel = null;
         const loadAppointments = async () => {
             const auth = new AuthService();
             const patientService = new PatientService();
             try {
                 const authUser = await auth.getAuthUser();
                 if (!authUser?.id) return;
+                if (!appointmentChannel) {
+                    appointmentChannel = patientService.supabase
+                        .channel(`mother-appointments-${authUser.id}`)
+                        .on('postgres_changes', {
+                            event: '*',
+                            schema: 'public',
+                            table: 'prenatal_visits',
+                            filter: `patient_id=eq.${authUser.id}`
+                        }, () => { if (active) loadAppointments(); })
+                        .on('postgres_changes', {
+                            event: '*',
+                            schema: 'public',
+                            table: 'postpartum_visits',
+                            filter: `patient_id=eq.${authUser.id}`
+                        }, () => { if (active) loadAppointments(); })
+                        .subscribe();
+                }
 
                 const patient = await patientService.getPatientById(authUser.id);
                 if (!patient) {
-                    setAppointmentsData([]);
+                    if (active) setAppointmentsData([]);
                     return;
                 }
 
                 const fullName = patient ? [patient.first_name, patient.middle_name, patient.last_name, patient.suffix].filter(Boolean).join(' ') : 'N/A';
+                if (!active) return;
                 setPatientInfo({
                     name: fullName || 'N/A',
                     id: patient?.patient_id || patient?.id || 'N/A',
@@ -98,37 +118,51 @@ const MyAppointments = () => {
                 const currentPregnancy = patient.currentPregnancy;
                 const currentStatus = String(patient.pregnancyRecord?.pregn_postp || patient.pregnancyRecord?.status || currentPregnancy?.status || patient.pregnancyStatus || '').toLowerCase();
                 const isPostpartum = currentStatus === 'postpartum';
-                const { data: postpartumVisits, error: postpartumVisitsError } = await patientService.supabase
-                    .from('postpartum_visits')
-                    .select('id, visit_type, scheduled_at, attended_date, status, assigned_staff, assessment, notes')
-                    .eq('patient_id', authUser.id)
-                    .order('scheduled_at', { ascending: true });
-                if (postpartumVisitsError) throw postpartumVisitsError;
+                const [prenatalResult, postpartumResult] = await Promise.all([
+                    patientService.supabase
+                        .from('prenatal_visits')
+                        .select('id, visit_date, visit_number, next_appt_type, status, assigned_staff, clinical_notes, missed_reason')
+                        .eq('patient_id', authUser.id)
+                        .order('visit_date', { ascending: true }),
+                    patientService.supabase
+                        .from('postpartum_visits')
+                        .select('id, visit_type, scheduled_date, scheduled_at, attended_date, status, assigned_staff, assessment, notes')
+                        .eq('patient_id', authUser.id)
+                        .order('scheduled_date', { ascending: true })
+                ]);
+                if (prenatalResult.error) throw prenatalResult.error;
+                if (postpartumResult.error) throw postpartumResult.error;
+                const prenatalVisits = prenatalResult.data || [];
+                const postpartumVisits = postpartumResult.data || [];
                 const postpartumStaffIds = [...new Set((postpartumVisits || [])
                     .map(visit => visit.assigned_staff)
                     .filter(Boolean))];
-                const { data: postpartumStaff, error: postpartumStaffError } = postpartumStaffIds.length
+                const prenatalStaffIds = [...new Set(prenatalVisits.map(visit => visit.assigned_staff).filter(Boolean))];
+                const staffIds = [...new Set([...postpartumStaffIds, ...prenatalStaffIds])];
+                const { data: postpartumStaff, error: postpartumStaffError } = staffIds.length
                     ? await patientService.supabase
                         .from('staff_profiles')
                         .select('id, full_name')
-                        .in('id', postpartumStaffIds)
+                        .in('id', staffIds)
                     : { data: [], error: null };
                 if (postpartumStaffError) throw postpartumStaffError;
                 const postpartumStaffNames = new Map((postpartumStaff || []).map(staff => [staff.id, staff.full_name]));
-                const visitAppts = (patient.pregnancyHistory || [])
-                    .flatMap(pregnancy => (pregnancy.visits || []).map(visit => ({ pregnancy, visit })))
-                    .filter(({ visit }) => visit.visit_date)
-                    .map(({ pregnancy, visit }) => ({
+                const pregnancyNumberByVisitId = new Map((patient.pregnancyHistory || [])
+                    .flatMap(pregnancy => (pregnancy.visits || []).map(visit => [visit.id, pregnancy.pregnancyNumber])));
+                const visitAppts = prenatalVisits
+                    .filter(visit => visit.visit_date)
+                    .map(visit => ({
                         id: visit.id,
                         date: visit.visit_date,
-                        type: String(visit.next_appt_type || '').toLowerCase().includes('postpartum') ? 'Postpartum' : 'Prenatal',
-                        status: visit.status || 'Scheduled',
+                        type: 'Prenatal',
+                        status: visit.status === 'Scheduled' && visit.visit_date < toLocalDateStr(new Date())
+                            ? 'Missed'
+                            : visit.status || 'Scheduled',
                         location: sanitizeUUID(patient.station, 'Health Station'),
-                        staffName: visit.assigned_staff_name || visit.assigned_staff || null,
-                        staffStation: visit.assigned_staff_station,
-                        notes: visit.missed_reason || visit.clinical_notes || '',
-                        pregnancyNumber: pregnancy.pregnancyNumber,
-                        color: String(visit.next_appt_type || '').toLowerCase().includes('postpartum') ? 'blue' : 'green'
+                        staffName: postpartumStaffNames.get(visit.assigned_staff) || null,
+                        notes: visit.missed_reason || visit.clinical_notes || visit.next_appt_type || '',
+                        pregnancyNumber: pregnancyNumberByVisitId.get(visit.id),
+                        color: 'green'
                     }));
                 const newbornVaccines = (isPostpartum ? currentPregnancy?.newborns || [] : [])
                     .filter(isNewbornVaccinationEligible)
@@ -147,14 +181,15 @@ const MyAppointments = () => {
                             color: 'yellow'
                         })));
 
-                const postpartumAppts = (isPostpartum ? postpartumVisits || [] : [])
+                const postpartumAppts = postpartumVisits
                     .map(visit => {
-                        const scheduledDate = visit.scheduled_at;
+                        const scheduledDate = visit.scheduled_date || getDateOnly(visit.scheduled_at);
+                        const today = toLocalDateStr(new Date());
                         const status = visit.status === 'Attended'
                             ? 'Attended'
                             : visit.status === 'Cancelled'
                                 ? 'Cancelled'
-                                : scheduledDate && new Date(scheduledDate) < new Date()
+                                : scheduledDate && scheduledDate < today
                                     ? 'Missed'
                                     : 'Scheduled';
                         const date = visit.attended_date || scheduledDate;
@@ -163,7 +198,7 @@ const MyAppointments = () => {
                             date,
                             scheduledDate,
                             attendedDate: visit.attended_date,
-                            time: scheduledDate ? new Date(scheduledDate).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' }) : '',
+                            time: '',
                             type: visit.visit_type,
                             status,
                             location: sanitizeUUID(patient.station, 'Health Station'),
@@ -179,18 +214,24 @@ const MyAppointments = () => {
                     });
 
                 const combined = [
-                    ...visitAppts.filter(appointment => appointment.type !== 'Postpartum'),
+                    ...visitAppts,
                     ...newbornVaccines,
                     ...postpartumAppts
                 ];
-                setAppointmentsData(combined);
+                if (active) setAppointmentsData(combined);
             } catch (err) {
                 console.error('Failed to load appointments:', err);
-                setAppointmentsData([]);
+                if (active) setAppointmentsData([]);
             }
         };
         loadAppointments();
-    }, [currentDate]);
+        return () => {
+            active = false;
+            if (appointmentChannel) {
+                new PatientService().supabase.removeChannel(appointmentChannel);
+            }
+        };
+    }, [t]);
 
     const getVisibleDays = (date, view) => {
         const d = new Date(date);

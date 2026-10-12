@@ -141,7 +141,7 @@ const AddPatient = () => {
                 ? { ...visit, date, week, trimester: patientService.getTrimesterFromWeek(week) }
                 : visit)
             .sort((left, right) => left.date.localeCompare(right.date))
-            .map((visit, visitIndex) => ({ ...visit, visitNumber: visitIndex + 2 })));
+            .map((visit, visitIndex) => ({ ...visit, visitNumber: visitIndex + 1 })));
     };
 
     const addScheduledVisit = () => {
@@ -162,14 +162,14 @@ const AddPatient = () => {
             trimester: patientService.getTrimesterFromWeek(week),
             type: 'Routine Prenatal'
         }].sort((left, right) => left.date.localeCompare(right.date))
-            .map((visit, index) => ({ ...visit, visitNumber: index + 2 })));
+            .map((visit, index) => ({ ...visit, visitNumber: index + 1 })));
         setNewScheduleDate('');
     };
 
     const removeScheduledVisit = (index) => {
         setSchedulePreview(current => current
             .filter((_, visitIndex) => visitIndex !== index)
-            .map((visit, visitIndex) => ({ ...visit, visitNumber: visitIndex + 2 })));
+            .map((visit, visitIndex) => ({ ...visit, visitNumber: visitIndex + 1 })));
     };
 
     const fetchSuggestedMothers = async () => {
@@ -451,8 +451,7 @@ const AddPatient = () => {
             const normalizedPreview = preview
                 .filter(v => v && v.date && !Number.isNaN(new Date(v.date).getTime()))
                 .map(v => ({ ...v, date: new Date(v.date).toISOString().split('T')[0] }));
-            const futurePreview = patientService.filterScheduleAfterToday(normalizedPreview)
-                .filter(visit => Number(visit.visitNumber) > 1);
+            const futurePreview = patientService.filterScheduleAfterToday(normalizedPreview);
             setSchedulePreview(futurePreview);
         } catch (err) {
             console.error('Error building schedule preview:', err);
