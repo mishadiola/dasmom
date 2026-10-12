@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import {
-    ArrowLeft, Save, X, FileText, User, Activity,
+    ArrowLeft, Save, X, FileText, User, Activity, Download,
     Calendar, HeartPulse, UploadCloud, AlertTriangle,
     CheckCircle2, XCircle, Loader2, Search, Info, History, Plus, Trash2
 } from 'lucide-react';
@@ -14,6 +14,7 @@ import { formatMotherId } from '../../utils/displayIds';
 
 const patientService = new PatientService();
 const inventoryService = new InventoryService();
+const APK_DOWNLOAD_URL = 'https://hcrpdvizautiuwgmfcqc.supabase.co/storage/v1/object/public/dasmom-apk/app-release.apk';
 const TABS = [
     { id: 'personal', label: 'Personal', icon: User },
     { id: 'pregnancy', label: 'Pregnancy', icon: HeartPulse },
@@ -1128,22 +1129,40 @@ const AddPatient = () => {
                     <ArrowLeft size={16} /> Back to Patient List
                 </button>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                     <h1 style={{ fontSize: '1.65rem', margin: 0, fontWeight: 600 }}>
                         {formData.pregnancyStatus === 'Postpartum' 
                             ? 'Register Postpartum Patient' 
                             : 'Register New Pregnancy'}
                     </h1>
                     
-                    <div style={{ 
-                        backgroundColor: 'rgba(255, 255, 255, 0.2)', 
-                        padding: '4px 12px', 
-                        borderRadius: '20px', 
-                        fontSize: '0.8rem',
-                        fontWeight: 500,
-                        whiteSpace: 'nowrap'
-                    }}>
-                        BHW: {currentStaff.full_name}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <a
+                            href={APK_DOWNLOAD_URL}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                color: 'white',
+                                fontSize: '0.8rem',
+                                fontWeight: 600,
+                                textDecoration: 'underline'
+                            }}
+                        >
+                            <Download size={15} /> Download Android app
+                        </a>
+                        <div style={{
+                            backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                            padding: '4px 12px',
+                            borderRadius: '20px',
+                            fontSize: '0.8rem',
+                            fontWeight: 500,
+                            whiteSpace: 'nowrap'
+                        }}>
+                            BHW: {currentStaff.full_name}
+                        </div>
                     </div>
                 </div>
             </div>

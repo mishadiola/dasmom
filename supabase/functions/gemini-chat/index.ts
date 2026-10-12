@@ -79,7 +79,7 @@ runtime.serve(async (req: Request) => {
       return jsonResponse({ error: "The assistant is available only to logged-in mothers" }, 403);
     }
 
-    const [visitsResult, newbornsResult, deliveriesResult] = await Promise.all([
+    const [visitsResult, newbornsResult, deliveriesResult, postpartumVisitsResult] = await Promise.all([
       supabaseRequest(
         `${supabaseUrl}/rest/v1/prenatal_visits?patient_id=eq.${encodedPatientId}&select=visit_date,visit_number,next_appt_date,next_appt_type,status,clinical_notes&order=visit_date.desc&limit=20`,
         accessToken,
@@ -91,13 +91,19 @@ runtime.serve(async (req: Request) => {
         supabaseAnonKey,
       ),
       supabaseRequest(
-        `${supabaseUrl}/rest/v1/deliveries?mother_id=eq.${encodedPatientId}&select=id,delivery_date,delivery_type,delivery_mode,gestational_age,complications,notes,postpartum_visit_date,postpartum_attended_date,postpartum_remarks&order=delivery_date.desc&limit=20`,
+        `${supabaseUrl}/rest/v1/deliveries?mother_id=eq.${encodedPatientId}&select=id,delivery_date,delivery_type,delivery_mode,gestational_age,complications,notes&order=delivery_date.desc&limit=20`,
+        accessToken,
+        supabaseAnonKey,
+      ),
+      supabaseRequest(
+        `${supabaseUrl}/rest/v1/postpartum_visits?patient_id=eq.${encodedPatientId}&select=visit_number,visit_type,scheduled_date,status,attended_date,clinical_notes,next_appt_date,next_appt_type&order=scheduled_date.desc&limit=20`,
         accessToken,
         supabaseAnonKey,
       ),
     ]);
 
     const queryError = [visitsResult, newbornsResult, deliveriesResult]
+      .concat([postpartumVisitsResult])
       .find((result) => !result.response.ok);
     if (queryError) {
       console.error("Patient context query failed:", queryError.data);
@@ -137,7 +143,8 @@ runtime.serve(async (req: Request) => {
       prenatalVisits: visitsResult.data ?? [],
       newborns,
       newbornVaccinations: vaccines,
-      postpartumVisits: deliveriesResult.data ?? [],
+      deliveryRecords: deliveriesResult.data ?? [],
+      postpartumVisits: postpartumVisitsResult.data ?? [],
     });
     const response = await fetch(
       "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
