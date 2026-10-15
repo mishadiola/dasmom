@@ -611,8 +611,8 @@ const PatientProfile = () => {
                     <div className="profile-title-block">
                         <div className="profile-title-row">
                             <h1 className="profile-name">{p.name}</h1>
-                            <span className={`risk-badge risk-${p.risk?.toLowerCase().split(' ')[0]}`}>
-                                {p.risk ? p.risk.toUpperCase() : 'NORMAL'}
+                            <span className={`risk-badge ${p.hasHealthConditions ? 'condition-present risk-with' : 'condition-none risk-none'}`}>
+                                {p.hasHealthConditions ? 'WITH HEALTH CONDITIONS' : 'NONE REPORTED'}
                             </span>
                         </div>
                         <p className="profile-meta">
@@ -826,7 +826,7 @@ const PatientProfile = () => {
                                         </div>
                                         <div className={`gpa-box box-risk-${p.hasHealthConditions ? 'high' : 'normal'}`}>
                                             <span className="gpa-label">Health Conditions</span>
-                                            <span className="gpa-value str">{p.hasHealthConditions ? 'Documented' : 'None'}</span>
+                                            <span className="gpa-value str">{p.hasHealthConditions ? 'Documented' : 'None Reported'}</span>
                                             <span className="gpa-sub">Medical Status</span>
                                         </div>
                                     </div>

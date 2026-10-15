@@ -294,7 +294,9 @@
 
 /* Documented condition badges (compact, readable, theme-consistent) */
 .condition-badge.condition-present,
-.condition-badge--present {
+.condition-badge--present,
+.risk-badge.condition-present,
+.risk-badge.risk-with {
     background: rgba(224, 92, 115, 0.12);
     color: #b73a52;
     border: 1px solid rgba(224, 92, 115, 0.22);

@@ -275,8 +275,13 @@ export default class PatientService {
       const latestAttendedVisitMap = new Map();
       const heightByPatientMap = new Map();
       const assignedStaffMap = new Map();
+      const visitsByPatientMap = new Map();
       (visits || []).forEach(v => {
         if (!v.patient_id) return;
+        if (!visitsByPatientMap.has(v.patient_id)) {
+          visitsByPatientMap.set(v.patient_id, []);
+        }
+        visitsByPatientMap.get(v.patient_id).push(v);
         if (Number(v.height_cm) > 0 && !heightByPatientMap.has(v.patient_id)) {
           heightByPatientMap.set(v.patient_id, v.height_cm);
         }
@@ -329,8 +334,33 @@ export default class PatientService {
           pgi || {},
           latestVisit
         );
-        const risk = riskAssessment.riskLevel;
-        const riskFactors = riskAssessment.riskFactors;
+
+        // Documented health conditions determination across current pregnancy visits
+        const patientVisits = visitsByPatientMap.get(p.id) || [];
+        const deliveryDateStr = deliveredPatients.get(p.id);
+        const deliveryTime = deliveryDateStr ? new Date(deliveryDateStr).getTime() : 0;
+        const currentPregnancyVisits = deliveryTime > 0
+          ? patientVisits.filter(v => v.visit_date && new Date(v.visit_date).getTime() > deliveryTime)
+          : patientVisits;
+        const visitsToInspect = currentPregnancyVisits.length > 0 ? currentPregnancyVisits : patientVisits;
+
+        const conditionSet = new Set();
+        visitsToInspect.forEach(v => {
+          if (v.risk_factors) {
+            const conds = this.getDocumentedHealthConditions(v.risk_factors);
+            conds.forEach(c => conditionSet.add(c));
+          }
+        });
+
+        if (latestVisit?.risk_factors) {
+          const latestConds = this.getDocumentedHealthConditions(latestVisit.risk_factors);
+          latestConds.forEach(c => conditionSet.add(c));
+        }
+
+        const documentedConditions = Array.from(conditionSet);
+        const hasHealthConditions = documentedConditions.length > 0;
+        const conditionDisplay = documentedConditions.join(', ') || 'None Reported';
+        const riskLevelDisplay = hasHealthConditions ? 'With Health Conditions' : 'None Reported';
 
         const rawNextAppt = nextApptMap.get(p.id) || null;
         let nextAppt = null;
@@ -387,13 +417,19 @@ export default class PatientService {
             : null,
           trimester,
           weeks,
-          risk,
+          risk: riskLevelDisplay,
+          riskLevel: riskLevelDisplay,
+          hasHealthConditions,
+          documentedConditions,
+          medicalConditions: documentedConditions,
+          condition: conditionDisplay,
+          conditionsList: documentedConditions,
           edd: pgi?.edd || null,
           lmp: pgi?.lmd || null,
           createdAt: p.created_at,
           nextAppt,
           totalVisits: attendedCountMap.get(p.id) || 0,
-          riskFactors,
+          riskFactors: documentedConditions,
           gravida: riskAssessment.gravida,
           pregnancyType: riskAssessment.pregnancyType,
           patientType,
@@ -2253,6 +2289,20 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       normalizedDeliveries,
       normalizedNewborns
     );
+    const currentPregnancy = pregnancyHistory.find(pregnancy => pregnancy.isCurrent) || null;
+    const currentVisits = (currentPregnancy?.visits && currentPregnancy.visits.length > 0)
+      ? currentPregnancy.visits
+      : normalizedVisits;
+
+    const patientConditionsSet = new Set();
+    (currentVisits || []).forEach(v => {
+      const rawConds = this.getDocumentedHealthConditions(v.raw_risk_factors || v.risk_factors);
+      const calcConds = this.getDocumentedHealthConditions(v.risk_factors);
+      [...rawConds, ...calcConds].forEach(c => patientConditionsSet.add(c));
+    });
+    const patientDocumentedConditions = Array.from(patientConditionsSet);
+    const patientHasHealthConditions = patientDocumentedConditions.length > 0;
+
     // preg is already defined earlier
     const rawEmergencyContact = patientData.emergency_contact || {};
     const emergencyContact = {
@@ -2281,9 +2331,11 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       civilStatus: patientData.civil_status,
       philhealth: patientData.philhealthnumber,
       bloodType: patientData.blood_type || patientData.bloodtype || 'Unknown',
-      medicalConditions: this.getDocumentedHealthConditions(latestAttendedVisit?.risk_factors),
-      hasHealthConditions: this.hasDocumentedHealthConditions(latestAttendedVisit?.risk_factors),
-      risk: this.hasDocumentedHealthConditions(latestAttendedVisit?.risk_factors) ? 'With Health Conditions' : 'None Reported',
+      medicalConditions: patientDocumentedConditions,
+      documentedConditions: patientDocumentedConditions,
+      hasHealthConditions: patientHasHealthConditions,
+      risk: patientHasHealthConditions ? 'With Health Conditions' : 'None Reported',
+      riskLevel: patientHasHealthConditions ? 'With Health Conditions' : 'None Reported',
       gravida: preg.gravida || 0,
       para: preg.para || 0,
       miscarriageInfo: preg.miscarriage_info || null,
@@ -2312,7 +2364,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       newborns: normalizedNewborns,
       deliveries: normalizedDeliveries,
       pregnancyHistory,
-      currentPregnancy: pregnancyHistory.find(pregnancy => pregnancy.isCurrent) || null,
+      currentPregnancy,
       pregnancyRecord: preg,
       pregnancyStatus: getPregnancyStatus(preg)
     };
