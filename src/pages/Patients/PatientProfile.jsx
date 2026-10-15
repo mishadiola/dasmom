@@ -857,9 +857,10 @@ const PatientProfile = () => {
                                         return (
                                             <div className="condition-history-timeline">
                                                 {attendedVisits.map((visit, index) => {
-                                                    const rawConds = patientService.getDocumentedHealthConditions(visit.raw_risk_factors);
-                                                    const calcConds = patientService.getDocumentedHealthConditions(visit.risk_factors);
-                                                    const conditions = Array.from(new Set([...rawConds, ...calcConds]));
+                                                    const riskFactors = Array.from(new Set([
+                                                        ...patientService.getRiskFactors(visit.raw_risk_factors),
+                                                        ...patientService.getRiskFactors(visit.risk_factors),
+                                                    ]));
 
                                                     return (
                                                         <div key={visit.id || index} className="condition-history-item">
@@ -870,13 +871,13 @@ const PatientProfile = () => {
                                                                         <span className="condition-visit-number">Visit #{visit.visit_number}</span>
                                                                     ) : null}
                                                                 </div>
-                                                                {conditions.length === 0 && (
+                                                                {riskFactors.length === 0 && (
                                                                     <span className="condition-badge condition-none">None Reported</span>
                                                                 )}
                                                             </div>
-                                                            {conditions.length > 0 && (
+                                                            {riskFactors.length > 0 && (
                                                                 <div className="condition-badges-list">
-                                                                    {conditions.map((condition, i) => (
+                                                                    {riskFactors.map((condition, i) => (
                                                                         <span key={i} className="condition-badge condition-present">
                                                                             {condition}
                                                                         </span>

@@ -1838,9 +1838,9 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         height_cm: visit.patient_basic_info?.height_cm || heightByPatientMap.get(visit.patient_id),
       };
       const pregnancy = latestPregMap.get(visit.patient_id) || {};
-      const documentedConditions = this.getDocumentedHealthConditions(visit.risk_factors);
-      const hasHealthConditions = documentedConditions.length > 0;
-      const conditionDisplay = documentedConditions.join(', ') || 'None Reported';
+      const riskFactors = this.getRiskFactors(visit.risk_factors);
+      const hasHealthConditions = this.getDocumentedHealthConditions(visit.risk_factors).length > 0;
+      const conditionDisplay = riskFactors.join(', ') || 'None Reported';
 
       const gestationalAge = visit.gestational_age ? parseInt(visit.gestational_age) || 0 : 0;
       const weeks = gestationalAge;
@@ -1870,7 +1870,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         riskLevel: hasHealthConditions ? 'Health Conditions Documented' : 'None Reported',
         hasHealthConditions,
         condition: conditionDisplay,
-        conditionsList: documentedConditions,
+        conditionsList: riskFactors,
         gravida: pregnancy.gravida || null,
         lmd: lmd ? lmd.toISOString().split('T')[0] : null,
         edd: edd ? edd.toISOString().split('T')[0] : null,
@@ -3208,7 +3208,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     }
   }
 
-  getDocumentedHealthConditions(riskFactorsInput) {
+  getRiskFactors(riskFactorsInput) {
     if (!riskFactorsInput) return [];
     let factorList = [];
     if (Array.isArray(riskFactorsInput)) {
@@ -3226,6 +3226,13 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
     return factorList
       .map(item => String(item || '').trim())
+      .filter(trimmed => trimmed && !['none', 'none reported'].includes(trimmed.toLowerCase()));
+  }
+
+  getDocumentedHealthConditions(riskFactorsInput) {
+    if (!riskFactorsInput) return [];
+
+    return this.getRiskFactors(riskFactorsInput)
       .filter(trimmed => {
         if (!trimmed) return false;
         const lower = trimmed.toLowerCase();
