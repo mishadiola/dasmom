@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AuthContext } from './AuthContext';
 import supabase from '../config/supabaseclient';
 
@@ -17,16 +17,21 @@ export const RolePermissionProvider = ({ children }) => {
     const [permissions, setPermissions] = useState({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const loadedUserId = useRef(null);
 
     const refresh = useCallback(async () => {
         if (!user?.id) {
             setPermissions({});
             setError(null);
             setLoading(false);
+            loadedUserId.current = null;
             return false;
         }
 
-        setLoading(true);
+        if (loadedUserId.current !== user.id) {
+            setPermissions({});
+            setLoading(true);
+        }
         setError(null);
         const { data, error: permissionError } = await supabase.rpc('get_my_permissions');
         if (permissionError) {
@@ -39,6 +44,7 @@ export const RolePermissionProvider = ({ children }) => {
         setPermissions(Object.fromEntries(
             (data || []).map(row => [row.permission_key, row.is_allowed === true])
         ));
+        loadedUserId.current = user.id;
         setLoading(false);
         return true;
     }, [user?.id]);

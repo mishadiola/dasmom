@@ -17,32 +17,34 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     let isMounted = true;
     let initRequest = 0;
+    let signInInitTimer = null;
 
     const initAuth = async () => {
       const requestId = ++initRequest;
       try {
-        // Clear any stale cached user
         authService.clearUser();
         
-        // Only try to load user if there's an active Supabase session
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError || !session?.user) {
-          // No valid session - don't auto-restore user
           if (isMounted && requestId === initRequest) {
             setUser(null);
             console.log('AuthContext: No active session, user not loaded');
           }
-        } else {
+        } 
+        else {
           const expectedGoogleEmail = localStorage.getItem('dasmom_google_email');
           const sessionEmail = session.user.email?.trim().toLowerCase();
+          
           if (expectedGoogleEmail && sessionEmail !== expectedGoogleEmail) {
             localStorage.removeItem('dasmom_google_email');
+            
+            
             await supabase.auth.signOut();
             throw new Error('Use Google with the same email registered for your DasMom account.');
           }
 
-          // Valid session exists - load full user data
+          
           const current = await authService.getAuthUser();
           localStorage.removeItem('dasmom_google_email');
           if (isMounted && requestId === initRequest) {
@@ -54,12 +56,15 @@ export const AuthProvider = ({ children }) => {
             console.log('AuthContext: User loaded from active session', current);
           }
         }
-      } catch (err) {
+      }
+      catch (err) {
         console.error('AuthContext: Error during auth init', err);
-        if (isMounted && requestId === initRequest) {
+        
+      if (isMounted && requestId === initRequest) {
           setUser(null);
         }
-      } finally {
+      } 
+      finally {
         if (isMounted && requestId === initRequest) {
           setIsAuthLoading(false);
         }
@@ -76,19 +81,17 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        if (session?.user) {
+      if (event === 'SIGNED_IN' && session?.user) {
+        signInInitTimer = window.setTimeout(() => {
+          signInInitTimer = null;
           initAuth();
-        } else {
-          initRequest += 1;
-          setUser(null);
-          setIsAuthLoading(false);
-        }
+        }, 0);
       }
     });
 
     return () => {
       isMounted = false;
+      if (signInInitTimer !== null) window.clearTimeout(signInInitTimer);
       subscription.unsubscribe();
     };
   }, []);
