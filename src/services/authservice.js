@@ -2,6 +2,7 @@
 import supabase from '../config/supabaseclient';
 import { getRoleConfig } from '../config/roleConfig';
 import { DASMOM_APP_URL } from '../config/appConfig';
+import { getClientDeviceString } from '../utils/formatters';
 
 const DUPLICATE_EMAIL_MESSAGE = 'Email already exists. Please use a different email address.';
 const normalizeRoleName = role => String(role || '').trim().toLowerCase().replace(/_/g, ' ');
@@ -291,6 +292,8 @@ export default class AuthService {
     }
 
     const profile = await this.fetchProfileName(userData.id, role);
+    const loginTimestamp = authData?.user?.last_sign_in_at || new Date().toISOString();
+    this.recordLoginEvent(userData.id, loginTimestamp);
 
     this._currentUser = {
       id: userData.id,
@@ -300,6 +303,8 @@ export default class AuthService {
       isDeactivated: Boolean(userData.is_deactivated),
       displayName: profile.displayName,
       fullName: profile.fullName,
+      station: profile.assigned_station,
+      lastSignInAt: loginTimestamp,
     };
 
     this.saveUser(this._currentUser);
@@ -449,6 +454,7 @@ export default class AuthService {
       displayName: profile.displayName,
       fullName: profile.fullName,
       station: profile.assigned_station,
+      lastSignInAt: authUser.last_sign_in_at || null,
     };
 
     this.saveUser(this._currentUser);
@@ -486,6 +492,125 @@ export default class AuthService {
     if (!role) return '/';
     const config = getRoleConfig(role);
     return config ? config.redirect : '/';
+  }
+
+  recordLoginEvent(userId, explicitTimestamp = null) {
+    if (!userId) return null;
+    const timestamp = explicitTimestamp || new Date().toISOString();
+    const device = getClientDeviceString();
+    const record = { timestamp, device };
+
+    try {
+      localStorage.setItem(`dasmom_last_login_${userId}`, JSON.stringify(record));
+      localStorage.setItem('dasmom_last_login', JSON.stringify({
+        time: timestamp,
+        timestamp,
+        device
+      }));
+    } catch (err) {
+      console.warn('Failed to save login event to localStorage:', err);
+    }
+
+    try {
+      this.supabase.auth.updateUser({
+        data: {
+          last_login_event: record
+        }
+      }).catch(err => {
+        console.warn('Background sync of last_login_event to Supabase failed:', err);
+      });
+    } catch {}
+
+    return record;
+  }
+
+  async getLoginHistory(userId) {
+    // 1. Check user-specific localStorage first (immediate local state)
+    try {
+      if (userId) {
+        const local = localStorage.getItem(`dasmom_last_login_${userId}`);
+        if (local) {
+          const parsed = JSON.parse(local);
+          if (parsed?.timestamp) {
+            return {
+              timestamp: parsed.timestamp,
+              device: parsed.device || getClientDeviceString()
+            };
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Error reading local login history:', err);
+    }
+
+    // 2. Check Supabase auth session or user
+    try {
+      let authUser = null;
+      const sessRes = await this._withTimeout(this.supabase.auth.getSession(), 4000);
+      authUser = sessRes?.data?.session?.user || null;
+      if (!authUser) {
+        const userRes = await this._withTimeout(this.supabase.auth.getUser(), 4000);
+        authUser = userRes?.data?.user || null;
+      }
+
+      if (authUser && (!userId || authUser.id === userId)) {
+        // A) User metadata event if synced
+        const metaEvent = authUser.user_metadata?.last_login_event;
+        if (metaEvent?.timestamp) {
+          const result = {
+            timestamp: metaEvent.timestamp,
+            device: metaEvent.device || getClientDeviceString()
+          };
+          if (userId) {
+            try {
+              localStorage.setItem(`dasmom_last_login_${userId}`, JSON.stringify(result));
+            } catch {}
+          }
+          return result;
+        }
+
+        // B) Native authUser.last_sign_in_at from Supabase Auth
+        if (authUser.last_sign_in_at) {
+          const result = {
+            timestamp: authUser.last_sign_in_at,
+            device: getClientDeviceString()
+          };
+          if (userId) {
+            try {
+              localStorage.setItem(`dasmom_last_login_${userId}`, JSON.stringify(result));
+            } catch {}
+          }
+          return result;
+        }
+
+        // C) authUser.created_at
+        if (authUser.created_at) {
+          return {
+            timestamp: authUser.created_at,
+            device: getClientDeviceString()
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('Error fetching Supabase auth login history:', err);
+    }
+
+    // 3. Fallback to generic local storage
+    try {
+      const generic = localStorage.getItem('dasmom_last_login');
+      if (generic) {
+        const parsed = JSON.parse(generic);
+        const ts = parsed?.timestamp || parsed?.time;
+        if (ts) {
+          return {
+            timestamp: ts,
+            device: parsed.device || getClientDeviceString()
+          };
+        }
+      }
+    } catch {}
+
+    return null;
   }
 
 

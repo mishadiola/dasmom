@@ -28,6 +28,8 @@ import PatientStaffAssignment from '../../components/Patient/PatientStaffAssignm
 import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/HighRiskCases.css';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import { formatMotherId } from '../../utils/displayIds';
+import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
 
 const TrimesterBadge = ({ weeks }) => {
   let trim = 1;
@@ -97,9 +99,13 @@ const HighRiskCases = () => {
     fetchStations();
   }, [service]);
 
-  const loadHighRiskData = useCallback(async () => {
+  const hasLoadedOnceRef = useRef(false);
+
+  const loadHighRiskData = useCallback(async (isSilent = false) => {
     try {
-      setLoading(true);
+      if (!isSilent && !hasLoadedOnceRef.current) {
+        setLoading(true);
+      }
       setError(null);
 
       const [statsData, patientsData, access] = await Promise.all([
@@ -133,7 +139,7 @@ const HighRiskCases = () => {
         needsImmediate: 0,
       });
       setPatients(patientsWithConditions);
-      console.log('Loaded health conditions:', patientsWithConditions.length, 'patients');
+      hasLoadedOnceRef.current = true;
     } catch (err) {
       console.error('Error loading high risk data:', err);
       setError(err);
@@ -144,14 +150,12 @@ const HighRiskCases = () => {
 
   useEffect(() => {
     let timeout;
-    loadHighRiskData();
+    loadHighRiskData(false);
 
     const subscription = service.subscribeToHighRiskChanges(() => {
-      console.log('High risk changes detected, re‑fetching...');
       clearTimeout(timeout);
       timeout = setTimeout(() => {
-        console.log('Debounced reload...');
-        loadHighRiskData();
+        loadHighRiskData(true);
       }, 500);
     });
 
@@ -159,7 +163,7 @@ const HighRiskCases = () => {
       if (timeout) clearTimeout(timeout);
       subscription.unsubscribe();
     };
-  }, [loadHighRiskData]);
+  }, [loadHighRiskData, service]);
 
   const filteredPatients = patients.filter((p) => {
     const search = searchTerm.toLowerCase();
@@ -216,28 +220,13 @@ const HighRiskCases = () => {
     startIndex + itemsPerPage
   );
 
-  const getStationDistribution = () => {
-    const counts = {};
-    filteredPatients.forEach((p) => {
-      if (p.station && p.station !== 'Unassigned') {
-        counts[p.station] = (counts[p.station] || 0) + 1;
-      }
-    });
-    return Object.entries(counts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count);
-  };
-
-  const stationDistribution = getStationDistribution();
-  const totalAssignedCases = stationDistribution.reduce((sum, item) => sum + item.count, 0);
-
   const [showExportModal, setShowExportModal] = useState(false);
 
   const handleExport = async (exportConfig) => {
-    const { format } = exportConfig;
+    const { format, reportPeriodText } = exportConfig;
     
     const exportData = filteredPatients.map(p => ({
-        'Patient ID': p.id || '',
+        'Patient ID': formatMotherId(p.id) || '',
         'Name': p.name || '',
         'Station': p.station || 'Unassigned',
         'Age': p.age || 'N/A',
@@ -253,11 +242,6 @@ const HighRiskCases = () => {
         XLSX.writeFile(workbook, 'health_conditions.xlsx');
     } else if (format === 'pdf') {
         try {
-            const jsPDF = (await import('jspdf')).default;
-            const autoTable = (await import('jspdf-autotable')).default;
-            
-            const doc = new jsPDF('landscape');
-            
             const tableColumn = ["Patient ID", "Name", "Station", "Age", "Gestation", "Documented Health Conditions", "Next Appt"];
             const tableRows = exportData.map(obj => [
                 obj['Patient ID'],
@@ -269,17 +253,19 @@ const HighRiskCases = () => {
                 obj['Next Appointment']
             ]);
 
-            doc.text("Patients with Health Conditions", 14, 15);
-            
-            autoTable(doc, {
-                head: [tableColumn],
-                body: tableRows,
-                startY: 20,
-                styles: { fontSize: 8 },
-                headStyles: { fillColor: [147, 111, 199] }
-            });
+            const stationText = filterStation === 'All' ? 'All Stations' : filterStation;
+            const periodText = reportPeriodText || (filterDateRange === 'All' ? 'All Dates' : filterDateRange);
 
-            doc.save("health_conditions.pdf");
+            exportStandardStaffPdf({
+                orientation: 'landscape',
+                title: 'Patients with Health Conditions',
+                period: periodText,
+                station: stationText,
+                totalRecords: exportData.length,
+                columns: tableColumn,
+                rows: tableRows,
+                filename: 'health_conditions.pdf'
+            });
         } catch (error) {
             console.error("Error generating PDF:", error);
         }
@@ -580,52 +566,6 @@ const HighRiskCases = () => {
                 </div>
               </div>
             )}
-          </div>
-        </div>
-
-        {/* ── Right Column: Panels ── */}
-        <div className="hr-side-col">
-          {/* Station Distribution */}
-          <div className="hr-card">
-            <div className="hr-card-head">
-              <h2>
-                <MapPin size={16} /> Station Distribution
-              </h2>
-            </div>
-            <div className="station-dist-list">
-              {stationDistribution.map((b) => {
-                const percentage = totalAssignedCases > 0 ? ((b.count / totalAssignedCases) * 100).toFixed(1) : 0;
-                return (
-                  <div key={b.name} className="station-dist-item">
-                    <span>{b.name}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div className="station-bar-wrap">
-                        <div
-                          className="station-bar-fill"
-                          style={{
-                            width: `${percentage}%`,
-                          }}
-                        ></div>
-                      </div>
-                      <span
-                        style={{
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          color: 'var(--color-rose)',
-                          minWidth: '45px',
-                          textAlign: 'right',
-                        }}
-                      >
-                        {percentage}%
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-              {stationDistribution.length === 0 && (
-                <p className="empty-alerts">No records found.</p>
-              )}
-            </div>
           </div>
         </div>
       </div>

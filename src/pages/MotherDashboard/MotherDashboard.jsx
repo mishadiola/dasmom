@@ -16,6 +16,15 @@ import pregnancySilhouette from '../../assets/images/pregnancy-silhouette.png';
 import { calculateEDD, calculateTimeRemaining, calculateGestationalAge, getTrimester, isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
 import { useLanguage } from '../../context/LanguageContext';
 
+const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
+
+const formatStaffDisplay = (staffName) => {
+    if (!staffName) return 'Not yet assigned';
+    const trimmed = String(staffName).trim();
+    if (isUUID(trimmed)) return 'Not yet assigned';
+    return trimmed;
+};
+
 const MotherDashboard = () => {
     const navigate = useNavigate();
     const { t } = useLanguage();
@@ -34,14 +43,36 @@ const MotherDashboard = () => {
     const [postpartumVisit, setPostpartumVisit] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    // Ensure all buttons release stuck focus/active states when returning from external apps (e.g. Phone dialer, Facebook)
+    useEffect(() => {
+        const handleResetActiveState = () => {
+            if (document.activeElement && typeof document.activeElement.blur === 'function') {
+                document.activeElement.blur();
+            }
+        };
+
+        window.addEventListener('focus', handleResetActiveState);
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                handleResetActiveState();
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('focus', handleResetActiveState);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, []);
+
     useEffect(() => {
         const auth = new AuthService();
         const patientService = new PatientService();
         let channel = null;
         let welcomeChecked = false;
 
-        const load = async () => {
-            setLoading(true);
+        const load = async (isSilent = false) => {
+            if (!isSilent) setLoading(true);
             try {
                 const authUser = await auth.getAuthUser();
                 if (!authUser?.id) return;
@@ -63,11 +94,11 @@ const MotherDashboard = () => {
                         .on('postgres_changes', {
                             event: '*', schema: 'public', table: 'pregnancy_info',
                             filter: `patient_id=eq.${authUser.id}`
-                        }, () => load())
+                        }, () => load(true))
                         .on('postgres_changes', {
                             event: '*', schema: 'public', table: 'deliveries',
                             filter: `mother_id=eq.${authUser.id}`
-                        }, () => load())
+                        }, () => load(true))
                         .subscribe();
                 }
 
@@ -108,7 +139,7 @@ const MotherDashboard = () => {
                         isPostpartum,
                         deliveryDate: latestDelivery?.delivery_date || null
                     });
-                    
+
                     // Main dashboard appointments belong only to the current pregnancy.
                     const todayStart = new Date();
                     todayStart.setHours(0, 0, 0, 0);
@@ -125,7 +156,7 @@ const MotherDashboard = () => {
                             date: v.visit_date,
                             time: new Date(v.visit_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
                             type: v.next_appt_type || 'Prenatal Checkup',
-                            staff: v.assigned_staff_name || 'Healthcare Worker',
+                            staff: formatStaffDisplay(v.assigned_staff_name),
                             status: v.status || 'Scheduled',
                             location: patient.station || ''
                         })) : [];
@@ -145,7 +176,7 @@ const MotherDashboard = () => {
                                 date: nextAppointmentSource.next_appt_date,
                                 time: '',
                                 type: nextAppointmentSource.next_appt_type || 'Prenatal Checkup',
-                                staff: nextAppointmentSource.assigned_staff_name || 'Healthcare Worker',
+                                staff: formatStaffDisplay(nextAppointmentSource.assigned_staff_name),
                                 status: 'Scheduled',
                                 location: patient.station || ''
                             });
@@ -170,7 +201,7 @@ const MotherDashboard = () => {
                                             ? new Date(visit.scheduled_at).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' })
                                             : '',
                                         type: visit.visit_type || 'Postpartum Visit',
-                                        staff: visit.assigned_staff_name || 'Healthcare Worker',
+                                        staff: formatStaffDisplay(visit.assigned_staff_name),
                                         status: visit.status || 'Scheduled',
                                         location: visit.assigned_station_name || visit.station_name || patient.station || ''
                                     });
@@ -194,7 +225,7 @@ const MotherDashboard = () => {
                                     date: vaccine.scheduled_vaccination,
                                     time: '',
                                     type: `${vaccine.recipient_type === 'Baby' ? `${vaccine.recipient_name || 'Baby'} ` : ''}Vaccination${vaccine.vaccine_name ? ` · ${vaccine.vaccine_name}` : ''}`,
-                                    staff: vaccine.assigned_staff_name || 'Healthcare Worker',
+                                    staff: formatStaffDisplay(vaccine.assigned_staff_name),
                                     status: vaccine.status || 'Pending',
                                     location: vaccine.administration_station_name || vaccine.assigned_staff_station || patient.station || ''
                                 });
@@ -364,7 +395,7 @@ const MotherDashboard = () => {
                                             </div>
                                         </div>
                                         <div className="timeline-staff">
-                                            <span className="staff-label">{t('dash_with')}</span> <span className="staff-name">{appt.staff}</span>
+                                            <span className="staff-label">{t('dash_with')}</span> <span className="staff-name">{formatStaffDisplay(appt.staff)}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -533,7 +564,12 @@ const MotherDashboard = () => {
                         </div>
                         <p className="support-text">{t('dash_support_text')}</p>
                         <div className="support-actions">
-                            <a href="tel:09452694260" className="support-btn support-btn-primary" style={{ textDecoration: 'none' }}>
+                            <a 
+                                href="tel:09452694260" 
+                                className="support-btn support-btn-primary" 
+                                style={{ textDecoration: 'none' }}
+                                onClick={(e) => e.currentTarget.blur()}
+                            >
                                 <Phone size={16} />
                                 {t('dash_call_cho')}
                             </a>
@@ -543,6 +579,7 @@ const MotherDashboard = () => {
                                 rel="noopener noreferrer" 
                                 className="support-btn support-btn-secondary" 
                                 style={{ textDecoration: 'none' }}
+                                onClick={(e) => e.currentTarget.blur()}
                             >
                                 <Facebook size={16} />
                                 {t('dash_fb_cho') || 'Visit Facebook Page'}

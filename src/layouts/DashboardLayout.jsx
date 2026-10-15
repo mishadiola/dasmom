@@ -258,19 +258,6 @@ const DashboardLayout = () => {
 
                 setNotifications(notifList);
                 setNotifCount(notifList.filter(n => !n.isResolved).length);
-
-                // Set up real-time subscription for notifications
-                const subscription = supabase
-                    .channel('notifications-channel')
-                    .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
-                        fetchNotifications(); // Refresh notifications on any database change
-                    })
-                    .subscribe();
-
-                return () => {
-                    supabase.removeChannel(subscription);
-                };
-
             } catch (error) {
                 console.error('Error fetching notifications:', error);
                 setNotifications([]);
@@ -279,7 +266,30 @@ const DashboardLayout = () => {
         };
 
         fetchNotifications();
-    }, [user, isUserView]);
+
+        if (!user || isUserView) {
+            return;
+        }
+
+        let debounceTimer = null;
+        const debouncedFetch = () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                fetchNotifications();
+            }, 1000);
+        };
+
+        const subscription = supabase
+            .channel('notifications-live-channel')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'prenatal_visits' }, debouncedFetch)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'vaccine_inventory' }, debouncedFetch)
+            .subscribe();
+
+        return () => {
+            clearTimeout(debounceTimer);
+            supabase.removeChannel(subscription);
+        };
+    }, [user?.id, isUserView]);
 
     const handleNotificationClick = (notif) => {
         setNotifOpen(false);

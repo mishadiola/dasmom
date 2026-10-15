@@ -22,9 +22,8 @@ import '../../styles/components/SharedFilters.css';
 import Legend from '../../components/Legend/Legend';
 import { formatMotherId, formatNewbornId } from '../../utils/displayIds';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import ExportModal from '../../components/ExportModal';
+import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
 import ActionTooltip from '../../components/Common/ActionTooltip';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
@@ -1600,33 +1599,24 @@ const Vaccinations = () => {
             const dateStr = new Date().toISOString().split('T')[0];
             XLSX.writeFile(wb, `Distribution_Records_${dateStr}.xlsx`);
         } else if (format === 'pdf') {
-            const doc = new jsPDF('landscape');
-            
-            doc.setFontSize(16);
-            doc.text("Distribution Records Report", 14, 20);
-            
-            doc.setFontSize(10);
-            doc.setTextColor(100);
-            doc.text(`Period: ${reportPeriodText}`, 14, 28);
-            
-            if (exportData.length === 0) {
-                doc.text("No records found for the selected period.", 14, 40);
-            } else {
-                const head = [Object.keys(exportData[0])];
-                const body = exportData.map(obj => Object.values(obj));
-                
-                doc.autoTable({
-                    startY: 35,
-                    head: head,
-                    body: body,
-                    theme: 'grid',
-                    styles: { fontSize: 8 },
-                    headStyles: { fillColor: [185, 129, 138] }
-                });
-            }
-            
             const dateStr = new Date().toISOString().split('T')[0];
-            doc.save(`Distribution_Records_${dateStr}.pdf`);
+            const stationText = (filters.station && filters.station !== 'All' && filters.station !== 'All Stations')
+                ? filters.station
+                : 'All Stations';
+
+            const head = exportData.length > 0 ? [Object.keys(exportData[0])] : [["Patient Name", "Patient ID", "Patient Type", "Item Type", "Item Name", "Dose", "Status", "Administered Date", "Scheduled Date", "Staff", "Station"]];
+            const body = exportData.length > 0 ? exportData.map(obj => Object.values(obj)) : [];
+
+            exportStandardStaffPdf({
+                orientation: 'landscape',
+                title: 'Distribution Records Report',
+                period: reportPeriodText || 'All Dates',
+                station: stationText,
+                totalRecords: exportData.length,
+                head: head,
+                body: body,
+                filename: `Distribution_Records_${dateStr}.pdf`
+            });
         }
     };
 

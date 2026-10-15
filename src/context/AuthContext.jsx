@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect, useRef } from 'react';
 import AuthService from '../services/authservice';
 import supabase from '../config/supabaseclient';
 
@@ -12,28 +12,34 @@ export const AuthContext = createContext({
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const userRef = useRef(null);
+  userRef.current = user;
   const authService = new AuthService();
 
   useEffect(() => {
     let isMounted = true;
     let initRequest = 0;
 
-    const initAuth = async () => {
+    const initAuth = async (isTokenRefresh = false) => {
       const requestId = ++initRequest;
       try {
-        // Clear any stale cached user
-        authService.clearUser();
+        if (!isTokenRefresh) {
+          authService.clearUser();
+        }
         
         // Only try to load user if there's an active Supabase session
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError || !session?.user) {
-          // No valid session - don't auto-restore user
           if (isMounted && requestId === initRequest) {
             setUser(null);
-            console.log('AuthContext: No active session, user not loaded');
           }
         } else {
+          // If token refreshed and user is already loaded with matching ID, no reload needed
+          if (isTokenRefresh && userRef.current?.id === session.user.id) {
+            return;
+          }
+
           const expectedGoogleEmail = localStorage.getItem('dasmom_google_email');
           const sessionEmail = session.user.email?.trim().toLowerCase();
           if (expectedGoogleEmail && sessionEmail !== expectedGoogleEmail) {
@@ -44,14 +50,20 @@ export const AuthProvider = ({ children }) => {
 
           // Valid session exists - load full user data
           const current = await authService.getAuthUser();
+          const googleEmail = localStorage.getItem('dasmom_google_email');
+          if (googleEmail && current?.id) {
+            authService.recordLoginEvent(current.id);
+          }
           localStorage.removeItem('dasmom_google_email');
           if (isMounted && requestId === initRequest) {
             if (!current) {
               await supabase.functions.invoke('google-account-check', { body: { action: 'cleanup' } });
               await supabase.auth.signOut();
             }
-            setUser(current);
-            console.log('AuthContext: User loaded from active session', current);
+            // Only update state if user changed to prevent re-render storms
+            if (!userRef.current || userRef.current.id !== current?.id || userRef.current.role !== current?.role) {
+              setUser(current);
+            }
           }
         }
       } catch (err) {
@@ -66,19 +78,38 @@ export const AuthProvider = ({ children }) => {
       }
     };
 
-    initAuth();
+    initAuth(false);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         initRequest += 1;
+        authService.clearUser();
         setUser(null);
         setIsAuthLoading(false);
         return;
       }
 
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      if (event === 'TOKEN_REFRESHED') {
         if (session?.user) {
-          initAuth();
+          // Silent token refresh: if user is already loaded and matches, do not teardown state
+          if (userRef.current?.id === session.user.id) {
+            return;
+          }
+          initAuth(true);
+        } else {
+          initRequest += 1;
+          setUser(null);
+          setIsAuthLoading(false);
+        }
+        return;
+      }
+
+      if (event === 'SIGNED_IN') {
+        if (session?.user) {
+          if (userRef.current?.id === session.user.id) {
+            return;
+          }
+          initAuth(false);
         } else {
           initRequest += 1;
           setUser(null);

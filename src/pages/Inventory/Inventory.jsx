@@ -37,9 +37,8 @@ import InventoryService from '../../services/inventoryservice';
 import PatientService from '../../services/patientservice';
 import { useModal } from '../../context/ModalContext';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import ExportModal from '../../components/ExportModal';
+import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
 import { isBatchExpired, getInventoryStatus } from '../../utils/inventoryUtils';
 import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/Inventory.css';
@@ -329,7 +328,7 @@ const Inventory = () => {
     }
   };
 
-  const fetchData = async () => {
+  const fetchData = async (isSilent = false) => {
     if (fetchDataInFlightRef.current) {
       fetchDataQueuedRef.current = true;
       return;
@@ -339,7 +338,9 @@ const Inventory = () => {
     try {
       do {
         fetchDataQueuedRef.current = false;
-        setLoading(true);
+        if (!isSilent && vaccines.length === 0 && supplements.length === 0) {
+          setLoading(true);
+        }
         setError(null);
         try {
           const [vaxData, suppData, stationsData] = await Promise.all([
@@ -419,13 +420,13 @@ const Inventory = () => {
     };
 
     loadScope();
-    fetchData();
+    fetchData(false);
 
     const vaxSub = canViewMainInventory
-      ? inventoryService.subscribeToInventory('vaccine_inventory', () => fetchData())
+      ? inventoryService.subscribeToInventory('vaccine_inventory', () => fetchData(true))
       : null;
     const suppSub = canViewMainInventory
-      ? inventoryService.subscribeToInventory('supplement_inventory', () => fetchData())
+      ? inventoryService.subscribeToInventory('supplement_inventory', () => fetchData(true))
       : null;
 
     return () => {
@@ -489,7 +490,7 @@ const Inventory = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'station_vaccine_inventory' }, () => {
         if (isCurrent) {
           scheduleStationDataRefresh();
-          if (!isAdmin) fetchData();
+          if (!isAdmin) fetchData(true);
         }
       })
       .subscribe();
@@ -499,7 +500,7 @@ const Inventory = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'station_supplement_inventory' }, () => {
         if (isCurrent) {
           scheduleStationDataRefresh();
-          if (!isAdmin) fetchData();
+          if (!isAdmin) fetchData(true);
         }
       })
       .subscribe();
@@ -986,34 +987,21 @@ const Inventory = () => {
       const dateStr = new Date().toISOString().split('T')[0];
       XLSX.writeFile(wb, `Inventory_Report_${dateStr}.xlsx`);
     } else if (format === 'pdf') {
-      const doc = new jsPDF('landscape');
-      
-      doc.setFontSize(16);
-      doc.text("DASMOM+ Inventory Management Report", 14, 20);
-      
-      doc.setFontSize(10);
-      doc.setTextColor(100);
-      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
-      doc.text(`Scope: ${fullDesc}`, 14, 34);
-      
-      if (data.length === 0) {
-        doc.text("No records found for the selected period and filters.", 14, 46);
-      } else {
-        const head = [Object.keys(data[0])];
-        const body = data.map(obj => Object.values(obj));
-        
-        doc.autoTable({
-          startY: 42,
-          head: head,
-          body: body,
-          theme: 'grid',
-          styles: { fontSize: 8 },
-          headStyles: { fillColor: [185, 129, 138] }
-        });
-      }
-      
       const dateStr = new Date().toISOString().split('T')[0];
-      doc.save(`Inventory_Report_${dateStr}.pdf`);
+      const head = data.length > 0 ? [Object.keys(data[0])] : [["Item Name", "Category / Type", "Current Stock", "Unit", "Stock Status", "Expiration Date", "Batch/Lot Number", "Last Updated"]];
+      const body = data.length > 0 ? data.map(obj => Object.values(obj)) : [];
+
+      exportStandardStaffPdf({
+        orientation: 'landscape',
+        title: 'Inventory Stock Management Report',
+        period: reportPeriodText || 'All Dates',
+        station: 'Main Storage / CHO III',
+        scope: filterDesc || '',
+        totalRecords: data.length,
+        head: head,
+        body: body,
+        filename: `Inventory_Report_${dateStr}.pdf`
+      });
     }
   };
 
@@ -1067,29 +1055,20 @@ const Inventory = () => {
       const dateStr = new Date().toISOString().split('T')[0];
       XLSX.writeFile(wb, `Station_Distribution_${dateStr}.xlsx`);
     } else if (format === 'pdf') {
-      const doc = new jsPDF('landscape');
-      doc.setFontSize(16);
-      doc.text("DASMOM+ Station Distribution Report", 14, 20);
-      doc.setFontSize(10);
-      doc.setTextColor(100);
-      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
-      doc.text(`Period: ${reportPeriodText}`, 14, 34);
-      if (exportData.length === 0) {
-        doc.text("No distribution records found for the selected period.", 14, 46);
-      } else {
-        const head = [Object.keys(exportData[0])];
-        const body = exportData.map(obj => Object.values(obj));
-        doc.autoTable({
-          startY: 42,
-          head: head,
-          body: body,
-          theme: 'grid',
-          styles: { fontSize: 8 },
-          headStyles: { fillColor: [185, 129, 138] }
-        });
-      }
       const dateStr = new Date().toISOString().split('T')[0];
-      doc.save(`Station_Distribution_${dateStr}.pdf`);
+      const head = exportData.length > 0 ? [Object.keys(exportData[0])] : [["Date", "Item Name", "Item Type", "Quantity", "Destination Station", "Released By", "Brand", "Batch", "Remarks"]];
+      const body = exportData.length > 0 ? exportData.map(obj => Object.values(obj)) : [];
+
+      exportStandardStaffPdf({
+        orientation: 'landscape',
+        title: 'Station Distribution Report',
+        period: reportPeriodText || 'All Dates',
+        station: 'All Stations',
+        totalRecords: exportData.length,
+        head: head,
+        body: body,
+        filename: `Station_Distribution_${dateStr}.pdf`
+      });
     }
   };
 

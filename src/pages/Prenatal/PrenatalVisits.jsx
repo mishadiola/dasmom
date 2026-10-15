@@ -17,11 +17,10 @@ import PatientModal from '../../components/Prenatal/PatientModal';
 import PostpartumVisitModal from '../../components/PostpartumVisitModal';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import ExportModal from '../../components/ExportModal';
 import '../../styles/pages/PrenatalVisits.css';
 import Legend from '../../components/Legend/Legend';
+import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
 import { formatMotherId } from '../../utils/displayIds';
 import VisitStaffAssignment from '../../components/Prenatal/VisitStaffAssignment';
 import ActionTooltip from '../../components/Common/ActionTooltip';
@@ -1312,34 +1311,21 @@ const PrenatalVisits = () => {
             const dateStr = new Date().toISOString().split('T')[0];
             XLSX.writeFile(wb, `Visits_Schedules_${dateStr}.xlsx`);
         } else if (format === 'pdf') {
-            const doc = new jsPDF('landscape');
-            
-            doc.setFontSize(16);
-            doc.text("Visits & Scheduling Report", 14, 20);
-            
-            doc.setFontSize(10);
-            doc.setTextColor(100);
-            doc.text(`Period: ${reportPeriodText}`, 14, 28);
-            doc.text(`Filters: ${filterDesc}`, 14, 34);
-            
-            if (data.length === 0) {
-                doc.text("No records found for the selected period and filters.", 14, 46);
-            } else {
-                const head = [Object.keys(data[0])];
-                const body = data.map(obj => Object.values(obj));
-                
-                autoTable(doc, {
-                    startY: 42,
-                    head: head,
-                    body: body,
-                    theme: 'grid',
-                    styles: { fontSize: 8 },
-                    headStyles: { fillColor: [185, 129, 138] }
-                });
-            }
-            
             const dateStr = new Date().toISOString().split('T')[0];
-            doc.save(`Visits_Schedules_${dateStr}.pdf`);
+            const head = data.length > 0 ? [Object.keys(data[0])] : [["Patient Name", "Patient ID", "Visit Type", "Scheduled Date", "Scheduled Time", "Assigned Station", "Visit Station", "Assigned Staff", "Status"]];
+            const body = data.length > 0 ? data.map(obj => Object.values(obj)) : [];
+
+            exportStandardStaffPdf({
+                orientation: 'landscape',
+                title: 'Visits & Scheduling Report',
+                period: reportPeriodText || 'All Dates',
+                station: 'All Stations',
+                scope: filterDesc || '',
+                totalRecords: data.length,
+                head: head,
+                body: body,
+                filename: `Visits_Schedules_${dateStr}.pdf`
+            });
         }
     };
 

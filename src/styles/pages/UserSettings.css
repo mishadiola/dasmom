@@ -337,13 +337,35 @@ input:checked + .slider:before {
     text-decoration: none;
     transition: all 0.2s ease;
     box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
 }
 
-.support-item:hover {
-    background: #f1f5f9;
-    border-color: rgba(185, 129, 138, 0.25);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 10px rgba(45, 34, 52, 0.04);
+@media (hover: hover) and (pointer: fine) {
+    .support-item:hover {
+        background: #f1f5f9;
+        border-color: rgba(185, 129, 138, 0.25);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px rgba(45, 34, 52, 0.04);
+    }
+}
+
+.support-item:active {
+    transform: scale(0.98);
+    background: #edf2f7;
+    transition: transform 0.08s ease;
+}
+
+.support-item:focus:not(:focus-visible) {
+    outline: none;
+    transform: none;
+    box-shadow: none;
+    background: #f8fafc;
+    border-color: #edf2f7;
+}
+
+.support-item:focus-visible {
+    outline: 2px solid var(--color-rose, #b9818a);
+    outline-offset: 2px;
 }
 
 .support-icon-wrap {

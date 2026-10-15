@@ -14,9 +14,8 @@ import supabase from '../../config/supabaseclient';
 import ExportModal from '../../components/ExportModal';
 import ActionTooltip from '../../components/Common/ActionTooltip';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
 
 /* ════════════════════════════
    MAIN COMPONENT
@@ -46,7 +45,7 @@ const StationReports = () => {
 
         const startPollingFallback = () => {
             if (pollingTimer) return;
-            pollingTimer = setInterval(fetchStationData, 30000);
+            pollingTimer = setInterval(() => fetchStationData(true), 30000);
         };
 
         const stopPollingFallback = () => {
@@ -55,13 +54,13 @@ const StationReports = () => {
             pollingTimer = null;
         };
 
-        fetchStationData();
+        fetchStationData(false);
 
         const channel = supabase
             .channel('station-reports-live-data')
             .on('postgres_changes', { event: '*', schema: 'public' }, payload => {
                 const tables = ['stations', 'patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'deliveries', 'newborns', 'vaccinations', 'supplements'];
-                if (tables.includes(payload.table)) fetchStationData();
+                if (tables.includes(payload.table)) fetchStationData(true);
             })
             .subscribe(status => {
                 if (status === 'SUBSCRIBED') {
@@ -77,9 +76,11 @@ const StationReports = () => {
         };
     }, []);
 
-    const fetchStationData = async () => {
+    const fetchStationData = async (isSilent = false) => {
         try {
-            setLoading(true);
+            if (!isSilent && stations.length === 0) {
+                setLoading(true);
+            }
             setError(null);
             const [data, ageRows] = await Promise.all([
                 patientService.getStationReports(),
@@ -160,28 +161,20 @@ const StationReports = () => {
             XLSX.utils.book_append_sheet(wb, ws, 'Station Reports');
             XLSX.writeFile(wb, `Station_Reports_${new Date().toISOString().split('T')[0]}.xlsx`);
         } else if (format === 'pdf') {
-            const doc = new jsPDF('landscape');
-            doc.setFontSize(16);
-            doc.text('DASMOM+ Station Reports', 14, 20);
-            doc.setFontSize(10);
-            doc.setTextColor(100);
-            doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
-            doc.text(`Period: ${reportPeriodText}`, 14, 34);
-            if (exportData.length === 0) {
-                doc.text('No station data found.', 14, 46);
-            } else {
-                const head = [Object.keys(exportData[0])];
-                const body = exportData.map(obj => Object.values(obj));
-                doc.autoTable({
-                    startY: 42,
-                    head,
-                    body,
-                    theme: 'grid',
-                    styles: { fontSize: 8 },
-                    headStyles: { fillColor: [185, 129, 138] }
-                });
-            }
-            doc.save(`Station_Reports_${new Date().toISOString().split('T')[0]}.pdf`);
+            const dateStr = new Date().toISOString().split('T')[0];
+            const head = exportData.length > 0 ? [Object.keys(exportData[0])] : [["Station", "Total Patients", "With Health Conditions", "Deliveries", "Newborns", "Vaccination Coverage (%)", "Supplement Coverage (%)"]];
+            const body = exportData.length > 0 ? exportData.map(obj => Object.values(obj)) : [];
+
+            exportStandardStaffPdf({
+                orientation: 'landscape',
+                title: 'Station Reports Summary',
+                period: reportPeriodText || 'All Dates',
+                station: 'All Stations',
+                totalRecords: exportData.length,
+                head: head,
+                body: body,
+                filename: `Station_Reports_${dateStr}.pdf`
+            });
         }
     };
 
@@ -790,24 +783,20 @@ const DetailModal = ({ station, onClose, navigate }) => {
             XLSX.utils.book_append_sheet(wb, ws, 'Station Detail');
             XLSX.writeFile(wb, `Station_${station.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`);
         } else if (format === 'pdf') {
-            const doc = new jsPDF('landscape');
-            doc.setFontSize(16);
-            doc.text(`${station.name} — Station Detail Report`, 14, 20);
-            doc.setFontSize(10);
-            doc.setTextColor(100);
-            doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
-            doc.text(`Period: ${reportPeriodText}`, 14, 34);
+            const dateStr = new Date().toISOString().split('T')[0];
             const head = [Object.keys(exportData[0])];
             const body = exportData.map(obj => Object.values(obj));
-            doc.autoTable({
-                startY: 42,
-                head,
-                body,
-                theme: 'grid',
-                styles: { fontSize: 8 },
-                headStyles: { fillColor: [185, 129, 138] }
+
+            exportStandardStaffPdf({
+                orientation: 'landscape',
+                title: `${station.name} — Station Detail Report`,
+                period: reportPeriodText || 'All Dates',
+                station: station.name,
+                totalRecords: exportData.length,
+                head: head,
+                body: body,
+                filename: `Station_${station.name.replace(/\s+/g, '_')}_${dateStr}.pdf`
             });
-            doc.save(`Station_${station.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
         }
     };
 

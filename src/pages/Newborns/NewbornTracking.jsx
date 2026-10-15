@@ -21,6 +21,7 @@ import { MapPin, Activity } from 'lucide-react';
 import { formatNewbornId } from '../../utils/displayIds';
 import ActionTooltip from '../../components/Common/ActionTooltip';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
 
 /* ════════════════════════════
    CALENDAR HELPERS
@@ -224,9 +225,11 @@ const NewbornTracking = () => {
     });
     const [newborns, setNewborns] = useState([]);
 
-    const loadNewbornData = useCallback(async () => {
+    const loadNewbornData = useCallback(async (isSilent = false) => {
         try {
-            setLoading(true);
+            if (!isSilent && newborns.length === 0) {
+                setLoading(true);
+            }
             setError(null);
             const service = new NewbornService();
             const newbornsData = await service.getAllNewborns();
@@ -269,7 +272,7 @@ const NewbornTracking = () => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [newborns.length]);
 
     useEffect(() => {
         const fetchStations = async () => {
@@ -284,16 +287,14 @@ const NewbornTracking = () => {
     }, [patientService]);
 
     useEffect(() => {
-        loadNewbornData();
+        loadNewbornData(false);
 
         const service = new NewbornService();
         const subscription = service.subscribeToNewbornChanges(() => {
-            console.log('🔄 Newborn changes detected, re-fetching data...');
-            loadNewbornData();
+            loadNewbornData(true);
         });
 
         return () => {
-            console.log('🔌 Unsubscribing from newborn changes');
             subscription.unsubscribe();
         };
     }, [loadNewbornData]);
@@ -551,31 +552,24 @@ const NewbornTracking = () => {
             XLSX.writeFile(wb, `Newborn_Vaccination_Tracking_${dateStr}.xlsx`);
         } else if (format === 'pdf') {
             try {
-                const jsPDF = (await import('jspdf')).default;
-                const autoTable = (await import('jspdf-autotable')).default;
-                
-                const doc = new jsPDF('landscape');
-                
-                if (exportData.length === 0) {
-                    doc.text("No records found for the selected period.", 14, 20);
-                } else {
-                    const tableColumn = Object.keys(exportData[0]);
-                    const tableRows = exportData.map(obj => Object.values(obj));
-
-                    doc.text("Newborn Vaccination Tracking List", 14, 15);
-                    doc.setFontSize(10);
-                    doc.text(`Period: ${reportPeriodText}`, 14, 22);
-                    
-                    autoTable(doc, {
-                        head: [tableColumn],
-                        body: tableRows,
-                        startY: 28,
-                        styles: { fontSize: 8 },
-                        headStyles: { fillColor: [147, 111, 199] }
-                    });
-                }
                 const dateStr = new Date().toISOString().split('T')[0];
-                doc.save(`Newborn_Vaccination_Tracking_${dateStr}.pdf`);
+                const stationText = (filters.station && filters.station !== 'All' && filters.station !== 'All Stations')
+                    ? filters.station
+                    : 'All Stations';
+
+                const head = exportData.length > 0 ? [Object.keys(exportData[0])] : [["Baby Name", "Mother Name", "Baby ID", "Station", "Birth Date", "Vaccines Completed", "Total Vaccines", "Progress %", "Next Vaccine", "Next Due Date"]];
+                const body = exportData.length > 0 ? exportData.map(obj => Object.values(obj)) : [];
+
+                exportStandardStaffPdf({
+                    orientation: 'landscape',
+                    title: 'Newborn Vaccination Tracking Report',
+                    period: reportPeriodText || 'All Dates',
+                    station: stationText,
+                    totalRecords: exportData.length,
+                    head: head,
+                    body: body,
+                    filename: `Newborn_Vaccination_Tracking_${dateStr}.pdf`
+                });
             } catch (error) {
                 console.error("Error generating PDF:", error);
             }

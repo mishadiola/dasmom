@@ -22,6 +22,7 @@ import PostpartumVisitModal from '../../components/PostpartumVisitModal';
 import ScheduledVisitModal from '../../components/Prenatal/ScheduledVisitModal';
 import ActionTooltip from '../../components/Common/ActionTooltip';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
 import { useRolePermissions } from '../../context/RolePermissionContext';
 
 const formatReadableDate = (dateString) => {
@@ -356,31 +357,24 @@ const PostpartumRecords = () => {
             XLSX.writeFile(wb, `Postpartum_Records_${dateStr}.xlsx`);
         } else if (format === 'pdf') {
             try {
-                const jsPDF = (await import('jspdf')).default;
-                const autoTable = (await import('jspdf-autotable')).default;
-                
-                const doc = new jsPDF('landscape');
-                
-                if (exportData.length === 0) {
-                    doc.text("No records found for the selected period.", 14, 20);
-                } else {
-                    const tableColumn = Object.keys(exportData[0]);
-                    const tableRows = exportData.map(obj => Object.values(obj));
-
-                    doc.text("Postpartum Records List", 14, 15);
-                    doc.setFontSize(10);
-                    doc.text(`Period: ${reportPeriodText}`, 14, 22);
-                    
-                    autoTable(doc, {
-                        head: [tableColumn],
-                        body: tableRows,
-                        startY: 28,
-                        styles: { fontSize: 7 },
-                        headStyles: { fillColor: [147, 111, 199] }
-                    });
-                }
                 const dateStr = new Date().toISOString().split('T')[0];
-                doc.save(`Postpartum_Records_${dateStr}.pdf`);
+                const stationText = (filters.station && filters.station !== 'All' && filters.station !== 'All Stations')
+                    ? filters.station
+                    : 'All Stations';
+
+                const head = exportData.length > 0 ? [Object.keys(exportData[0])] : [["Patient Name", "Patient ID", "Station", "Delivery Type", "Delivery Date", "Days Postpartum", "Baby Outcome", "Recovery Status", "Last Checkup", "Next Follow-up", "Follow-up Status", "Complications"]];
+                const body = exportData.length > 0 ? exportData.map(obj => Object.values(obj)) : [];
+
+                exportStandardStaffPdf({
+                    orientation: 'landscape',
+                    title: 'Postpartum Records Report',
+                    period: reportPeriodText || 'All Dates',
+                    station: stationText,
+                    totalRecords: exportData.length,
+                    head: head,
+                    body: body,
+                    filename: `Postpartum_Records_${dateStr}.pdf`
+                });
             } catch (error) {
                 console.error("Error generating PDF:", error);
             }
@@ -717,66 +711,6 @@ const PostpartumRecords = () => {
                             )}
                         </div>
                     </div>
-                </div>
-
-                {/* ── RIGHT: Alerts + Station ── */}
-                <div className="pp-side-col">
-
-                    {/* Station Distribution */}
-                    <div className="pp-card">
-                        <div className="pp-card-head">
-                            <h2>
-                                <MapPin size={16} /> Station Distribution
-                            </h2>
-                        </div>
-                        <div className="station-dist-list">
-                            {(() => {
-                                const counts = {};
-                                filtered.forEach((p) => {
-                                    const st = p.station || 'Unassigned';
-                                    counts[st] = (counts[st] || 0) + 1;
-                                });
-                                const dist = Object.entries(counts)
-                                    .map(([name, count]) => ({ name, count }))
-                                    .sort((a, b) => b.count - a.count);
-                                
-                                return (
-                                    <>
-                                        {dist.map((b) => (
-                                            <div key={b.name} className="station-dist-item">
-                                                <span>{b.name}</span>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    <div className="station-bar-wrap">
-                                                        <div
-                                                            className="station-bar-fill"
-                                                            style={{
-                                                                width: `${(b.count / Math.max(filtered.length, 1)) * 100}%`,
-                                                            }}
-                                                        ></div>
-                                                    </div>
-                                                    <span
-                                                        style={{
-                                                            fontSize: '12px',
-                                                            fontWeight: 700,
-                                                            color: 'var(--color-rose)',
-                                                            minWidth: '20px',
-                                                            textAlign: 'right',
-                                                        }}
-                                                    >
-                                                        {b.count}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                        {dist.length === 0 && (
-                                            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', textAlign: 'center', margin: '20px 0' }}>No records found.</p>
-                                        )}
-                                    </>
-                                );
-                            })()}
-                        </div>
-                    </div>
-
                 </div>
             </div>
 

@@ -62,13 +62,13 @@ function AnalyticsTracker() {
 
 function App() {
   return (
-    <AuthProvider>
-      <RolePermissionProvider>
-      <LanguageProvider>
-      <ModalProvider>
-      <SystemSettingsProvider>
-        <BrowserRouter>
-          <ErrorBoundary>
+    <ErrorBoundary>
+      <AuthProvider>
+        <RolePermissionProvider>
+        <LanguageProvider>
+        <ModalProvider>
+        <SystemSettingsProvider>
+          <BrowserRouter>
             <AnalyticsTracker />
             <Routes>
 
@@ -179,13 +179,13 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
 
         </Routes>
-          </ErrorBoundary>
         </BrowserRouter>
       </SystemSettingsProvider>
         </ModalProvider>
       </LanguageProvider>
       </RolePermissionProvider>
     </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

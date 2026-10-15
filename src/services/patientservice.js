@@ -2048,7 +2048,17 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     // Fetch prenatal visits
     const { data: visitsData, error: visitsError } = await this.supabase
       .from('prenatal_visits')
-      .select('*')
+      .select(`
+        *,
+        staff_profiles:assigned_staff (
+          id, full_name, station_ass,
+          stations:station_ass (station_name)
+        ),
+        performed_staff:performed_by (
+          id, full_name, station_ass,
+          stations:station_ass (station_name)
+        )
+      `)
       .eq('patient_id', patientId)
       .order('visit_date', { ascending: false });
     if (visitsError) throw visitsError;
@@ -2070,7 +2080,11 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       .select(`
         id, patient_id, vaccine_inventory_id, dose_number, scheduled_vaccination,
         vaccinated_date, status, notes, vaccinated_by, assigned_staff, station_ass,
-        vaccine_inventory (vaccine_name, brand, unit, doses, batch, expiration_date)
+        vaccine_inventory (vaccine_name, brand, unit, doses, batch, expiration_date),
+        staff_profiles:assigned_staff (
+          id, full_name, station_ass,
+          stations:station_ass (station_name)
+        )
       `)
       .eq('patient_id', patientId)
       .order('scheduled_vaccination', { ascending: true, nullsFirst: false });
@@ -2105,7 +2119,15 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           breast_assessment, breastfeeding_status, urination_and_bowel_status,
           mental_health_assessment, danger_signs, clinical_notes, advice_given,
           treatments_given, medications_review, family_planning_counseling,
-          is_referred, referred_to, referral_reason, next_appt_date, next_appt_type
+          is_referred, referred_to, referral_reason, next_appt_date, next_appt_type,
+          staff_profiles:assigned_staff (
+            id, full_name, station_ass,
+            stations:station_ass (station_name)
+          ),
+          performed_staff:performed_by (
+            id, full_name, station_ass,
+            stations:station_ass (station_name)
+          )
         `)
         .in('delivery_id', deliveryIds)
         .order('scheduled_at', { ascending: true })
@@ -2120,7 +2142,11 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         vaccinations (
           id, vaccine_inventory_id, dose_number, notes, status, scheduled_vaccination, vaccinated_date,
           vaccinated_by, assigned_staff, station_ass,
-          vaccine_inventory (vaccine_name, brand, unit, doses, batch, expiration_date)
+          vaccine_inventory (vaccine_name, brand, unit, doses, batch, expiration_date),
+          staff_profiles:assigned_staff (
+            id, full_name, station_ass,
+            stations:station_ass (station_name)
+          )
         )
       `)
       .eq('mother_id', patientId)
@@ -2129,7 +2155,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
     const assignedStaffIds = [...new Set([
       patientData.retained_staff,
-    ...(visitsData || []).flatMap(visit => [visit.assigned_staff, visit.performed_by, visit.retained_staff]),
+      ...(visitsData || []).flatMap(visit => [visit.assigned_staff, visit.performed_by, visit.retained_staff]),
       ...(supplementsData || []).flatMap(supplement => [supplement.administered_by, supplement.created_by]),
       ...(maternalVaccinationsData || []).flatMap(vaccination => [vaccination.assigned_staff, vaccination.vaccinated_by]),
       ...(newbornsData || []).flatMap(newborn => (newborn.vaccinations || []).map(vaccine => vaccine.assigned_staff)),
@@ -2143,21 +2169,74 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     ].filter(Boolean))];
 
     let assignedStaffById = {};
-    if (assignedStaffIds.length > 0) {
-      const { data: staffProfiles, error: staffError } = await this.supabase
-        .from('staff_profiles')
-        .select('id, full_name, station_ass, stations:station_ass (station_name)')
-        .in('id', assignedStaffIds);
 
-      if (staffError) throw staffError;
-      (staffProfiles || []).forEach(profile => {
-        const details = {
-          name: profile.full_name || 'Healthcare Worker',
-          station: profile.stations?.station_name || 'Unassigned'
-        };
-        if (profile.id) assignedStaffById[profile.id] = details;
-        if (profile.full_name) assignedStaffById[profile.full_name] = details;
-      });
+    const registerStaffProfile = (sp) => {
+      const profile = Array.isArray(sp) ? sp[0] : sp;
+      if (!profile?.id && !profile?.full_name) return;
+      const details = {
+        name: profile.full_name || 'Healthcare Worker',
+        station: profile.stations?.station_name || profile.station_name || 'Unassigned'
+      };
+      if (profile.id) assignedStaffById[profile.id] = details;
+      if (profile.full_name) assignedStaffById[profile.full_name] = details;
+    };
+
+    // 1. Ingest embedded profiles directly returned by visit/delivery/vaccine queries
+    (visitsData || []).forEach(v => {
+      registerStaffProfile(v.staff_profiles);
+      registerStaffProfile(v.performed_staff);
+    });
+    (postpartumVisitsData || []).forEach(pv => {
+      registerStaffProfile(pv.staff_profiles);
+      registerStaffProfile(pv.performed_staff);
+    });
+    (maternalVaccinationsData || []).forEach(mv => {
+      registerStaffProfile(mv.staff_profiles);
+    });
+    (newbornsData || []).forEach(nb => {
+      (nb.vaccinations || []).forEach(vac => registerStaffProfile(vac.staff_profiles));
+    });
+    (deliveriesData || []).forEach(d => {
+      registerStaffProfile(d.staff_profiles);
+    });
+
+    // 2. Fetch any missing assigned staff from staff_profiles
+    const missingStaffIds = assignedStaffIds.filter(id => !assignedStaffById[id]);
+    if (missingStaffIds.length > 0) {
+      try {
+        const { data: staffProfiles, error: staffError } = await this.supabase
+          .from('staff_profiles')
+          .select('id, full_name, station_ass, stations:station_ass (station_name)')
+          .in('id', missingStaffIds);
+
+        if (!staffError && staffProfiles?.length) {
+          staffProfiles.forEach(registerStaffProfile);
+        }
+      } catch (err) {
+        console.warn('Direct staff_profiles lookup failed:', err);
+      }
+    }
+
+    // 3. Fallback to get_assigned_staff_names RPC for any still-unmapped staff IDs
+    const stillMissingStaffIds = assignedStaffIds.filter(id => !assignedStaffById[id]);
+    if (stillMissingStaffIds.length > 0) {
+      try {
+        const { data: rpcStaff, error: rpcError } = await this.supabase
+          .rpc('get_assigned_staff_names', { p_staff_ids: stillMissingStaffIds });
+
+        if (!rpcError && rpcStaff?.length) {
+          rpcStaff.forEach(profile => {
+            if (profile.id) {
+              assignedStaffById[profile.id] = {
+                name: profile.full_name || 'Healthcare Worker',
+                station: profile.station_name || 'Unassigned'
+              };
+            }
+          });
+        }
+      } catch (err) {
+        // RPC might not exist if migration is not yet applied
+      }
     }
 
     const preg = getLatestPregnancyRecord(pregnancyData || []) || {};
@@ -2193,7 +2272,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         risk_factors: riskAssessment.riskFactors.join(', '),
         assigned_staff: assignedStaffId,
         status: normalizeVisitStatus(visit),
-        assigned_staff_name: assignedStaffById[assignedStaffId]?.name || (assignedStaffId || null),
+        assigned_staff_name: assignedStaffById[assignedStaffId]?.name || null,
         assigned_staff_station: assignedStaffById[assignedStaffId]?.station || null,
         performed_by_name: assignedStaffById[visit.performed_by]?.name || null,
         assigned_station_name: stationNameById[visit.assigned_station] || null,
@@ -2232,7 +2311,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         assigned_staff: d.attending_staff || null,
         station_ass: d.station_ass || null,
         station: d.stations?.station_name || 'Unassigned',
-        assigned_staff_name: attendingProfile?.full_name || staffLookup?.name || (d.attending_staff ? d.attending_staff : 'Not Assigned'),
+        assigned_staff_name: attendingProfile?.full_name || staffLookup?.name || null,
         assigned_staff_station: attendingProfile?.stations?.station_name || staffLookup?.station || null,
         delivery_date: d.delivery_date,
         delivery_time: d.delivery_time,

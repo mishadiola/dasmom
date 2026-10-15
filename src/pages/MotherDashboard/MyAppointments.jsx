@@ -3,15 +3,13 @@ import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
 import { 
     Calendar as CalendarIcon, ChevronLeft, ChevronRight, 
-    Clock, ArrowLeft, Download, X, Printer,
+    Clock, ArrowLeft, X,
     CheckCircle2, AlertCircle, CalendarDays, MapPin
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/MyAppointments.css';
 import appointmentSilhouette from '../../assets/images/appointments-silhouette.png';
 import { useLanguage } from '../../context/LanguageContext';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import { isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
 
 const toLocalDateStr = (d) => {
@@ -45,11 +43,10 @@ const getDateOnly = (value) => {
     }).format(parsed);
 };
 
+const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
+
 const sanitizeUUID = (str, fallback) => {
-    if (!str) return fallback;
-    if (typeof str === 'string' && str.length === 36 && str.includes('-')) {
-        return fallback;
-    }
+    if (!str || isUUID(str)) return fallback;
     return str;
 };
 
@@ -121,12 +118,12 @@ const MyAppointments = () => {
                 const [prenatalResult, postpartumResult] = await Promise.all([
                     patientService.supabase
                         .from('prenatal_visits')
-                        .select('id, visit_date, visit_number, next_appt_type, status, assigned_staff, clinical_notes, missed_reason')
+                        .select('id, visit_date, visit_number, next_appt_type, status, assigned_staff, clinical_notes, missed_reason, staff_profiles:assigned_staff (id, full_name)')
                         .eq('patient_id', authUser.id)
                         .order('visit_date', { ascending: true }),
                     patientService.supabase
                         .from('postpartum_visits')
-                        .select('id, visit_type, scheduled_date, scheduled_at, attended_date, status, assigned_staff, assessment, notes')
+                        .select('id, visit_type, scheduled_date, scheduled_at, attended_date, status, assigned_staff, assessment, notes, staff_profiles:assigned_staff (id, full_name)')
                         .eq('patient_id', authUser.id)
                         .order('scheduled_date', { ascending: true })
                 ]);
@@ -139,14 +136,45 @@ const MyAppointments = () => {
                     .filter(Boolean))];
                 const prenatalStaffIds = [...new Set(prenatalVisits.map(visit => visit.assigned_staff).filter(Boolean))];
                 const staffIds = [...new Set([...postpartumStaffIds, ...prenatalStaffIds])];
-                const { data: postpartumStaff, error: postpartumStaffError } = staffIds.length
-                    ? await patientService.supabase
-                        .from('staff_profiles')
-                        .select('id, full_name')
-                        .in('id', staffIds)
-                    : { data: [], error: null };
-                if (postpartumStaffError) throw postpartumStaffError;
-                const postpartumStaffNames = new Map((postpartumStaff || []).map(staff => [staff.id, staff.full_name]));
+
+                const postpartumStaffNames = new Map();
+                // 1. Harvest embedded staff profiles
+                (prenatalVisits || []).forEach(v => {
+                    const sp = Array.isArray(v.staff_profiles) ? v.staff_profiles[0] : v.staff_profiles;
+                    if (sp?.id && sp?.full_name) postpartumStaffNames.set(sp.id, sp.full_name);
+                });
+                (postpartumVisits || []).forEach(v => {
+                    const sp = Array.isArray(v.staff_profiles) ? v.staff_profiles[0] : v.staff_profiles;
+                    if (sp?.id && sp?.full_name) postpartumStaffNames.set(sp.id, sp.full_name);
+                });
+
+                // 2. Direct lookup for remaining staff IDs
+                const remainingStaffIds = staffIds.filter(id => !postpartumStaffNames.has(id));
+                if (remainingStaffIds.length > 0) {
+                    try {
+                        const { data: postpartumStaff } = await patientService.supabase
+                            .from('staff_profiles')
+                            .select('id, full_name')
+                            .in('id', remainingStaffIds);
+                        (postpartumStaff || []).forEach(staff => {
+                            if (staff.id && staff.full_name) postpartumStaffNames.set(staff.id, staff.full_name);
+                        });
+                    } catch (err) {
+                        console.warn('Direct staff lookup in MyAppointments failed:', err);
+                    }
+                }
+
+                // 3. Security definer RPC fallback
+                const stillMissingIds = staffIds.filter(id => !postpartumStaffNames.has(id));
+                if (stillMissingIds.length > 0) {
+                    try {
+                        const { data: rpcStaff } = await patientService.supabase
+                            .rpc('get_assigned_staff_names', { p_staff_ids: stillMissingIds });
+                        (rpcStaff || []).forEach(staff => {
+                            if (staff.id && staff.full_name) postpartumStaffNames.set(staff.id, staff.full_name);
+                        });
+                    } catch (_) {}
+                }
                 const pregnancyNumberByVisitId = new Map((patient.pregnancyHistory || [])
                     .flatMap(pregnancy => (pregnancy.visits || []).map(visit => [visit.id, pregnancy.pregnancyNumber])));
                 const visitAppts = prenatalVisits
@@ -308,88 +336,6 @@ const MyAppointments = () => {
         });
     };
 
-    const handleDownloadPDF = () => {
-        const doc = new jsPDF('portrait');
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const margin = 14;
-        let y = 16;
-
-        // ── Header ──
-        doc.setFontSize(18);
-        doc.setTextColor(139, 90, 100);
-        doc.text('DASMOM+', margin, y);
-        doc.setFontSize(10);
-        doc.setTextColor(100);
-        doc.text('City Health Office — Dasmariñas, Cavite', margin, y + 7);
-        y += 16;
-
-        doc.setDrawColor(185, 129, 138);
-        doc.setLineWidth(0.5);
-        doc.line(margin, y, pageWidth - margin, y);
-        y += 10;
-
-        // ── Report Title ──
-        doc.setFontSize(16);
-        doc.setTextColor(40);
-        doc.text('Appointment Schedule', margin, y);
-        y += 10;
-
-        // ── Patient Info ──
-        doc.setFontSize(10);
-        doc.setTextColor(80);
-        const patientId = String(patientInfo.id || 'N/A').substring(0, 8).toUpperCase();
-        doc.text(`Patient Name: ${patientInfo.name || 'N/A'}`, margin, y);
-        doc.text(`Patient ID: ${patientId}`, pageWidth / 2, y);
-        y += 6;
-        doc.text(`Health Station: ${patientInfo.station || 'N/A'}`, margin, y);
-        doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, y);
-        y += 10;
-
-        doc.setDrawColor(200);
-        doc.setLineWidth(0.3);
-        doc.line(margin, y, pageWidth - margin, y);
-        y += 8;
-
-        const allAppointments = [...appointmentsData].sort((a, b) => new Date(b.date) - new Date(a.date));
-
-        const tableHead = [['Date', 'Time', 'Type', 'Location / Station', 'Health Worker', 'Status']];
-        const tableBody = allAppointments.map(a => [
-            new Date(a.date).toLocaleDateString('en-PH'),
-            a.time || '--',
-            a.type,
-            a.location || '--',
-            a.staffName || '--',
-            a.status || 'Scheduled'
-        ]);
-
-        if (allAppointments.length > 0) {
-            doc.autoTable({
-                startY: y,
-                head: tableHead,
-                body: tableBody,
-                theme: 'grid',
-                styles: { fontSize: 8, cellPadding: 3 },
-                headStyles: { fillColor: [185, 129, 138], textColor: 255, fontStyle: 'bold' },
-                alternateRowStyles: { fillColor: [252, 249, 250] },
-                margin: { left: margin, right: margin },
-                didDrawPage: (data) => {
-                    const pageCount = doc.internal.getNumberOfPages();
-                    doc.setFontSize(8);
-                    doc.setTextColor(150);
-                    doc.text(`Page ${data.pageNumber} of ${pageCount}`, pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
-                    doc.text('DASMOM+ — Confidential Patient Record', margin, doc.internal.pageSize.getHeight() - 10);
-                }
-            });
-        } else {
-            doc.setFontSize(10);
-            doc.setTextColor(120);
-            doc.text('No appointments available.', margin, y);
-        }
-
-        const dateStr = new Date().toISOString().split('T')[0];
-        doc.save(`DASMOM_Appointments_${patientId}_${dateStr}.pdf`);
-    };
-
     const getAppointmentsForDay = (dateStr) => {
         let appointments = (appointmentsData || []).filter(a => {
             if (!a.date) return false;
@@ -458,9 +404,6 @@ const MyAppointments = () => {
                         {a.staffStation && <span>Assigned station: <strong>{a.staffStation}</strong></span>}
                     </div>
                 )}
-            </div>
-            <div className="appt-actions">
-                <button className="btn-icon-outline desktop-only" title={t('appt_print')} onClick={(e) => e.stopPropagation()}><Printer size={16} /></button>
             </div>
         </div>
     );
@@ -568,11 +511,6 @@ const MyAppointments = () => {
                             <CalendarIcon size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('appt_title')}
                         </h1>
                         <p className="page-subtitle">{t('appt_subtitle')}</p>
-                        <div className="mother-download-pdf-btn-wrapper">
-                            <button className="mother-download-pdf-btn" onClick={handleDownloadPDF}>
-                                <Download size={14} /> Download PDF
-                            </button>
-                        </div>
                     </div>
                 </div>
             </div>

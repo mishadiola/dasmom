@@ -19,11 +19,15 @@ const VaccineDetailModal = ({ vaccine, onClose }) => {
         }
     };
 
+    const isUUID = (val) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+
     const scheduledVaccination = vaccine.notes?.trim() || 'Scheduled vaccination';
     const actualVaccine = vaccine.vaccine_inventory || null;
-    const assignedStaffName = vaccine.assigned_staff_name || null;
+    const rawStaffName = vaccine.assigned_staff_name || null;
+    const assignedStaffName = isUUID(rawStaffName) ? null : rawStaffName;
     const assignedStaffStation = vaccine.assigned_staff_station || null;
-    const vaccinatedBy = vaccine.vaccinated_by_name || null;
+    const rawVaccinatedBy = vaccine.vaccinated_by_name || null;
+    const vaccinatedBy = isUUID(rawVaccinatedBy) ? null : rawVaccinatedBy;
     const displayName = scheduledVaccination;
     const status = vaccine.status || 'Unknown';
     
@@ -107,7 +111,7 @@ const VaccineDetailModal = ({ vaccine, onClose }) => {
                         <div className="vdm-details-grid">
                             <div className="vdm-detail-item">
                                 <span className="label">{t('vax_modal_hw_label', 'Health worker')}</span>
-                                <span className="value">{assignedStaffName || t('vax_modal_not_assigned', 'Not assigned')}</span>
+                                <span className="value">{assignedStaffName || t('vax_modal_not_assigned', 'Not yet assigned')}</span>
                             </div>
                             {assignedStaffStation && (
                                 <div className="vdm-detail-item">

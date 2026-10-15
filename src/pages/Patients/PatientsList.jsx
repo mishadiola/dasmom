@@ -21,6 +21,7 @@ import { formatMotherId } from '../../utils/displayIds';
 import ExportModal from '../../components/ExportModal';
 import ActionTooltip from '../../components/Common/ActionTooltip';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
 
 // Helper function to extract first 4 numeric digits from patient ID
 const getShortPatientId = (id) => {
@@ -544,17 +545,6 @@ const PatientsList = () => {
             XLSX.writeFile(workbook, `patient_profiles_${reportPeriodText || 'all'}.xlsx`);
         } else if (format === 'pdf') {
             try {
-                const jsPDF = (await import('jspdf')).default;
-                const autoTable = (await import('jspdf-autotable')).default;
-                
-                const doc = new jsPDF();
-                
-                doc.text("Patient Profiles List", 14, 15);
-                if (reportPeriodText) {
-                    doc.setFontSize(10);
-                    doc.text(`Period: ${reportPeriodText}`, 14, 22);
-                }
-                
                 const tableColumn = ["Patient ID", "Name", "Type", "Station", "Age", "Gestation", "Health Conditions", "Total Visits", "Next Appt"];
                 const tableRows = exportData.map(obj => [
                     obj['Patient ID'],
@@ -568,15 +558,18 @@ const PatientsList = () => {
                     obj['Next Appointment']
                 ]);
 
-                autoTable(doc, {
-                    head: [tableColumn],
-                    body: tableRows,
-                    startY: reportPeriodText ? 28 : 20,
-                    styles: { fontSize: 8 },
-                    headStyles: { fillColor: [147, 111, 199] }
-                });
+                const stationText = filters.stations && filters.stations.length > 0 ? filters.stations.join(', ') : 'All Stations';
 
-                doc.save(`patient_profiles_${reportPeriodText || 'all'}.pdf`);
+                exportStandardStaffPdf({
+                    orientation: 'landscape',
+                    title: 'Patient Profiles Masterlist',
+                    period: reportPeriodText || 'All Dates',
+                    station: stationText,
+                    totalRecords: exportData.length,
+                    columns: tableColumn,
+                    rows: tableRows,
+                    filename: `patient_profiles_${reportPeriodText || 'all'}.pdf`
+                });
             } catch (error) {
                 console.error("Error generating PDF:", error);
                 await customAlert({ title: 'Error', text: 'Unable to generate PDF right now.', iconType: 'danger' });

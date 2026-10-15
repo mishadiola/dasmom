@@ -10,12 +10,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import supabase from '../../config/supabaseclient';
 import PatientService from '../../services/patientservice';
 import '../../styles/pages/Analytics.css';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import ExportModal from '../../components/ExportModal';
 import { getSystemSettings } from '../../utils/systemSettings';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import { drawStaffPdfHeader, getStaffTableStyles, finalizeAndSaveStaffPdf, JsPDFConstructor, runAutoTable } from '../../utils/staffPdfTemplate';
 
 /* ════════════════════════════════════════════════════════════════
    ERROR BOUNDARY — catches render crashes and shows fallback UI
@@ -924,58 +923,71 @@ const Analytics = () => {
             const dateStr = new Date().toISOString().split('T')[0];
             XLSX.writeFile(wb, `DASMOM_Analytics_Intelligence_${dateStr}.xlsx`);
         } else if (format === 'pdf') {
-            const doc = new jsPDF('portrait');
-            
-            doc.setFontSize(16);
-            doc.text("DASMOM+ Analytics Intelligence Report", 14, 20);
-            
-            doc.setFontSize(10);
-            doc.setTextColor(100);
-            doc.text(`Period: ${reportPeriodText}`, 14, 28);
-            
-            doc.setFontSize(12);
-            doc.setTextColor(0);
-            let finalY = 38;
-
-            if (reportSettings.includePatientSummary) {
-                doc.text("Executive Summary", 14, finalY);
-                doc.autoTable({
-                    startY: finalY + 4,
-                    head: [['Intelligence Metric', 'Value / Rate']],
-                    body: kpiOverview.map(obj => [obj['Intelligence Metric'], obj['Value / Rate']]),
-                    theme: 'grid',
-                    styles: { fontSize: 8 },
-                    headStyles: { fillColor: [185, 129, 138] }
-                });
-                finalY = doc.lastAutoTable.finalY + 10;
-            }
-
-            if (reportSettings.includeStation) {
-                doc.text("Station Comparison", 14, finalY);
-                doc.autoTable({
-                    startY: finalY + 4,
-                    head: [Object.keys(stationComparison[0])],
-                    body: stationComparison.map(obj => Object.values(obj)),
-                    theme: 'grid',
-                    styles: { fontSize: 8 },
-                    headStyles: { fillColor: [185, 129, 138] }
-                });
-                finalY = doc.lastAutoTable.finalY + 10;
-            }
-
-            doc.text("Deliveries and Recovery", 14, finalY);
-            
-            doc.autoTable({
-                startY: finalY + 4,
-                head: [['Category', 'Count']],
-                body: outcomesSheet.map(obj => [obj['Outcomes Segment'] || obj['Complications'] || obj['Recovery State'], obj['Count']]),
-                theme: 'grid',
-                styles: { fontSize: 8 },
-                headStyles: { fillColor: [185, 129, 138] }
+            const doc = new JsPDFConstructor({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4'
             });
-            
+
+            let finalY = drawStaffPdfHeader(doc, {
+                title: 'Analytics Intelligence Report',
+                period: reportPeriodText || 'All Dates',
+                station: 'All Stations'
+            });
+
+            const tableStyles = getStaffTableStyles({ fontSize: 7.5, headFontSize: 8 });
+
+            if (reportSettings.includePatientSummary && kpiOverview && kpiOverview.length > 0) {
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(9.5);
+                doc.setTextColor(45, 34, 52);
+                doc.text("Executive Summary", 14, finalY + 4);
+                runAutoTable(doc, {
+                    ...tableStyles,
+                    startY: finalY + 6,
+                    head: [['Intelligence Metric', 'Value / Rate']],
+                    body: kpiOverview.map(obj => [obj['Intelligence Metric'], obj['Value / Rate']])
+                });
+                finalY = (doc.lastAutoTable ? doc.lastAutoTable.finalY : finalY) + 6;
+            }
+
+            if (reportSettings.includeStation && stationComparison && stationComparison.length > 0) {
+                if (finalY > doc.internal.pageSize.getHeight() - 45) {
+                    doc.addPage();
+                    finalY = 16;
+                }
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(9.5);
+                doc.setTextColor(45, 34, 52);
+                doc.text("Station Comparison", 14, finalY + 4);
+                runAutoTable(doc, {
+                    ...tableStyles,
+                    startY: finalY + 6,
+                    head: [Object.keys(stationComparison[0])],
+                    body: stationComparison.map(obj => Object.values(obj))
+                });
+                finalY = (doc.lastAutoTable ? doc.lastAutoTable.finalY : finalY) + 6;
+            }
+
+            if (outcomesSheet && outcomesSheet.length > 0) {
+                if (finalY > doc.internal.pageSize.getHeight() - 45) {
+                    doc.addPage();
+                    finalY = 16;
+                }
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(9.5);
+                doc.setTextColor(45, 34, 52);
+                doc.text("Deliveries and Recovery", 14, finalY + 4);
+                runAutoTable(doc, {
+                    ...tableStyles,
+                    startY: finalY + 6,
+                    head: [['Category', 'Count']],
+                    body: outcomesSheet.map(obj => [obj['Outcomes Segment'] || obj['Complications'] || obj['Recovery State'], obj['Count']])
+                });
+            }
+
             const dateStr = new Date().toISOString().split('T')[0];
-            doc.save(`DASMOM_Analytics_Intelligence_${dateStr}.pdf`);
+            finalizeAndSaveStaffPdf(doc, `DASMOM_Analytics_Intelligence_${dateStr}.pdf`);
         }
     };
 
