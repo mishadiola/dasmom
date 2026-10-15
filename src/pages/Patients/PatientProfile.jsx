@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
     ArrowLeft, Printer, Download, Edit,
@@ -6,7 +6,7 @@ import {
     CalendarCheck, User, MapPin, Phone,
     AlertTriangle, CheckCircle2, Clock, History,
     Shield, Mail, Home, FileText, Pill, Scale,
-    Ruler, Thermometer, Heart, Wind
+    Ruler, Thermometer, Heart, Wind, ClipboardList
 } from 'lucide-react';
 import '../../styles/pages/PatientProfile.css';
 import PatientService from '../../services/patientservice';
@@ -159,6 +159,7 @@ const PatientProfile = () => {
     const [activeTab, setActiveTab] = useState(() => {
         return searchParams.get('tab') || 'info';
     });
+    const patientService = useMemo(() => new PatientService(), []);
     const [p, setP] = useState(null);
     const [assignmentAccess, setAssignmentAccess] = useState({ role: '', stationId: null });
     const [loading, setLoading] = useState(true);
@@ -180,7 +181,6 @@ const PatientProfile = () => {
         setLoading(true);
         setError(null);
         try {
-            const patientService = new PatientService();  
             const data = await patientService.getPatientById(id);  
             setP(data);
             setAssignmentAccess(await patientService.getCurrentUserAccess());
@@ -811,7 +811,7 @@ const PatientProfile = () => {
                                     <h3>Obstetric History (GPA)</h3>
                                 </div>
                                 <div className="mc-body">
-                                    <p className="section-instruction">Previous pregnancy outcomes and current clinical risk evaluation.</p>
+                                    <p className="section-instruction">Previous pregnancy outcomes and documented maternal health conditions.</p>
                                     
                                     <div className="gpa-score-grid mt-3">
                                         <div className="gpa-box">
@@ -833,47 +833,62 @@ const PatientProfile = () => {
                                 </div>
                             </div>
 
-                            {/* Card: Risk History Timeline */}
+                            {/* Card: Health Condition Assessment History */}
                             <div className="modern-card">
                                 <div className="modern-card-header">
-                                    <div className="mc-icon orange-gradient"><AlertTriangle size={18} /></div>
-                                    <h3>Risk Assessment History</h3>
+                                    <div className="mc-icon sage-gradient"><ClipboardList size={18} /></div>
+                                    <h3>Health Condition Assessment History</h3>
                                 </div>
                                 <div className="mc-body">
-                                    {p.visits && p.visits.length > 0 ? (
-                                        <div className="risk-history-timeline">
-                                            {p.visits
-                                                .filter(v => v.status === 'Attended')
-                                                .sort((a, b) => new Date(a.visit_date) - new Date(b.visit_date))
-                                                .map((visit, index) => (
-                                                    <div key={index} className="risk-history-item">
-                                                        <div className="risk-history-header">
-                                                            <div className="risk-visit-info">
-                                                                <span className="risk-visit-date">{formatReadableDate(visit.visit_date)}</span>
-                                                                <span className="risk-visit-number">Visit #{visit.visit_number}</span>
+                                    {(() => {
+                                        const attendedVisits = (p.visits || [])
+                                            .filter(v => v.status === 'Attended')
+                                            .sort((a, b) => new Date(a.visit_date) - new Date(b.visit_date) || (a.visit_number || 0) - (b.visit_number || 0));
+
+                                        if (attendedVisits.length === 0) {
+                                            return (
+                                                <div className="empty-box">
+                                                    <ClipboardList size={24} className="text-muted mb-2" />
+                                                    <p>No health condition assessment history available yet.</p>
+                                                </div>
+                                            );
+                                        }
+
+                                        return (
+                                            <div className="condition-history-timeline">
+                                                {attendedVisits.map((visit, index) => {
+                                                    const rawConds = patientService.getDocumentedHealthConditions(visit.raw_risk_factors);
+                                                    const calcConds = patientService.getDocumentedHealthConditions(visit.risk_factors);
+                                                    const conditions = Array.from(new Set([...rawConds, ...calcConds]));
+
+                                                    return (
+                                                        <div key={visit.id || index} className="condition-history-item">
+                                                            <div className="condition-history-header">
+                                                                <div className="condition-visit-info">
+                                                                    <span className="condition-visit-date">{formatReadableDate(visit.visit_date)}</span>
+                                                                    {visit.visit_number ? (
+                                                                        <span className="condition-visit-number">Visit #{visit.visit_number}</span>
+                                                                    ) : null}
+                                                                </div>
+                                                                {conditions.length === 0 && (
+                                                                    <span className="condition-badge condition-none">None Reported</span>
+                                                                )}
                                                             </div>
-                                                            <div className={`risk-badge risk-${(visit.calculated_risk || 'normal').toLowerCase().split(' ')[0]}`}>
-                                                                {(visit.calculated_risk || 'Normal').toUpperCase()}
-                                                            </div>
+                                                            {conditions.length > 0 && (
+                                                                <div className="condition-badges-list">
+                                                                    {conditions.map((condition, i) => (
+                                                                        <span key={i} className="condition-badge condition-present">
+                                                                            {condition}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                        {visit.risk_factors && visit.risk_factors.split(',').filter(f => f.trim() && f.trim().toLowerCase() !== 'none').length > 0 && (
-                                                            <div className="risk-factors-list">
-                                                                {visit.risk_factors.split(',').filter(f => f.trim() && f.trim().toLowerCase() !== 'none').map((factor, i) => (
-                                                                    <span key={i} className="risk-factor-tag">
-                                                                        {factor.trim()}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ))}
-                                        </div>
-                                    ) : (
-                                        <div className="empty-box">
-                                            <History size={24} className="text-muted mb-2" />
-                                            <p>No visit history available yet.</p>
-                                        </div>
-                                    )}
+                                                    );
+                                                })}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         </div>

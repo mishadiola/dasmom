@@ -2149,6 +2149,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       
       return {
         ...visit,
+        raw_risk_factors: visit.risk_factors,
         calculated_risk: riskAssessment.riskLevel,
         risk_factors: riskAssessment.riskFactors.join(', '),
         assigned_staff: assignedStaffId,
@@ -3177,16 +3178,25 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         if (!trimmed) return false;
         const lower = trimmed.toLowerCase();
 
-        // 1. Exclude "None", "None Reported", null/empty placeholders
+        // 1. Exclude "None", "None Reported", null/empty placeholders, and legacy risk labels
         if (
           lower === 'none' ||
           lower === 'none reported' ||
           lower === 'no documented conditions' ||
+          lower === 'no conditions documented' ||
+          lower === 'no conditions' ||
+          lower === 'none recorded' ||
           lower === 'n/a' ||
           lower === 'normal' ||
           lower === 'healthy' ||
           lower === 'null' ||
-          lower === 'undefined'
+          lower === 'undefined' ||
+          lower === 'high risk' ||
+          lower === 'medium risk' ||
+          lower === 'low risk' ||
+          lower === 'normal risk' ||
+          lower === 'at risk' ||
+          lower === 'risk'
         ) {
           return false;
         }
@@ -3207,6 +3217,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           /^obstetric history/i,
           /^gravida\b/i,
           /^para\b/i,
+          /^g\d+\s*p\d+/i,
         ];
         if (obstetricPatterns.some(pattern => pattern.test(trimmed))) {
           return false;
@@ -3220,6 +3231,8 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           /^singleton/i,
           /^twins/i,
           /^multiple/i,
+          /^(undetermined|not yet determined|unknown)(\s+pregnancy(\s+type)?)?$/i,
+          /^pregnancy\s+type\b/i,
           /bmi$/i,
           /^(high|low|normal|elevated)\s+bp$/i,
           /^hypertension\s*\((high|low)\)$/i,
@@ -3227,6 +3240,8 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           /^fever$/i,
           /^hypothermia$/i,
           /^abnormal (pulse|respiratory rate|fetal heart rate)$/i,
+          /^(high|medium|low|normal)\s+risk$/i,
+          /^risk\s+(level|classification|category)\b/i,
         ];
         if (nonConditionPatterns.some(pattern => pattern.test(trimmed))) {
           return false;
