@@ -21,6 +21,7 @@ import 'jspdf-autotable';
 import ExportModal from '../../components/ExportModal';
 import { formatTime12Hour, isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
 import { useModal } from '../../context/ModalContext';
+import { useRolePermissions } from '../../context/RolePermissionContext';
 import Legend from '../../components/Legend/Legend';
 import { formatMotherId } from '../../utils/displayIds';
 import ActionTooltip from '../../components/Common/ActionTooltip';
@@ -58,6 +59,8 @@ const getSections = (outcome) => outcome === 'Miscarriage'
 const DeliveryOutcomes = () => {
     const navigate = useNavigate();
     const { confirm, alert: customAlert } = useModal();
+    const { hasPermission } = useRolePermissions();
+    const canAddDelivery = hasPermission('delivery.add.own_station');
     const babyService = new BabyService();
     const [searchTerm, setSearchTerm] = useState('');
     const [periodFilter, setPeriodFilter] = useState('This Year');
@@ -521,9 +524,11 @@ const DeliveryOutcomes = () => {
                     >
                         <Download size={16} /> Export
                     </button>
-                    <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-                        <Plus size={16} /> Record New Delivery
-                    </button>
+                    {canAddDelivery && (
+                        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+                            <Plus size={16} /> Record New Delivery
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -962,7 +967,7 @@ const DeliveryOutcomes = () => {
                                                         <button className="action-btn new-pregnancy-btn" onClick={() => handleNewPregnancy(d.patientId)}><RefreshCw size={13} /></button>
                                                     </ActionTooltip>
                                                     <ActionTooltip text="Edit Record">
-                                                        <button className="action-btn edit-btn" onClick={() => { setSelectedDelivery(d); setShowModal(true); }}><Edit2 size={13} /></button>
+                                                        {canAddDelivery && <button className="action-btn edit-btn" onClick={() => { setSelectedDelivery(d); setShowModal(true); }}><Edit2 size={13} /></button>}
                                                     </ActionTooltip>
                                                 </div>
                                             </td>

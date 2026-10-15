@@ -105,7 +105,7 @@ export default class AuthService {
     return insertedRole?.id;
   }
 
-  async ensurePublicUserRecord({ userId, email, role, password = null }) {
+  async ensurePublicUserRecord({ userId, email, role }) {
     const normalizedEmail = (email || '').trim().toLowerCase();
     const normalizedRole = normalizeRoleName(role);
 
@@ -139,7 +139,6 @@ export default class AuthService {
         p_user_id: userId,
         p_email: normalizedEmail,
         p_role: normalizedRole,
-        p_password: password,
       });
 
       if (rpcError) {
@@ -180,6 +179,7 @@ export default class AuthService {
             email: normalizedEmail,
             password,
             motherName: metadata?.full_name || normalizedEmail,
+            stationId,
           }
         }),
         15000

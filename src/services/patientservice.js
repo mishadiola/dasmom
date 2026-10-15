@@ -61,9 +61,9 @@ export default class PatientService {
     this.supabase = supabase;
   }
 
-  async sendMotherEmail(action, patientId, temporaryPassword = null) {
+  async sendMotherEmail(action, patientId) {
     const { data, error } = await this.supabase.functions.invoke('create-mother', {
-      body: { action, patientId, temporaryPassword, appUrl: APP_URL }
+      body: { action, patientId, appUrl: APP_URL }
     });
 
     if (error) throw error;
@@ -133,20 +133,22 @@ export default class PatientService {
   }
 
   async archivePatient(patientId) {
-    const { error } = await this.supabase
-      .from('users')
-      .update({ is_archived: true })
-      .eq('id', patientId);
+    const { error } = await this.supabase.rpc('set_patient_account_status', {
+      p_patient_id: patientId,
+      p_is_archived: true,
+      p_is_deactivated: null
+    });
 
     if (error) throw error;
     return true;
   }
 
   async restorePatient(patientId) {
-    const { error } = await this.supabase
-      .from('users')
-      .update({ is_archived: false })
-      .eq('id', patientId);
+    const { error } = await this.supabase.rpc('set_patient_account_status', {
+      p_patient_id: patientId,
+      p_is_archived: false,
+      p_is_deactivated: null
+    });
 
     if (error) throw error;
     return true;
@@ -1419,7 +1421,8 @@ export default class PatientService {
       role: 'patient',
       metadata: {
         full_name: `${patientData.firstName || ''} ${patientData.lastName || ''}`.trim(),
-      }
+      },
+      stationId
     });
 
     const { data: activeSession, error: activeSessionError } = await this.supabase.auth.getSession();
@@ -1548,7 +1551,7 @@ export default class PatientService {
     if (patientData.pregnancyStatus === 'Postpartum') {
       console.log('Skipping prenatal visit scheduling for postpartum patient');
       try {
-        await this.sendMotherEmail('welcome', patientId, patientData.password || 'mother123!');
+        await this.sendMotherEmail('welcome', patientId);
       } catch (emailError) {
         console.error('Warning: postpartum patient was created but welcome email could not be sent:', emailError);
       }
@@ -1650,7 +1653,7 @@ export default class PatientService {
     }
 
     try {
-      await this.sendMotherEmail('welcome', patientId, patientData.password || 'mother123!');
+      await this.sendMotherEmail('welcome', patientId);
     } catch (emailError) {
       console.error('Warning: patient was created but welcome email could not be sent:', emailError);
     }

@@ -9,6 +9,7 @@ import InventoryService from '../../services/inventoryservice';
 import supabase from '../../config/supabaseclient';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useModal } from '../../context/ModalContext';
+import { useRolePermissions } from '../../context/RolePermissionContext';
 import {
     Search, Filter, Plus, X, Syringe, Pill, Package,
     AlertTriangle, CheckCircle2, Clock, XCircle,
@@ -943,6 +944,19 @@ const Vaccinations = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { alert: customAlert } = useModal();
+    const { hasAnyPermission } = useRolePermissions();
+    const canRecordVaccine = hasAnyPermission([
+        'vaccine.administer.own_station',
+        'vaccine.administer.other_station',
+    ]);
+    const canDistributeSupplement = hasAnyPermission([
+        'supplement.distribute.patient.own_station',
+        'supplement.distribute.patient.other_station',
+    ]);
+    const canRecordItem = item => (
+        ((item.itemTypes || []).includes('vaccine') && canRecordVaccine)
+        || ((item.itemTypes || []).includes('supplement') && canDistributeSupplement)
+    );
     const patientService = new PatientService();
     const babyService = new BabyService();
 
@@ -2008,7 +2022,7 @@ const Vaccinations = () => {
                                                     <ActionTooltip text="View Patient Profile">
                                                         <button className="action-btn view-btn" onClick={() => item.type === 'Mother' ? navigate(`/dashboard/patients/${item.patientId}`) : navigate(`/dashboard/patients/${item.records?.[0]?.motherId || item.patientId}`)}><User size={13} /></button>
                                                     </ActionTooltip>
-                                                    {activeTab !== 'administered' && (
+                                                    {activeTab !== 'administered' && canRecordItem(item) && (
                                                         <ActionTooltip text="Record Vaccination or Supplement">
                                                             <button 
                                                                 className="action-btn record-btn" 

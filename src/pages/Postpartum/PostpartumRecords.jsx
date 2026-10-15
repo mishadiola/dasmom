@@ -22,6 +22,7 @@ import PostpartumVisitModal from '../../components/PostpartumVisitModal';
 import ScheduledVisitModal from '../../components/Prenatal/ScheduledVisitModal';
 import ActionTooltip from '../../components/Common/ActionTooltip';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import { useRolePermissions } from '../../context/RolePermissionContext';
 
 const formatReadableDate = (dateString) => {
     if (!dateString || dateString === 'N/A' || dateString === 'Not scheduled' || dateString === 'None') return dateString;
@@ -196,6 +197,11 @@ const DetailModal = ({ mother, onClose }) => {
    MAIN COMPONENT
    ════════════════════════════ */
 const PostpartumRecords = () => {
+    const { hasAnyPermission } = useRolePermissions();
+    const canRecordPostpartum = hasAnyPermission([
+        'postpartum.record.own_station',
+        'postpartum.record.other_station',
+    ]);
     const navigate = useNavigate();
     const babyService = new BabyService();
     const patientService = useMemo(() => new PatientService(), []);
@@ -639,7 +645,7 @@ const PostpartumRecords = () => {
                                             </td>
                                             <td>
                                                 <div className="pp-actions">
-                                                    {m.scheduledVisits?.some(visit => visit.status !== 'Completed' && visit.status !== 'Cancelled') && (
+                                                    {canRecordPostpartum && m.scheduledVisits?.some(visit => visit.status !== 'Completed' && visit.status !== 'Cancelled') && (
                                                         <ActionTooltip text="Record Postpartum Visit">
                                                             <button 
                                                                 className="action-btn record-btn" 

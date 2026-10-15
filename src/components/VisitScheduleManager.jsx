@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Calendar, Plus, Trash2, X } from 'lucide-react';
 import PatientService from '../services/patientservice';
+import { useRolePermissions } from '../context/RolePermissionContext';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -21,12 +22,14 @@ const preserveManilaTime = (date, timestamp) => {
 
 const VisitScheduleManager = ({ patientId, onClose, onChanged }) => {
     const service = useMemo(() => new PatientService(), []);
+    const { hasPermission } = useRolePermissions();
     const [visits, setVisits] = useState([]);
     const [newborns, setNewborns] = useState([]);
     const [patient, setPatient] = useState(null);
     const [delivery, setDelivery] = useState(null);
     const [userId, setUserId] = useState(null);
     const [canManage, setCanManage] = useState(false);
+    const [stationId, setStationId] = useState(null);
     const [kind, setKind] = useState('prenatal');
     const [newbornId, setNewbornId] = useState('');
     const [date, setDate] = useState('');
@@ -79,6 +82,7 @@ const VisitScheduleManager = ({ patientId, onClose, onChanged }) => {
             setPatient(patientResult.data);
             setDelivery(deliveryResult.data);
             setUserId(session.data?.user?.id || null);
+            setStationId(access?.stationId || null);
             const normalizedRole = String(access?.role || '').trim().toLowerCase().replace(/_/g, ' ');
             setCanManage(['admin', 'staff', 'cho personnel'].includes(
                 normalizedRole === 'station staff' ? 'staff' : normalizedRole
@@ -107,6 +111,15 @@ const VisitScheduleManager = ({ patientId, onClose, onChanged }) => {
         && (category !== 'newborn_vaccination' || visit.newborn_id === targetId)
         && visit.scheduledDate === scheduledDate
     );
+    const patientSchedulePermission = patient?.station_ass && patient.station_ass === stationId
+        ? 'visit.schedule.own_station'
+        : 'visit.schedule.other_station';
+    const vaccineSchedulePermission = patient?.station_ass && patient.station_ass === stationId
+        ? 'vaccine.schedule.create.own_station'
+        : 'vaccine.schedule.create.other_station';
+    const canScheduleCurrentKind = kind === 'prenatal' || kind === 'postpartum'
+        ? hasPermission(patientSchedulePermission)
+        : hasPermission(vaccineSchedulePermission);
 
     const updateDate = async visit => {
         const nextDate = window.prompt(`New date for ${visit.display} (YYYY-MM-DD):`, visit.scheduledDate);
@@ -208,6 +221,10 @@ const VisitScheduleManager = ({ patientId, onClose, onChanged }) => {
         event.preventDefault();
         if (!date || date < today() || !userId) {
             setError('Choose a future visit date and verify your staff session.');
+            return;
+        }
+        if (!canManage || !canScheduleCurrentKind) {
+            setError('You do not have permission to schedule this type of visit for this patient.');
             return;
         }
         const targetId = kind === 'newborn_vaccination' ? newbornId : patientId;
@@ -319,6 +336,9 @@ const VisitScheduleManager = ({ patientId, onClose, onChanged }) => {
                 <div className="modal-body" style={{ padding: 20 }}>
                     {error && <div role="alert" style={{ color: '#b91c1c', marginBottom: 12 }}>{error}</div>}
                     {!canManage && <p role="alert">Your account is not authorized to manage visit schedules.</p>}
+                    {canManage && !canScheduleCurrentKind && (
+                        <p role="alert">You do not have permission to schedule this type of visit for this patient.</p>
+                    )}
                     <form onSubmit={addVisit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 20 }}>
                         <label>Visit category
                             <select value={kind} onChange={event => setKind(event.target.value)}>
@@ -336,7 +356,7 @@ const VisitScheduleManager = ({ patientId, onClose, onChanged }) => {
                         <label>Visit details
                             <input value={label} maxLength={120} onChange={event => setLabel(event.target.value)} placeholder="Optional description" />
                         </label>
-                        <button type="submit" className="btn btn-primary" disabled={busy || !canManage || !patient}><Plus size={16} /> Add visit</button>
+                        <button type="submit" className="btn btn-primary" disabled={busy || !canManage || !canScheduleCurrentKind || !patient}><Plus size={16} /> Add visit</button>
                     </form>
                     {visits.length === 0 ? <p>No visits are recorded for this patient.</p> : (
                         <div style={{ display: 'grid', gap: 8 }}>

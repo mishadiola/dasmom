@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useRef } from 'react';
+import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
@@ -10,7 +10,7 @@ import {
     CheckCircle2, XCircle, AlertCircle, Bell,
     Monitor, ChevronDown, ToggleLeft, ToggleRight,
     Key, Save, Mail, MapPin, Clock, LogOut, Lock, FileText, Trash2,
-    Table, Globe, Download
+    Table, Globe, Download, ShieldCheck
 } from 'lucide-react';
 import '../../styles/pages/Settings.css';
 import { useModal } from '../../context/ModalContext';
@@ -23,6 +23,7 @@ import { useSystemSettings } from '../../context/SystemSettingsContext';
 import ResetPasswordModal from '../../components/ResetPasswordModal';
 import ActionTooltip from '../../components/Common/ActionTooltip';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import RolePermissionManagement from '../../components/RolePermissionManagement';
 
 /* ════════════════════════════
    MOCK DATA
@@ -1526,27 +1527,34 @@ const ProfileTab = () => {
    MAIN COMPONENT
 ════════════════════════════ */
 const Settings = () => {
+    const { user } = useContext(AuthContext);
     const [searchParams, setSearchParams] = useSearchParams();
     const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'accounts');
+    const isAdmin = ['admin', 'super admin'].includes(normalizeRoleValue(user?.role));
+    const TABS = useMemo(() => [
+        { id: 'accounts',  label: 'User Accounts',      icon: Users },
+        ...(isAdmin ? [{ id: 'permissions', label: 'Role Permissions', icon: ShieldCheck }] : []),
+        { id: 'system',    label: 'System Settings',    icon: SettingsIcon },
+        { id: 'profile',   label: 'Profile', icon: User },
+    ], [isAdmin]);
 
     // Sync state with URL search params
     useEffect(() => {
         const tab = searchParams.get('tab');
+        if (tab === 'permissions' && !isAdmin) {
+            setActiveTab('accounts');
+            setSearchParams({ tab: 'accounts' }, { replace: true });
+            return;
+        }
         if (tab && TABS.some(t => t.id === tab)) {
             setActiveTab(tab);
         }
-    }, [searchParams]);
+    }, [searchParams, isAdmin, setSearchParams, TABS]);
 
     const handleTabChange = (tabId) => {
         setActiveTab(tabId);
         setSearchParams({ tab: tabId });
     };
-
-    const TABS = [
-        { id: 'accounts',  label: 'User Accounts',      icon: Users },
-        { id: 'system',    label: 'System Settings',    icon: SettingsIcon },
-        { id: 'profile',   label: 'Profile', icon: User },
-    ];
 
     return (
         <div className="set-page staff-page-ready">
@@ -1554,7 +1562,7 @@ const Settings = () => {
             <div className="page-header">
                 <div>
                     <h1 className="page-title"><SettingsIcon size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Settings</h1>
-                    <p className="page-subtitle">Manage user accounts, system settings, and your profile.</p>
+                    <p className="page-subtitle">Manage user accounts, role permissions, system settings, and your profile.</p>
                 </div>
             </div>
 
@@ -1577,6 +1585,7 @@ const Settings = () => {
             {/* ── Tab Content ── */}
             <div className="set-tab-content-wrap">
                 {activeTab === 'accounts' && <UserAccountsTab />}
+                {activeTab === 'permissions' && isAdmin && <RolePermissionManagement />}
                 {activeTab === 'system'   && <SystemSettingsTab />}
                 {activeTab === 'profile'  && <ProfileTab />}
             </div>

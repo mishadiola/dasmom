@@ -26,6 +26,7 @@ import { formatMotherId } from '../../utils/displayIds';
 import VisitStaffAssignment from '../../components/Prenatal/VisitStaffAssignment';
 import ActionTooltip from '../../components/Common/ActionTooltip';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import { useRolePermissions } from '../../context/RolePermissionContext';
 
 const toLocalDateStr = (d) => {
     const offset = d.getTimezoneOffset() * 60000;
@@ -152,6 +153,7 @@ const SearchableDropdown = ({ patients, value, onChange }) => {
 const PrenatalVisits = () => {
     const navigate = useNavigate();
     const { user } = useContext(AuthContext);
+    const { hasAnyPermission, hasPermission } = useRolePermissions();
 
     const [initialLoading, setInitialLoading] = useState(true);
     const [initialError, setInitialError] = useState(null);
@@ -213,13 +215,22 @@ const PrenatalVisits = () => {
     const [isRescheduling, setIsRescheduling] = useState(false);
 
     const patientService = useMemo(() => new PatientService(), []);
-    const canReschedule = ['admin', 'staff', 'cho personnel'].includes(visitAccess?.role);
+    const canReschedule = ['admin', 'staff', 'cho personnel'].includes(visitAccess?.role)
+        && hasAnyPermission(['patient.reschedule.own_station', 'patient.reschedule.other_station']);
+    const canScheduleVisit = ['admin', 'staff', 'cho personnel'].includes(visitAccess?.role)
+        && hasAnyPermission(['visit.schedule.own_station', 'visit.schedule.other_station']);
     const patientsForVisitCategory = useMemo(() => allPatients.filter(patient => (
         addVisitForm.visit_category === 'Postpartum'
             ? patient.hasDelivery
             : !patient.hasDelivery && String(patient.pregnancyStatus).toLowerCase() === 'pregnant'
     )), [addVisitForm.visit_category, allPatients]);
-    const selectedAddVisitPatient = allPatients.find(patient => patient.id === addVisitForm.patient_id);
+    const scheduleablePatients = useMemo(() => patientsForVisitCategory.filter(patient => {
+        const permission = patient.stationId && patient.stationId === visitAccess?.stationId
+            ? 'visit.schedule.own_station'
+            : 'visit.schedule.other_station';
+        return hasPermission(permission);
+    }), [hasPermission, patientsForVisitCategory, visitAccess?.stationId]);
+    const selectedAddVisitPatient = scheduleablePatients.find(patient => patient.id === addVisitForm.patient_id);
     const assignableVisitStaff = addVisitForm.visit_category === 'Postpartum' && selectedAddVisitPatient?.assignedStaffId
         ? assignmentStaff.filter(staff => staff.id === selectedAddVisitPatient.assignedStaffId)
         : assignmentStaff;
@@ -602,9 +613,9 @@ const PrenatalVisits = () => {
             setTimeout(() => setToast(null), 3500);
             return;
         }
-        const patient = patientsForVisitCategory.find(p => p.id === addVisitForm.patient_id);
+        const patient = scheduleablePatients.find(p => p.id === addVisitForm.patient_id);
         if (!patient) {
-            setToast('Select a patient who matches the selected visit category.');
+            setToast('Select a patient for whom you have visit-scheduling permission.');
             setTimeout(() => setToast(null), 3500);
             return;
         }
@@ -1839,33 +1850,35 @@ const PrenatalVisits = () => {
                             </button>
                         </div>
                         <div className="mv-selection-grid">
-                            <div
-                                className="mv-option-card"
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => {
-                                    setShowManageModal(false);
-                                    setAddVisitForm({
-                                        visit_category: 'Prenatal',
-                                        visit_type: 'emergency',
-                                        patient_id: '',
-                                        visit_date: new Date().toISOString().split('T')[0],
-                                        assigned_staff: '',
-                                        assigned_station: visitAccess?.stationId || '',
-                                        reason: '',
-                                        notes: ''
-                                    });
-                                    setShowAddVisitModal(true);
-                                }}
-                            >
-                                <div className="mv-option-icon mv-option-icon--schedule">
-                                    <CalendarPlus size={24} />
+                            {canScheduleVisit && (
+                                <div
+                                    className="mv-option-card"
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => {
+                                        setShowManageModal(false);
+                                        setAddVisitForm({
+                                            visit_category: 'Prenatal',
+                                            visit_type: 'emergency',
+                                            patient_id: '',
+                                            visit_date: new Date().toISOString().split('T')[0],
+                                            assigned_staff: '',
+                                            assigned_station: visitAccess?.stationId || '',
+                                            reason: '',
+                                            notes: ''
+                                        });
+                                        setShowAddVisitModal(true);
+                                    }}
+                                >
+                                    <div className="mv-option-icon mv-option-icon--schedule">
+                                        <CalendarPlus size={24} />
+                                    </div>
+                                    <div>
+                                        <h3 className="mv-option-title">Schedule a Visit</h3>
+                                        <p className="mv-option-desc">Create a new appointment for a patient.</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h3 className="mv-option-title">Schedule a Visit</h3>
-                                    <p className="mv-option-desc">Create a new appointment for a patient.</p>
-                                </div>
-                            </div>
+                            )}
 
                             {canReschedule && (
                                 <div
@@ -1962,7 +1975,7 @@ const PrenatalVisits = () => {
                                     <div className="form-group">
                                         <label>Patient <span style={{ color: '#e05c73' }}>*</span></label>
                                         <SearchableDropdown
-                                            patients={patientsForVisitCategory}
+                                            patients={scheduleablePatients}
                                             value={addVisitForm.patient_id}
                                             onChange={val => {
                                                 const selected = patientsForVisitCategory.find(patient => patient.id === val);

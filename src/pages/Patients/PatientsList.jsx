@@ -15,6 +15,7 @@ import PatientService from '../../services/patientservice';
 import EditPatientModal from '../../components/Patient/EditPatientModal';
 import PatientStaffAssignment from '../../components/Patient/PatientStaffAssignment';
 import { useModal } from '../../context/ModalContext';
+import { useRolePermissions } from '../../context/RolePermissionContext';
 import Legend from '../../components/Legend/Legend';
 import { formatMotherId } from '../../utils/displayIds';
 import ExportModal from '../../components/ExportModal';
@@ -240,6 +241,7 @@ const PatientsList = () => {
     const initialTrimester = searchParams.get('trimester');
     
     const { alert: customAlert, confirm } = useModal();
+    const { hasPermission } = useRolePermissions();
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -247,6 +249,17 @@ const PatientsList = () => {
     const [availableStations, setAvailableStations] = useState([]);
     const [assignmentAccess, setAssignmentAccess] = useState({ role: '', stationId: null });
     const [defaultApplied, setDefaultApplied] = useState(false);
+
+    const hasPatientStationPermission = (patient, ownPermission, otherPermission) => (
+        patient.stationId != null && patient.stationId === assignmentAccess.stationId
+            ? hasPermission(ownPermission)
+            : hasPermission(otherPermission)
+    );
+    const canChangeArchiveState = (patient) => hasPatientStationPermission(
+        patient,
+        'patient.archive.own_station',
+        'patient.archive.other_station'
+    );
 
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -1071,25 +1084,31 @@ const PatientsList = () => {
 
                                         <td>
                                             <div className="actions-group">
-                                                <ActionTooltip text="View Profile">
-                                                    <button type="button" className="action-btn view-btn" onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/${p.id}?from=patients`); }}>
-                                                        <Eye size={16} />
-                                                    </button>
-                                                </ActionTooltip>
+                                                {hasPatientStationPermission(p, 'patient.view.own_station', 'patient.view.other_station') && (
+                                                    <ActionTooltip text="View Profile">
+                                                        <button type="button" className="action-btn view-btn" onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/${p.id}?from=patients`); }}>
+                                                            <Eye size={16} />
+                                                        </button>
+                                                    </ActionTooltip>
+                                                )}
 
-                                                <ActionTooltip text="Record Vitals">
-                                                    <button type="button" className="action-btn vitals-btn" onClick={(e) => { e.stopPropagation(); openVitalsModal(p.id); }} disabled={modalLoading.vitals}>
-                                                        <Activity size={16} />
-                                                    </button>
-                                                </ActionTooltip>
+                                                {hasPatientStationPermission(p, 'prenatal.record.own_station', 'prenatal.record.other_station') && (
+                                                    <ActionTooltip text="Record Vitals">
+                                                        <button type="button" className="action-btn vitals-btn" onClick={(e) => { e.stopPropagation(); openVitalsModal(p.id); }} disabled={modalLoading.vitals}>
+                                                            <Activity size={16} />
+                                                        </button>
+                                                    </ActionTooltip>
+                                                )}
 
-                                                <ActionTooltip text="Edit Patient">
-                                                    <button type="button" className="action-btn edit-btn" onClick={(e) => { e.stopPropagation(); openEditModal(p.id); }} disabled={modalLoading.edit}>
-                                                        <Edit size={16} />
-                                                    </button>
-                                                </ActionTooltip>
+                                                {hasPatientStationPermission(p, 'patient.edit.own_station', 'patient.edit.other_station') && (
+                                                    <ActionTooltip text="Edit Patient">
+                                                        <button type="button" className="action-btn edit-btn" onClick={(e) => { e.stopPropagation(); openEditModal(p.id); }} disabled={modalLoading.edit}>
+                                                            <Edit size={16} />
+                                                        </button>
+                                                    </ActionTooltip>
+                                                )}
 
-                                                {(p.archiveStatus || 'active') === 'archived' ? (
+                                                {canChangeArchiveState(p) && ((p.archiveStatus || 'active') === 'archived' ? (
                                                     <ActionTooltip text="Restore Patient">
                                                         <button type="button" className="action-btn restore-btn" onClick={(e) => {
                                                             e.stopPropagation();
@@ -1107,7 +1126,7 @@ const PatientsList = () => {
                                                             <Archive size={16} />
                                                         </button>
                                                     </ActionTooltip>
-                                                )}
+                                                ))}
                                             </div>
                                         </td>
                                     </tr>

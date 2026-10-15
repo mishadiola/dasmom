@@ -1,6 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { accountEmail, APK_DOWNLOAD_URL, APP_URL, DUPLICATE_EMAIL_MESSAGE, escapeHtml, isDuplicateEmailError, sendBrevoEmail } from '../_shared/email.ts';
+import { accountEmail, APK_DOWNLOAD_URL, APP_URL, DUPLICATE_EMAIL_MESSAGE, escapeHtml, isDuplicateEmailError, PASSWORD_RESET_URL, sendBrevoEmail } from '../_shared/email.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,6 +11,7 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL');
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
 let adminClient: ReturnType<typeof createClient> | null = null;
 
 function getAdmin() {
@@ -86,6 +87,49 @@ async function requireStaff(request: Request) {
   return allowed;
 }
 
+async function callerCanRegisterPatient(request: Request, targetStationId: string) {
+  const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
+  if (!token || !anonKey || !supabaseUrl || !targetStationId) {
+    throw new Error('Permission verification is not configured');
+  }
+
+  const callerClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const [stationResult, ownResult, otherResult, assignOtherResult] = await Promise.all([
+    callerClient.rpc('get_my_station'),
+    callerClient.rpc('has_permission', { p_permission_key: 'patient.register.own_station' }),
+    callerClient.rpc('has_permission', { p_permission_key: 'patient.register.other_station' }),
+    callerClient.rpc('has_permission', { p_permission_key: 'patient.register.assign_other_station' }),
+  ]);
+  if (stationResult.error) throw stationResult.error;
+  if (ownResult.error) throw ownResult.error;
+  if (otherResult.error) throw otherResult.error;
+  if (assignOtherResult.error) throw assignOtherResult.error;
+  if (stationResult.data === targetStationId) return ownResult.data === true;
+  return otherResult.data === true && assignOtherResult.data === true;
+}
+
+async function callerCanViewPatient(request: Request, patientId: string) {
+  const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
+  if (!token || !anonKey || !supabaseUrl) {
+    throw new Error('Permission verification is not configured');
+  }
+
+  const callerClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data, error } = await callerClient.rpc('guard_patient_data_read', {
+    p_patient_id: patientId,
+    p_own_permission: 'patient.view.own_station',
+    p_other_permission: 'patient.view.other_station',
+  });
+  if (error) throw error;
+  return data === true;
+}
+
 async function getMother(patientId: string) {
   const [{ data: patient }, { data: user }, { data: pregnancy }, { data: visits }] = await Promise.all([
     getAdmin().from('patient_basic_info').select('id, first_name, last_name, municipality, station_ass').eq('id', patientId).maybeSingle(),
@@ -124,6 +168,20 @@ Deno.serve(async (request: Request) => {
     if (!action && body.email && body.password && body.motherName) {
       currentStep = 'staff authorization';
       if (!await requireStaff(request)) return json({ error: 'Staff authorization required' }, 401);
+      const targetStationId = String(body.stationId || '');
+      currentStep = 'patient station validation';
+      if (!targetStationId) return json({ error: 'A patient station is required' }, 400);
+      const { data: station, error: stationError } = await getAdmin()
+        .from('stations')
+        .select('id')
+        .eq('id', targetStationId)
+        .maybeSingle();
+      if (stationError) throw stationError;
+      if (!station) return json({ error: 'The selected station does not exist' }, 400);
+      currentStep = 'patient registration permission';
+      if (!await callerCanRegisterPatient(request, targetStationId)) {
+        return json({ error: 'You do not have permission to register patients' }, 403);
+      }
       const email = String(body.email).trim().toLowerCase();
 
       currentStep = 'duplicate email check';
@@ -167,11 +225,20 @@ Deno.serve(async (request: Request) => {
         id: createdUserId,
         email_address: email,
         usertype: patientRole.id,
-        password: String(body.password),
       });
       if (publicUserError) throw publicUserError;
       publicUserCreated = true;
       console.log('[create-mother] public.users record created');
+
+      currentStep = 'password setup link generation';
+      const { data: setupLinkData, error: setupLinkError } = await getAdmin().auth.admin.generateLink({
+        type: 'recovery',
+        email,
+        options: { redirectTo: PASSWORD_RESET_URL },
+      });
+      if (setupLinkError) throw setupLinkError;
+      const setupLink = setupLinkData.properties?.action_link;
+      if (!setupLink) throw new Error('Supabase Auth did not return a password setup link');
 
       currentStep = 'Brevo email sending';
       console.log('[create-mother] Sending Brevo email...');
@@ -179,7 +246,7 @@ Deno.serve(async (request: Request) => {
         name: String(body.motherName),
         email,
         role: 'mother',
-        password: String(body.password),
+        setupLink,
         accountType: 'mother',
       }));
       console.log('[create-mother] Brevo email sent');
@@ -189,6 +256,10 @@ Deno.serve(async (request: Request) => {
     currentStep = 'staff authorization';
     if (!await requireStaff(request)) return json({ error: 'Staff authorization required' }, 401);
     if (!['welcome', 'new_pregnancy'].includes(action) || !body.patientId) return json({ error: 'Invalid email request' }, 400);
+    currentStep = 'patient visibility permission';
+    if (!await callerCanViewPatient(request, String(body.patientId))) {
+      return json({ error: 'You do not have permission to access this patient' }, 403);
+    }
 
     currentStep = 'mother data lookup';
     const mother = await getMother(String(body.patientId));
@@ -197,11 +268,21 @@ Deno.serve(async (request: Request) => {
     const name = `${mother.patient.first_name || ''} ${mother.patient.last_name || ''}`.trim() || 'there';
     const isNewPregnancy = action === 'new_pregnancy';
     const subject = isNewPregnancy ? 'Congratulations on your new pregnancy | DASMOM' : 'Welcome to DASMOM';
-    const passwordBlock = !isNewPregnancy && body.temporaryPassword
-      ? `<p><strong>Your initial password:</strong> ${escapeHtml(body.temporaryPassword)}</p><p>Please change this password after your first login.</p>`
-      : '';
+    let passwordSetupBlock = '';
+    if (!isNewPregnancy) {
+      currentStep = 'password setup link generation';
+      const { data: setupLinkData, error: setupLinkError } = await getAdmin().auth.admin.generateLink({
+        type: 'recovery',
+        email: mother.email,
+        options: { redirectTo: PASSWORD_RESET_URL },
+      });
+      if (setupLinkError) throw setupLinkError;
+      const setupLink = setupLinkData.properties?.action_link;
+      if (!setupLink) throw new Error('Supabase Auth did not return a password setup link');
+      passwordSetupBlock = `<p><a href="${escapeHtml(setupLink)}">Set or reset your DASMOM password</a></p>`;
+    }
     const pregnancy = mother.pregnancy || {};
-    const html = `<h2>${isNewPregnancy ? `Congratulations, ${escapeHtml(name)}!` : `Welcome to DASMOM, ${escapeHtml(name)}!`}</h2><p>${isNewPregnancy ? 'Your new pregnancy has been registered in DASMOM.' : 'Your mother account has been created.'}</p>${passwordBlock}<p><a href="${escapeHtml(APK_DOWNLOAD_URL)}">Download the DasMom Android app (APK)</a></p><h3>Pregnancy information</h3><p><strong>LMP:</strong> ${escapeHtml(dateLabel(pregnancy.lmd))}<br><strong>EDD:</strong> ${escapeHtml(dateLabel(pregnancy.edd))}<br><strong>Pregnancy type:</strong> ${escapeHtml(pregnancy.pregnancy_type || 'Not set')}<br><strong>Gravida / Para:</strong> ${escapeHtml(pregnancy.gravida || '-')} / ${escapeHtml(pregnancy.para || '-')}</p><h3>Your schedule</h3><table border="1" cellpadding="8" cellspacing="0"><thead><tr><th>Visit</th><th>Date</th><th>Type</th><th>Status</th></tr></thead><tbody>${scheduleRows(mother.visits)}</tbody></table><p><a href="${escapeHtml(APP_URL)}">Open DASMOM</a></p><p>Please contact your health worker if any information is incorrect.</p>`;
+    const html = `<h2>${isNewPregnancy ? `Congratulations, ${escapeHtml(name)}!` : `Welcome to DASMOM, ${escapeHtml(name)}!`}</h2><p>${isNewPregnancy ? 'Your new pregnancy has been registered in DASMOM.' : 'Your mother account has been created.'}</p>${passwordSetupBlock}<p><a href="${escapeHtml(APK_DOWNLOAD_URL)}">Download the DasMom Android app (APK)</a></p><h3>Pregnancy information</h3><p><strong>LMP:</strong> ${escapeHtml(dateLabel(pregnancy.lmd))}<br><strong>EDD:</strong> ${escapeHtml(dateLabel(pregnancy.edd))}<br><strong>Pregnancy type:</strong> ${escapeHtml(pregnancy.pregnancy_type || 'Not set')}<br><strong>Gravida / Para:</strong> ${escapeHtml(pregnancy.gravida || '-')} / ${escapeHtml(pregnancy.para || '-')}</p><h3>Your schedule</h3><table border="1" cellpadding="8" cellspacing="0"><thead><tr><th>Visit</th><th>Date</th><th>Type</th><th>Status</th></tr></thead><tbody>${scheduleRows(mother.visits)}</tbody></table><p><a href="${escapeHtml(APP_URL)}">Open DASMOM</a></p><p>Please contact your health worker if any information is incorrect.</p>`;
 
     currentStep = 'Brevo email sending';
     console.log('[create-mother] Sending Brevo email...');

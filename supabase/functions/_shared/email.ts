@@ -1,4 +1,5 @@
 export const APP_URL = Deno.env.get('DASMOM_APP_URL') || 'https://dasmom.vercel.app/';
+export const PASSWORD_RESET_URL = new URL('/reset-password', APP_URL).toString();
 export const APK_DOWNLOAD_URL = 'https://hcrpdvizautiuwgmfcqc.supabase.co/storage/v1/object/public/dasmom-apk/app-release.apk';
 
 const brevoApiKey = Deno.env.get('BREVO_API_KEY');
@@ -57,6 +58,7 @@ export function accountEmail({
   role,
   station,
   password,
+  setupLink,
   accountType,
 }: {
   name: string;
@@ -64,19 +66,22 @@ export function accountEmail({
   role: string;
   station?: string;
   password?: string;
+  setupLink?: string;
   accountType: 'staff' | 'mother';
 }) {
   const stationBlock = accountType === 'staff'
     ? `<p><strong>Assigned station:</strong> ${escapeHtml(station || 'Not assigned')}</p>`
     : '';
-  const passwordBlock = password
+  const passwordBlock = setupLink
+    ? `<p><a href="${escapeHtml(setupLink)}">Set or reset your DASMOM password</a></p>`
+    : password
     ? `<p><strong>Initial password:</strong> ${escapeHtml(password)}</p><p>Please change it after signing in.</p>`
     : '';
   const appDownloadBlock = accountType === 'mother'
     ? `<p><a href="${escapeHtml(APK_DOWNLOAD_URL)}">Download the DasMom Android app (APK)</a></p>`
     : '';
 
-  return `<h2>Welcome to DASMOM, ${escapeHtml(name)}!</h2><p>Your ${accountType} account was created by an authorized DasMom administrator.</p><p><strong>Registered email:</strong> ${escapeHtml(email)}<br><strong>Account role:</strong> ${escapeHtml(role)}</p>${stationBlock}${passwordBlock}${appDownloadBlock}<p><strong>Login methods:</strong> use your DasMom email and initial password, or choose Sign in with Google using this same registered email address.</p><p><a href="${escapeHtml(APP_URL)}">Open DASMOM</a></p><p>Forgot your password? Use the Forgot password link on the login page to receive a secure reset email.</p>`;
+  return `<h2>Welcome to DASMOM, ${escapeHtml(name)}!</h2><p>Your ${accountType} account was created by an authorized DasMom administrator.</p><p><strong>Registered email:</strong> ${escapeHtml(email)}<br><strong>Account role:</strong> ${escapeHtml(role)}</p>${stationBlock}${passwordBlock}${appDownloadBlock}<p>Sign in with your DasMom email after setting your password, or choose Sign in with Google using this same registered email address.</p><p><a href="${escapeHtml(APP_URL)}">Open DASMOM</a></p><p>Forgot your password? Use the Forgot password link on the login page to receive a secure reset email.</p>`;
 }
 
 export { escapeHtml };

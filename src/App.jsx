@@ -2,6 +2,8 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
 import { AuthProvider } from './context/AuthContext';
+import { RolePermissionProvider } from './context/RolePermissionContext';
+import { PermissionBoundary } from './context/RolePermissionContext';
 import { ModalProvider } from './context/ModalContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { SystemSettingsProvider } from './context/SystemSettingsContext';
@@ -61,6 +63,7 @@ function AnalyticsTracker() {
 function App() {
   return (
     <AuthProvider>
+      <RolePermissionProvider>
       <LanguageProvider>
       <ModalProvider>
       <SystemSettingsProvider>
@@ -86,18 +89,62 @@ function App() {
             </ProtectedRoute>
           }>
             <Route index element={<Dashboard />} />
-            <Route path="patients" element={<PatientsList />} />
-            <Route path="patients/add" element={<AddPatient />} />
-            <Route path="patients/:id" element={<PatientProfile />} />
+            <Route path="patients" element={
+              <PermissionBoundary anyOf={['patient.view.own_station', 'patient.view.other_station']}>
+                <PatientsList />
+              </PermissionBoundary>
+            } />
+            <Route path="patients/add" element={
+              <PermissionBoundary anyOf={['patient.register.own_station', 'patient.register.other_station']}>
+                <AddPatient />
+              </PermissionBoundary>
+            } />
+            <Route path="patients/:id" element={
+              <PermissionBoundary anyOf={['patient.view.own_station', 'patient.view.other_station']}>
+                <PatientProfile />
+              </PermissionBoundary>
+            } />
             <Route path="high-risk" element={<HighRiskCases />} />
-            <Route path="prenatal" element={<PrenatalVisits />} />
-            <Route path="prenatal/add/:patientId" element={<AddPrenatalVisit />} />
-            <Route path="postpartum" element={<PostpartumRecords />} />
-            <Route path="postpartum/add/:patientId" element={<AddPostpartumVisit />} />
-            <Route path="vaccinations" element={<Vaccinations />} />
-            <Route path="inventory" element={<Inventory />} />
-            <Route path="deliveries" element={<DeliveryOutcomes />} />
-            <Route path="newborns" element={<NewbornTracking />} />
+            <Route path="prenatal" element={
+              <PermissionBoundary anyOf={['prenatal.schedule.view.own_station', 'prenatal.schedule.view.other_station']}>
+                <PrenatalVisits />
+              </PermissionBoundary>
+            } />
+            <Route path="prenatal/add/:patientId" element={
+              <PermissionBoundary anyOf={['prenatal.record.own_station', 'prenatal.record.other_station', 'prenatal.record.other_station_at_own_station']}>
+                <AddPrenatalVisit />
+              </PermissionBoundary>
+            } />
+            <Route path="postpartum" element={
+              <PermissionBoundary anyOf={['postpartum.schedule.view.own_station', 'postpartum.schedule.view.other_station']}>
+                <PostpartumRecords />
+              </PermissionBoundary>
+            } />
+            <Route path="postpartum/add/:patientId" element={
+              <PermissionBoundary anyOf={['postpartum.record.own_station', 'postpartum.record.other_station']}>
+                <AddPostpartumVisit />
+              </PermissionBoundary>
+            } />
+            <Route path="vaccinations" element={
+              <PermissionBoundary anyOf={['vaccine.schedule.view.own_station', 'vaccine.schedule.view.other_station']}>
+                <Vaccinations />
+              </PermissionBoundary>
+            } />
+            <Route path="inventory" element={
+              <PermissionBoundary anyOf={['inventory.main.view', 'inventory.station.view.own_station', 'inventory.station.view.other_station']}>
+                <Inventory />
+              </PermissionBoundary>
+            } />
+            <Route path="deliveries" element={
+              <PermissionBoundary anyOf={['delivery.view.own_station', 'delivery.view.other_station']}>
+                <DeliveryOutcomes />
+              </PermissionBoundary>
+            } />
+            <Route path="newborns" element={
+              <PermissionBoundary anyOf={['newborn.view.own_station', 'newborn.view.other_station']}>
+                <NewbornTracking />
+              </PermissionBoundary>
+            } />
             <Route path="stations" element={
               <ProtectedRoute pageKey="reports">
                 <StationReports />
@@ -137,6 +184,7 @@ function App() {
       </SystemSettingsProvider>
         </ModalProvider>
       </LanguageProvider>
+      </RolePermissionProvider>
     </AuthProvider>
   );
 }

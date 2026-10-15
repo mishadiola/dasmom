@@ -32,6 +32,7 @@ import {
   Download
 } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
+import { useRolePermissions } from '../../context/RolePermissionContext';
 import InventoryService from '../../services/inventoryservice';
 import PatientService from '../../services/patientservice';
 import { useModal } from '../../context/ModalContext';
@@ -68,6 +69,7 @@ const Inventory = () => {
     const location = useLocation();
   const { alert: customAlert, confirm } = useModal();
   const { user } = useContext(AuthContext);
+  const { hasPermission } = useRolePermissions();
   const [userScope, setUserScope] = useState(() => ({
     role: normalizeRole(user?.role) || 'user',
     stationId: null,
@@ -76,10 +78,22 @@ const Inventory = () => {
   }));
   const [availableStations, setAvailableStations] = useState([]);
   const isAdmin = isAdminRole(userScope.role);
+  const canDistributeToStations = isAdmin || hasPermission('inventory.main.distribute.to_stations');
+  const canViewMainInventory = isAdmin
+    || hasPermission('inventory.main.view')
+    || hasPermission('inventory.main.stock.add')
+    || canDistributeToStations;
+  const canAddMainStock = isAdmin || hasPermission('inventory.main.stock.add');
+  const canViewStationInventory = isAdmin
+    || hasPermission('inventory.station.view.own_station')
+    || hasPermission('inventory.station.view.other_station');
+  const canViewOtherStations = isAdmin
+    || hasPermission('inventory.station.view.other_station')
+    || canDistributeToStations;
   const visibleStations = useMemo(() => {
-    if (isAdmin) return availableStations;
+    if (canViewOtherStations) return availableStations;
     return userScope.stationName ? [userScope.stationName] : [];
-  }, [availableStations, isAdmin, userScope.stationName]);
+  }, [availableStations, canViewOtherStations, userScope.stationName]);
   const [activeTab, setActiveTab] = useState('vaccines');
   const [mainTab, setMainTab] = useState('inventory');
   const [distPage, setDistPage] = useState(1);
@@ -329,8 +343,8 @@ const Inventory = () => {
         setError(null);
         try {
           const [vaxData, suppData, stationsData] = await Promise.all([
-            inventoryService.getVaccineInventory(),
-            inventoryService.getSupplementInventory(),
+            inventoryService.getVaccineInventory({ includeMainInventory: canViewMainInventory }),
+            inventoryService.getSupplementInventory({ includeMainInventory: canViewMainInventory }),
             patientService.getAvailableStations()
           ]);
 
@@ -407,10 +421,10 @@ const Inventory = () => {
     loadScope();
     fetchData();
 
-    const vaxSub = isAdmin
+    const vaxSub = canViewMainInventory
       ? inventoryService.subscribeToInventory('vaccine_inventory', () => fetchData())
       : null;
-    const suppSub = isAdmin
+    const suppSub = canViewMainInventory
       ? inventoryService.subscribeToInventory('supplement_inventory', () => fetchData())
       : null;
 
@@ -419,7 +433,7 @@ const Inventory = () => {
       vaxSub?.unsubscribe();
       suppSub?.unsubscribe();
     };
-  }, [user?.id, isAdmin]);
+  }, [user?.id, isAdmin, canViewMainInventory]);
 
   // Separate effect for station inventory to prevent clearing on central inventory updates
   useEffect(() => {
@@ -440,8 +454,12 @@ const Inventory = () => {
           refreshQueued = false;
           try {
             const [stationInventoryData, history] = await Promise.all([
-              inventoryService.getStationInventorySnapshot(),
-              inventoryService.getStationDistributionHistory()
+              canViewStationInventory
+                ? inventoryService.getStationInventorySnapshot()
+                : Promise.resolve([]),
+              canViewStationInventory || canDistributeToStations
+                ? inventoryService.getStationDistributionHistory()
+                : Promise.resolve([])
             ]);
             if (isCurrent) {
               setStationCurrentInventory(stationInventoryData || []);
@@ -492,7 +510,7 @@ const Inventory = () => {
       inventoryService.supabase.removeChannel(stationVaccineSub);
       inventoryService.supabase.removeChannel(stationSupplementSub);
     };
-  }, [user?.id, isAdmin]);
+  }, [user?.id, isAdmin, canViewOtherStations, canDistributeToStations, canViewStationInventory]);
 
   const getStatus = (qty, maxStock, hasExpiredStock) => {
     return getInventoryStatus(qty, maxStock, hasExpiredStock);
@@ -1430,10 +1448,10 @@ const Inventory = () => {
       <div className="page-header">
         <div>
           <h1 className="page-title">
-            <Package size={22} className="header-icon" /> {isAdmin ? 'Inventory Management' : 'Station Inventory'}
+            <Package size={22} className="header-icon" /> {canViewMainInventory ? 'Inventory Management' : 'Station Inventory'}
           </h1>
           <p className="page-subtitle">
-            {isAdmin
+            {canViewMainInventory
               ? 'Track and manage vaccine and supplement supplies across CHO stations to help maintain adequate stock levels.'
               : `Current vaccine and supplement stock distributed to ${userScope.stationName || 'your assigned station'}.`}
           </p>
@@ -1451,9 +1469,9 @@ const Inventory = () => {
             style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
             onClick={() => setMainTab('distribution')}
           >
-            <Truck size={16} /> {isAdmin ? 'Station Distribution' : 'Distribution History'}
+            <Truck size={16} /> {canDistributeToStations ? 'Station Distribution' : 'Distribution History'}
           </button>
-          {isAdmin && (
+          {canAddMainStock && (
             <button
               className="btn btn-primary"
               onClick={() => {
@@ -1699,17 +1717,17 @@ const Inventory = () => {
               <tr>
                 <th className="row-number-header">#</th>
                 <th>Item Name</th>
-                <th>{isAdmin ? 'Total Stock' : 'Station Stock'}</th>
+                <th>{canViewMainInventory ? 'Total Stock' : 'Station Stock'}</th>
                 <th>Unit</th>
                 <th>Batch Info</th>
                 <th>Status</th>
-                {isAdmin && <th style={{ textAlign: 'right' }}>Actions</th>}
+                {canAddMainStock && <th style={{ textAlign: 'right' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={isAdmin ? 7 : 6} className="text-center py-8">
+                  <td colSpan={canAddMainStock ? 7 : 6} className="text-center py-8">
                     Loading inventory data...
                   </td>
                 </tr>
@@ -1798,7 +1816,7 @@ const Inventory = () => {
                           {status.label}
                         </span>
                       </td>
-                      {isAdmin && <td style={{ textAlign: 'right' }}>
+                      {canAddMainStock && <td style={{ textAlign: 'right' }}>
                         <div className="action-btns">
                           <ActionTooltip text="Update Stock">
                             <button
@@ -1859,7 +1877,7 @@ const Inventory = () => {
                     </tr>
                     {expandedRow === rowNumber && item.items.length > 0 && (
                       <tr key={`detail-${item.item_name}-${index}`} className="inv-row-detail">
-                        <td colSpan={isAdmin ? 7 : 6} style={{ padding: '0' }}>
+                        <td colSpan={canAddMainStock ? 7 : 6} style={{ padding: '0' }}>
                           <div style={{
                             padding: '16px 20px',
                             background: '#f8f9fa',
@@ -1934,7 +1952,7 @@ const Inventory = () => {
                                       )}
                                       <div><strong>Manufactured:</strong> {subItem.manufactured_date ? formatDate(subItem.manufactured_date) : 'N/A'}</div>
                                     </div>
-                                    {isAdmin && <div style={{
+                                    {canAddMainStock && <div style={{
                                       display: 'flex',
                                       gap: '8px',
                                       borderTop: '1px solid #e9ecef',
@@ -2013,7 +2031,7 @@ const Inventory = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={isAdmin ? 7 : 6} className="text-center py-8">
+                  <td colSpan={canAddMainStock ? 7 : 6} className="text-center py-8">
                     No items found
                   </td>
                 </tr>
@@ -2114,7 +2132,7 @@ const Inventory = () => {
             <Truck size={22} className="header-icon" /> Station Distribution
           </h1>
           <p className="page-subtitle">
-            {isAdmin
+            {canDistributeToStations
               ? 'Transfer vaccines and supplements from CHO inventory to registered health stations.'
               : `Distribution records for ${userScope.stationName || 'your assigned station'}.`}
           </p>
@@ -2134,7 +2152,7 @@ const Inventory = () => {
           >
             <ArrowLeft size={16} /> Back to Inventory
           </button>
-          {isAdmin && (
+          {canDistributeToStations && (
             <button
               className="btn btn-primary"
               style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
@@ -2212,14 +2230,14 @@ const Inventory = () => {
         <div className="shared-filters-row" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <span className="filters-label"><Filter size={13} /> Filters:</span>
           <select
-            value={isAdmin ? historyStationFilter : (visibleStations.includes(historyStationFilter) ? historyStationFilter : (visibleStations[0] || 'All'))}
+            value={canViewOtherStations ? historyStationFilter : (visibleStations.includes(historyStationFilter) ? historyStationFilter : (visibleStations[0] || 'All'))}
             onChange={e => setHistoryStationFilter(e.target.value)}
-            disabled={!isAdmin && visibleStations.length <= 1}
+            disabled={!canViewOtherStations && visibleStations.length <= 1}
             className="filter-btn"
-            style={{ cursor: !isAdmin && visibleStations.length <= 1 ? 'not-allowed' : 'pointer' }}
+            style={{ cursor: !canViewOtherStations && visibleStations.length <= 1 ? 'not-allowed' : 'pointer' }}
           >
-            {isAdmin ? <option value="All">All Stations</option> : null}
-            {(isAdmin ? availableStations : visibleStations).map(s => <option key={s} value={s}>{s}</option>)}
+            {canViewOtherStations ? <option value="All">All Stations</option> : null}
+            {(canViewOtherStations ? availableStations : visibleStations).map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           <select
             value={historyTypeFilter}
@@ -2806,7 +2824,7 @@ const Inventory = () => {
       )}
 
       {/* ── STATION DISTRIBUTION MODAL ── */}
-      {isAdmin && showDistributionModal && createPortal(
+      {canDistributeToStations && showDistributionModal && createPortal(
         <div className="modal-overlay" onClick={() => setShowDistributionModal(false)}>
           <div
             className="modal-content"
