@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, useContext } from 'react';
+import { createPortal } from 'react-dom';
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import PatientService from '../../services/patientservice';
 import '../../styles/components/SharedFilters.css';
@@ -1817,7 +1818,7 @@ const PrenatalVisits = () => {
             </div>
 
             {/* ── MANAGE VISITS SELECTION MODAL ── */}
-            {showManageModal && (
+            {showManageModal && createPortal(
                 <div className="modal-overlay" onClick={() => setShowManageModal(false)}>
                     <div
                         className="modal-content mv-selection-modal"
@@ -1892,11 +1893,12 @@ const PrenatalVisits = () => {
                             )}
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             {/* ── SCHEDULE A VISIT MODAL (Formerly Add Visit) ── */}
-            {showAddVisitModal && (
+            {showAddVisitModal && createPortal(
                 <div className="modal-overlay" onClick={() => setShowAddVisitModal(false)}>
                     <div
                         className="modal-content"
@@ -2095,11 +2097,12 @@ const PrenatalVisits = () => {
                             </div>
                         </form>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             {/* ── RESCHEDULE A VISIT MODAL ── */}
-            {showRescheduleModal && (
+            {showRescheduleModal && createPortal(
                 <div className="modal-overlay" onClick={() => !isRescheduling && setShowRescheduleModal(false)}>
                     <div
                         className="modal-content"
@@ -2257,7 +2260,8 @@ const PrenatalVisits = () => {
                             </div>
                         </form>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             {selectedVisit && (

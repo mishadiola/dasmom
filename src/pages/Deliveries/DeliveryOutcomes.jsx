@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import useClickOutside from '../../hooks/useClickOutside';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -1587,7 +1588,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
         icon: sectionItem.id === 'patient' ? User : sectionItem.id === 'delivery' ? Stethoscope : sectionItem.id === 'complications' ? AlertTriangle : sectionItem.id === 'baby' ? Baby : sectionItem.id === 'miscarriage' ? AlertCircle : Calendar
     }));
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="do-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
@@ -1867,14 +1868,15 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
                     )}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 
 const ViewDeliveryModal = ({ show, onClose, delivery }) => {
     if (!show || !delivery) return null;
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="do-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
@@ -2014,7 +2016,8 @@ const ViewDeliveryModal = ({ show, onClose, delivery }) => {
                     <button className="btn btn-outline" onClick={onClose}>Close</button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

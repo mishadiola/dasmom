@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import AuthService from '../../services/authservice';
@@ -109,7 +110,7 @@ const AddStationModal = ({ onClose, onSuccess }) => {
         }
     };
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="set-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
                 <div className="modal-header">
@@ -143,7 +144,8 @@ const AddStationModal = ({ onClose, onSuccess }) => {
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 
@@ -276,7 +278,7 @@ const AddUserModal = ({ onClose, onSuccess }) => {
         }
     };
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="set-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
@@ -399,7 +401,8 @@ const AddUserModal = ({ onClose, onSuccess }) => {
                     }}
                 />
             )}
-        </div>
+        </div>,
+        document.body
     );
 };
 
@@ -481,7 +484,7 @@ const ManageStationsModal = ({ onClose, onSuccess, initialStations }) => {
         }
     };
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="set-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
                 <div className="modal-header" style={{ flexShrink: 0 }}>
@@ -555,7 +558,8 @@ const ManageStationsModal = ({ onClose, onSuccess, initialStations }) => {
                     <button className="btn btn-outline" onClick={onClose} disabled={submitting}>Close</button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 
@@ -640,7 +644,7 @@ const EditUserModal = ({ staff, onClose, onSuccess }) => {
         }
     };
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="set-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
@@ -739,7 +743,8 @@ const EditUserModal = ({ staff, onClose, onSuccess }) => {
                     }}
                 />
             )}
-        </div>
+        </div>,
+        document.body
     );
 };
 const UserAccountsTab = () => {

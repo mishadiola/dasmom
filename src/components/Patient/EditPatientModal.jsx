@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, User, Phone, MapPin, Shield, Save, AlertCircle } from 'lucide-react';
 import PatientService from '../../services/patientservice';
 import './EditPatientModal.css';
@@ -225,7 +226,7 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
         }
     };
 
-    return (
+    return createPortal(
         <div className="edit-patient-modal-overlay" onClick={onClose}>
             <div className="edit-patient-modal" onClick={e => e.stopPropagation()}>
                 <div className="edit-patient-modal-header">
@@ -477,7 +478,8 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
                     </form>
                 )}
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import supabase from '../config/supabaseclient';
 import PatientService from '../services/patientservice';
 import VaccinationService from '../services/vaccinationservice';
@@ -167,7 +168,7 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
         }
     };
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="vacc-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
@@ -253,7 +254,8 @@ const NewbornVaccinationModal = ({ newborn, onClose, onSave }) => {
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { UserRoundPlus, Edit2, X, Check } from 'lucide-react';
 import PatientService from '../../services/patientservice';
 import ActionTooltip from '../Common/ActionTooltip';
@@ -170,7 +171,7 @@ const VisitStaffAssignment = ({
       )}
 
       {/* Assignment Modal / Popover */}
-      {isOpen && (
+      {isOpen && createPortal(
         <div className="vsa-modal-overlay" onClick={closeAssignment}>
           <div className="vsa-modal-card" onClick={e => e.stopPropagation()}>
             <div className="vsa-modal-header">
@@ -236,7 +237,8 @@ const VisitStaffAssignment = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

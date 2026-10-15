@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import * as XLSX from 'xlsx';
@@ -100,7 +101,7 @@ const RecordVitalsModal = ({ patient, onSave, onClose, supplements }) => {
         onSave(patient.id, { ...form, patientName: patient.name }, supplementsData);
     };
 
-    return (
+    return createPortal(
         <div className="pv-modal-overlay" onClick={onClose}>
             <div className="pv-modal" onClick={e => e.stopPropagation()}>
                 <div className="pv-modal-header">
@@ -227,7 +228,8 @@ const RecordVitalsModal = ({ patient, onSave, onClose, supplements }) => {
                     </div>
                 </form>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import useClickOutside from '../../hooks/useClickOutside';
@@ -2496,7 +2497,7 @@ const Inventory = () => {
       </>
       )}
 
-      {showAddModal && (
+      {showAddModal && createPortal(
         <div
           className="modal-overlay"
           onClick={() => setShowAddModal(false)}
@@ -2730,10 +2731,11 @@ const Inventory = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {showUpdateModal && (
+      {showUpdateModal && createPortal(
         <div
           className="modal-overlay"
           onClick={() => setShowUpdateModal(null)}
@@ -2799,11 +2801,12 @@ const Inventory = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── STATION DISTRIBUTION MODAL ── */}
-      {isAdmin && showDistributionModal && (
+      {isAdmin && showDistributionModal && createPortal(
         <div className="modal-overlay" onClick={() => setShowDistributionModal(false)}>
           <div
             className="modal-content"
@@ -2975,11 +2978,12 @@ const Inventory = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── VIEW DISTRIBUTION DETAILS MODAL ── */}
-      {selectedDistRecord && (
+      {selectedDistRecord && createPortal(
         <div className="modal-overlay" onClick={() => setSelectedDistRecord(null)}>
           <div
             className="modal-content"
@@ -3020,7 +3024,8 @@ const Inventory = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <ExportModal 

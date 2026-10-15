@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import useClickOutside from '../../hooks/useClickOutside';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -76,7 +77,7 @@ const VaccinationDetailModal = ({ baby, onClose }) => {
 
     const progress = getVaccinationProgress();
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="nb-modal vacc-modal" onClick={e => e.stopPropagation()}>
                 {/* Header */}
@@ -175,7 +176,8 @@ const VaccinationDetailModal = ({ baby, onClose }) => {
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useContext } from 'react';
+import { createPortal } from 'react-dom';
 import { Activity, CheckCircle2, ClipboardList, RefreshCw, UserRound, X } from 'lucide-react';
 import supabase from '../config/supabaseclient';
 import { AuthContext } from '../context/AuthContext';
@@ -121,7 +122,7 @@ const PostpartumVisitModal = ({ mother, onClose, onSave }) => {
         }
     };
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="pp-modal pp-visit-modal" onClick={event => event.stopPropagation()}>
                 <div className="modal-header">
@@ -224,7 +225,8 @@ const PostpartumVisitModal = ({ mother, onClose, onSave }) => {
                 </div>
                 <div className="modal-footer"><button className="btn btn-outline" onClick={onClose} disabled={saving}>Cancel</button><button className="btn btn-primary" onClick={handleSave} disabled={saving || loading}>{saving ? <RefreshCw size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} {saving ? 'Saving...' : 'Save Visit'}</button></div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

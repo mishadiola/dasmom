@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
     Search, Filter, Plus, X, MapPin, Users, AlertTriangle,
@@ -820,7 +821,7 @@ const DetailModal = ({ station, onClose, navigate }) => {
 
     const coverageColor = (v) => v >= 90 ? '#7bae5e' : v >= 80 ? '#d4a03c' : '#c7586a';
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="st-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">

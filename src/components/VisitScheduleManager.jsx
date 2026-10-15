@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Calendar, Plus, Trash2, X } from 'lucide-react';
 import PatientService from '../services/patientservice';
 
@@ -304,7 +305,7 @@ const VisitScheduleManager = ({ patientId, onClose, onChanged }) => {
         ...(newborns.length ? [['newborn_vaccination', 'Newborn vaccination']] : [])
     ];
 
-    return (
+    return createPortal(
         <div className="modal-overlay" onClick={onClose}>
             <section className="modal-content" role="dialog" aria-modal="true" aria-labelledby="visit-schedule-title"
                 onClick={event => event.stopPropagation()} style={{ maxWidth: 850, maxHeight: '90vh', overflowY: 'auto' }}>
@@ -357,7 +358,8 @@ const VisitScheduleManager = ({ patientId, onClose, onChanged }) => {
                     )}
                 </div>
             </section>
-        </div>
+        </div>,
+        document.body
     );
 };
 

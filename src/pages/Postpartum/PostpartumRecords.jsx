@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import useClickOutside from '../../hooks/useClickOutside';
 import { useNavigate } from 'react-router-dom';
@@ -106,7 +107,7 @@ const DetailModal = ({ mother, onClose }) => {
         return <Clock size={14} />;
     };
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="pp-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
@@ -186,7 +187,8 @@ const DetailModal = ({ mother, onClose }) => {
                     <button className="btn btn-outline" onClick={onClose}>Close</button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

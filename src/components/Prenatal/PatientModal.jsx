@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { X, User, Calendar, Heart, Activity, MapPin, Phone, Mail, Baby, Clock, Thermometer, Weight, Ruler } from 'lucide-react';
 import PatientService from '../../services/patientservice';
 import '../../styles/components/ScheduledVisitModal.css'; // reuse styles
@@ -22,7 +23,7 @@ const PatientModal = ({ patientId, onClose }) => {
         if (patientId) fetchPatient();
     }, [patientId, patientService]);
 
-    if (loading) return <div className="modal-overlay"><div className="modal-content loading">Loading patient details...</div></div>;
+    if (loading) return createPortal(<div className="modal-overlay"><div className="modal-content loading">Loading patient details...</div></div>, document.body);
     if (!patient) return null;
 
     const formatDate = (dateStr) => {
@@ -49,7 +50,7 @@ const PatientModal = ({ patientId, onClose }) => {
     const upcomingVisits = sortedVisits.filter(v => isUpcoming(v.visit_date));
     const pastVisits = sortedVisits.filter(v => !isUpcoming(v.visit_date));
 
-    return (
+    return createPortal(
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-content patient-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
@@ -187,7 +188,8 @@ const PatientModal = ({ patientId, onClose }) => {
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

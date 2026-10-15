@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
     ArrowLeft, ArrowRight, ChevronRight, Save, X, Activity, Baby, HeartPulse,
@@ -1186,7 +1187,7 @@ const AddPrenatalVisit = () => {
                 </div>
 
             </form>
-            {rebalanceReview && (
+            {rebalanceReview && createPortal(
                 <div className="modal-overlay" role="presentation">
                     <section className="modal-content" role="dialog" aria-modal="true" aria-labelledby="rebalance-review-title"
                         onClick={event => event.stopPropagation()} style={{ maxWidth: 900, maxHeight: '90vh', overflowY: 'auto' }}>
@@ -1244,7 +1245,8 @@ const AddPrenatalVisit = () => {
                             </button>
                         </footer>
                     </section>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

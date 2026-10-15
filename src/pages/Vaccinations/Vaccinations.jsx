@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import useClickOutside from '../../hooks/useClickOutside';
 import PatientService from '../../services/patientservice';
@@ -725,7 +726,7 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
         }
     };
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="vacc-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
@@ -930,7 +931,8 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 
@@ -2068,7 +2070,7 @@ const Vaccinations = () => {
             )}
 
             {/* ── Expiration Summary Modal ── */}
-            {expirationSummaryModal && (
+            {expirationSummaryModal && createPortal(
                 <div className="modal-backdrop" onClick={() => setExpirationSummaryModal(null)}>
                     <div className="vacc-modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
@@ -2153,7 +2155,8 @@ const Vaccinations = () => {
                             <button className="btn btn-primary" onClick={() => setExpirationSummaryModal(null)}>Close</button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
             {newbornVaccinationModal && (
                 <NewbornVaccinationModal
