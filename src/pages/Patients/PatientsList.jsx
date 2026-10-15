@@ -18,6 +18,7 @@ import Legend from '../../components/Legend/Legend';
 import { formatMotherId } from '../../utils/displayIds';
 import ExportModal from '../../components/ExportModal';
 import ActionTooltip from '../../components/Common/ActionTooltip';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 // Helper function to extract first 4 numeric digits from patient ID
 const getShortPatientId = (id) => {
@@ -238,6 +239,8 @@ const PatientsList = () => {
     
     const { alert: customAlert, confirm } = useModal();
 
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [patients, setPatients] = useState([]);
     const [availableStations, setAvailableStations] = useState([]);
     const [assignmentAccess, setAssignmentAccess] = useState({ role: '', stationId: null });
@@ -342,42 +345,32 @@ const PatientsList = () => {
         }
     };
 
-    useEffect(() => {
-    const fetchPatients = async () => {
+    const loadInitialData = async () => {
+        setLoading(true);
+        setError(null);
         try {
-            const patientService = new PatientService();  
-            const data = await patientService.getAllPatients({ includeArchived: true });
+            const patientService = new PatientService();
+            const [data, access, supps, stns] = await Promise.all([
+                patientService.getAllPatients({ includeArchived: true }),
+                patientService.getCurrentUserAccess(),
+                patientService.getSupplementInventory(),
+                patientService.getAllStations()
+            ]);
             setPatients(data || []);
-            setAssignmentAccess(await patientService.getCurrentUserAccess());
+            setAssignmentAccess(access || { role: '', stationId: null });
+            setSupplements(supps || []);
+            setAvailableStations(stns || []);
         } catch (err) {
-            console.error(err);
+            console.error('Failed to load patient profiles:', err);
+            setError(err);
+        } finally {
+            setLoading(false);
         }
     };
 
-    const fetchSupplements = async () => {
-        try {
-            const patientService = new PatientService();
-            const data = await patientService.getSupplementInventory();
-            setSupplements(data);
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
-    const fetchStations = async () => {
-        try {
-            const patientService = new PatientService();
-            const data = await patientService.getAllStations();
-            setAvailableStations(data);
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
-    fetchPatients();
-    fetchSupplements();
-    fetchStations();
-}, []);
+    useEffect(() => {
+        loadInitialData();
+    }, []);
 
     useEffect(() => {
         if (!defaultApplied && availableStations.length > 0 && assignmentAccess.role) {
@@ -656,9 +649,19 @@ const PatientsList = () => {
         }
     };
 
+    if (loading) {
+        return (
+            <StaffPageLoader 
+                message="Loading patient profiles..." 
+                error={error} 
+                onRetry={loadInitialData} 
+            />
+        );
+    }
+
     return (
         <>
-        <div className="patients-page">
+        <div className="patients-page staff-page-ready">
 
             <div className="page-header">
                 <div>

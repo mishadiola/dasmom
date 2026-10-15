@@ -6,7 +6,8 @@ import {
     Search, Filter, Baby, Heart, AlertTriangle, Clock,
     CheckCircle2, XCircle, ChevronRight, ChevronLeft, Eye,
     AlertCircle, FileText, MapPin, Activity, Thermometer,
-    Brain, Milk, Calendar, TrendingUp, Download, X, ChevronDown, ClipboardList
+    Brain, Milk, Calendar, TrendingUp, Download, X, ChevronDown, ClipboardList,
+    Plus
 } from 'lucide-react';
 import BabyService from '../../services/babyservices';
 import PatientService from '../../services/patientservice';
@@ -19,6 +20,7 @@ import { formatMotherId } from '../../utils/displayIds';
 import PostpartumVisitModal from '../../components/PostpartumVisitModal';
 import ScheduledVisitModal from '../../components/Prenatal/ScheduledVisitModal';
 import ActionTooltip from '../../components/Common/ActionTooltip';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 const formatReadableDate = (dateString) => {
     if (!dateString || dateString === 'N/A' || dateString === 'Not scheduled' || dateString === 'None') return dateString;
@@ -200,6 +202,7 @@ const PostpartumRecords = () => {
     const [stationStats, setStationStats] = useState([]);
     const [mothers, setMothers] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState({
         deliveryType: 'All', station: 'All', followUp: 'All', summaryCard: 'All'
@@ -235,23 +238,26 @@ const PostpartumRecords = () => {
         fetchStations();
     }, [patientService]);
 
+    const fetchData = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            const [statData, newRecords] = await Promise.all([
+                babyService.getPostpartumStats(),
+                babyService.getPostpartumRecords()
+            ]);
+            setStats(statData.summary || []);
+            setStationStats(statData.stationRecovery || []);
+            setMothers(newRecords || []);
+        } catch (error) {
+            console.error('Error fetching postpartum data:', error);
+            setError(error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                setLoading(true);
-                const [statData, newRecords] = await Promise.all([
-                    babyService.getPostpartumStats(),
-                    babyService.getPostpartumRecords()
-                ]);
-                setStats(statData.summary || []);
-                setStationStats(statData.stationRecovery || []);
-                setMothers(newRecords || []);
-            } catch (error) {
-                console.error('Error fetching postpartum data:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchData();
     }, []);
 
@@ -397,8 +403,18 @@ const PostpartumRecords = () => {
         return 'fu-badge-upcoming';
     };
 
+    if (loading) {
+        return (
+            <StaffPageLoader 
+                message="Loading postpartum records..." 
+                error={error} 
+                onRetry={fetchData} 
+            />
+        );
+    }
+
     return (
-        <div className="pp-page">
+        <div className="pp-page staff-page-ready">
 
             {/* ── Page Header ── */}
             <div className="page-header">
@@ -415,8 +431,7 @@ const PostpartumRecords = () => {
 
             {/* ── Summary Cards ── */}
             <div className="pp-stats-grid">
-                {(loading ? [1, 2, 3, 4, 5] : stats).map((s, idx) => {
-                    if (loading) return <div key={idx} className="stat-card skeleton-loading" style={{ height: '120px' }} />;
+                {stats.map((s, idx) => {
                     const Icon = iconMap[s.icon] || Baby;
                     return (
                         <div key={s.label} className={`stat-card stat-card--${s.color}`}>
@@ -645,7 +660,7 @@ const PostpartumRecords = () => {
                                                                     });
                                                                 }}
                                                             >
-                                                                <ClipboardList size={15} />
+                                                                <Plus size={15} />
                                                             </button>
                                                         </ActionTooltip>
                                                     )}

@@ -27,6 +27,7 @@ import PatientService from '../../services/patientservice';
 import PatientStaffAssignment from '../../components/Patient/PatientStaffAssignment';
 import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/HighRiskCases.css';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 const TrimesterBadge = ({ weeks }) => {
   let trim = 1;
@@ -43,6 +44,7 @@ const TrimesterBadge = ({ weeks }) => {
 const HighRiskCases = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [stats, setStats] = useState({
     totalHighRisk: 0,
     criticalToday: 0,
@@ -98,6 +100,7 @@ const HighRiskCases = () => {
   const loadHighRiskData = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
 
       const [statsData, patientsData, access] = await Promise.all([
         service.getHighRiskStats(),
@@ -133,6 +136,7 @@ const HighRiskCases = () => {
       console.log('Loaded health conditions:', patientsWithConditions.length, 'patients');
     } catch (err) {
       console.error('Error loading high risk data:', err);
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -289,16 +293,15 @@ const HighRiskCases = () => {
 
   if (loading)
     return (
-      <div className="high-risk-page">
-        <div className="loading-state">
-          <div className="spinner"></div>
-          <p>Loading health conditions...</p>
-        </div>
-      </div>
+      <StaffPageLoader 
+        message="Loading health conditions..." 
+        error={error} 
+        onRetry={loadHighRiskData} 
+      />
     );
 
   return (
-    <div className="high-risk-page animate-fade">
+    <div className="high-risk-page animate-fade staff-page-ready">
       {/* ── Page Header ── */}
       <div className="page-header">
         <div>

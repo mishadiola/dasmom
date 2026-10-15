@@ -23,6 +23,7 @@ import { useModal } from '../../context/ModalContext';
 import Legend from '../../components/Legend/Legend';
 import { formatMotherId } from '../../utils/displayIds';
 import ActionTooltip from '../../components/Common/ActionTooltip';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 const COMPLICATION_OPTIONS = ['None', 'Hemorrhage', 'Infection', 'Preeclampsia', 'Placenta Previa', 'Preterm'];
 const DELIVERY_TYPES = ['NSD', 'CS', 'Breech'];
@@ -81,6 +82,7 @@ const DeliveryOutcomes = () => {
     const [deliveries, setDeliveries] = useState([]);
     const [stats, setStats] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [stations, setStations] = useState(['All Stations']);
     const [showExportModal, setShowExportModal] = useState(false);
 
@@ -189,6 +191,7 @@ const DeliveryOutcomes = () => {
 
     const loadData = async () => {
         setLoading(true);
+        setError(null);
         try {
             const [allDeliv, allStats] = await Promise.all([
                 babyService.getAllDeliveries(),
@@ -197,6 +200,7 @@ const DeliveryOutcomes = () => {
             setDeliveries(allDeliv || []);
         } catch (err) {
             console.error('Error loading delivery outcomes:', err);
+            setError(err);
             setDeliveries([]);
         } finally {
             setLoading(false);
@@ -488,8 +492,18 @@ const DeliveryOutcomes = () => {
 
 
 
+    if (loading) {
+        return (
+            <StaffPageLoader 
+                message="Loading delivery outcomes..." 
+                error={error} 
+                onRetry={loadData} 
+            />
+        );
+    }
+
     return (
-        <div className="do-page">
+        <div className="do-page staff-page-ready">
             <div className="page-header">
                 <div>
                     <h1 className="page-title">

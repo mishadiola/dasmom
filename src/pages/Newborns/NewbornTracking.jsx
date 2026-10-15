@@ -5,7 +5,8 @@ import {
     Search, Filter, X, Baby, Heart, AlertTriangle,
     CheckCircle2, Clock, AlertCircle, Eye,
     Syringe, Calendar, Download, ChevronDown, ChevronUp,
-    TrendingUp, ShieldCheck, Timer, ChevronLeft, ChevronRight
+    TrendingUp, ShieldCheck, Timer, ChevronLeft, ChevronRight,
+    ClipboardList
 } from 'lucide-react';
 import NewbornService from '../../services/newbornservice';
 import PatientService from '../../services/patientservice';
@@ -18,6 +19,7 @@ import Legend from '../../components/Legend/Legend';
 import { MapPin, Activity } from 'lucide-react';
 import { formatNewbornId } from '../../utils/displayIds';
 import ActionTooltip from '../../components/Common/ActionTooltip';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 /* ════════════════════════════
    CALENDAR HELPERS
@@ -185,6 +187,7 @@ const NewbornTracking = () => {
     const patientService = useMemo(() => new PatientService(), []);
     const [availableStations, setAvailableStations] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState({ status: 'All', progress: 'All', station: 'All' });
 
@@ -221,6 +224,8 @@ const NewbornTracking = () => {
 
     const loadNewbornData = useCallback(async () => {
         try {
+            setLoading(true);
+            setError(null);
             const service = new NewbornService();
             const newbornsData = await service.getAllNewborns();
             
@@ -258,6 +263,7 @@ const NewbornTracking = () => {
             setNewborns(allNewborns);
         } catch (err) {
             console.error('Error loading newborn data:', err);
+            setError(err);
         } finally {
             setLoading(false);
         }
@@ -582,17 +588,15 @@ const NewbornTracking = () => {
     ];
 
     if (loading) return (
-        <div className="nb-page">
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px', gap: '16px' }}>
-                <div className="spinner" style={{ width: '40px', height: '40px', border: '3px solid #f0f2f5', borderTopColor: 'var(--color-rose)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
-                <p style={{ fontSize: '14px', color: 'var(--color-text-muted)', fontWeight: 600 }}>Loading newborn records...</p>
-                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-            </div>
-        </div>
+        <StaffPageLoader 
+            message="Loading newborn records..." 
+            error={error} 
+            onRetry={loadNewbornData} 
+        />
     );
 
     return (
-        <div className="nb-page vacc-tracking-page">
+        <div className="nb-page vacc-tracking-page staff-page-ready">
 
             {/* ── Page Header ── */}
             <div className="page-header vacc-header">
@@ -961,14 +965,22 @@ const NewbornTracking = () => {
                                         </td>
                                         <td>
                                             <div className="row-actions registry-actions">
-                                                <ActionTooltip text="View Profile">
-                                                    <button className="action-btn-text action-btn-secondary" onClick={() => navigate(`/dashboard/patients/${b.motherId}`)}>
-                                                        <Eye size={13} /> View Profile
+                                                <ActionTooltip text="View History">
+                                                    <button 
+                                                        type="button" 
+                                                        className="action-btn record-btn" 
+                                                        onClick={() => setSelectedBaby(b)}
+                                                    >
+                                                        <ClipboardList size={15} />
                                                     </button>
                                                 </ActionTooltip>
-                                                <ActionTooltip text="View Vaccination History">
-                                                    <button className="action-btn-text action-btn-primary" onClick={() => setSelectedBaby(b)}>
-                                                        <Syringe size={13} /> View History
+                                                <ActionTooltip text="View Profile">
+                                                    <button 
+                                                        type="button" 
+                                                        className="action-btn view-btn" 
+                                                        onClick={() => navigate(`/dashboard/patients/${b.motherId}`)}
+                                                    >
+                                                        <Eye size={15} />
                                                     </button>
                                                 </ActionTooltip>
                                             </div>

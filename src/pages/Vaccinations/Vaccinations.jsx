@@ -24,6 +24,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import ExportModal from '../../components/ExportModal';
 import ActionTooltip from '../../components/Common/ActionTooltip';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 const inventoryService = new InventoryService();
 
@@ -955,6 +956,7 @@ const Vaccinations = () => {
     const [supplementRecords, setSupplementRecords] = useState([]);
     const [archivedPatientIds, setArchivedPatientIds] = useState(new Set());
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [activePopover, setActivePopover] = useState(null);
     const filterRowRef = useRef(null);
     useClickOutside(filterRowRef, () => setActivePopover(null));
@@ -1035,6 +1037,7 @@ const Vaccinations = () => {
     const fetchData = async () => {
         try {
             setLoading(true);
+            setError(null);
 
             const archivedIds = await patientService.getArchivedPatientIds();
             setArchivedPatientIds(archivedIds);
@@ -1274,6 +1277,7 @@ const Vaccinations = () => {
             setInventory(inventory);
         } catch (error) {
             console.error('Error loading dashboard data:', error);
+            setError(error);
         } finally {
             setLoading(false);
         }
@@ -1646,8 +1650,18 @@ const Vaccinations = () => {
 
     const itemOptions = activeTab === 'vaccines' ? VACCINE_TYPES : SUPPLEMENT_TYPES;
 
+    if (loading) {
+        return (
+            <StaffPageLoader 
+                message="Loading distribution records..." 
+                error={error} 
+                onRetry={fetchData} 
+            />
+        );
+    }
+
     return (
-        <div className="vacc-page">
+        <div className="vacc-page staff-page-ready">
 
             {/* ── Page Header ── */}
             <div className="page-header">

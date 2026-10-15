@@ -24,6 +24,7 @@ import Legend from '../../components/Legend/Legend';
 import { formatMotherId } from '../../utils/displayIds';
 import VisitStaffAssignment from '../../components/Prenatal/VisitStaffAssignment';
 import ActionTooltip from '../../components/Common/ActionTooltip';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 const toLocalDateStr = (d) => {
     const offset = d.getTimezoneOffset() * 60000;
@@ -151,6 +152,8 @@ const PrenatalVisits = () => {
     const navigate = useNavigate();
     const { user } = useContext(AuthContext);
 
+    const [initialLoading, setInitialLoading] = useState(true);
+    const [initialError, setInitialError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('All');
     const [archiveFilter, setArchiveFilter] = useState('active');
@@ -329,9 +332,12 @@ const PrenatalVisits = () => {
             }));
 
             setVisitsTable(processedVisits);
+            setInitialLoading(false);
 
         } catch (error) {
             console.error('Prenatal fetch error:', error);
+            setInitialError(error);
+            setInitialLoading(false);
         }
     }, [currentDate, calendarView, archiveFilter, patientService]);
 
@@ -1325,8 +1331,22 @@ const PrenatalVisits = () => {
         }
     };
 
+    if (initialLoading) {
+        return (
+            <StaffPageLoader 
+                message="Loading visits & scheduling..." 
+                error={initialError} 
+                onRetry={() => {
+                    setInitialLoading(true);
+                    setInitialError(null);
+                    fetchData();
+                }} 
+            />
+        );
+    }
+
     return (
-        <div className="prenatal-visits-overall">
+        <div className="prenatal-visits-overall staff-page-ready">
             {toast && <div className="toast toast--success"><CheckCircle2 size={16} /> {toast}</div>}
 
             {/* Page Header */}

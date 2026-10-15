@@ -11,6 +11,7 @@ import PatientService from "../../services/patientservice";
 import InventoryService from '../../services/inventoryservice';
 import { formatDate } from '../../utils/formatters';
 import { formatMotherId } from '../../utils/displayIds';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 const patientService = new PatientService();
 const inventoryService = new InventoryService();
@@ -1100,8 +1101,16 @@ const AddPatient = () => {
         return result;
     }, [suggestedMothers, searchQuery, suggestedStation, suggestedPeriod, suggestedSort]);
 
+    if (loadingStations) {
+        return (
+            <StaffPageLoader 
+                message="Loading registration form..." 
+            />
+        );
+    }
+
     return (
-        <div className="add-patient-page">
+        <div className="add-patient-page staff-page-ready">
 
             {toast && (
                 <div className={`toast toast--${toast.type}`}>
@@ -1779,8 +1788,14 @@ const AddPatient = () => {
                                             <label>Planned Place of Delivery</label>
                                             <select name="plannedDeliveryPlace" value={formData.plannedDeliveryPlace} onChange={handleChange}>
                                                 <option value="Hospital">Hospital</option>
-                                                <option value="Lying-in">Lying-in Clinic</option>
-                                                <option value="Home">Home</option>
+                                                <option value="Lying-in Clinic">Lying-in Clinic</option>
+                                                <option value="City Health Office 3">City Health Office 3</option>
+                                                {formData.plannedDeliveryPlace === 'Home' && (
+                                                    <option value="Home" disabled hidden>Home</option>
+                                                )}
+                                                {formData.plannedDeliveryPlace === 'Lying-in' && (
+                                                    <option value="Lying-in" disabled hidden>Lying-in Clinic</option>
+                                                )}
                                             </select>
                                         </div>
                                     </div>

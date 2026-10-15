@@ -17,6 +17,7 @@ import PostpartumVisitModal from '../../components/PostpartumVisitModal';
 import VisitScheduleManager from '../../components/VisitScheduleManager';
 import { formatDate } from '../../utils/formatters';
 import ActionTooltip from '../../components/Common/ActionTooltip';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 // Helper function for readable date formatting
 const formatReadableDate = (dateString) => {
@@ -161,6 +162,7 @@ const PatientProfile = () => {
     const [p, setP] = useState(null);
     const [assignmentAccess, setAssignmentAccess] = useState({ role: '', stationId: null });
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [editModalOpen, setEditModalOpen] = useState(false);
 
     const [showPostpartumVisitModal, setShowPostpartumVisitModal] = useState(false);
@@ -174,20 +176,23 @@ const PatientProfile = () => {
         }
     };
 
-    useEffect(() => {
-        const fetchPatient = async () => {
-            try {
-                const patientService = new PatientService();  
-                const data = await patientService.getPatientById(id);  
-                setP(data);
-                setAssignmentAccess(await patientService.getCurrentUserAccess());
-            } catch (err) {
-                console.error(err);
-            } finally {
-                setLoading(false);
-            }
-        };
+    const fetchPatient = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const patientService = new PatientService();  
+            const data = await patientService.getPatientById(id);  
+            setP(data);
+            setAssignmentAccess(await patientService.getCurrentUserAccess());
+        } catch (err) {
+            console.error(err);
+            setError(err);
+        } finally {
+            setLoading(false);
+        }
+    };
 
+    useEffect(() => {
         fetchPatient();
     }, [id]);
 
@@ -570,12 +575,11 @@ const PatientProfile = () => {
     };
 
     if (loading) return (
-        <div className="profile-page">
-            <div className="loading-state">
-                <div className="spinner"></div>
-                <p>Loading patient records...</p>
-            </div>
-        </div>
+        <StaffPageLoader 
+            message="Loading patient records..." 
+            error={error} 
+            onRetry={fetchPatient} 
+        />
     );
 
     if (!p) return (
@@ -594,7 +598,7 @@ const PatientProfile = () => {
     const currentScheduledAssignment = p.visits?.find(visit => visit.status === 'Scheduled' && visit.assigned_staff);
 
     return (
-        <div className="profile-page animate-fade">
+        <div className="profile-page animate-fade staff-page-ready">
             <button className="back-btn" onClick={handleBack}>
                 <ArrowLeft size={16} /> Back
             </button>

@@ -438,13 +438,134 @@
 
 /* Tags */
 .type-tag {
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 600;
-    padding: 3px 8px;
+    padding: 3px 9px;
     border-radius: 6px;
+    display: inline-block;
+    white-space: nowrap;
+    letter-spacing: 0.2px;
     background: rgba(235, 235, 250, 0.6);
     color: var(--color-text-muted);
+}
+
+.type-tag--prenatal {
+    background: rgba(195, 207, 183, 0.45);
+    color: #3b6643;
+    border: 1px solid rgba(195, 207, 183, 0.75);
+}
+
+.type-tag--postpartum {
+    background: rgba(91, 174, 208, 0.16);
+    color: #246d8f;
+    border: 1px solid rgba(91, 174, 208, 0.35);
+}
+
+.type-tag--vaccination {
+    background: rgba(255, 227, 164, 0.5);
+    color: #8a6218;
+    border: 1px solid rgba(255, 227, 164, 0.85);
+}
+
+/* Health Conditions column */
+.conditions-cell {
+    display: flex;
+    align-items: center;
+}
+
+.conditions-tags-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    max-width: 290px;
+    transition: max-height 0.22s ease;
+}
+
+.condition-tag {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2.5px 8px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    line-height: 1.3;
+    white-space: normal;
+    word-break: break-word;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.condition-tag--none {
+    background: rgba(109, 184, 160, 0.15);
+    color: #3d8870;
+    border: 1px solid rgba(109, 184, 160, 0.25);
     white-space: nowrap;
+}
+
+.condition-tag--present {
+    background: rgba(224, 92, 115, 0.12);
+    color: #b73a52;
+    border: 1px solid rgba(224, 92, 115, 0.22);
+}
+
+.condition-tag--extra {
+    animation: conditionFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes conditionFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-2px) scale(0.97);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.conditions-toggle-btn {
+    appearance: none;
+    -webkit-appearance: none;
+    background: rgba(224, 92, 115, 0.08);
+    color: #b73a52;
+    border: 1px solid rgba(224, 92, 115, 0.28);
+    font-size: 10.5px;
+    font-weight: 600;
+    font-family: inherit;
+    padding: 2px 7.5px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.3;
+    transition: all 0.18s ease;
+    white-space: nowrap;
+    user-select: none;
+}
+
+.conditions-toggle-btn:hover {
+    background: rgba(224, 92, 115, 0.18);
+    border-color: rgba(224, 92, 115, 0.48);
+    color: #8f2339;
+    box-shadow: 0 1px 4px rgba(183, 58, 82, 0.12);
+}
+
+.conditions-toggle-btn:active {
+    transform: translateY(0);
+}
+
+.conditions-toggle-btn--less {
+    background: rgba(100, 116, 139, 0.08);
+    color: #64748b;
+    border: 1px solid rgba(100, 116, 139, 0.24);
+}
+
+.conditions-toggle-btn--less:hover {
+    background: rgba(100, 116, 139, 0.16);
+    border-color: rgba(100, 116, 139, 0.38);
+    color: #334155;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
 .time-tag {
@@ -502,6 +623,17 @@
 .tri-badge--3 {
     background: rgba(195, 207, 183, 0.4);
     color: #4a7a50;
+}
+
+.tri-badge--postpartum {
+    background: rgba(91, 174, 208, 0.16);
+    color: #246d8f;
+    border: 1px solid rgba(91, 174, 208, 0.3);
+}
+
+.tri-badge--neutral {
+    background: #f0f2f5;
+    color: var(--color-text-muted);
 }
 
 /* Filter tabs */

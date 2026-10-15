@@ -15,6 +15,7 @@ import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import ExportModal from '../../components/ExportModal';
 import { getSystemSettings } from '../../utils/systemSettings';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 /* ════════════════════════════════════════════════════════════════
    ERROR BOUNDARY — catches render crashes and shows fallback UI
@@ -118,6 +119,7 @@ const Analytics = () => {
 
     // ── Live DB Data State ──
     const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState(null);
     const [dbData, setDbData] = useState({
         patients: [],
         pregnancies: [],
@@ -159,6 +161,7 @@ const Analytics = () => {
         const fetchAllData = async () => {
             try {
                 if (!hasLoadedOnce) setLoading(true);
+                setFetchError(null);
                 const [
                     { data: patients },
                     { data: pregnancies },
@@ -189,6 +192,7 @@ const Analytics = () => {
                 hasLoadedOnce = true;
             } catch (error) {
                 console.error('Error fetching Supabase data in Analytics:', error);
+                setFetchError(error);
             } finally {
                 if (isMounted) setLoading(false);
             }
@@ -1173,17 +1177,15 @@ const Analytics = () => {
 
     if (loading) {
         return (
-            <div className="analytics-loading-screen">
-                <div className="heartbeat-loader">
-                    <HeartPulse size={48} className="pulse-icon" />
-                    <p>Aggregating Health Intelligence...</p>
-                </div>
-            </div>
+            <StaffPageLoader 
+                message="Aggregating Health Intelligence..." 
+                error={fetchError} 
+            />
         );
     }
 
     return (
-        <div className="analytics-page">
+        <div className="analytics-page staff-page-ready">
             
             {/* ── Page Header ── */}
             <header className="page-header">

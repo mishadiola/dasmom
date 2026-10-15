@@ -6,6 +6,7 @@ import { ModalProvider } from './context/ModalContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { SystemSettingsProvider } from './context/SystemSettingsContext';
 import ProtectedRoute from './routes/ProtectedRoute';
+import ErrorBoundary from './components/Common/ErrorBoundary';
 
 import Landing from './pages/Landing/Landing';
 import Login from './pages/Login/Login';
@@ -64,8 +65,9 @@ function App() {
       <ModalProvider>
       <SystemSettingsProvider>
         <BrowserRouter>
-          <AnalyticsTracker />
-          <Routes>
+          <ErrorBoundary>
+            <AnalyticsTracker />
+            <Routes>
 
           {/* PUBLIC ROUTES */}
           <Route path="/" element={<Login />} />
@@ -130,6 +132,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
 
         </Routes>
+          </ErrorBoundary>
         </BrowserRouter>
       </SystemSettingsProvider>
         </ModalProvider>

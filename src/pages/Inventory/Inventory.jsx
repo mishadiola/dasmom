@@ -43,6 +43,7 @@ import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/Inventory.css';
 import { formatDate } from '../../utils/formatters';
 import ActionTooltip from '../../components/Common/ActionTooltip';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 
 const inventoryService = new InventoryService();
@@ -84,6 +85,7 @@ const Inventory = () => {
   const distItemsPerPage = settings?.tables?.rowsPerPage || 10;
   const [showStationInventory, setShowStationInventory] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [vaccines, setVaccines] = useState([]);
   const [supplements, setSupplements] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -323,6 +325,7 @@ const Inventory = () => {
       do {
         fetchDataQueuedRef.current = false;
         setLoading(true);
+        setError(null);
         try {
           const [vaxData, suppData, stationsData] = await Promise.all([
             inventoryService.getVaccineInventory(),
@@ -378,6 +381,7 @@ const Inventory = () => {
           setSupplements(mappedSupplements);
         } catch (error) {
           console.error('Error fetching inventory:', error);
+          setError(error);
         } finally {
           setLoading(false);
         }
@@ -1403,8 +1407,18 @@ const Inventory = () => {
     return { totalDistributed, distributionsThisMonth, stationsSupplied, itemsDistributed };
   }, [distributionHistory]);
 
+  if (loading) {
+    return (
+      <StaffPageLoader 
+        message="Loading inventory management..." 
+        error={error} 
+        onRetry={fetchData} 
+      />
+    );
+  }
+
   return (
-    <div className="inventory-page">
+    <div className="inventory-page staff-page-ready">
 
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* ═══════════ VIEW 1: CHO INVENTORY MANAGEMENT ═══════════ */}

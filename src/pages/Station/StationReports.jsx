@@ -15,6 +15,7 @@ import ActionTooltip from '../../components/Common/ActionTooltip';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 /* ════════════════════════════
    MAIN COMPONENT
@@ -28,6 +29,7 @@ const StationReports = () => {
     const [stations, setStations] = useState([]);
     const [pregnancyAgeRows, setPregnancyAgeRows] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [summaryStats, setSummaryStats] = useState([
         { label: 'Total Pregnant Patients', value: 0, color: 'sage', icon: Users, path: '/dashboard/patients', filter: null },
         { label: 'Pregnancies with Health Conditions', value: 0, color: 'rose', icon: HeartPulse, path: '/dashboard/high-risk', filter: null },
@@ -77,6 +79,7 @@ const StationReports = () => {
     const fetchStationData = async () => {
         try {
             setLoading(true);
+            setError(null);
             const [data, ageRows] = await Promise.all([
                 patientService.getStationReports(),
                 patientService.getStationPregnancyAgeReport()
@@ -102,6 +105,7 @@ const StationReports = () => {
             ]);
         } catch (error) {
             console.error('Error fetching station data:', error);
+            setError(error);
             setPregnancyAgeRows([]);
         } finally {
             setLoading(false);
@@ -187,8 +191,18 @@ const StationReports = () => {
     const totalDeliveries = stations.reduce((sum, s) => sum + s.recentDeliveries, 0);
     const totalNewborns = stations.reduce((sum, s) => sum + s.newborns, 0);
 
+    if (loading) {
+        return (
+            <StaffPageLoader 
+                message="Loading station reports..." 
+                error={error} 
+                onRetry={fetchStationData} 
+            />
+        );
+    }
+
     return (
-        <div className="st-page">
+        <div className="st-page staff-page-ready">
 
             {/* ── Page Header ── */}
             <div className="page-header">

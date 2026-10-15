@@ -8,6 +8,7 @@ import {
 import PatientService from '../../services/patientservice';
 import { AuthContext } from '../../context/AuthContext';
 import { formatMotherId } from '../../utils/displayIds';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 import '../../styles/pages/AddPrenatalVisit.css';
 import '../../styles/pages/PatientProfile.css';
 
@@ -33,6 +34,7 @@ const AddPrenatalVisit = () => {
     const [patient, setPatient] = useState(null);
     const [vitalWarnings, setVitalWarnings] = useState({});
     const [tempWarning, setTempWarning] = useState(null);
+    const [patientError, setPatientError] = useState(null);
     const [vitalsErrors, setVitalsErrors] = useState({});
     const [dangerErrors, setDangerErrors] = useState({});
 
@@ -81,7 +83,10 @@ const AddPrenatalVisit = () => {
     // Fetch patient data
     useEffect(() => {
         if (patientId) {
-            patientService.getPatientById(patientId).then(setPatient).catch(console.error);
+            patientService.getPatientById(patientId).then(setPatient).catch(err => {
+                console.error(err);
+                setPatientError(err);
+            });
         }
     }, [patientId]);
 
@@ -746,11 +751,23 @@ const AddPrenatalVisit = () => {
     );
 
     if (!patient) {
-        return <div className="loading">Loading patient data...</div>;
+        return (
+            <StaffPageLoader 
+                message="Loading patient visit details..." 
+                error={patientError} 
+                onRetry={() => {
+                    setPatientError(null);
+                    patientService.getPatientById(patientId).then(setPatient).catch(err => {
+                        console.error(err);
+                        setPatientError(err);
+                    });
+                }} 
+            />
+        );
     }
 
     return (
-        <div className="add-pvisit-page">
+        <div className="add-pvisit-page staff-page-ready">
             {toast && (
                 <div className={`toast toast--${toast.type}`}>
                     <span>{toast.type === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />} {toast.message}</span>

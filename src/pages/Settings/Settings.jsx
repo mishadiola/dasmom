@@ -21,6 +21,7 @@ import {
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import ResetPasswordModal from '../../components/ResetPasswordModal';
 import ActionTooltip from '../../components/Common/ActionTooltip';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 /* ════════════════════════════
    MOCK DATA
@@ -958,12 +959,11 @@ const UserAccountsTab = () => {
 
     if (loading) {
         return (
-            <div className="tab-content">
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px' }}>
-                    <div className="set-spinner"></div>
-                    <p style={{ marginLeft: '16px' }}>Loading staff...</p>
-                </div>
-            </div>
+            <StaffPageLoader 
+                message="Loading staff accounts..." 
+                minHeight="300px" 
+                onRetry={fetchStaff} 
+            />
         );
     }
 
@@ -1544,7 +1544,7 @@ const Settings = () => {
     ];
 
     return (
-        <div className="set-page">
+        <div className="set-page staff-page-ready">
             {/* ── Page Header ── */}
             <div className="page-header">
                 <div>

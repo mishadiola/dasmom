@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Search, HeartPulse, Sparkles, BookOpen, Apple, Dumbbell,
@@ -490,14 +490,27 @@ export const TIPS_DATA = [
     }
 ];
 
-const CATEGORIES = [
-    'All',
+export const CATEGORY_ORDER = [
+    'Prenatal Care',
     'Nutrition',
     'Mental Health & Wellness',
-    'Prenatal Care',
     'Postpartum Care',
     'Newborn Care',
 ];
+
+const CATEGORIES = [
+    'All',
+    'Prenatal Care',
+    'Nutrition',
+    'Mental Health & Wellness',
+    'Postpartum Care',
+    'Newborn Care',
+];
+
+const getCategoryRank = (category) => {
+    const idx = CATEGORY_ORDER.indexOf(category);
+    return idx === -1 ? 999 : idx;
+};
 
 export const CATEGORY_IMAGES = {
     'Nutrition': '/assets/images/pregnancy-tips/nutrition.png',
@@ -559,15 +572,21 @@ const PregnancyTips = () => {
 
     const tipOfTheDay = TIPS_DATA.find(t => t.tipOfDay) || TIPS_DATA[3];
 
-    const filteredTips = TIPS_DATA.filter(tip => {
-        const matchesSearch = !searchTerm ||
-            tip.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            tip.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            tip.category.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesCategory = activeCategory === 'All' || tip.category === activeCategory;
-        const matchesBookmark = !showBookmarksOnly || bookmarks.includes(tip.id);
-        return matchesSearch && matchesCategory && matchesBookmark;
-    });
+    const filteredTips = useMemo(() => {
+        return TIPS_DATA.filter(tip => {
+            const matchesSearch = !searchTerm ||
+                tip.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                tip.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                tip.category.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesCategory = activeCategory === 'All' || tip.category === activeCategory;
+            const matchesBookmark = !showBookmarksOnly || bookmarks.includes(tip.id);
+            return matchesSearch && matchesCategory && matchesBookmark;
+        }).sort((a, b) => {
+            const rankA = getCategoryRank(a.category);
+            const rankB = getCategoryRank(b.category);
+            return rankA - rankB;
+        });
+    }, [searchTerm, activeCategory, showBookmarksOnly, bookmarks]);
 
     const toggleBookmark = (e, id) => {
         e.stopPropagation();

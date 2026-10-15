@@ -2286,6 +2286,8 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       gravida: preg.gravida || 0,
       para: preg.para || 0,
       miscarriageInfo: preg.miscarriage_info || null,
+      pregnancyType: preg.pregnancy_type || 'Singleton',
+      plannedDeliveryPlace: preg.place_of_delivery || null,
       lmp: preg.lmd || null,
       edd: preg.edd || null,
       trimester: this.calculateTrimester(preg.lmd),

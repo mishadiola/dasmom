@@ -10,6 +10,7 @@ import BabyService from '../../services/babyservices';
 import { AuthContext } from '../../context/AuthContext';
 import { formatMotherId } from '../../utils/displayIds';
 import supabase from '../../config/supabaseclient';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 import '../../styles/pages/AddPrenatalVisit.css';
 import '../../styles/pages/PatientProfile.css';
 
@@ -109,6 +110,7 @@ const AddPostpartumVisit = () => {
     const [isSaving, setIsSaving] = useState(false);
     const saveInFlightRef = useRef(false);
     const [loadingData, setLoadingData] = useState(true);
+    const [error, setError] = useState(null);
 
     // Form Data
     const [formData, setFormData] = useState({
@@ -221,6 +223,7 @@ const AddPostpartumVisit = () => {
                 }
             } catch (err) {
                 console.error('Error loading postpartum patient data:', err);
+                if (active) setError(err);
             } finally {
                 if (active) setLoadingData(false);
             }
@@ -455,14 +458,15 @@ const AddPostpartumVisit = () => {
 
     if (loadingData || !patient) {
         return (
-            <div className="add-pvisit-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '300px' }}>
-                <p style={{ color: 'var(--color-text-muted)', fontSize: '15px' }}>Loading postpartum patient record...</p>
-            </div>
+            <StaffPageLoader 
+                message="Loading postpartum patient record..." 
+                error={error} 
+            />
         );
     }
 
     return (
-        <div className="add-pvisit-page">
+        <div className="add-pvisit-page staff-page-ready">
             {toast && (
                 <div className={`toast toast--${toast.type}`}>
                     <span>{toast.type === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />} {toast.message}</span>

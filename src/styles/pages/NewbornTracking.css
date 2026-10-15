@@ -232,17 +232,17 @@
 .status-ongoing   { background: rgba(91,174,208,0.12);  color: #2d7fa3; }
 
 /* Action buttons */
-.row-actions { display: flex; gap: 5px; }
+.row-actions { display: flex; gap: 6px; align-items: center; }
 .action-btn {
-    width: 28px; height: 28px; border: none;
-    border-radius: 7px; display: flex;
+    width: 30px; height: 30px; border: none;
+    border-radius: 8px; display: flex;
     align-items: center; justify-content: center;
     cursor: pointer; transition: all 0.15s;
 }
 .view-btn   { background: rgba(91,174,208,0.1);  color: #2d7fa3; }
 .view-btn:hover { background: rgba(91,174,208,0.2); }
-.vacc-btn   { background: rgba(109,184,160,0.1); color: #3d8870; }
-.vacc-btn:hover { background: rgba(109,184,160,0.2); }
+.record-btn, .vacc-btn { background: rgba(109,184,160,0.1); color: #3d8870; }
+.record-btn:hover, .vacc-btn:hover { background: rgba(109,184,160,0.2); }
 .vitals-btn { background: rgba(139,92,246,0.1);  color: #6d28d9; }
 .vitals-btn:hover { background: rgba(139,92,246,0.2); }
 

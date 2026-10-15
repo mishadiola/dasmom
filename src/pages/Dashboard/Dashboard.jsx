@@ -13,6 +13,7 @@ import PatientService from '../../services/patientservice';
 import supabase from '../../config/supabaseclient';
 import { AuthContext } from '../../context/AuthContext';
 import { formatDate } from '../../utils/formatters';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 const authService = new AuthService();
 
@@ -51,12 +52,80 @@ const MiniBar = ({ value, max, color }) => (
     </div>
 );
 
-const TrimesterBadge = ({ weeks }) => {
-    const tri = weeks <= 12 ? 1 : weeks <= 26 ? 2 : 3;
+const TrimesterBadge = ({ weeks, isPostpartum }) => {
+    if (isPostpartum) {
+        return (
+            <span className="tri-badge tri-badge--postpartum">
+                Postpartum
+            </span>
+        );
+    }
+    if (weeks === null || weeks === undefined || weeks === '' || isNaN(weeks)) {
+        return (
+            <span className="tri-badge tri-badge--neutral">
+                --
+            </span>
+        );
+    }
+    const safeWeeks = Math.max(0, parseInt(weeks) || 0);
+    const tri = safeWeeks <= 12 ? 1 : safeWeeks <= 26 ? 2 : 3;
     return (
         <span className={`tri-badge tri-badge--${tri}`}>
-            T{tri} · {weeks}w
+            T{tri} · {safeWeeks}w
         </span>
+    );
+};
+
+const HealthConditionsCell = ({ conditions }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+
+    const condList = Array.isArray(conditions)
+        ? conditions.filter(c => Boolean(c) && c !== 'None Reported' && c !== 'None')
+        : (typeof conditions === 'string' && conditions.trim() && conditions !== 'None Reported' && conditions !== 'None')
+            ? conditions.split(',').map(s => s.trim()).filter(Boolean)
+            : [];
+
+    if (condList.length === 0) {
+        return (
+            <span className="condition-tag condition-tag--none">
+                None Reported
+            </span>
+        );
+    }
+
+    const hasMore = condList.length > 2;
+    const visibleConditions = isExpanded ? condList : condList.slice(0, 2);
+    const remainingCount = condList.length - 2;
+
+    const handleToggle = (e) => {
+        e.stopPropagation();
+        setIsExpanded(prev => !prev);
+    };
+
+    return (
+        <div className={`conditions-cell ${isExpanded ? 'conditions-cell--expanded' : ''}`}>
+            <div className="conditions-tags-wrap">
+                {visibleConditions.map((cond, idx) => (
+                    <span
+                        key={`${cond}-${idx}`}
+                        className={`condition-tag condition-tag--present ${idx >= 2 ? 'condition-tag--extra' : ''}`}
+                    >
+                        {cond}
+                    </span>
+                ))}
+                {hasMore && (
+                    <button
+                        type="button"
+                        className={`conditions-toggle-btn ${isExpanded ? 'conditions-toggle-btn--less' : ''}`}
+                        onClick={handleToggle}
+                        title={isExpanded ? 'Show fewer conditions' : `Show ${remainingCount} more condition${remainingCount > 1 ? 's' : ''}`}
+                        aria-expanded={isExpanded}
+                    >
+                        {isExpanded ? 'Show Less' : `+${remainingCount} more`}
+                    </button>
+                )}
+            </div>
+        </div>
     );
 };
 
@@ -68,6 +137,8 @@ const Dashboard = () => {
     const patientService = new PatientService();
     
     //const [user, setUser] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [liveStats, setLiveStats] = useState({ totalPatients: 0, highRisk: 0, newborns: 0, apptToday: 0 });
     const [vaccineStock, setVaccineStock] = useState([]);
     const [loadingStock, setLoadingStock] = useState(true);
@@ -75,8 +146,9 @@ const Dashboard = () => {
     const [healthSnapshot, setHealthSnapshot] = useState({ conditions: [], trimesterDist: [] });
     const [loadingHealth, setLoadingHealth] = useState(true);
 
-    useEffect(() => {
     const fetchStats = async () => {
+        setLoading(true);
+        setError(null);
         try {
             // ✅ Defend against timezone shifting when converting 'today' to ISO YYYY-MM-DD
             const now = new Date();
@@ -97,30 +169,52 @@ const Dashboard = () => {
                 ? uniqueHealthConditionPatients.length
                 : (highRiskStats?.highRiskCount ?? 0);
             
-            const [{ data: patientRows }, { data: newbornRows }, { count: apptToday }, { data: apptData }, { data: pregnancyData }] = await Promise.all([
+            // Build documented health conditions lookup using the Health Conditions page dataset
+            const highRiskPatientMap = new Map();
+            (highRiskPatients || []).forEach(p => {
+                if (p.id) {
+                    highRiskPatientMap.set(p.id, p);
+                }
+            });
+
+            const [
+                { data: patientRows },
+                { data: newbornRows },
+                { data: prenatalApptData },
+                { data: postpartumApptData },
+                { data: vaccinationApptData },
+                { data: pregnancyData },
+                { data: deliveriesData },
+                { data: recentVisitsWithConditions }
+            ] = await Promise.all([
                 supabase.from('patient_basic_info').select('id, emergency_contact'),
-                supabase.from('newborns').select('id, mother_id'),
-                supabase.from('prenatal_visits').select('id', { count: 'exact', head: true })
-                    .eq('visit_date', todayStr)
-                    .neq('status', 'Cancelled')
-                    .neq('status', 'Missed'),
-                
-                // 🔥 NEW: Fetch full rich relational data for Today's Appointments table dynamic rendering
+                supabase.from('newborns').select('id, mother_id, baby_name'),
                 supabase.from('prenatal_visits').select(`
-                    id, visit_date, patient_id, created_at, status,
+                    id, visit_date, patient_id, created_at, status, next_appt_type, risk_factors, gestational_age, trimester,
                     patient_basic_info!inner ( 
-                        first_name, last_name, station_ass, stations:station_ass (station_name), date_of_birth
+                        id, first_name, last_name, station_ass, stations:station_ass (station_name), date_of_birth
                     )
                 `).eq('visit_date', todayStr)
                   .neq('status', 'Cancelled')
                   .neq('status', 'Missed')
                   .order('created_at', { ascending: true }),
-                
-                // Fetch pregnancy info separately to avoid nested relationship error, ordered by created_at to get latest first
-                supabase.from('pregnancy_info').select('patient_id, lmd, created_at').eq('pregn_postp', 'Pregnant').order('created_at', { ascending: false })
+                supabase.from('postpartum_visits').select(`
+                    id, patient_id, delivery_id, visit_type, visit_number, scheduled_date, scheduled_at, status, created_at
+                `).neq('status', 'Cancelled')
+                  .neq('status', 'Missed'),
+                supabase.from('vaccinations').select(`
+                    id, patient_id, newborn_id, scheduled_vaccination, status, notes, dose_number, created_at,
+                    vaccine_inventory (vaccine_name)
+                `).neq('status', 'Cancelled')
+                  .neq('status', 'Missed')
+                  .neq('status', 'cancelled')
+                  .neq('status', 'missed'),
+                supabase.from('pregnancy_info').select('patient_id, lmd, pregn_postp, created_at').order('created_at', { ascending: false }),
+                supabase.from('deliveries').select('id, mother_id, delivery_date'),
+                supabase.from('prenatal_visits').select('patient_id, risk_factors, visit_date').not('risk_factors', 'is', null).order('visit_date', { ascending: false })
             ]);
 
-            const pregnantPatientIds = new Set((pregnancyData || []).map(row => row.patient_id).filter(Boolean));
+            const pregnantPatientIds = new Set((pregnancyData || []).filter(row => row.pregn_postp?.toLowerCase() === 'pregnant').map(row => row.patient_id).filter(Boolean));
             const activePatientIds = new Set(
                 (patientRows || [])
                     .filter(row => !archivedPatientIds.has(row.id) && pregnantPatientIds.has(row.id))
@@ -132,78 +226,294 @@ const Dashboard = () => {
                     .map((row) => row.id)
             );
 
+            const isTodayMatch = (rawDate) => {
+                if (!rawDate) return false;
+                const dateStr = String(rawDate).slice(0, 10);
+                if (dateStr === todayStr) return true;
+                try {
+                    const d = new Date(rawDate);
+                    if (Number.isNaN(d.getTime())) return false;
+                    const localDate = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+                    return localDate === todayStr;
+                } catch {
+                    return false;
+                }
+            };
+
+            const newbornToMotherMap = new Map((newbornRows || []).map(n => [n.id, n.mother_id]));
+
+            const todayPrenatalFiltered = (prenatalApptData || []).filter(v => {
+                if (!v.visit_date || archivedPatientIds.has(v.patient_id)) return false;
+                return isTodayMatch(v.visit_date);
+            });
+
+            const todayPostpartumFiltered = (postpartumApptData || []).filter(v => {
+                if (!v.patient_id || archivedPatientIds.has(v.patient_id)) return false;
+                return isTodayMatch(v.scheduled_date || v.scheduled_at);
+            });
+
+            const todayVaccinationsFiltered = (vaccinationApptData || []).filter(v => {
+                const pid = v.patient_id || newbornToMotherMap.get(v.newborn_id);
+                if (!pid || archivedPatientIds.has(pid)) return false;
+                return isTodayMatch(v.scheduled_vaccination);
+            });
+
+            // Populate patient basic info map for any non-prenatal appointments
+            const patientInfoMap = new Map();
+            todayPrenatalFiltered.forEach(v => {
+                if (v.patient_id && v.patient_basic_info) {
+                    patientInfoMap.set(v.patient_id, v.patient_basic_info);
+                }
+            });
+
+            const missingPatientIds = [
+                ...todayPostpartumFiltered.map(v => v.patient_id),
+                ...todayVaccinationsFiltered.map(v => v.patient_id || newbornToMotherMap.get(v.newborn_id))
+            ].filter(id => id && !patientInfoMap.has(id));
+
+            if (missingPatientIds.length > 0) {
+                const { data: morePatients } = await supabase
+                    .from('patient_basic_info')
+                    .select('id, first_name, last_name, station_ass, stations:station_ass (station_name), date_of_birth')
+                    .in('id', [...new Set(missingPatientIds)]);
+                (morePatients || []).forEach(p => {
+                    patientInfoMap.set(p.id, p);
+                });
+            }
+
+            // Create a map of patient_id to latest pregnancy info
+            const pregMap = new Map();
+            (pregnancyData || []).forEach(p => {
+                if (p.patient_id && !pregMap.has(p.patient_id)) {
+                    pregMap.set(p.patient_id, p);
+                }
+            });
+
+            const patientVisitsMap = new Map();
+            (recentVisitsWithConditions || []).forEach(v => {
+                if (!v.patient_id) return;
+                const list = patientVisitsMap.get(v.patient_id) || [];
+                list.push(v);
+                patientVisitsMap.set(v.patient_id, list);
+            });
+
+            const postpartumScheduledSet = new Set(todayPostpartumFiltered.map(v => v.patient_id).filter(Boolean));
+            const vaccinationScheduledSet = new Set(todayVaccinationsFiltered.map(v => v.patient_id || newbornToMotherMap.get(v.newborn_id)).filter(Boolean));
+            const deliveryMap = new Map();
+            (deliveriesData || []).forEach(d => {
+                if (d.mother_id && (!deliveryMap.has(d.mother_id) || new Date(d.delivery_date) > new Date(deliveryMap.get(d.mother_id)))) {
+                    deliveryMap.set(d.mother_id, d.delivery_date);
+                }
+            });
+
+            const getConditionsForPatient = (patientId, currentVisitRiskFactors = null) => {
+                // 1. Retrieve from the Health Conditions page dataset
+                if (highRiskPatientMap.has(patientId)) {
+                    const hr = highRiskPatientMap.get(patientId);
+                    if (Array.isArray(hr.conditionsList) && hr.conditionsList.length > 0) {
+                        return hr.conditionsList;
+                    }
+                    if (hr.condition && hr.condition !== 'None Reported' && hr.condition !== 'None') {
+                        const parsed = hr.condition.split(',').map(s => s.trim()).filter(Boolean);
+                        if (parsed.length > 0) return parsed;
+                    }
+                }
+
+                // 2. Fallback to documented risk factors evaluated through the same PatientService method
+                if (currentVisitRiskFactors) {
+                    const parsed = patientService.getDocumentedHealthConditions(currentVisitRiskFactors);
+                    if (parsed.length > 0) return parsed;
+                }
+
+                // 3. Fallback to any past visits with documented conditions
+                const pastVisits = patientVisitsMap.get(patientId) || [];
+                for (const v of pastVisits) {
+                    if (v.risk_factors) {
+                        const parsed = patientService.getDocumentedHealthConditions(v.risk_factors);
+                        if (parsed.length > 0) return parsed;
+                    }
+                }
+
+                return [];
+            };
+
+            const classifyAppointmentType = ({
+                sourceTable,
+                storedType,
+                notes,
+                patientId,
+                visitDate,
+                pregInfo
+            }) => {
+                // 1. Direct explicit classification from stored appointment type or notes
+                const text = String(storedType || notes || '').trim().toLowerCase();
+                if (text.includes('postpartum') || text.includes('post-partum') || text.includes('postnatal')) {
+                    return 'Postpartum';
+                }
+                if (text.includes('vaccin') || text.includes('immuniz') || text.includes('toxoid') || text.includes('dose') || text.includes('tt ') || text.includes('bcg') || text.includes('hepa')) {
+                    return 'Vaccination';
+                }
+                if (text.includes('prenatal') || text.includes('antenatal') || text.includes('pre-natal') || text.includes('semester')) {
+                    return 'Prenatal';
+                }
+
+                // 2. Direct table classification
+                if (sourceTable === 'postpartum_visits') {
+                    return 'Postpartum';
+                }
+                if (sourceTable === 'vaccinations') {
+                    return 'Vaccination';
+                }
+
+                // 3. Older records with generic types (e.g. 'Checkup', 'Consultation', 'Follow-up Checkup', 'Follow-up')
+                // Trace related scheduling records to determine correct classification
+                if (postpartumScheduledSet.has(patientId)) {
+                    return 'Postpartum';
+                }
+                if (vaccinationScheduledSet.has(patientId)) {
+                    return 'Vaccination';
+                }
+                if (deliveryMap.has(patientId)) {
+                    const deliveryDate = deliveryMap.get(patientId);
+                    if (deliveryDate && visitDate && new Date(visitDate) >= new Date(deliveryDate)) {
+                        return 'Postpartum';
+                    }
+                }
+                if (pregInfo?.pregn_postp?.toLowerCase() === 'postpartum') {
+                    return 'Postpartum';
+                }
+
+                return 'Prenatal';
+            };
+
+            const mappedPrenatal = todayPrenatalFiltered.map(v => {
+                const info = v.patient_basic_info || patientInfoMap.get(v.patient_id) || {};
+                const pregInfo = pregMap.get(v.patient_id) || {};
+
+                let age = '?';
+                if (info.date_of_birth) {
+                    const bd = new Date(info.date_of_birth);
+                    age = now.getFullYear() - bd.getFullYear();
+                    if (now.getMonth() < bd.getMonth() || (now.getMonth() === bd.getMonth() && now.getDate() < bd.getDate())) age--;
+                }
+
+                let weeks = null;
+                if (pregInfo.lmd) {
+                    weeks = Math.max(0, Math.floor((now - new Date(pregInfo.lmd)) / (1000 * 60 * 60 * 24 * 7)));
+                } else if (v.gestational_age) {
+                    const parsedGa = parseInt(v.gestational_age);
+                    if (!isNaN(parsedGa) && parsedGa > 0) weeks = parsedGa;
+                }
+
+                const type = classifyAppointmentType({
+                    sourceTable: 'prenatal_visits',
+                    storedType: v.next_appt_type,
+                    notes: v.clinical_notes,
+                    patientId: v.patient_id,
+                    visitDate: v.visit_date,
+                    pregInfo
+                });
+
+                const conditions = getConditionsForPatient(v.patient_id, v.risk_factors);
+
+                return {
+                    id: v.id,
+                    patientId: v.patient_id,
+                    name: `${info.first_name || ''} ${info.last_name || ''}`.trim() || 'Unknown',
+                    station: info.stations?.station_name || 'N/A',
+                    age: age,
+                    weeks: type === 'Postpartum' ? null : weeks,
+                    type: type,
+                    conditions: conditions,
+                    created_at: v.created_at
+                };
+            });
+
+            const mappedPostpartum = todayPostpartumFiltered.map(v => {
+                const info = patientInfoMap.get(v.patient_id) || {};
+                let age = '?';
+                if (info.date_of_birth) {
+                    const bd = new Date(info.date_of_birth);
+                    age = now.getFullYear() - bd.getFullYear();
+                    if (now.getMonth() < bd.getMonth() || (now.getMonth() === bd.getMonth() && now.getDate() < bd.getDate())) age--;
+                }
+
+                const conditions = getConditionsForPatient(v.patient_id, null);
+
+                return {
+                    id: v.id,
+                    patientId: v.patient_id,
+                    name: `${info.first_name || ''} ${info.last_name || ''}`.trim() || 'Unknown',
+                    station: info.stations?.station_name || 'N/A',
+                    age: age,
+                    weeks: null,
+                    type: 'Postpartum',
+                    conditions: conditions,
+                    created_at: v.created_at || v.scheduled_at
+                };
+            });
+
+            const mappedVaccinations = todayVaccinationsFiltered.map(v => {
+                const patientId = v.patient_id || newbornToMotherMap.get(v.newborn_id);
+                const info = patientInfoMap.get(patientId) || {};
+                const pregInfo = pregMap.get(patientId) || {};
+
+                let age = '?';
+                if (info.date_of_birth) {
+                    const bd = new Date(info.date_of_birth);
+                    age = now.getFullYear() - bd.getFullYear();
+                    if (now.getMonth() < bd.getMonth() || (now.getMonth() === bd.getMonth() && now.getDate() < bd.getDate())) age--;
+                }
+
+                let weeks = null;
+                if (pregInfo.lmd && pregInfo.pregn_postp?.toLowerCase() === 'pregnant') {
+                    weeks = Math.max(0, Math.floor((now - new Date(pregInfo.lmd)) / (1000 * 60 * 60 * 24 * 7)));
+                }
+
+                const conditions = getConditionsForPatient(patientId, null);
+
+                return {
+                    id: v.id,
+                    patientId: patientId,
+                    name: `${info.first_name || ''} ${info.last_name || ''}`.trim() || 'Unknown',
+                    station: info.stations?.station_name || 'N/A',
+                    age: age,
+                    weeks: weeks,
+                    type: 'Vaccination',
+                    conditions: conditions,
+                    created_at: v.created_at
+                };
+            });
+
+            const allMappedAppts = [
+                ...mappedPrenatal,
+                ...mappedPostpartum,
+                ...mappedVaccinations
+            ];
+
+            // Remove duplicates based on patient and appointment type (keep latest)
+            const uniqueAppts = allMappedAppts.reduce((acc, current) => {
+                const existingIndex = acc.findIndex(item => item.patientId ? (item.patientId === current.patientId && item.type === current.type) : item.name === current.name);
+                if (existingIndex === -1) {
+                    acc.push(current);
+                } else {
+                    const existingTime = new Date(acc[existingIndex].created_at || 0).getTime();
+                    const currentTime = new Date(current.created_at || 0).getTime();
+                    if (currentTime > existingTime) {
+                        acc[existingIndex] = current;
+                    }
+                }
+                return acc;
+            }, []);
+
+            setTodayAppts(uniqueAppts);
+
             setLiveStats({
                 totalPatients: activePatientIds.size,
                 highRisk: healthConditionCount,
                 newborns: activeNewbornIds.size,
-                apptToday: apptToday ?? 0,
+                apptToday: uniqueAppts.length,
             });
-
-            // Dynamically map schedule data instead of relying on empty mock arrays
-            if (apptData) {
-                // Create a map of patient_id to pregnancy info (only keep latest per patient)
-                const pregMap = new Map();
-                (pregnancyData || []).forEach(p => {
-                    if (p.patient_id && !pregMap.has(p.patient_id)) {
-                        // Since we ordered by created_at descending, first occurrence is the latest
-                        pregMap.set(p.patient_id, p);
-                    }
-                });
-
-                // Additional client-side filtering to ensure only today's appointments
-                const todayFiltered = apptData.filter(v => {
-                    if (!v.visit_date || archivedPatientIds.has(v.patient_id)) return false;
-                    const visitDate = new Date(v.visit_date);
-                    const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                    const visitDateOnly = new Date(visitDate.getFullYear(), visitDate.getMonth(), visitDate.getDate());
-                    return visitDateOnly.getTime() === todayDate.getTime();
-                });
-
-                const mappedAppts = todayFiltered.map(v => {
-                    const info = v.patient_basic_info || {};
-                    const pregInfo = pregMap.get(v.patient_id) || {};
-                    
-                    let age = '?';
-                    if (info.date_of_birth) {
-                        const bd = new Date(info.date_of_birth);
-                        age = now.getFullYear() - bd.getFullYear();
-                        if (now.getMonth() < bd.getMonth() || (now.getMonth() === bd.getMonth() && now.getDate() < bd.getDate())) age--;
-                    }
-
-                    let weeks = 0;
-                    if (pregInfo.lmd) {
-                        weeks = Math.floor((now - new Date(pregInfo.lmd)) / (1000 * 60 * 60 * 24 * 7));
-                    }
-
-                    return {
-                        id: v.id,
-                        name: `${info.first_name || ''} ${info.last_name || ''}`.trim() || 'Unknown',
-                        station: info.stations?.station_name || 'N/A',
-                        age: age,
-                        weeks: Math.max(0, weeks),
-                        type: 'Checkup',
-                        risk: pregInfo.calculated_risk || 'Normal'
-                    };
-                });
-                
-                // Remove duplicates based on patient ID (keep only the latest visit per patient for today)
-                const uniqueAppts = mappedAppts.reduce((acc, current) => {
-                    const existingIndex = acc.findIndex(item => item.name === current.name);
-                    if (existingIndex === -1) {
-                        acc.push(current);
-                    } else {
-                        // Keep the one with the later time
-                        const existingTime = acc[existingIndex].time;
-                        const currentTime = current.time;
-                        if (currentTime > existingTime) {
-                            acc[existingIndex] = current;
-                        }
-                    }
-                    return acc;
-                }, []);
-                
-                setTodayAppts(uniqueAppts);
-            }
 
             // Fetch Vaccine Stock
             setLoadingStock(true);
@@ -292,14 +602,19 @@ const Dashboard = () => {
 
             setHealthSnapshot({ conditions, trimesterDist });
             setLoadingHealth(false);
+            setLoading(false);
         } catch (err) {
             console.error('Failed to load dashboard stats:', err);
+            setError(err);
             setLoadingStock(false);
             setLoadingHealth(false);
+            setLoading(false);
         }
     };
-    fetchStats();
-}, []);
+    
+    useEffect(() => {
+        fetchStats();
+    }, []);
 
 
 
@@ -312,48 +627,19 @@ const Dashboard = () => {
         month: 'long',
         day: 'numeric',
     });
-/*
-const Dashboard = () => {
-    const navigate = useNavigate();
-    const [riskFilter, setRiskFilter] = useState('all');
 
-    // ✅ STORE USER IN STATE
-    const [user, setUser] = useState(null);
+    if (loading) {
+        return (
+            <StaffPageLoader 
+                message="Loading dashboard overview..." 
+                error={error} 
+                onRetry={fetchStats} 
+            />
+        );
+    }
 
-    // ✅ LOAD USER FROM LOCALSTORAGE
-    useEffect(() => {
-        const currentUser = authService.getUser();
-
-        if (!currentUser) {
-            navigate('/');
-            return;
-        }
-
-        // Block unauthorized roles
-        if (!authService.accessCheck(currentUser, 'admin')) {
-            authService.logout();
-            navigate('/');
-            return;
-        }
-
-        setUser(currentUser);
-    }, [navigate]);
-
-    // ✅ Extract display name
-    const displayName = user?.email
-        ? user.email.split('@')[0]
-        : 'User';
-
-    const roleLabel = user?.role?.toUpperCase() || 'UNKNOWN';
-
-    const today = new Date().toLocaleDateString('en-PH', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-    });*/
     return (
-        <div className="dashboard">
+        <div className="dashboard staff-page-ready">
 
             {/* ── Page Title ── */}
             <div className="page-header">
@@ -468,7 +754,7 @@ const Dashboard = () => {
                                         <th>Patient</th>
                                         <th>Trimester</th>
                                         <th>Type</th>
-                                        <th>Risk</th>
+                                        <th>Health Conditions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -492,12 +778,14 @@ const Dashboard = () => {
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td><TrimesterBadge weeks={a.weeks} /></td>
-                                                <td><span className="type-tag">{a.type}</span></td>
+                                                <td><TrimesterBadge weeks={a.weeks} isPostpartum={a.type === 'Postpartum'} /></td>
                                                 <td>
-                                                    <span className={`risk-badge risk-badge--${a.risk.replace(' ', '-').toLowerCase()}`}>
-                                                        {a.risk}
+                                                    <span className={`type-tag type-tag--${a.type.toLowerCase()}`}>
+                                                        {a.type}
                                                     </span>
+                                                </td>
+                                                <td>
+                                                    <HealthConditionsCell conditions={a.conditions} />
                                                 </td>
                                             </tr>
                                         ))
