@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, useRef } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AuthContext } from './AuthContext';
 import supabase from '../config/supabaseclient';
 import StaffPageLoader from '../components/Common/StaffPageLoader';
@@ -18,26 +18,25 @@ export const RolePermissionProvider = ({ children }) => {
     const [permissions, setPermissions] = useState({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const hasLoadedRef = useRef(false);
-    const lastUserIdRef = useRef(null);
+    const loadedUserId = useRef(null);
 
     const refresh = useCallback(async (isSilent = false) => {
         if (!user?.id) {
-            hasLoadedRef.current = false;
-            lastUserIdRef.current = null;
+            loadedUserId.current = null;
             setPermissions({});
             setError(null);
             setLoading(false);
             return false;
         }
 
-        // Only show full loading state on initial load or user change
-        const isUserChanged = lastUserIdRef.current !== user.id;
-        if (isUserChanged || !hasLoadedRef.current) {
-            lastUserIdRef.current = user.id;
+        const isUserChanged = loadedUserId.current !== user.id;
+        if (isUserChanged) {
+            setPermissions({});
             if (!isSilent) {
                 setLoading(true);
             }
+        } else if (!isSilent && !loadedUserId.current) {
+            setLoading(true);
         }
 
         setError(null);
@@ -45,7 +44,7 @@ export const RolePermissionProvider = ({ children }) => {
             const { data, error: permissionError } = await supabase.rpc('get_my_permissions');
             if (permissionError) {
                 console.warn('RolePermissionContext: get_my_permissions error:', permissionError);
-                if (!hasLoadedRef.current) {
+                if (loadedUserId.current !== user.id) {
                     setPermissions({});
                     setError(permissionError);
                 }
@@ -56,12 +55,12 @@ export const RolePermissionProvider = ({ children }) => {
             setPermissions(Object.fromEntries(
                 (data || []).map(row => [row.permission_key, row.is_allowed === true])
             ));
-            hasLoadedRef.current = true;
+            loadedUserId.current = user.id;
             setError(null);
             return true;
         } catch (err) {
             console.warn('RolePermissionContext: permission check failed:', err);
-            if (!hasLoadedRef.current) {
+            if (loadedUserId.current !== user.id) {
                 setError(err);
             }
             return false;
@@ -83,8 +82,8 @@ export const RolePermissionProvider = ({ children }) => {
             load(true);
         };
 
-        // Initial load for this user
-        load(hasLoadedRef.current);
+        // Initial load for this user (silent if already loaded for this user)
+        load(loadedUserId.current === user?.id);
         window.addEventListener('focus', refreshWhenFocused);
         document.addEventListener('visibilitychange', refreshWhenVisible);
         const interval = window.setInterval(() => load(true), 60_000);
@@ -95,7 +94,7 @@ export const RolePermissionProvider = ({ children }) => {
             document.removeEventListener('visibilitychange', refreshWhenVisible);
             window.clearInterval(interval);
         };
-    }, [refresh]);
+    }, [refresh, user?.id]);
 
     const value = useMemo(() => ({
         permissions,

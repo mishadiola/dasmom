@@ -19,6 +19,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     let isMounted = true;
     let initRequest = 0;
+    let signInInitTimer = null;
 
     const initAuth = async (isTokenRefresh = false) => {
       const requestId = ++initRequest;
@@ -27,14 +28,15 @@ export const AuthProvider = ({ children }) => {
           authService.clearUser();
         }
         
-        // Only try to load user if there's an active Supabase session
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError || !session?.user) {
           if (isMounted && requestId === initRequest) {
             setUser(null);
+            console.log('AuthContext: No active session, user not loaded');
           }
-        } else {
+        } 
+        else {
           // If token refreshed and user is already loaded with matching ID, no reload needed
           if (isTokenRefresh && userRef.current?.id === session.user.id) {
             return;
@@ -42,13 +44,13 @@ export const AuthProvider = ({ children }) => {
 
           const expectedGoogleEmail = localStorage.getItem('dasmom_google_email');
           const sessionEmail = session.user.email?.trim().toLowerCase();
+          
           if (expectedGoogleEmail && sessionEmail !== expectedGoogleEmail) {
             localStorage.removeItem('dasmom_google_email');
             await supabase.auth.signOut();
             throw new Error('Use Google with the same email registered for your DasMom account.');
           }
 
-          // Valid session exists - load full user data
           const current = await authService.getAuthUser();
           const googleEmail = localStorage.getItem('dasmom_google_email');
           if (googleEmail && current?.id) {
@@ -64,14 +66,17 @@ export const AuthProvider = ({ children }) => {
             if (!userRef.current || userRef.current.id !== current?.id || userRef.current.role !== current?.role) {
               setUser(current);
             }
+            console.log('AuthContext: User loaded from active session', current);
           }
         }
-      } catch (err) {
+      }
+      catch (err) {
         console.error('AuthContext: Error during auth init', err);
         if (isMounted && requestId === initRequest) {
           setUser(null);
         }
-      } finally {
+      } 
+      finally {
         if (isMounted && requestId === initRequest) {
           setIsAuthLoading(false);
         }
@@ -104,22 +109,21 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      if (event === 'SIGNED_IN') {
-        if (session?.user) {
-          if (userRef.current?.id === session.user.id) {
-            return;
-          }
-          initAuth(false);
-        } else {
-          initRequest += 1;
-          setUser(null);
-          setIsAuthLoading(false);
+      if (event === 'SIGNED_IN' && session?.user) {
+        if (userRef.current?.id === session.user.id) {
+          return;
         }
+        if (signInInitTimer !== null) window.clearTimeout(signInInitTimer);
+        signInInitTimer = window.setTimeout(() => {
+          signInInitTimer = null;
+          initAuth(false);
+        }, 0);
       }
     });
 
     return () => {
       isMounted = false;
+      if (signInInitTimer !== null) window.clearTimeout(signInInitTimer);
       subscription.unsubscribe();
     };
   }, []);
