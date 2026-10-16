@@ -1,0 +1,2 @@
+ALTER TABLE public.newborns
+  ADD COLUMN IF NOT EXISTS notes TEXT;
