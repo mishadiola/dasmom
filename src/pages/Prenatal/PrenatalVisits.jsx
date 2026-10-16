@@ -165,6 +165,7 @@ const PrenatalVisits = () => {
     const itemsPerPage = settings?.tables?.rowsPerPage || 10;
     const [currentDate, setCurrentDate] = useState(new Date());
     const [toast, setToast] = useState(null);
+    const toastTimeoutRef = useRef(null);
     const [calendarView, setCalendarView] = useState('day');
     const [selectedVisit, setSelectedVisit] = useState(null);
     const [postpartumVisitMother, setPostpartumVisitMother] = useState(null);
@@ -213,6 +214,18 @@ const PrenatalVisits = () => {
     });
     const [rescheduleResults, setRescheduleResults] = useState([]);
     const [isRescheduling, setIsRescheduling] = useState(false);
+
+    const scheduleToastClear = useCallback((duration) => {
+        if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+        toastTimeoutRef.current = setTimeout(() => {
+            setToast(null);
+            toastTimeoutRef.current = null;
+        }, duration);
+    }, []);
+
+    useEffect(() => () => {
+        if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    }, []);
 
     const patientService = useMemo(() => new PatientService(), []);
     const canReschedule = ['admin', 'staff', 'cho personnel'].includes(visitAccess?.role)
@@ -362,11 +375,11 @@ const PrenatalVisits = () => {
             await patientService.updatePrenatalVisitStatus(visitId, updates);
             await fetchData();
             setToast('Visit status updated successfully!');
-            setTimeout(() => setToast(null), 3000);
+            scheduleToastClear(3000);
         } catch (error) {
             console.error('Error updating visit:', error);
             setToast('Failed to update visit status.');
-            setTimeout(() => setToast(null), 3000);
+            scheduleToastClear(3000);
         }
     };
 
@@ -375,11 +388,11 @@ const PrenatalVisits = () => {
             await patientService.reassignPrenatalVisit(visitId, assignedStaffId);
             await fetchData();
             setToast('Visit assignment updated.');
-            setTimeout(() => setToast(null), 3000);
+            scheduleToastClear(3000);
         } catch (error) {
             console.error('Error assigning prenatal visit:', error);
             setToast(error.message || 'Could not update visit assignment.');
-            setTimeout(() => setToast(null), 3000);
+            scheduleToastClear(3000);
         }
     };
 
@@ -578,52 +591,52 @@ const PrenatalVisits = () => {
                 console.error('Could not load vaccinations for rescheduling:', error);
                 if (active) {
                     setToast('Could not load scheduled vaccinations for rescheduling.');
-                    setTimeout(() => setToast(null), 4000);
+                    scheduleToastClear(4000);
                 }
             }
         };
         loadVaccinationsForRescheduling();
         return () => { active = false; };
-    }, [patientService.supabase]);
+    }, [patientService.supabase, scheduleToastClear]);
 
     const handleAddVisitSubmit = async (e) => {
         e.preventDefault();
         const role = visitAccess?.role;
         if (!['admin', 'staff', 'cho personnel'].includes(role)) {
             setToast('Your account is not authorized to schedule visits.');
-            setTimeout(() => setToast(null), 3500);
+            scheduleToastClear(3500);
             return;
         }
         const mayAssignOutsideOwnStation = role === 'admin';
         if (!addVisitForm.assigned_station) {
             setToast('Select an assigned station for this visit.');
-            setTimeout(() => setToast(null), 3500);
+            scheduleToastClear(3500);
             return;
         }
         if (!mayAssignOutsideOwnStation
             && addVisitForm.assigned_station !== visitAccess?.stationId
             && addVisitForm.assigned_staff) {
             setToast('Staff and CHO personnel can only assign a worker when the visit station is their own station.');
-            setTimeout(() => setToast(null), 4000);
+            scheduleToastClear(4000);
             return;
         }
         if (addVisitForm.assigned_staff
             && !assignmentStaff.some(staff => staff.id === addVisitForm.assigned_staff)) {
             setToast('Select a healthcare worker from the assigned station.');
-            setTimeout(() => setToast(null), 3500);
+            scheduleToastClear(3500);
             return;
         }
         const patient = scheduleablePatients.find(p => p.id === addVisitForm.patient_id);
         if (!patient) {
             setToast('Select a patient for whom you have visit-scheduling permission.');
-            setTimeout(() => setToast(null), 3500);
+            scheduleToastClear(3500);
             return;
         }
         if (addVisitForm.visit_category === 'Postpartum'
             && addVisitForm.assigned_staff
             && patient.assignedStaffId !== addVisitForm.assigned_staff) {
             setToast("Postpartum visits can only be assigned to the patient's assigned prenatal healthcare worker.");
-            setTimeout(() => setToast(null), 4000);
+            scheduleToastClear(4000);
             return;
         }
         setIsAddingVisit(true);
@@ -786,11 +799,11 @@ const PrenatalVisits = () => {
             setToast(postInsertWarnings.length
                 ? `Visit saved. ${postInsertWarnings.join(' ')}`
                 : 'Visit scheduled successfully. An email notification was sent.');
-            setTimeout(() => setToast(null), 3000);
+            scheduleToastClear(3000);
         } catch (error) {
             console.error('Failed to schedule visit:', error);
             setToast(`Failed to schedule visit: ${error.message || 'Please try again.'}`);
-            setTimeout(() => setToast(null), 5000);
+            scheduleToastClear(5000);
         } finally {
             setIsAddingVisit(false);
         }
@@ -800,7 +813,7 @@ const PrenatalVisits = () => {
         e.preventDefault();
         if (!canReschedule) {
             setToast('Your account is not authorized to reschedule visits.');
-            setTimeout(() => setToast(null), 3500);
+            scheduleToastClear(3500);
             return;
         }
         const visitsToReschedule = selectedRescheduleVisitIds
@@ -808,12 +821,12 @@ const PrenatalVisits = () => {
             .filter(Boolean);
         if (!visitsToReschedule.length || visitsToReschedule.length !== selectedRescheduleVisitIds.length) {
             setToast('Select one or more current scheduled visits.');
-            setTimeout(() => setToast(null), 3500);
+            scheduleToastClear(3500);
             return;
         }
         if (!rescheduleForm.new_date || !/^\d{4}-\d{2}-\d{2}$/.test(rescheduleForm.new_date)) {
             setToast('Please select a valid new visit date.');
-            setTimeout(() => setToast(null), 3500);
+            scheduleToastClear(3500);
             return;
         }
         const [year, month, day] = rescheduleForm.new_date.split('-').map(Number);
@@ -825,28 +838,28 @@ const PrenatalVisits = () => {
             || parsedDate.getDate() !== day
         ) {
             setToast('Please select a valid new visit date.');
-            setTimeout(() => setToast(null), 3500);
+            scheduleToastClear(3500);
             return;
         }
         if (rescheduleForm.reason.length > 1000) {
             setToast('The rescheduling reason must be 1000 characters or fewer.');
-            setTimeout(() => setToast(null), 3500);
+            scheduleToastClear(3500);
             return;
         }
         const todayStr = toLocalDateStr(new Date());
         if (rescheduleForm.new_date < todayStr) {
             setToast('Cannot reschedule to a past date.');
-            setTimeout(() => setToast(null), 3500);
+            scheduleToastClear(3500);
             return;
         }
         if (visitsToReschedule.some(visit => visit.currentDate === rescheduleForm.new_date)) {
             setToast('The new date must differ from the current date for every selected visit.');
-            setTimeout(() => setToast(null), 4000);
+            scheduleToastClear(4000);
             return;
         }
         if (!user?.id) {
             setToast('Your staff session is unavailable. Sign in again to reschedule visits.');
-            setTimeout(() => setToast(null), 4000);
+            scheduleToastClear(4000);
             return;
         }
 
@@ -986,7 +999,7 @@ const PrenatalVisits = () => {
         const succeeded = results.filter(result => result.status === 'success').length;
         const failed = results.length - succeeded;
         setToast(`${succeeded} visit${succeeded === 1 ? '' : 's'} rescheduled; ${failed} failed. Review the result list.`);
-        setTimeout(() => setToast(null), 5000);
+        scheduleToastClear(5000);
     };
 
 
@@ -1024,48 +1037,81 @@ const PrenatalVisits = () => {
 
 
     const visibleDays = getVisibleDays(currentDate, calendarView);
-    const filteredVisits = visitsTable.filter(v => {
-        const matchesSearch = (v.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            v.patientId?.toLowerCase().includes(searchTerm.toLowerCase()));
-        const matchesStatus = (filterStatus === 'All' || v.status === filterStatus);
-        const matchesArchive =
-            archiveFilter === 'all' ||
-            (archiveFilter === 'archived' ? archivedPatientIds.has(v.patientId) : !archivedPatientIds.has(v.patientId));
-        return matchesSearch && matchesStatus && matchesArchive;
-    });
+    const filteredVisits = useMemo(() => {
+        const normalizedSearch = searchTerm.toLowerCase();
+        return visitsTable.filter(v => {
+            const matchesSearch = (v.patientName?.toLowerCase().includes(normalizedSearch) ||
+                v.patientId?.toLowerCase().includes(normalizedSearch));
+            const matchesStatus = (filterStatus === 'All' || v.status === filterStatus);
+            const matchesArchive =
+                archiveFilter === 'all' ||
+                (archiveFilter === 'archived' ? archivedPatientIds.has(v.patientId) : !archivedPatientIds.has(v.patientId));
+            return matchesSearch && matchesStatus && matchesArchive;
+        });
+    }, [visitsTable, searchTerm, filterStatus, archiveFilter, archivedPatientIds]);
 
     const todayOnly = new Date().toISOString().split('T')[0];
-    // Group visits by patient
-    const latestPatientVisitMap = new Map();
-    filteredVisits
-      .slice()
-      .sort((a, b) => new Date(b.visitDateOnly) - new Date(a.visitDateOnly))
-      .forEach((visit) => {
-        if (!latestPatientVisitMap.has(visit.patientId)) {
-          latestPatientVisitMap.set(visit.patientId, visit);
-        }
-      });
+    const uniquePatients = useMemo(() => {
+        const patientById = new Map();
+        allPatients.forEach(patient => {
+            if (!patientById.has(patient.id)) patientById.set(patient.id, patient);
+        });
+        const summaries = new Map();
 
-    const uniquePatients = Array.from(latestPatientVisitMap.values()).map((visit) => ({
-      id: visit.patientId,
-      name: visit.patientName,
-      risk: allPatients.find(p => p.id === visit.patientId)?.riskLevel || 'Unknown',
-      nextVisit: (() => {
-        const nextScheduled = filteredVisits.filter(v => v.patientId === visit.patientId && v.status === 'Scheduled' && v.visitDateOnly >= todayOnly).sort((a, b) => a.visitDateOnly.localeCompare(b.visitDateOnly))[0];
-        return nextScheduled ? nextScheduled.visitDateOnly : 'No upcoming';
-      })(),
-      // Show last ATTENDED visit (not just any visit)
-      lastVisit: (() => {
-        const attended = filteredVisits.filter(v => v.patientId === visit.patientId && v.status === 'Attended')
-          .sort((a, b) => {
-            const dateA = a.attendedDate ? new Date(a.attendedDate) : new Date(a.visitDate);
-            const dateB = b.attendedDate ? new Date(b.attendedDate) : new Date(b.visitDate);
-            return dateB - dateA;
-          })[0];
-        return attended ? (attended.attendedDate || attended.visitDate) : 'No completed visit';
-      })(),
-      totalVisits: filteredVisits.filter(v => v.patientId === visit.patientId).length
-    }));
+        filteredVisits.forEach((visit, index) => {
+            const visitDate = visit.visitDateOnly || '';
+            const visitTimestamp = new Date(visitDate).getTime();
+            let summary = summaries.get(visit.patientId);
+            if (!summary) {
+                const patient = patientById.get(visit.patientId);
+                summary = {
+                    id: visit.patientId,
+                    name: visit.patientName,
+                    risk: patient?.riskLevel || 'Unknown',
+                    latestVisitTimestamp: Number.isNaN(visitTimestamp) ? -Infinity : visitTimestamp,
+                    latestVisitIndex: index,
+                    nextVisit: null,
+                    lastVisit: null,
+                    lastAttendedTimestamp: -Infinity,
+                    totalVisits: 0
+                };
+                summaries.set(visit.patientId, summary);
+            }
+
+            summary.totalVisits += 1;
+            if (!Number.isNaN(visitTimestamp) && visitTimestamp > summary.latestVisitTimestamp) {
+                summary.latestVisitTimestamp = visitTimestamp;
+                summary.latestVisitIndex = index;
+                summary.name = visit.patientName;
+            }
+
+            if (visit.status === 'Scheduled' && visitDate >= todayOnly
+                && (!summary.nextVisit || visitDate < summary.nextVisit)) {
+                summary.nextVisit = visitDate;
+            }
+
+            if (visit.status === 'Attended') {
+                const attendedDate = visit.attendedDate || visit.visitDate;
+                const attendedTimestamp = new Date(attendedDate).getTime();
+                if (!Number.isNaN(attendedTimestamp) && attendedTimestamp > summary.lastAttendedTimestamp) {
+                    summary.lastAttendedTimestamp = attendedTimestamp;
+                    summary.lastVisit = attendedDate;
+                }
+            }
+        });
+
+        return Array.from(summaries.values())
+            .sort((left, right) => right.latestVisitTimestamp - left.latestVisitTimestamp
+                || left.latestVisitIndex - right.latestVisitIndex)
+            .map(patient => ({
+                id: patient.id,
+                name: patient.name,
+                risk: patient.risk,
+                nextVisit: patient.nextVisit || 'No upcoming',
+                lastVisit: patient.lastVisit || 'No completed visit',
+                totalVisits: patient.totalVisits
+            }));
+    }, [allPatients, filteredVisits, todayOnly]);
 
     const totalPages = Math.ceil(uniquePatients.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -1661,7 +1707,7 @@ const PrenatalVisits = () => {
                                                     userStationId={visitAccess?.stationId}
                                                     onAssigned={async ({ assignedStaffId, assignedStaffName }) => {
                                                         setToast('Healthcare worker assigned successfully.');
-                                                        setTimeout(() => setToast(null), 3000);
+                                                        scheduleToastClear(3000);
                                                         await fetchData();
                                                     }}
                                                 />

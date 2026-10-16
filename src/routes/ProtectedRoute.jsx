@@ -2,6 +2,7 @@ import React, { useContext } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { getRoleConfig } from '../config/roleConfig';
+import StaffPageLoader from '../components/Common/StaffPageLoader';
 
 export default function ProtectedRoute({ pageKey, children }) {
   const { user, isAuthLoading } = useContext(AuthContext); 
@@ -10,7 +11,7 @@ export default function ProtectedRoute({ pageKey, children }) {
   console.log('ProtectedRoute: checking access', { pageKey, user, isAuthLoading });
 
   if (isAuthLoading) {
-    return null;
+    return <StaffPageLoader message="Checking your session..." minHeight="100vh" />;
   }
 
   if (!user) {

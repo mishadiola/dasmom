@@ -9,42 +9,40 @@ import { LanguageProvider } from './context/LanguageContext';
 import { SystemSettingsProvider } from './context/SystemSettingsContext';
 import ProtectedRoute from './routes/ProtectedRoute';
 import ErrorBoundary from './components/Common/ErrorBoundary';
-
-import Landing from './pages/Landing/Landing';
+import StaffPageLoader from './components/Common/StaffPageLoader';
 import Login from './pages/Login/Login';
-import MotherLogin from './pages/MotherLogin/MotherLogin';
-import ResetPassword from './pages/ResetPassword';
-
-import MotherDashboard from './pages/MotherDashboard/MotherDashboard';
-import UserAccount from './pages/MotherDashboard/UserAccount';
-import UserSettings from './pages/MotherDashboard/UserSettings';
-import MyVitals from './pages/MotherDashboard/MyVitals';
-import MyAppointments from './pages/MotherDashboard/MyAppointments';
-import UserVaccinations from './pages/MotherDashboard/UserVaccinations';
-import PregnancyTips from './pages/MotherDashboard/PregnancyTips';
-import TipDetailPage from './pages/MotherDashboard/TipDetailPage';
-import PregnancyDeliveryInfo from './pages/MotherDashboard/PregnancyDeliveryInfo';
-
-import DashboardLayout from './layouts/DashboardLayout';
-import Dashboard from './pages/Dashboard/Dashboard';
-
-import PatientsList from './pages/Patients/PatientsList';
-import PatientProfile from './pages/Patients/PatientProfile';
-import AddPatient from './pages/Patients/AddPatient';
-import HighRiskCases from './pages/HighRisk/HighRiskCases';
-import PrenatalVisits from './pages/Prenatal/PrenatalVisits';
-import AddPrenatalVisit from './pages/Prenatal/AddPrenatalVisit';
-import PostpartumRecords from './pages/Postpartum/PostpartumRecords';
-import AddPostpartumVisit from './pages/Postpartum/AddPostpartumVisit';
-import Vaccinations from './pages/Vaccinations/Vaccinations';
-import DeliveryOutcomes from './pages/Deliveries/DeliveryOutcomes';
-import NewbornTracking from './pages/Newborns/NewbornTracking';
-import Analytics from './pages/Analytics/Analytics';
-import StationReports from './pages/Station/StationReports';
-import Settings from './pages/Settings/Settings';
-import Inventory from './pages/Inventory/Inventory';
 
 import './App.css';
+
+const DashboardLayout = React.lazy(() => import('./layouts/DashboardLayout'));
+const Landing = React.lazy(() => import('./pages/Landing/Landing'));
+const MotherLogin = React.lazy(() => import('./pages/MotherLogin/MotherLogin'));
+const ResetPassword = React.lazy(() => import('./pages/ResetPassword'));
+const MotherDashboard = React.lazy(() => import('./pages/MotherDashboard/MotherDashboard'));
+const UserAccount = React.lazy(() => import('./pages/MotherDashboard/UserAccount'));
+const UserSettings = React.lazy(() => import('./pages/MotherDashboard/UserSettings'));
+const MyVitals = React.lazy(() => import('./pages/MotherDashboard/MyVitals'));
+const MyAppointments = React.lazy(() => import('./pages/MotherDashboard/MyAppointments'));
+const UserVaccinations = React.lazy(() => import('./pages/MotherDashboard/UserVaccinations'));
+const PregnancyTips = React.lazy(() => import('./pages/MotherDashboard/PregnancyTips'));
+const TipDetailPage = React.lazy(() => import('./pages/MotherDashboard/TipDetailPage'));
+const PregnancyDeliveryInfo = React.lazy(() => import('./pages/MotherDashboard/PregnancyDeliveryInfo'));
+const Dashboard = React.lazy(() => import('./pages/Dashboard/Dashboard'));
+const PatientsList = React.lazy(() => import('./pages/Patients/PatientsList'));
+const PatientProfile = React.lazy(() => import('./pages/Patients/PatientProfile'));
+const AddPatient = React.lazy(() => import('./pages/Patients/AddPatient'));
+const HighRiskCases = React.lazy(() => import('./pages/HighRisk/HighRiskCases'));
+const PrenatalVisits = React.lazy(() => import('./pages/Prenatal/PrenatalVisits'));
+const AddPrenatalVisit = React.lazy(() => import('./pages/Prenatal/AddPrenatalVisit'));
+const PostpartumRecords = React.lazy(() => import('./pages/Postpartum/PostpartumRecords'));
+const AddPostpartumVisit = React.lazy(() => import('./pages/Postpartum/AddPostpartumVisit'));
+const Vaccinations = React.lazy(() => import('./pages/Vaccinations/Vaccinations'));
+const DeliveryOutcomes = React.lazy(() => import('./pages/Deliveries/DeliveryOutcomes'));
+const NewbornTracking = React.lazy(() => import('./pages/Newborns/NewbornTracking'));
+const Analytics = React.lazy(() => import('./pages/Analytics/Analytics'));
+const StationReports = React.lazy(() => import('./pages/Station/StationReports'));
+const Settings = React.lazy(() => import('./pages/Settings/Settings'));
+const Inventory = React.lazy(() => import('./pages/Inventory/Inventory'));
 
 function AnalyticsTracker() {
   const location = useLocation();
@@ -70,6 +68,7 @@ function App() {
         <BrowserRouter>
           <ErrorBoundary>
             <AnalyticsTracker />
+            <React.Suspense fallback={<StaffPageLoader />}>
             <Routes>
 
           {/* PUBLIC ROUTES */}
@@ -179,6 +178,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
 
         </Routes>
+        </React.Suspense>
           </ErrorBoundary>
         </BrowserRouter>
       </SystemSettingsProvider>

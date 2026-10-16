@@ -129,7 +129,20 @@ export default class NewbornService {
             const { data: babies, error: babyError } = await this.supabase
                 .from('newborns')
                 .select(`
-                    *,
+                    id,
+                    baby_name,
+                    mother_id,
+                    delivery_id,
+                    gender,
+                    birth_weight,
+                    birth_length,
+                    head_circumference,
+                    apgar_1min,
+                    apgar_5min,
+                    condition_at_birth,
+                    risk_level,
+                    notes,
+                    created_at,
                     patient_basic_info!mother_id (
                         id,
                         first_name,
@@ -139,6 +152,21 @@ export default class NewbornService {
                     ),
                     deliveries (
                         delivery_date
+                    ),
+                    vaccinations (
+                        id,
+                        newborn_id,
+                        vaccine_inventory_id,
+                        dose_number,
+                        scheduled_vaccination,
+                        vaccinated_date,
+                        notes,
+                        vaccinated_by,
+                        assigned_staff,
+                        status,
+                        vaccine_inventory (
+                            vaccine_name, brand, unit, doses, batch, expiration_date
+                        )
                     )
                 `)
                 .order('created_at', { ascending: false });
@@ -146,40 +174,8 @@ export default class NewbornService {
             if (babyError) throw babyError;
             if (!babies || babies.length === 0) return [];
 
-            // Fetch vaccinations separately for all newborns
-            const babyIds = babies.map(b => b.id);
-            const { data: allVaccinations = [], error: vaccinationsError } = await this.supabase
-                .from('vaccinations')
-                .select(`
-                    id,
-                    newborn_id,
-                    vaccine_inventory_id,
-                    dose_number,
-                    scheduled_vaccination,
-                    vaccinated_date,
-                    notes,
-                    vaccinated_by,
-                    assigned_staff,
-                    status,
-                    vaccine_inventory (
-                        vaccine_name, brand, unit, doses, batch, expiration_date
-                    )
-                `)
-                .in('newborn_id', babyIds);
-            if (vaccinationsError) throw vaccinationsError;
-
-            // Create a map of newborn_id -> vaccinations
-            const vaccMap = new Map();
-            (allVaccinations || []).forEach(v => {
-                if (!vaccMap.has(v.newborn_id)) {
-                    vaccMap.set(v.newborn_id, []);
-                }
-                vaccMap.get(v.newborn_id).push(v);
-            });
-
             return babies.map(baby => {
                 const mother = baby.patient_basic_info;
-                const pregnancyRisk = null;
 
                 let riskLevel = 'Normal';
                 if (baby.condition_at_birth === 'NICU' || baby.condition_at_birth === 'Special Care') {
@@ -190,7 +186,7 @@ export default class NewbornService {
                     riskLevel = 'Monitor';
                 }
 
-                const vaccLog = (vaccMap.get(baby.id) || []).map(v => {
+                const vaccLog = (baby.vaccinations || []).map(v => {
                     const scheduledDate = v.scheduled_vaccination || null;
                     const vaccinatedDate = v.vaccinated_date || null;
                     const vaccineName = v.vaccine_inventory?.vaccine_name ||

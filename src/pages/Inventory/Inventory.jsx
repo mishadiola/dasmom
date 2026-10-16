@@ -1737,7 +1737,7 @@ const Inventory = () => {
                   const percentage = getStockPercentage(item.total_quantity || 0, item.total_max_stock || 500);
                   const rowNumber = startIndex + index + 1;
                   return (
-                    <>
+                    <React.Fragment key={`${item.items[0]?.id || item.item_name}-${index}`}>
                     <tr key={`${item.item_name}-${index}`} className="inv-row">
                       <td className="row-number-cell">
                         {item.items.length > 0 && (
@@ -2026,7 +2026,7 @@ const Inventory = () => {
                         </td>
                       </tr>
                     )}
-                    </>
+                    </React.Fragment>
                   );
                 })
               ) : (

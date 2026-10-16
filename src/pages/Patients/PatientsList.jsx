@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -399,11 +399,15 @@ const PatientsList = () => {
         }
     }, [availableStations, assignmentAccess, defaultApplied]);
 
-    const filteredPatients = patients.filter(p => {
+    const filterDate = new Date();
+    const filterYear = filterDate.getFullYear();
+    const filterMonth = filterDate.getMonth();
+    const normalizedSearch = searchTerm.toLowerCase();
+    const filteredPatients = useMemo(() => patients.filter(p => {
         const matchesSearch =
-            p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            p.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (p.station || '').toLowerCase().includes(searchTerm.toLowerCase());
+            p.name.toLowerCase().includes(normalizedSearch) ||
+            p.id.toLowerCase().includes(normalizedSearch) ||
+            (p.station || '').toLowerCase().includes(normalizedSearch);
 
         const matchesTri = filters.trimesters.length === 0 || filters.trimesters.includes(String(p.trimester || 1));
         
@@ -431,11 +435,10 @@ const PatientsList = () => {
             if (!created) {
                 matchesDate = false;
             } else {
-                const now = new Date();
                 if (dateFilter === 'this_month') {
-                    matchesDate = created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
+                    matchesDate = created.getMonth() === filterMonth && created.getFullYear() === filterYear;
                 } else if (dateFilter === 'this_year') {
-                    matchesDate = created.getFullYear() === now.getFullYear();
+                    matchesDate = created.getFullYear() === filterYear;
                 } else if (dateFilter === 'custom' && customDateFrom && customDateTo) {
                     const from = new Date(`${customDateFrom}T00:00:00`);
                     const to = new Date(`${customDateTo}T23:59:59.999`);
@@ -445,9 +448,9 @@ const PatientsList = () => {
         }
 
         return matchesSearch && matchesTri && matchesRisk && matchesType && matchesStation && matchesAssignment && matchesArchive && matchesDate;
-    });
+    }), [patients, normalizedSearch, filters, archiveFilter, dateFilter, customDateFrom, customDateTo, filterYear, filterMonth]);
 
-    const sortedPatients = [...filteredPatients].sort((a, b) => {
+    const sortedPatients = useMemo(() => [...filteredPatients].sort((a, b) => {
         if (filters.sortBy === 'newest') return new Date(b.createdAt) - new Date(a.createdAt);
         if (filters.sortBy === 'oldest') return new Date(a.createdAt) - new Date(b.createdAt);
         if (filters.sortBy === 'alpha_az') return a.name.localeCompare(b.name);
@@ -464,7 +467,7 @@ const PatientsList = () => {
             return new Date(b.edd) - new Date(a.edd);
         }
         return 0;
-    });
+    }), [filteredPatients, filters.sortBy]);
 
     // availableStations fetched dynamically from DB
 

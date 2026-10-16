@@ -10,9 +10,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import supabase from '../../config/supabaseclient';
 import PatientService from '../../services/patientservice';
 import '../../styles/pages/Analytics.css';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
-import * as XLSX from 'xlsx';
 import ExportModal from '../../components/ExportModal';
 import { getSystemSettings } from '../../utils/systemSettings';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
@@ -144,6 +141,8 @@ const Analytics = () => {
     useEffect(() => {
         let isMounted = true;
         let pollingTimer = null;
+        let refreshTimer = null;
+        let latestRequestId = 0;
         let hasLoadedOnce = false;
         const realtimeTables = ['patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'deliveries', 'vaccinations', 'newborns', 'stations'];
 
@@ -159,6 +158,7 @@ const Analytics = () => {
         };
 
         const fetchAllData = async () => {
+            const requestId = ++latestRequestId;
             try {
                 if (!hasLoadedOnce) setLoading(true);
                 setFetchError(null);
@@ -180,7 +180,7 @@ const Analytics = () => {
                     supabase.from('stations').select('id, station_name').order('station_name')
                 ]);
 
-                if (isMounted) setDbData({
+                if (isMounted && requestId === latestRequestId) setDbData({
                     patients: patients || [],
                     pregnancies: pregnancies || [],
                     visits: visits || [],
@@ -189,12 +189,12 @@ const Analytics = () => {
                     newborns: newborns || [],
                     stations: stations || []
                 });
-                hasLoadedOnce = true;
+                if (isMounted && requestId === latestRequestId) hasLoadedOnce = true;
             } catch (error) {
                 console.error('Error fetching Supabase data in Analytics:', error);
-                setFetchError(error);
+                if (isMounted && requestId === latestRequestId) setFetchError(error);
             } finally {
-                if (isMounted) setLoading(false);
+                if (isMounted && requestId === latestRequestId) setLoading(false);
             }
         };
 
@@ -203,7 +203,9 @@ const Analytics = () => {
         const channel = supabase
             .channel('analytics-live-data')
             .on('postgres_changes', { event: '*', schema: 'public' }, payload => {
-                if (realtimeTables.includes(payload.table)) fetchAllData();
+                if (!realtimeTables.includes(payload.table)) return;
+                if (refreshTimer) clearTimeout(refreshTimer);
+                refreshTimer = setTimeout(fetchAllData, 150);
             })
             .subscribe(status => {
                 if (status === 'SUBSCRIBED') {
@@ -216,6 +218,7 @@ const Analytics = () => {
         return () => {
             isMounted = false;
             stopPollingFallback();
+            if (refreshTimer) clearTimeout(refreshTimer);
             supabase.removeChannel(channel);
         };
     }, []);
@@ -241,14 +244,22 @@ const Analytics = () => {
         };
 
         const riskService = new PatientService();
+        const patientById = new Map(dbData.patients.map(patient => [patient.id, patient]));
+        const visitsByPatient = new Map();
+        const newbornById = new Map(dbData.newborns.map(newborn => [newborn.id, newborn]));
 
         // Determine latest attended visit for each patient so resolved risk is removed.
         const latestVisits = {};
         dbData.visits.forEach(v => {
-            if (!v.patient_id || v.status !== 'Attended') return;
-            const existing = latestVisits[v.patient_id];
-            if (!existing || new Date(v.visit_date) > new Date(existing.visit_date)) {
-                latestVisits[v.patient_id] = v;
+            if (!v.patient_id) return;
+            const patientVisits = visitsByPatient.get(v.patient_id) || [];
+            patientVisits.push(v);
+            visitsByPatient.set(v.patient_id, patientVisits);
+            if (v.status === 'Attended') {
+                const existing = latestVisits[v.patient_id];
+                if (!existing || new Date(v.visit_date) > new Date(existing.visit_date)) {
+                    latestVisits[v.patient_id] = v;
+                }
             }
         });
 
@@ -328,7 +339,7 @@ const Analytics = () => {
 
         // Loop visits for missed appts
         dbData.visits.forEach(v => {
-            const pat = dbData.patients.find(p => p.id === v.patient_id);
+            const pat = patientById.get(v.patient_id);
             const station = normalizeStation(pat?.stations?.station_name);
             if (!isWithinDateRange(v.visit_date)) return;
             const isMissed = v.status === 'Missed' || (v.visit_date && new Date(v.visit_date) < new Date() && v.status === 'Scheduled');
@@ -358,13 +369,12 @@ const Analytics = () => {
         dbData.deliveries.forEach(delivery => {
             const deliveryDate = new Date(delivery.delivery_date);
             if (Number.isNaN(deliveryDate.getTime()) || deliveryDate > now || !isWithinDateRange(delivery.delivery_date)) return;
-            const mother = dbData.patients.find(patient => patient.id === delivery.mother_id);
             const station = normalizeStation(delivery.stations?.station_name);
             if (!postpartumByStation[station]) postpartumByStation[station] = { eligible: 0, completed: 0 };
             postpartumByStation[station].eligible++;
             const endDate = new Date(deliveryDate);
             endDate.setDate(endDate.getDate() + 42);
-            const completed = dbData.visits.some(visit => {
+            const completed = (visitsByPatient.get(delivery.mother_id) || []).some(visit => {
                 if (visit.patient_id !== delivery.mother_id || visit.status !== 'Attended') return false;
                 const visitDate = new Date(visit.visit_date);
                 return !Number.isNaN(visitDate.getTime()) && visitDate >= deliveryDate && visitDate <= endDate;
@@ -381,8 +391,8 @@ const Analytics = () => {
         // Loop vaccinations
         dbData.vaccinations.forEach(v => {
             if (!v.newborn_id) return;
-            const newborn = dbData.newborns.find(n => n.id === v.newborn_id);
-            const mother = dbData.patients.find(p => p.id === newborn?.mother_id);
+            const newborn = newbornById.get(v.newborn_id);
+            const mother = patientById.get(newborn?.mother_id);
             const station = normalizeStation(mother?.stations?.station_name);
             if (!isWithinDateRange(v.vaccinated_date)) return;
 
@@ -520,6 +530,14 @@ const Analytics = () => {
         const selectedPatientIds = new Set(dbData.patients
             .filter(patient => filters.station === 'All Stations' || normalizeStation(patient.stations?.station_name) === filters.station)
             .map(patient => patient.id));
+        const visitsByPatient = new Map();
+        dbData.visits.forEach(visit => {
+            if (!visit.patient_id) return;
+            const visits = visitsByPatient.get(visit.patient_id) || [];
+            visits.push(visit);
+            visitsByPatient.set(visit.patient_id, visits);
+        });
+        const newbornById = new Map(dbData.newborns.map(newborn => [newborn.id, newborn]));
         const latestRiskByPatient = {};
         dbData.visits.forEach(visit => {
             if (!visit.patient_id || !visit.calculated_risk) return;
@@ -556,7 +574,7 @@ const Analytics = () => {
                 const deliveryDate = new Date(delivery.delivery_date);
                 const endDate = new Date(deliveryDate);
                 endDate.setDate(endDate.getDate() + 42);
-                if (dbData.visits.some(visit => visit.patient_id === delivery.mother_id && visit.status === 'Attended' && new Date(visit.visit_date) >= deliveryDate && new Date(visit.visit_date) <= endDate)) postpartum[index].completed++;
+                if ((visitsByPatient.get(delivery.mother_id) || []).some(visit => visit.status === 'Attended' && new Date(visit.visit_date) >= deliveryDate && new Date(visit.visit_date) <= endDate)) postpartum[index].completed++;
             }
         });
         dbData.visits.forEach(visit => {
@@ -568,7 +586,7 @@ const Analytics = () => {
         });
         dbData.vaccinations.forEach(vaccination => {
             if (!vaccination.newborn_id) return;
-            const newborn = dbData.newborns.find(n => n.id === vaccination.newborn_id);
+            const newborn = newbornById.get(vaccination.newborn_id);
             if (!selectedPatientIds.has(newborn?.mother_id)) return;
             const index = bucket(vaccination.vaccinated_date || vaccination.scheduled_vaccination);
             if (index < 0) return;
@@ -705,6 +723,8 @@ const Analytics = () => {
     const getExportDataForDateRange = (dateRange) => {
         const stationNames = [...new Set([...(dbData.stations || []).map(station => station.station_name), 'Unassigned'])];
         const liveAgg = Object.fromEntries(stationNames.map(station => [station, createStationMetrics(true)]));
+        const patientById = new Map(dbData.patients.map(patient => [patient.id, patient]));
+        const newbornById = new Map(dbData.newborns.map(newborn => [newborn.id, newborn]));
 
         const isWithinExportDateRange = (dateString) => {
             if (!dateString) return true;
@@ -777,7 +797,7 @@ const Analytics = () => {
         });
 
         dbData.visits.forEach(v => {
-            const pat = dbData.patients.find(p => p.id === v.patient_id);
+            const pat = patientById.get(v.patient_id);
             const station = normalizeStation(pat?.stations?.station_name);
             if (!liveAgg[station]) return;
             if (!isWithinExportDateRange(v.visit_date)) return;
@@ -804,8 +824,8 @@ const Analytics = () => {
 
         dbData.vaccinations.forEach(v => {
             if (!v.newborn_id) return;
-            const newborn = dbData.newborns.find(n => n.id === v.newborn_id);
-            const mother = dbData.patients.find(p => p.id === newborn?.mother_id);
+            const newborn = newbornById.get(v.newborn_id);
+            const mother = patientById.get(newborn?.mother_id);
             const station = normalizeStation(mother?.stations?.station_name);
             if (!liveAgg[station]) return;
             if (!isWithinExportDateRange(v.vaccinated_date)) return;
@@ -862,7 +882,7 @@ const Analytics = () => {
     };
 
     // ── Export Sheet Handler ──
-    const handleExport = (exportConfig) => {
+    const handleExport = async (exportConfig) => {
         const { format, dateRange, reportPeriodText } = exportConfig;
         const reportSettings = exportConfig.reportSettings || {};
         const data = getExportDataForDateRange(dateRange);
@@ -906,6 +926,7 @@ const Analytics = () => {
         ];
 
         if (format === 'excel') {
+            const XLSX = await import('xlsx');
             const wb = XLSX.utils.book_new();
             
             if (reportSettings.includePatientSummary) {
@@ -924,6 +945,10 @@ const Analytics = () => {
             const dateStr = new Date().toISOString().split('T')[0];
             XLSX.writeFile(wb, `DASMOM_Analytics_Intelligence_${dateStr}.xlsx`);
         } else if (format === 'pdf') {
+            const [{ default: jsPDF }] = await Promise.all([
+                import('jspdf'),
+                import('jspdf-autotable')
+            ]);
             const doc = new jsPDF('portrait');
             
             doc.setFontSize(16);

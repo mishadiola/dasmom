@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -13,9 +13,6 @@ import Legend from '../../components/Legend/Legend';
 import supabase from '../../config/supabaseclient';
 import ExportModal from '../../components/ExportModal';
 import ActionTooltip from '../../components/Common/ActionTooltip';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 /* ════════════════════════════
@@ -29,6 +26,13 @@ const StationReports = () => {
     const [showCharts, setShowCharts] = useState(true);
     const [stations, setStations] = useState([]);
     const [pregnancyAgeRows, setPregnancyAgeRows] = useState([]);
+    const [showPregnancyAgeReport, setShowPregnancyAgeReport] = useState(false);
+    const [pregnancyAgeLoading, setPregnancyAgeLoading] = useState(false);
+    const [pregnancyAgeError, setPregnancyAgeError] = useState(null);
+    const pregnancyAgeLoaded = useRef(false);
+    const mounted = useRef(false);
+    const reportRequestId = useRef(0);
+    const ageReportRequestId = useRef(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [summaryStats, setSummaryStats] = useState([
@@ -39,54 +43,15 @@ const StationReports = () => {
         { label: 'Supplements Distributed', value: 0, color: 'pink', icon: Pill, path: '/dashboard/inventory', filter: 'supplements' },
     ]);
 
-    const patientService = new PatientService();
+    const patientService = useMemo(() => new PatientService(), []);
 
-    useEffect(() => {
-        let pollingTimer = null;
-
-        const startPollingFallback = () => {
-            if (pollingTimer) return;
-            pollingTimer = setInterval(fetchStationData, 30000);
-        };
-
-        const stopPollingFallback = () => {
-            if (!pollingTimer) return;
-            clearInterval(pollingTimer);
-            pollingTimer = null;
-        };
-
-        fetchStationData();
-
-        const channel = supabase
-            .channel('station-reports-live-data')
-            .on('postgres_changes', { event: '*', schema: 'public' }, payload => {
-                const tables = ['stations', 'patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'deliveries', 'newborns', 'vaccinations', 'supplements'];
-                if (tables.includes(payload.table)) fetchStationData();
-            })
-            .subscribe(status => {
-                if (status === 'SUBSCRIBED') {
-                    stopPollingFallback();
-                } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
-                    startPollingFallback();
-                }
-            });
-
-        return () => {
-            stopPollingFallback();
-            supabase.removeChannel(channel);
-        };
-    }, []);
-
-    const fetchStationData = async () => {
+    const fetchStationData = useCallback(async () => {
+        const requestId = ++reportRequestId.current;
         try {
-            setLoading(true);
             setError(null);
-            const [data, ageRows] = await Promise.all([
-                patientService.getStationReports(),
-                patientService.getStationPregnancyAgeReport()
-            ]);
+            const data = await patientService.getStationReports();
+            if (!mounted.current || requestId !== reportRequestId.current) return;
             setStations(data);
-            setPregnancyAgeRows(ageRows);
 
             // Calculate summary stats from station data
             const totalPregnant = data.reduce((sum, s) => sum + s.totalPatients, 0);
@@ -106,11 +71,85 @@ const StationReports = () => {
             ]);
         } catch (error) {
             console.error('Error fetching station data:', error);
-            setError(error);
-            setPregnancyAgeRows([]);
+            if (mounted.current && requestId === reportRequestId.current) setError(error);
         } finally {
-            setLoading(false);
+            if (mounted.current && requestId === reportRequestId.current) setLoading(false);
         }
+    }, [patientService]);
+
+    const refreshPregnancyAgeReport = useCallback(async () => {
+        const requestId = ++ageReportRequestId.current;
+        try {
+            const rows = await patientService.getStationPregnancyAgeReport();
+            if (!mounted.current || requestId !== ageReportRequestId.current) return;
+            setPregnancyAgeRows(rows);
+            pregnancyAgeLoaded.current = true;
+            setPregnancyAgeError(null);
+        } catch (reportError) {
+            console.error('Error fetching pregnancy age report:', reportError);
+            if (mounted.current && requestId === ageReportRequestId.current) setPregnancyAgeError(reportError);
+        } finally {
+            if (mounted.current && requestId === ageReportRequestId.current) setPregnancyAgeLoading(false);
+        }
+    }, [patientService]);
+
+    useEffect(() => {
+        let pollingTimer = null;
+        let refreshTimer = null;
+        mounted.current = true;
+
+        const startPollingFallback = () => {
+            if (!pollingTimer) {
+                pollingTimer = setInterval(() => {
+                    fetchStationData();
+                    if (pregnancyAgeLoaded.current) refreshPregnancyAgeReport();
+                }, 30000);
+            }
+        };
+        const stopPollingFallback = () => {
+            if (!pollingTimer) return;
+            clearInterval(pollingTimer);
+            pollingTimer = null;
+        };
+
+        fetchStationData();
+        const channel = supabase
+            .channel('station-reports-live-data')
+            .on('postgres_changes', { event: '*', schema: 'public' }, payload => {
+                const tables = ['stations', 'patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'deliveries', 'newborns', 'vaccinations', 'supplements'];
+                if (!tables.includes(payload.table)) return;
+                if (refreshTimer) clearTimeout(refreshTimer);
+                refreshTimer = setTimeout(() => {
+                    fetchStationData();
+                    if (pregnancyAgeLoaded.current) refreshPregnancyAgeReport();
+                }, 150);
+            })
+            .subscribe(status => {
+                if (status === 'SUBSCRIBED') {
+                    stopPollingFallback();
+                } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
+                    startPollingFallback();
+                }
+            });
+
+        return () => {
+            mounted.current = false;
+            reportRequestId.current += 1;
+            ageReportRequestId.current += 1;
+            stopPollingFallback();
+            if (refreshTimer) clearTimeout(refreshTimer);
+            supabase.removeChannel(channel);
+        };
+    }, [fetchStationData, refreshPregnancyAgeReport]);
+
+    const togglePregnancyAgeReport = async () => {
+        const willShow = !showPregnancyAgeReport;
+        setShowPregnancyAgeReport(willShow);
+        if (!willShow || pregnancyAgeLoaded.current) return;
+
+        setPregnancyAgeLoading(true);
+        setPregnancyAgeError(null);
+        await refreshPregnancyAgeReport();
     };
 
     const filtered = searchTerm
@@ -121,7 +160,7 @@ const StationReports = () => {
 
     const [showExportModal, setShowExportModal] = useState(false);
 
-    const handleExport = (exportConfig) => {
+    const handleExport = async (exportConfig) => {
         const { format, reportPeriodText } = exportConfig;
         const exportData = stations.map(s => ({
             'Station': s.name,
@@ -138,6 +177,7 @@ const StationReports = () => {
         }));
 
         if (format === 'excel') {
+            const XLSX = await import('xlsx');
             let worksheetData = [
                 ['Report: DASMOM+ Station Reports'],
                 [`Generated: ${new Date().toLocaleString()}`],
@@ -160,6 +200,10 @@ const StationReports = () => {
             XLSX.utils.book_append_sheet(wb, ws, 'Station Reports');
             XLSX.writeFile(wb, `Station_Reports_${new Date().toISOString().split('T')[0]}.xlsx`);
         } else if (format === 'pdf') {
+            const [{ default: jsPDF }] = await Promise.all([
+                import('jspdf'),
+                import('jspdf-autotable')
+            ]);
             const doc = new jsPDF('landscape');
             doc.setFontSize(16);
             doc.text('DASMOM+ Station Reports', 14, 20);
@@ -192,7 +236,7 @@ const StationReports = () => {
     const totalDeliveries = stations.reduce((sum, s) => sum + s.recentDeliveries, 0);
     const totalNewborns = stations.reduce((sum, s) => sum + s.newborns, 0);
 
-    if (loading) {
+    if (loading || error) {
         return (
             <StaffPageLoader 
                 message="Loading station reports..." 
@@ -214,6 +258,9 @@ const StationReports = () => {
                 <div className="header-actions">
                     <button className="btn btn-outline" onClick={() => setShowCharts(v => !v)}>
                         <Activity size={16} /> {showCharts ? 'Hide Charts' : 'Show Charts'}
+                    </button>
+                    <button className="btn btn-outline" onClick={togglePregnancyAgeReport}>
+                        <Users size={16} /> {showPregnancyAgeReport ? 'Hide Pregnancy Report' : 'Show Pregnancy Report'}
                     </button>
                     <button className="btn btn-outline" onClick={() => setShowExportModal(true)}>
                         <Download size={16} /> Export
@@ -426,7 +473,11 @@ const StationReports = () => {
             {/* ── Charts Section ── */}
             {showCharts && <ChartsSection stations={stations} />}
 
-            <PregnancyAgeReport rows={pregnancyAgeRows} />
+            {showPregnancyAgeReport && (pregnancyAgeLoading
+                ? <StaffPageLoader message="Loading pregnancy age report..." />
+                : pregnancyAgeError
+                    ? <div className="st-age-empty" role="alert">Could not load the pregnancy age report. Close and reopen the report to retry.</div>
+                    : <PregnancyAgeReport rows={pregnancyAgeRows} />)}
 
             {/* ── Footer Timestamp ── */}
             <div className="st-footer-timestamp">
@@ -453,9 +504,14 @@ export default StationReports;
 ════════════════════════════ */
 const PregnancyAgeReport = ({ rows }) => {
     const [filters, setFilters] = useState({ period: 'All', station: 'All', outcome: 'All', deliveryType: 'All' });
+    const [currentPage, setCurrentPage] = useState(1);
+    const rowsPerPage = 50;
 
-    const stationOptions = [...new Set(rows.map(row => row.station).filter(Boolean))].sort();
-    const deliveryTypeOptions = [...new Set(rows.map(row => row.deliveryType).filter(type => type && type !== 'N/A'))].sort();
+    const stationOptions = useMemo(() => [...new Set(rows.map(row => row.station).filter(Boolean))].sort(), [rows]);
+    const deliveryTypeOptions = useMemo(
+        () => [...new Set(rows.map(row => row.deliveryType).filter(type => type && type !== 'N/A'))].sort(),
+        [rows]
+    );
 
     const filteredRows = useMemo(() => rows.filter(row => {
         const date = new Date(row.eventDate);
@@ -473,17 +529,25 @@ const PregnancyAgeReport = ({ rows }) => {
             && (filters.outcome === 'All' || row.outcome === filters.outcome)
             && (filters.deliveryType === 'All' || row.deliveryType === filters.deliveryType);
     }), [rows, filters]);
+    const totalPages = Math.ceil(filteredRows.length / rowsPerPage);
+    const visiblePage = Math.min(currentPage, Math.max(1, totalPages));
+    const visibleRows = filteredRows.slice((visiblePage - 1) * rowsPerPage, visiblePage * rowsPerPage);
 
-    const ageCounts = filteredRows.reduce((counts, row) => {
-        if (row.age === null) return counts;
-        counts[row.age] = (counts[row.age] || 0) + 1;
-        return counts;
-    }, {});
-    const ageData = Object.entries(ageCounts).map(([age, count]) => ({ age: Number(age), count }))
-        .sort((a, b) => a.age - b.age);
-    const maxAgeCount = Math.max(...ageData.map(item => item.count), 1);
+    const { ageData, maxAgeCount } = useMemo(() => {
+        const ageCounts = filteredRows.reduce((counts, row) => {
+            if (row.age === null) return counts;
+            counts[row.age] = (counts[row.age] || 0) + 1;
+            return counts;
+        }, {});
+        const data = Object.entries(ageCounts).map(([age, count]) => ({ age: Number(age), count }))
+            .sort((a, b) => a.age - b.age);
+        return { ageData: data, maxAgeCount: Math.max(...data.map(item => item.count), 1) };
+    }, [filteredRows]);
 
-    const updateFilter = (key, value) => setFilters(current => ({ ...current, [key]: value }));
+    const updateFilter = (key, value) => {
+        setFilters(current => ({ ...current, [key]: value }));
+        setCurrentPage(1);
+    };
     const formatDate = date => new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
     return (
@@ -570,7 +634,7 @@ const PregnancyAgeReport = ({ rows }) => {
                         <table className="st-age-table">
                             <thead><tr><th>Patient</th><th>Age</th><th>Station</th><th>Date</th><th>Outcome</th><th>Delivery Type</th></tr></thead>
                             <tbody>
-                                {filteredRows.map(row => (
+                                {visibleRows.map(row => (
                                     <tr key={row.id}>
                                         <td>{row.patientName}</td>
                                         <td>{row.age === null ? 'N/A' : `${row.age} yrs`}</td>
@@ -584,6 +648,26 @@ const PregnancyAgeReport = ({ rows }) => {
                             </tbody>
                         </table>
                     </div>
+                    {filteredRows.length > rowsPerPage && (
+                        <div className="st-age-pagination">
+                            <span>Showing {(visiblePage - 1) * rowsPerPage + 1}–{Math.min(visiblePage * rowsPerPage, filteredRows.length)} of {filteredRows.length}</span>
+                            <button
+                                className="btn btn-outline"
+                                onClick={() => setCurrentPage(page => Math.max(1, Math.min(page, totalPages) - 1))}
+                                disabled={visiblePage === 1}
+                            >
+                                Previous
+                            </button>
+                            <span>Page {visiblePage} of {totalPages}</span>
+                            <button
+                                className="btn btn-outline"
+                                onClick={() => setCurrentPage(page => Math.min(totalPages, Math.min(page, totalPages) + 1))}
+                                disabled={visiblePage >= totalPages}
+                            >
+                                Next
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </section>
@@ -753,7 +837,7 @@ const DetailModal = ({ station, onClose, navigate }) => {
     const [tab, setTab] = useState('overview');
     const [showDetailExportModal, setShowDetailExportModal] = useState(false);
 
-    const handleDetailExport = (exportConfig) => {
+    const handleDetailExport = async (exportConfig) => {
         const { format, reportPeriodText } = exportConfig;
         const exportData = [{
             'Station': station.name,
@@ -774,6 +858,7 @@ const DetailModal = ({ station, onClose, navigate }) => {
         }];
 
         if (format === 'excel') {
+            const XLSX = await import('xlsx');
             let worksheetData = [
                 [`Report: ${station.name} — Station Detail Report`],
                 [`Generated: ${new Date().toLocaleString()}`],
@@ -790,6 +875,10 @@ const DetailModal = ({ station, onClose, navigate }) => {
             XLSX.utils.book_append_sheet(wb, ws, 'Station Detail');
             XLSX.writeFile(wb, `Station_${station.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`);
         } else if (format === 'pdf') {
+            const [{ default: jsPDF }] = await Promise.all([
+                import('jspdf'),
+                import('jspdf-autotable')
+            ]);
             const doc = new jsPDF('landscape');
             doc.setFontSize(16);
             doc.text(`${station.name} — Station Detail Report`, 14, 20);

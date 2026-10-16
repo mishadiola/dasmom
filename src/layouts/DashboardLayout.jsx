@@ -13,7 +13,14 @@ import PatientService from '../services/patientservice';
 import supabase from '../config/supabaseclient';
 import { useModal } from '../context/ModalContext';
 import { useLanguage } from '../context/LanguageContext';
-import MotherAIChatAssistant from '../components/MotherDashboard/MotherAIChatAssistant';
+import StaffPageLoader from '../components/Common/StaffPageLoader';
+
+const MotherAIChatAssistant = React.lazy(() => import('../components/MotherDashboard/MotherAIChatAssistant'));
+const DashboardOutlet = React.memo(() => (
+    <React.Suspense fallback={<StaffPageLoader />}>
+        <Outlet />
+    </React.Suspense>
+));
 
 const NAV_ITEMS = [
     {
@@ -126,10 +133,16 @@ const DashboardLayout = () => {
 
     // Fetch real notifications from database
     useEffect(() => {
+        let active = true;
+        let latestRequest = 0;
+
         const fetchNotifications = async () => {
+            const requestId = ++latestRequest;
             if (!user || isUserView) {
-                setNotifications([]);
-                setNotifCount(0);
+                if (active) {
+                    setNotifications([]);
+                    setNotifCount(0);
+                }
                 return;
             }
 
@@ -256,29 +269,35 @@ const DashboardLayout = () => {
                     n.isResolved = resolvedIds.includes(n.id);
                 });
 
-                setNotifications(notifList);
-                setNotifCount(notifList.filter(n => !n.isResolved).length);
-
-                // Set up real-time subscription for notifications
-                const subscription = supabase
-                    .channel('notifications-channel')
-                    .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
-                        fetchNotifications(); // Refresh notifications on any database change
-                    })
-                    .subscribe();
-
-                return () => {
-                    supabase.removeChannel(subscription);
-                };
+                if (active && requestId === latestRequest) {
+                    setNotifications(notifList);
+                    setNotifCount(notifList.filter(n => !n.isResolved).length);
+                }
 
             } catch (error) {
                 console.error('Error fetching notifications:', error);
-                setNotifications([]);
-                setNotifCount(0);
+                if (active && requestId === latestRequest) {
+                    setNotifications([]);
+                    setNotifCount(0);
+                }
             }
         };
 
         fetchNotifications();
+
+        if (!user || isUserView) {
+            return () => { active = false; };
+        }
+
+        const subscription = supabase
+            .channel('notifications-channel')
+            .on('postgres_changes', { event: '*', schema: 'public' }, fetchNotifications)
+            .subscribe();
+
+        return () => {
+            active = false;
+            supabase.removeChannel(subscription);
+        };
     }, [user, isUserView]);
 
     const handleNotificationClick = (notif) => {
@@ -606,7 +625,7 @@ const DashboardLayout = () => {
 
                 {/* ── Page Content ── */}
                 <main className="page-content" id="main-content" tabIndex={-1}>
-                    <Outlet />
+                    <DashboardOutlet />
                 </main>
 
                 {/* ── Mobile Bottom Navigation (User View) ── */}
@@ -678,7 +697,11 @@ const DashboardLayout = () => {
 
             {/* ── Mother Portal AI Chat Assistant ── */}
             <div style={{ display: (isUserView && mobileMoreOpen) ? 'none' : 'block' }}>
-                {isUserView && <MotherAIChatAssistant />}
+                {isUserView && (
+                    <React.Suspense fallback={null}>
+                        <MotherAIChatAssistant />
+                    </React.Suspense>
+                )}
             </div>
         </div>
     );

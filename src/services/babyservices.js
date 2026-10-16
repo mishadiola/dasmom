@@ -209,71 +209,86 @@ class BabyService {
   async getAllDeliveries() {
     try {
       const { role, stationId } = await this.patientService.getCurrentUserAccess();
-      const { data, error } = await supabase
-        .from('deliveries')
-        .select(`
-          id,
-          pregnancy_id,
-          station_ass,
-          attending_staff,
-          delivery_date,
-          delivery_time,
-          delivery_type,
-          delivery_mode,
-          gestational_age,
-          risk_level,
-          complications,
-          notes,
-          created_at,
-          stations:station_ass (station_name),
-          patient_basic_info!deliveries_mother_id_fkey (
-            id,
-            first_name,
-            last_name,
-            station_ass,
-            stations:station_ass (station_name)
-          ),
-          newborns (
-            id,
-            gender,
-            birth_weight,
-            birth_length,
-            head_circumference,
-            apgar_1min,
-            apgar_5min,
-            condition_at_birth,
-            risk_level
-          ),
-          staff_profiles!deliveries_attending_staff_fkey (
-            id, full_name, station_ass,
-            stations:station_ass (station_name)
-          )
-        `)
-        .order('delivery_date', { ascending: false })
-        .order('created_at', { ascending: false });
+      const isStationStaff = ['cho personnel', 'staff'].includes(role) && stationId;
+      if (role !== 'admin' && !isStationStaff) return [];
 
+      const deliveriesQuery = supabase
+          .from('deliveries')
+          .select(`
+            id,
+            pregnancy_id,
+            station_ass,
+            attending_staff,
+            delivery_date,
+            delivery_time,
+            delivery_type,
+            delivery_mode,
+            gestational_age,
+            risk_level,
+            complications,
+            notes,
+            created_at,
+            stations:station_ass (station_name),
+            patient_basic_info!deliveries_mother_id_fkey (
+              id,
+              first_name,
+              last_name,
+              station_ass,
+              stations:station_ass (station_name)
+            ),
+            newborns (
+              id,
+              gender,
+              birth_weight,
+              birth_length,
+              head_circumference,
+              apgar_1min,
+              apgar_5min,
+              condition_at_birth,
+              risk_level
+            ),
+            staff_profiles!deliveries_attending_staff_fkey (
+              id, full_name, station_ass,
+              stations:station_ass (station_name)
+            )
+          `)
+          .order('delivery_date', { ascending: false })
+          .order('created_at', { ascending: false });
+      const miscarriagesQuery = supabase
+          .from('pregnancy_info')
+          .select(`
+            id,
+            patient_id,
+            lmd,
+            edd,
+            miscarriage_info,
+            created_at,
+            patient_basic_info!pregnancy_info_patient_id_fkey (
+              id,
+              first_name,
+              last_name,
+              station_ass,
+              stations:station_ass (station_name)
+            )
+          `)
+          .not('miscarriage_info', 'is', null)
+          .order('created_at', { ascending: false });
+
+      if (role !== 'admin') {
+        deliveriesQuery.eq('station_ass', stationId);
+        miscarriagesQuery
+          .eq('patient_basic_info.station_ass', stationId)
+          .not('patient_basic_info', 'is', null);
+      }
+
+      const [deliveriesResult, miscarriagesResult] = await Promise.all([
+        deliveriesQuery,
+        miscarriagesQuery
+      ]);
+
+      const { data, error } = deliveriesResult;
       if (error) throw error;
-
-      const { data: miscarriageRows, error: miscarriageError } = await supabase
-        .from('pregnancy_info')
-        .select(`
-          id,
-          patient_id,
-          lmd,
-          edd,
-          miscarriage_info,
-          created_at,
-          patient_basic_info!pregnancy_info_patient_id_fkey (
-            id,
-            first_name,
-            last_name,
-            station_ass,
-            stations:station_ass (station_name)
-          )
-        `)
-        .not('miscarriage_info', 'is', null)
-        .order('created_at', { ascending: false });
-
+      const { data: miscarriageRows, error: miscarriageError } = miscarriagesResult;
       if (miscarriageError) throw miscarriageError;
 
       const filtered = (data || []).filter(d => {
@@ -303,11 +318,13 @@ class BabyService {
       if (postpartumVisitsError) throw postpartumVisitsError;
 
       const motherIds = [...new Set(filtered.map(delivery => delivery.patient_basic_info?.id).filter(Boolean))];
-      const [{ data: mothers }, { data: pregnancies }, { data: visits }] = await Promise.all([
-        supabase.from('patient_basic_info').select('id, date_of_birth').in('id', motherIds),
-        supabase.from('pregnancy_info').select('id, patient_id, pregnancy_type, gravida, place_of_delivery, created_at').in('patient_id', motherIds).order('created_at', { ascending: false }),
-        supabase.from('prenatal_visits').select('patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm').in('patient_id', motherIds).eq('status', 'Attended').order('visit_date', { ascending: false })
-      ]);
+      const [{ data: mothers }, { data: pregnancies }, { data: visits }] = motherIds.length
+        ? await Promise.all([
+          supabase.from('patient_basic_info').select('id, date_of_birth').in('id', motherIds),
+          supabase.from('pregnancy_info').select('id, patient_id, pregnancy_type, gravida, place_of_delivery, created_at').in('patient_id', motherIds).order('created_at', { ascending: false }),
+          supabase.from('prenatal_visits').select('patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm').in('patient_id', motherIds).eq('status', 'Attended').order('visit_date', { ascending: false })
+        ])
+        : [{ data: [] }, { data: [] }, { data: [] }];
       const motherMap = new Map((mothers || []).map(mother => [mother.id, mother]));
       
       const pregnancyMap = new Map((pregnancies || []).map(p => [p.id, p]));
