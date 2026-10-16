@@ -48,6 +48,7 @@ export const AuthProvider = ({ children }) => {
           const current = await authService.getAuthUser();
           localStorage.removeItem('dasmom_google_email');
           if (isMounted && requestId === initRequest) {
+            
             if (!current) {
               await supabase.functions.invoke('google-account-check', { body: { action: 'cleanup' } });
               await supabase.auth.signOut();

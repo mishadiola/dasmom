@@ -40,7 +40,9 @@ const MotherLogin = () => {
         if (!isAuthLoading && user) {
             navigate(getPostLoginRoute(), { replace: true });
         }
-    }, [user, isAuthLoading, navigate, location.state]);
+    }, 
+    
+    [user, isAuthLoading, navigate, location.state]);
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -72,14 +74,19 @@ const MotherLogin = () => {
         const route = getPostLoginRoute();
         navigate(route);
 
-    } catch (err) {
+    } 
+    catch (err) {
         const errMsg = (err.message || '').toLowerCase();
         if (errMsg.includes('invalid') || errMsg.includes('credentials') || errMsg.includes('password') || errMsg.includes('incorrect')) {
             setErrors(prev => ({ ...prev, password: 'Incorrect email or password. Please try again.' }));
-        } else {
+        } 
+        
+        else {
             setErrors(prev => ({ ...prev, password: 'Unable to sign in right now. Please try again.' }));
         }
-    } finally {
+    } 
+    
+    finally {
         setIsLoading(false);
     }
 };
@@ -95,7 +102,9 @@ const MotherLogin = () => {
         try {
             await prepareFirstLoginWelcome();
             await authService.signInWithGoogle(normalizedEmail, `${DASMOM_APP_URL}/mother-login`);
-        } catch (error) {
+        } 
+        
+        catch (error) {
             await customAlert({ title: t('login_error_title'), text: error.message || 'Google sign-in failed.', iconType: 'danger' });
             setIsLoading(false);
         }
