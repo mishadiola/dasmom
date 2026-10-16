@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import {
     Users, Baby, AlertTriangle, CalendarCheck, TrendingUp,
     TrendingDown, Activity, Syringe, HeartPulse, MapPin,
@@ -145,50 +145,28 @@ const Dashboard = () => {
     const [todayAppts, setTodayAppts] = useState([]);
     const [healthSnapshot, setHealthSnapshot] = useState({ conditions: [], trimesterDist: [] });
     const [loadingHealth, setLoadingHealth] = useState(true);
+    const isFetchingStats = useRef(false);
 
     const fetchStats = async () => {
+        if (isFetchingStats.current) return;
+        isFetchingStats.current = true;
         setLoading(true);
         setError(null);
         try {
-            // ✅ Defend against timezone shifting when converting 'today' to ISO YYYY-MM-DD
             const now = new Date();
             const todayStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
-            
-            // Fetch health conditions / high risk stats using PatientService (matching Health Conditions page criteria)
-            const archivedPatientIds = await patientService.getArchivedPatientIds();
-            const [highRiskStats, highRiskPatients] = await Promise.all([
-                patientService.getHighRiskStats(),
-                patientService.getHighRiskPatients(),
-            ]);
-
-            const uniqueHealthConditionPatients = Array.from(
-                new Map((highRiskPatients || []).map((p) => [p.id, p])).values()
-            );
-
-            const healthConditionCount = (highRiskPatients && highRiskPatients.length > 0)
-                ? uniqueHealthConditionPatients.length
-                : (highRiskStats?.highRiskCount ?? 0);
-            
-            // Build documented health conditions lookup using the Health Conditions page dataset
-            const highRiskPatientMap = new Map();
-            (highRiskPatients || []).forEach(p => {
-                if (p.id) {
-                    highRiskPatientMap.set(p.id, p);
-                }
-            });
+            const todayStart = new Date(now);
+            todayStart.setHours(0, 0, 0, 0);
+            const tomorrowStart = new Date(todayStart);
+            tomorrowStart.setDate(tomorrowStart.getDate() + 1);
 
             const [
-                { data: patientRows },
-                { data: newbornRows },
-                { data: prenatalApptData },
-                { data: postpartumApptData },
-                { data: vaccinationApptData },
-                { data: pregnancyData },
-                { data: deliveriesData },
-                { data: recentVisitsWithConditions }
+                { data: dashboardOverview, error: overviewError },
+                { data: prenatalApptData, error: prenatalError },
+                { data: postpartumApptData, error: postpartumError },
+                { data: vaccinationApptData, error: vaccinationError }
             ] = await Promise.all([
-                supabase.from('patient_basic_info').select('id, emergency_contact'),
-                supabase.from('newborns').select('id, mother_id, baby_name'),
+                supabase.rpc('get_dashboard_overview'),
                 supabase.from('prenatal_visits').select(`
                     id, visit_date, patient_id, created_at, status, next_appt_type, risk_factors, gestational_age, trimester,
                     patient_basic_info!inner ( 
@@ -200,31 +178,31 @@ const Dashboard = () => {
                   .order('created_at', { ascending: true }),
                 supabase.from('postpartum_visits').select(`
                     id, patient_id, delivery_id, visit_type, visit_number, scheduled_date, scheduled_at, status, created_at
-                `).neq('status', 'Cancelled')
+                `).or(`scheduled_date.eq.${todayStr},and(scheduled_date.is.null,scheduled_at.gte.${todayStart.toISOString()},scheduled_at.lt.${tomorrowStart.toISOString()})`)
+                  .neq('status', 'Cancelled')
                   .neq('status', 'Missed'),
                 supabase.from('vaccinations').select(`
                     id, patient_id, newborn_id, scheduled_vaccination, status, notes, dose_number, created_at,
                     vaccine_inventory (vaccine_name)
-                `).neq('status', 'Cancelled')
+                `).eq('scheduled_vaccination', todayStr)
+                  .neq('status', 'Cancelled')
                   .neq('status', 'Missed')
                   .neq('status', 'cancelled')
-                  .neq('status', 'missed'),
-                supabase.from('pregnancy_info').select('patient_id, lmd, pregn_postp, created_at').order('created_at', { ascending: false }),
-                supabase.from('deliveries').select('id, mother_id, delivery_date'),
-                supabase.from('prenatal_visits').select('patient_id, risk_factors, visit_date').not('risk_factors', 'is', null).order('visit_date', { ascending: false })
+                  .neq('status', 'missed')
             ]);
 
-            const pregnantPatientIds = new Set((pregnancyData || []).filter(row => row.pregn_postp?.toLowerCase() === 'pregnant').map(row => row.patient_id).filter(Boolean));
-            const activePatientIds = new Set(
-                (patientRows || [])
-                    .filter(row => !archivedPatientIds.has(row.id) && pregnantPatientIds.has(row.id))
-                    .map(row => row.id)
+            if (overviewError) throw overviewError;
+            if (prenatalError) throw prenatalError;
+            if (postpartumError) throw postpartumError;
+            if (vaccinationError) throw vaccinationError;
+            if (!dashboardOverview) throw new Error('Dashboard overview returned no data');
+
+            const archivedPatientIds = new Set(dashboardOverview.archivedPatientIds || []);
+            const highRiskPatients = dashboardOverview.highRiskPatients || [];
+            const highRiskPatientMap = new Map(
+                highRiskPatients.filter(patient => patient.id).map(patient => [patient.id, patient])
             );
-            const activeNewbornIds = new Set(
-                (newbornRows || [])
-                    .filter((row) => row.mother_id && !archivedPatientIds.has(row.mother_id))
-                    .map((row) => row.id)
-            );
+            const healthConditionCount = highRiskPatients.length;
 
             const isTodayMatch = (rawDate) => {
                 if (!rawDate) return false;
@@ -240,7 +218,20 @@ const Dashboard = () => {
                 }
             };
 
-            const newbornToMotherMap = new Map((newbornRows || []).map(n => [n.id, n.mother_id]));
+            const linkedNewbornIds = [...new Set(
+                (vaccinationApptData || [])
+                    .filter(v => !v.patient_id && v.newborn_id)
+                    .map(v => v.newborn_id)
+            )];
+            const newbornToMotherMap = new Map();
+            if (linkedNewbornIds.length > 0) {
+                const { data: newbornRows, error: newbornError } = await supabase
+                    .from('newborns')
+                    .select('id, mother_id')
+                    .in('id', linkedNewbornIds);
+                if (newbornError) throw newbornError;
+                (newbornRows || []).forEach(newborn => newbornToMotherMap.set(newborn.id, newborn.mother_id));
+            }
 
             const todayPrenatalFiltered = (prenatalApptData || []).filter(v => {
                 if (!v.visit_date || archivedPatientIds.has(v.patient_id)) return false;
@@ -258,6 +249,41 @@ const Dashboard = () => {
                 return isTodayMatch(v.scheduled_vaccination);
             });
 
+            const appointmentPatientIds = [...new Set([
+                ...todayPrenatalFiltered.map(v => v.patient_id),
+                ...todayPostpartumFiltered.map(v => v.patient_id),
+                ...todayVaccinationsFiltered.map(v => v.patient_id || newbornToMotherMap.get(v.newborn_id))
+            ].filter(Boolean))];
+
+            let pregnancyData = [];
+            let deliveriesData = [];
+            let recentVisitsWithConditions = [];
+            if (appointmentPatientIds.length > 0) {
+                const [
+                    { data: pregnancies, error: pregnancyError },
+                    { data: deliveries, error: deliveriesError },
+                    { data: visits, error: visitsError }
+                ] = await Promise.all([
+                    supabase.from('pregnancy_info')
+                        .select('patient_id, lmd, pregn_postp, created_at')
+                        .in('patient_id', appointmentPatientIds)
+                        .order('created_at', { ascending: false }),
+                    supabase.from('deliveries')
+                        .select('id, mother_id, delivery_date')
+                        .in('mother_id', appointmentPatientIds),
+                    supabase.from('prenatal_visits')
+                        .select('patient_id, risk_factors, visit_date, bp_systolic, bp_diastolic, calculated_risk')
+                        .in('patient_id', appointmentPatientIds)
+                        .order('visit_date', { ascending: false })
+                ]);
+                if (pregnancyError) throw pregnancyError;
+                if (deliveriesError) throw deliveriesError;
+                if (visitsError) throw visitsError;
+                pregnancyData = pregnancies || [];
+                deliveriesData = deliveries || [];
+                recentVisitsWithConditions = visits || [];
+            }
+
             // Populate patient basic info map for any non-prenatal appointments
             const patientInfoMap = new Map();
             todayPrenatalFiltered.forEach(v => {
@@ -272,10 +298,11 @@ const Dashboard = () => {
             ].filter(id => id && !patientInfoMap.has(id));
 
             if (missingPatientIds.length > 0) {
-                const { data: morePatients } = await supabase
+                const { data: morePatients, error: patientInfoError } = await supabase
                     .from('patient_basic_info')
                     .select('id, first_name, last_name, station_ass, stations:station_ass (station_name), date_of_birth')
                     .in('id', [...new Set(missingPatientIds)]);
+                if (patientInfoError) throw patientInfoError;
                 (morePatients || []).forEach(p => {
                     patientInfoMap.set(p.id, p);
                 });
@@ -310,13 +337,8 @@ const Dashboard = () => {
                 // 1. Retrieve from the Health Conditions page dataset
                 if (highRiskPatientMap.has(patientId)) {
                     const hr = highRiskPatientMap.get(patientId);
-                    if (Array.isArray(hr.conditionsList) && hr.conditionsList.length > 0) {
-                        return hr.conditionsList;
-                    }
-                    if (hr.condition && hr.condition !== 'None Reported' && hr.condition !== 'None') {
-                        const parsed = hr.condition.split(',').map(s => s.trim()).filter(Boolean);
-                        if (parsed.length > 0) return parsed;
-                    }
+                    const conditions = patientService.getRiskFactors(hr.risk_factors);
+                    if (conditions.length > 0) return conditions;
                 }
 
                 // 2. Fallback to documented risk factors evaluated through the same PatientService method
@@ -509,9 +531,9 @@ const Dashboard = () => {
             setTodayAppts(uniqueAppts);
 
             setLiveStats({
-                totalPatients: activePatientIds.size,
+                totalPatients: Number(dashboardOverview.totalPatients) || 0,
                 highRisk: healthConditionCount,
-                newborns: activeNewbornIds.size,
+                newborns: Number(dashboardOverview.totalNewborns) || 0,
                 apptToday: uniqueAppts.length,
             });
 
@@ -523,84 +545,10 @@ const Dashboard = () => {
 
             // Fetch Health Snapshot Data
             setLoadingHealth(true);
-            const [{ data: healthPrenatalVisits, error: visitsError }, { data: healthPregnancies, error: pregError }] = await Promise.all([
-                supabase.from('prenatal_visits').select('patient_id, bp_systolic, bp_diastolic, risk_factors, calculated_risk'),
-                supabase.from('pregnancy_info').select('patient_id, lmd, created_at').eq('pregn_postp', 'Pregnant').order('created_at', { ascending: false })
-            ]);
-
-            if (visitsError) console.error('Error fetching prenatal visits for health snapshot:', visitsError);
-            if (pregError) console.error('Error fetching pregnancies for health snapshot:', pregError);
-
-            console.log('Health snapshot data - prenatalVisits:', healthPrenatalVisits?.length || 0, 'pregnancies:', healthPregnancies?.length || 0);
-
-            // Calculate health conditions
-            let normalBP = 0, preEclampsia = 0, anaemia = 0, gestationalDiabetes = 0;
-            const totalVisits = healthPrenatalVisits?.filter(visit => !archivedPatientIds.has(visit.patient_id)).length || 0;
-
-            healthPrenatalVisits?.forEach(visit => {
-                if (archivedPatientIds.has(visit.patient_id)) return;
-                const sys = visit.bp_systolic;
-                const dia = visit.bp_diastolic;
-                
-                // BP classification
-                if (sys && dia) {
-                    if (sys >= 140 || dia >= 90) {
-                        preEclampsia++;
-                    } else {
-                        normalBP++;
-                    }
-                }
-
-                // Check risk factors for other conditions
-                if (visit.risk_factors) {
-                    const riskFactors = Array.isArray(visit.risk_factors) ? visit.risk_factors : visit.risk_factors.split(',').map(s => s.trim());
-                    if (riskFactors.includes('anemia') || riskFactors.includes('anaemia')) {
-                        anaemia++;
-                    }
-                    if (riskFactors.includes('gestational diabetes') || riskFactors.includes('diabetes')) {
-                        gestationalDiabetes++;
-                    }
-                }
+            setHealthSnapshot({
+                conditions: dashboardOverview.conditions || [],
+                trimesterDist: dashboardOverview.trimesterDist || [],
             });
-
-            const conditions = [
-                { label: 'Normal BP', pct: totalVisits > 0 ? Math.round((normalBP / totalVisits) * 100) : 0, color: 'sage' },
-                { label: 'Pre-eclampsia', pct: totalVisits > 0 ? Math.round((preEclampsia / totalVisits) * 100) : 0, color: 'rose' },
-                { label: 'Anaemia', pct: totalVisits > 0 ? Math.round((anaemia / totalVisits) * 100) : 0, color: 'orange' },
-                { label: 'Gestational Diabetes', pct: totalVisits > 0 ? Math.round((gestationalDiabetes / totalVisits) * 100) : 0, color: 'yellow' },
-            ];
-
-            // Calculate trimester distribution - count unique pregnant patients only
-            let tri1 = 0, tri2 = 0, tri3 = 0;
-            const currentDate = new Date();
-
-            // Build map of latest pregnancy info per patient (first occurrence is latest due to ordering)
-            const latestPregMap = new Map();
-            (healthPregnancies || []).forEach(p => {
-                if (archivedPatientIds.has(p.patient_id)) return;
-                if (p.patient_id && !latestPregMap.has(p.patient_id)) {
-                    latestPregMap.set(p.patient_id, p);
-                }
-            });
-
-            // Count unique patients in each trimester
-            latestPregMap.forEach(preg => {
-                if (preg.lmd) {
-                    const lmpDate = new Date(preg.lmd);
-                    const weeks = Math.floor((currentDate - lmpDate) / (1000 * 60 * 60 * 24 * 7));
-                    if (weeks <= 12) tri1++;
-                    else if (weeks <= 26) tri2++;
-                    else tri3++;
-                }
-            });
-
-            const trimesterDist = [
-                { label: '1st Trimester', count: tri1, color: 'tri1' },
-                { label: '2nd Trimester', count: tri2, color: 'tri2' },
-                { label: '3rd Trimester', count: tri3, color: 'tri3' },
-            ];
-
-            setHealthSnapshot({ conditions, trimesterDist });
             setLoadingHealth(false);
             setLoading(false);
         } catch (err) {
@@ -609,6 +557,8 @@ const Dashboard = () => {
             setLoadingStock(false);
             setLoadingHealth(false);
             setLoading(false);
+        } finally {
+            isFetchingStats.current = false;
         }
     };
     
