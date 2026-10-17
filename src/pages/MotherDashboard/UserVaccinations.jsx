@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
 import { 
@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import vaccinationsSilhouette from '../../assets/images/vaccinations-silhouette.png';
 import { useLanguage } from '../../context/LanguageContext';
 import { isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 const isUUID = (val) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
 
@@ -23,6 +24,9 @@ const UserVaccinations = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filter, setFilter] = useState('All');
     const [selectedVaccine, setSelectedVaccine] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const loadRef = useRef(null);
     const { t } = useLanguage();
 
     useEffect(() => {
@@ -86,8 +90,12 @@ const UserVaccinations = () => {
                 });
             } catch (err) {
                 console.error('Failed to load vaccines:', err);
+                setError(err?.message || 'Unable to load vaccinations data.');
+            } finally {
+                setLoading(false);
             }
         };
+        loadRef.current = load;
         load();
     }, []);
 
@@ -121,8 +129,22 @@ const UserVaccinations = () => {
     const completedCount = vaccines.filter(v => (v.status || '').toString().toLowerCase() === 'completed').length;
     const totalCount = vaccines.length;
 
+    if (loading) {
+        return (
+            <StaffPageLoader 
+                message={t('vac_loading') || 'Loading your vaccination records...'} 
+                error={error} 
+                errorTitle="Unable to load vaccinations"
+                onRetry={() => {
+                    setLoading(true);
+                    loadRef.current?.();
+                }} 
+            />
+        );
+    }
+
     return (
-        <div className="user-vaccinations-page">
+        <div className="user-vaccinations-page staff-page-ready">
             <div className="page-header hero-header-with-img">
                 <img 
                     src={vaccinationsSilhouette} 
@@ -132,7 +154,7 @@ const UserVaccinations = () => {
                 <div className="hero-content-wrapper">
                     <div className="hero-text-section">
                         <h1 className="page-title">
-                            <Syringe size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('vac_title')}
+                            <Syringe size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('vac_title', 'Vaccination Info')}
                         </h1>
                         <p className="page-subtitle">{t('vac_subtitle')}</p>
                     </div>

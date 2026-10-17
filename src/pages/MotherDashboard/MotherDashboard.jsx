@@ -15,6 +15,7 @@ import supabase from '../../config/supabaseclient';
 import pregnancySilhouette from '../../assets/images/pregnancy-silhouette.png';
 import { calculateEDD, calculateTimeRemaining, calculateGestationalAge, getTrimester, isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
 import { useLanguage } from '../../context/LanguageContext';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
 
@@ -37,12 +38,14 @@ const MotherDashboard = () => {
         weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
     });
 
-    const [pregnancyData, setPregnancyData] = useState({ lmp: null, weeks: null, trimester: null, status: 'Unknown', isPregnant: false, isPostpartum: false });
+    const [pregnancyData, setPregnancyData] = useState({ lmp: null, weeks: null, trimester: null, status: 'No active pregnancy', isPregnant: false, isPostpartum: false });
     const [appointments, setAppointments] = useState([]);
     const [healthRecords, setHealthRecords] = useState([]);
     const [postpartumVisit, setPostpartumVisit] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const dashboardRequestId = useRef(0);
+    const loadRef = useRef(null);
 
     // Ensure all buttons release stuck focus/active states when returning from external apps (e.g. Phone dialer, Facebook)
     useEffect(() => {
@@ -77,20 +80,29 @@ const MotherDashboard = () => {
 
         const load = async (isSilent = false) => {
             const requestId = ++dashboardRequestId.current;
-            if (!isSilent && !loadedOnce) setLoading(true);
+            if (!isSilent && !loadedOnce) {
+                setLoading(true);
+                setError(null);
+            }
             try {
                 const authUser = await auth.getAuthUser();
-                if (!authUser?.id) return;
+                if (!authUser?.id) {
+                    throw new Error('User session not found. Please log in again.');
+                }
 
                 if (!welcomeChecked && (authUser.role === 'mother' || authUser.role === 'patient')) {
                     welcomeChecked = true;
-                    const { data: welcomeData, error: welcomeError } = await supabase.functions.invoke('mother-welcome', {
-                        body: { action: 'claim' },
-                    });
-                    if (welcomeError) {
-                        console.error('Error checking first-login welcome status:', welcomeError);
-                    } else if (welcomeData?.showWelcome) {
-                        setShowWelcome(true);
+                    try {
+                        const { data: welcomeData, error: welcomeError } = await supabase.functions.invoke('mother-welcome', {
+                            body: { action: 'claim' },
+                        });
+                        if (welcomeError) {
+                            console.error('Error checking first-login welcome status:', welcomeError);
+                        } else if (welcomeData?.showWelcome) {
+                            setShowWelcome(true);
+                        }
+                    } catch (welcomeCatchErr) {
+                        console.error('Error checking first-login welcome status:', welcomeCatchErr);
                     }
                 }
 
@@ -112,7 +124,8 @@ const MotherDashboard = () => {
                 if (patient) {
                     const currentPregnancy = patient.currentPregnancy;
                     const currentPregnancyRecord = currentPregnancy || patient.pregnancyRecord;
-                    const status = String(currentPregnancyRecord?.pregn_postp || currentPregnancyRecord?.status || patient.pregnancyStatus || 'Unknown');
+                    const rawStatus = currentPregnancyRecord?.pregn_postp || currentPregnancyRecord?.status || patient.pregnancyStatus;
+                    const status = String(rawStatus || (patient.deliveries?.length ? 'Postpartum' : 'No active pregnancy'));
                     const isPregnant = status.toLowerCase() === 'pregnant';
                     const isPostpartum = status.toLowerCase() === 'postpartum';
                     const lmpDateStr = isPregnant ? currentPregnancyRecord?.lmd : null;
@@ -131,7 +144,7 @@ const MotherDashboard = () => {
                     } else if (eddDate && !Number.isNaN(eddDate.getTime())) {
                         timeRem = calculateTimeRemaining(eddDate);
                     }
-                    const latestDelivery = currentPregnancy?.deliveries?.[0] || null;
+                    const latestDelivery = currentPregnancy?.deliveries?.[0] || patient.deliveries?.[0] || null;
                     setPregnancyData({
                         lmp: lmpDateStr,
                         edd: isPregnant && eddDate && !Number.isNaN(eddDate.getTime())
@@ -286,10 +299,31 @@ const MotherDashboard = () => {
                     ];
                     
                     setHealthRecords(records);
+                } else {
+                    setPregnancyData({
+                        lmp: null,
+                        edd: null,
+                        weeks: null,
+                        daysUntilDue: null,
+                        trimester: null,
+                        status: 'No active pregnancy',
+                        isPregnant: false,
+                        isPostpartum: false,
+                        deliveryDate: null
+                    });
+                    setAppointments([]);
+                    setHealthRecords([
+                        { label: 'WEIGHT', value: 'N/A', status: 'Not recorded', icon: Heart },
+                        { label: 'BP', value: 'N/A', status: 'Not recorded', icon: Droplet },
+                        { label: 'TEMP', value: 'N/A', status: 'Not recorded', icon: Thermometer }
+                    ]);
                 }
             } catch (err) {
                 if (!isMounted || requestId !== dashboardRequestId.current) return;
                 console.error('Error loading mother dashboard data:', err);
+                if (!loadedOnce) {
+                    setError(err?.message || 'Unable to load dashboard data. Please check your connection and try again.');
+                }
             } finally {
                 if (isMounted && requestId === dashboardRequestId.current) {
                     loadedOnce = true;
@@ -297,6 +331,8 @@ const MotherDashboard = () => {
                 }
             }
         };
+
+        loadRef.current = load;
 
         const scheduleRefresh = () => {
             window.clearTimeout(refreshTimer);
@@ -332,8 +368,19 @@ const MotherDashboard = () => {
         setShowWelcome(false);
     };
 
+    if (loading) {
+        return (
+            <StaffPageLoader 
+                message={t('dash_loading') || 'Loading your dashboard...'} 
+                error={error} 
+                errorTitle="Unable to load dashboard"
+                onRetry={() => loadRef.current ? loadRef.current(false) : null} 
+            />
+        );
+    }
+
     return (
-        <div className="mother-dashboard">
+        <div className="mother-dashboard staff-page-ready">
             {showWelcome && <WelcomeMotherModal onClose={handleCloseWelcome} />}
             <div className="page-header mother-welcome-header-with-img">
                 <img 
@@ -352,7 +399,9 @@ const MotherDashboard = () => {
                             ) : pregnancyData.isPregnant ? (
                                 <>{t('dash_weeks_pregnant').replace('{weeks}', pregnancyData.weeks ?? '?')} {pregnancyData.daysUntilDue !== undefined && t('dash_baby_expected').replace('{days}', pregnancyData.daysUntilDue)}</>
                             ) : (
-                                <>Current pregnancy status: {pregnancyData.status}</>
+                                <>{pregnancyData.status === 'Unknown' || !pregnancyData.status || pregnancyData.status === 'No active pregnancy'
+                                    ? 'No active pregnancy record on file.'
+                                    : `Current pregnancy status: ${pregnancyData.status}`}</>
                             )}
                         </p>
                         
@@ -469,8 +518,14 @@ const MotherDashboard = () => {
                                     </>
                                 ) : (
                                     <>
-                                        <h2 className="mother-card-title edd-title-small">{pregnancyData.status}</h2>
-                                        <h2 className="edd-display" style={{ opacity: 0.5 }}>No current due date</h2>
+                                        <h2 className="mother-card-title edd-title-small">
+                                            {pregnancyData.status === 'Unknown' || !pregnancyData.status || pregnancyData.status === 'No active pregnancy'
+                                                ? 'No Active Pregnancy'
+                                                : pregnancyData.status}
+                                        </h2>
+                                        <h2 className="edd-display" style={{ opacity: 0.65, fontSize: '18px' }}>
+                                            No scheduled due date
+                                        </h2>
                                     </>
                                 )}
                             </div>

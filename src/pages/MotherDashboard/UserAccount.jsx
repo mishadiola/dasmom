@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     User, Mail, Phone, MapPin, ShieldCheck,
     Lock, LogOut, Edit2, Heart, ChevronDown, ChevronUp,
@@ -10,6 +10,7 @@ import PatientService from '../../services/patientservice';
 import '../../styles/pages/UserAccount.css';
 import { formatMotherId } from '../../utils/displayIds';
 import { useLanguage } from '../../context/LanguageContext';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 const getInitials = (name = '') =>
@@ -46,60 +47,65 @@ const UserAccount = () => {
     const { t } = useLanguage();
     const authService = new AuthService();
     const patientService = new PatientService();
+    const loadRef = useRef(null);
+
+    const fetchUserData = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const authUser = await authService.getAuthUser();
+            if (!authUser?.id) {
+                setError(t('acct_not_authenticated') || 'User session not found.');
+                return;
+            }
+
+            const patient = await patientService.getPatientById(authUser.id);
+            if (!patient) {
+                setError(t('acct_not_found') || 'Patient profile not found.');
+                return;
+            }
+
+            // Extract patient info
+            const fullName = `${patient.first_name || ''} ${patient.middle_name || ''} ${patient.last_name || ''}`.trim();
+            const userInfo = {
+                id: patient.id,
+                name: fullName || 'N/A',
+                firstName: patient.first_name || '',
+                middleName: patient.middle_name || '',
+                lastName: patient.last_name || '',
+                suffix: patient.suffix || '',
+                dateOfBirth: patient.date_of_birth,
+                age: getAge(patient.date_of_birth),
+                bloodType: patient.blood_type || patient.bloodtype || 'N/A',
+                civilStatus: patient.civil_status || 'N/A',
+                phone: patient.contact_no || 'N/A',
+                email: authUser?.email || patient.email || 'N/A',
+                address: patient.house_no ? `${patient.house_no}, ${patient.municipality || ''}, ${patient.province || ''}`.trim() : 'N/A',
+                philHealthNumber: patient.philhealthnumber || 'N/A',
+                station: patient.station || patient.stations?.station_name || 'N/A'
+            };
+
+            setUserData(userInfo);
+
+            // Load newborn info if available
+            if (patient.newborns && patient.newborns.length > 0) {
+                setNewborns(patient.newborns);
+            }
+        } catch (err) {
+            console.error('Failed to load user data:', err);
+            setError(t('acct_load_failed') || 'Unable to load profile.');
+        } finally {
+            setLoading(false);
+        }
+    }, [t]);
+
+    // Provide loadUserData alias for backwards compatibility
+    const loadUserData = fetchUserData;
 
     useEffect(() => {
-        const loadUserData = async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const authUser = await authService.getAuthUser();
-                if (!authUser?.id) {
-                    setError(t('acct_not_authenticated'));
-                    return;
-                }
-
-                const patient = await patientService.getPatientById(authUser.id);
-                if (!patient) {
-                    setError(t('acct_not_found'));
-                    return;
-                }
-
-                // Extract patient info
-                const fullName = `${patient.first_name || ''} ${patient.middle_name || ''} ${patient.last_name || ''}`.trim();
-                const userInfo = {
-                    id: patient.id,
-                    name: fullName || 'N/A',
-                    firstName: patient.first_name || '',
-                    middleName: patient.middle_name || '',
-                    lastName: patient.last_name || '',
-                    suffix: patient.suffix || '',
-                    dateOfBirth: patient.date_of_birth,
-                    age: getAge(patient.date_of_birth),
-                    bloodType: patient.blood_type || patient.bloodtype || 'N/A',
-                    civilStatus: patient.civil_status || 'N/A',
-                    phone: patient.contact_no || 'N/A',
-                    email: authUser?.email || 'N/A',
-                    address: patient.house_no ? `${patient.house_no}, ${patient.municipality || ''}, ${patient.province || ''}`.trim() : 'N/A',
-                    philHealthNumber: patient.philhealthnumber || 'N/A',
-                    station: patient.station || 'N/A'
-                };
-
-                setUserData(userInfo);
-
-                // Load newborn info if available
-                if (patient.newborns && patient.newborns.length > 0) {
-                    setNewborns(patient.newborns);
-                }
-            } catch (err) {
-                console.error('Failed to load user data:', err);
-                setError(t('acct_load_failed'));
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        loadUserData();
-    }, []);
+        loadRef.current = fetchUserData;
+        fetchUserData();
+    }, [fetchUserData]);
 
     const handleLogout = async () => {
         await authService.logout();
@@ -108,39 +114,31 @@ const UserAccount = () => {
 
     if (loading) {
         return (
-            <div className="user-account-page">
-                <div className="page-header">
-                    <div>
-                        <h1 className="page-title">
-                            <User size={22} className="header-icon" /> {t('acct_title')}
-                        </h1>
-                        <p className="page-subtitle">{t('acct_loading')}</p>
-                    </div>
-                    <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
-
-                    </div>
-                </div>
-                <div style={{ padding: '40px', textAlign: 'center' }}>
-                    <p>{t('acct_loading_text')}</p>
-                </div>
-            </div>
+            <StaffPageLoader 
+                message={t('acct_loading') || 'Loading profile...'} 
+                error={error} 
+                errorTitle="Unable to load profile"
+                onRetry={fetchUserData} 
+            />
         );
     }
 
     if (!userData) {
         return (
             <div className="user-account-page">
-                <div className="page-header">
-                    <div>
+                <div className="page-header hero-header-with-img user-account-hero-header">
+                <div className="hero-decorative-icon-bg user-account-decorative-bg" aria-hidden="true">
+                    <User size={160} strokeWidth={1.2} className="hero-decorative-icon" />
+                </div>
+                <div className="hero-content-wrapper">
+                    <div className="hero-text-section">
                         <h1 className="page-title">
-                            <User size={22} className="header-icon" /> {t('acct_title')}
+                            <User size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('acct_title', 'My Profile')}
                         </h1>
                         <p className="page-subtitle">{t('acct_subtitle')}</p>
                     </div>
-                    <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
-
-                    </div>
                 </div>
+            </div>
                 <div style={{ padding: '40px', textAlign: 'center' }}>
                     <AlertCircle size={40} style={{ color: '#e74c3c', marginBottom: '10px' }} />
                     <p>{error || t('acct_error')}</p>
@@ -150,15 +148,18 @@ const UserAccount = () => {
     }
 
     return (
-        <div className="user-account-page">
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">
-                        <User size={22} className="header-icon" /> {t('acct_title')}
-                    </h1>
-                    <p className="page-subtitle">{t('acct_subtitle')}</p>
+        <div className="user-account-page staff-page-ready">
+            <div className="page-header hero-header-with-img user-account-hero-header">
+                <div className="hero-decorative-icon-bg user-account-decorative-bg" aria-hidden="true">
+                    <User size={160} strokeWidth={1.2} className="hero-decorative-icon" />
                 </div>
-                <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
+                <div className="hero-content-wrapper">
+                    <div className="hero-text-section">
+                        <h1 className="page-title">
+                            <User size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('acct_title', 'My Profile')}
+                        </h1>
+                        <p className="page-subtitle">{t('acct_subtitle')}</p>
+                    </div>
                 </div>
             </div>
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -15,7 +15,9 @@ import PatientService from '../../services/patientservice';
 import EditPatientModal from '../../components/Patient/EditPatientModal';
 import PatientStaffAssignment from '../../components/Patient/PatientStaffAssignment';
 import { useModal } from '../../context/ModalContext';
+import { AuthContext } from '../../context/AuthContext';
 import { useRolePermissions } from '../../context/RolePermissionContext';
+import { useDefaultStation } from '../../hooks/useDefaultStation';
 import Legend from '../../components/Legend/Legend';
 import { formatMotherId } from '../../utils/displayIds';
 import ExportModal from '../../components/ExportModal';
@@ -179,6 +181,18 @@ const PatientsList = () => {
     const [assignmentAccess, setAssignmentAccess] = useState({ role: '', stationId: null });
     const [defaultApplied, setDefaultApplied] = useState(false);
 
+    const {
+        isStationStaff,
+        assignedStation,
+        canViewOtherStations,
+        availableStations: permittedStations,
+        matchStation: matchStationHook,
+    } = useDefaultStation({
+        permissionKey: 'patient.view.other_station',
+        allStations: availableStations,
+        isArray: true,
+    });
+
     const hasPatientStationPermission = (patient, ownPermission, otherPermission) => (
         patient.stationId != null && patient.stationId === assignmentAccess.stationId
             ? hasPermission(ownPermission)
@@ -199,14 +213,14 @@ const PatientsList = () => {
         const defaultView = settings?.tables?.defaultPatientView || 'Active Patients';
         return defaultView === 'All Patients' ? 'all' : 'active';
     });
-    const [filters, setFilters] = useState({
+    const [filters, setFilters] = useState(() => ({
         trimesters: initialTrimester ? [initialTrimester] : [],
         risks: [],
-        stations: [],
+        stations: isStationStaff && assignedStation ? [assignedStation] : [],
         assignmentStatus: 'All',
         patientType: 'All',
         sortBy: 'newest'
-    });
+    }));
     
     const [activePopover, setActivePopover] = useState(null);
     const [stationSearch, setStationSearch] = useState('');
@@ -358,16 +372,14 @@ const PatientsList = () => {
     }, []);
 
     useEffect(() => {
-        if (!defaultApplied && availableStations.length > 0 && assignmentAccess.role) {
-            if (assignmentAccess.role === 'staff' && assignmentAccess.stationId) {
-                const assignedStation = availableStations.find(s => s.id === assignmentAccess.stationId);
-                if (assignedStation) {
-                    setFilters(prev => ({ ...prev, stations: [assignedStation.station_name] }));
-                }
-            }
+        if (!defaultApplied && isStationStaff && assignedStation) {
+            setFilters(prev => ({
+                ...prev,
+                stations: prev.stations && prev.stations.length > 0 ? prev.stations : [assignedStation]
+            }));
             setDefaultApplied(true);
         }
-    }, [availableStations, assignmentAccess, defaultApplied]);
+    }, [defaultApplied, isStationStaff, assignedStation]);
 
     const filterDate = new Date();
     const filterYear = filterDate.getFullYear();
@@ -382,6 +394,7 @@ const PatientsList = () => {
         const matchesSearch =
             p.name.toLowerCase().includes(normalizedSearch) ||
             p.id.toLowerCase().includes(normalizedSearch) ||
+            formatMotherId(p.id).toLowerCase().includes(normalizedSearch) ||
             (p.station || '').toLowerCase().includes(normalizedSearch) ||
             conditionMatches;
 
@@ -393,7 +406,7 @@ const PatientsList = () => {
             filters.risks.includes('none') && !p.hasHealthConditions
         );
         const matchesType = filters.patientType === 'All' || (p.patientType || p.type) === filters.patientType;
-        const matchesStation = filters.stations.length === 0 || filters.stations.includes(p.station);
+        const matchesStation = matchStationHook(p.station, filters.stations);
         const matchesAssignment = filters.assignmentStatus === 'All'
             || (filters.assignmentStatus === 'Unassigned' ? !p.assignedStaffId : Boolean(p.assignedStaffId));
         
@@ -459,16 +472,23 @@ const PatientsList = () => {
     const toggleArrayFilter = (field, value) => {
         setFilters(prev => {
             const current = [...prev[field]];
-            const updated = current.includes(value) 
+            let updated = current.includes(value) 
                 ? current.filter(item => item !== value)
                 : [...current, value];
+            if (field === 'stations' && isStationStaff && !canViewOtherStations) {
+                // Restricted staff cannot deselect their assigned station
+                updated = assignedStation ? [assignedStation] : ['__UNASSIGNED__'];
+            }
             return { ...prev, [field]: updated };
         });
         setCurrentPage(1);
     };
 
     const clearFilters = () => {
-        setFilters({ trimesters: [], risks: [], stations: [], assignmentStatus: 'All', patientType: 'All', sortBy: 'newest' });
+        const defaultStations = (isStationStaff && !canViewOtherStations)
+            ? (assignedStation ? [assignedStation] : ['__UNASSIGNED__'])
+            : [];
+        setFilters({ trimesters: [], risks: [], stations: defaultStations, assignmentStatus: 'All', patientType: 'All', sortBy: 'newest' });
         setArchiveFilter('active');
         setDateFilter('all');
         setCustomDateFrom('');
@@ -779,7 +799,7 @@ const PatientsList = () => {
                                     autoFocus
                                 />
                                 <div className="popover-options">
-                                    {availableStations
+                                    {permittedStations
                                         .filter(s => s.toLowerCase().includes(stationSearch.toLowerCase()))
                                         .map(station => (
                                             <label key={station} className="popover-checkbox-label">
@@ -787,7 +807,7 @@ const PatientsList = () => {
                                                 {station}
                                             </label>
                                         ))}
-                                    {availableStations.filter(s => s.toLowerCase().includes(stationSearch.toLowerCase())).length === 0 && (
+                                    {permittedStations.filter(s => s.toLowerCase().includes(stationSearch.toLowerCase())).length === 0 && (
                                         <div className="popover-empty">No stations found</div>
                                     )}
                                 </div>
@@ -936,6 +956,15 @@ const PatientsList = () => {
                                     { label: "Pregnancy-Related Conditions", className: "category-badge category-badge--pregnancy-related" },
                                     { label: "Relevant Obstetric History", className: "category-badge category-badge--obstetric-history" },
                                     { label: "None Reported", className: "risk-badge condition-none" }
+                                ]
+                            },
+                            {
+                                title: "Patient Status & Assignment",
+                                items: [
+                                    { label: "Assigned Staff", style: { backgroundColor: 'rgba(109, 184, 160, 0.15)', color: '#3d8870' } },
+                                    { label: "Unassigned", style: { backgroundColor: 'rgba(230, 184, 110, 0.2)', color: '#8a6a10' } },
+                                    { label: "Pregnant", style: { backgroundColor: 'rgba(122, 162, 219, 0.15)', color: '#3b5a8c' } },
+                                    { label: "Postpartum", style: { backgroundColor: 'rgba(185, 129, 138, 0.15)', color: '#8a505b' } }
                                 ]
                             }
                         ]}

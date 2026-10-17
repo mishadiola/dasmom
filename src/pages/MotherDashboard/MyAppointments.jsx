@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
 import { 
@@ -11,6 +11,7 @@ import '../../styles/pages/MyAppointments.css';
 import appointmentSilhouette from '../../assets/images/appointments-silhouette.png';
 import { useLanguage } from '../../context/LanguageContext';
 import { isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 const toLocalDateStr = (d) => {
     const offset = d.getTimezoneOffset() * 60000;
@@ -59,8 +60,10 @@ const MyAppointments = () => {
     const [selectedAppt, setSelectedAppt] = useState(null);
     const { t } = useLanguage();
     const [patientInfo, setPatientInfo] = useState({});
-
     const [appointmentsData, setAppointmentsData] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const loadRef = useRef(null);
     
     const [selectedMobileDate, setSelectedMobileDate] = useState(() => new Date().toISOString().split('T')[0]);
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -79,7 +82,10 @@ const MyAppointments = () => {
             const patientService = new PatientService();
             try {
                 const authUser = await auth.getAuthUser();
-                if (!authUser?.id) return;
+                if (!authUser?.id) {
+                    throw new Error('User session not found.');
+                }
+                setError(null);
                 if (!appointmentChannel) {
                     appointmentChannel = patientService.supabase
                         .channel(`mother-appointments-${authUser.id}`)
@@ -249,9 +255,15 @@ const MyAppointments = () => {
                 if (active) setAppointmentsData(combined);
             } catch (err) {
                 console.error('Failed to load appointments:', err);
-                if (active) setAppointmentsData([]);
+                if (active) {
+                    setAppointmentsData([]);
+                    setError(err?.message || 'Unable to load appointments. Please try again.');
+                }
+            } finally {
+                if (active) setLoading(false);
             }
         };
+        loadRef.current = loadAppointments;
         loadAppointments();
         return () => {
             active = false;
@@ -497,8 +509,22 @@ const MyAppointments = () => {
         );
     };
 
+    if (loading) {
+        return (
+            <StaffPageLoader 
+                message={t('appt_loading') || 'Loading your appointments...'} 
+                error={error} 
+                errorTitle="Unable to load appointments"
+                onRetry={() => {
+                    setLoading(true);
+                    loadRef.current?.();
+                }} 
+            />
+        );
+    }
+
     return (
-        <div className="my-appointments-page">
+        <div className="my-appointments-page staff-page-ready">
             <div className="appt-hero-header">
                 <img 
                     src={appointmentSilhouette} 

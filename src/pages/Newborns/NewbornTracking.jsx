@@ -22,6 +22,7 @@ import { formatNewbornId } from '../../utils/displayIds';
 import ActionTooltip from '../../components/Common/ActionTooltip';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
 import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
+import { useDefaultStation } from '../../hooks/useDefaultStation';
 
 /* ════════════════════════════
    CALENDAR HELPERS
@@ -192,12 +193,40 @@ const NewbornTracking = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filters, setFilters] = useState({ status: 'All', progress: 'All', station: 'All' });
+
+    const {
+        isStationStaff,
+        assignedStation,
+        canViewOtherStations,
+        availableStations: permittedStations,
+        matchStation: matchStationHook,
+    } = useDefaultStation({
+        permissionKey: 'newborn.view.other_station',
+        allStations: availableStations,
+        isArray: false
+    });
+
+    const [filters, setFilters] = useState(() => ({
+        status: 'All',
+        progress: 'All',
+        station: isStationStaff && assignedStation ? assignedStation : 'All'
+    }));
+    const userHasChangedStationRef = useRef(false);
+
+    useEffect(() => {
+        if (!userHasChangedStationRef.current && isStationStaff && assignedStation) {
+            setFilters(prev => ({
+                ...prev,
+                station: prev.station !== 'All' ? prev.station : assignedStation
+            }));
+        }
+    }, [isStationStaff, assignedStation]);
 
     const hasActiveFilters = filters.status !== 'All' || filters.progress !== 'All' || filters.station !== 'All' || searchTerm !== '';
 
     const clearFilters = () => {
-        setFilters({ status: 'All', progress: 'All', station: 'All' });
+        const defStation = (isStationStaff && !canViewOtherStations) ? (assignedStation || '__UNASSIGNED__') : 'All';
+        setFilters({ status: 'All', progress: 'All', station: defStation });
         setSearchTerm('');
         setActivePopover(null);
     };
@@ -388,6 +417,7 @@ const NewbornTracking = () => {
     const vaccByDate = useMemo(() => {
         const map = {};
         newborns.forEach(b => {
+            if (!matchStationHook(b.station, filters.station)) return;
             (b.vaccLog || []).forEach(v => {
                 if (!v.nextDue) return;
                 const key = v.nextDue.split('T')[0];
@@ -401,7 +431,7 @@ const NewbornTracking = () => {
             });
         });
         return map;
-    }, [newborns]);
+    }, [newborns, filters.station, matchStationHook]);
 
     const VACC_TODAY = new Date().toISOString().split('T')[0];
 
@@ -412,6 +442,7 @@ const NewbornTracking = () => {
             const matchSearch = b.babyName?.toLowerCase().includes(s) || 
                               b.motherName?.toLowerCase().includes(s) || 
                               b.id?.toLowerCase().includes(s) || 
+                              formatNewbornId(b.id).toLowerCase().includes(s) || 
                               b.station?.toLowerCase().includes(s);
             
             // Calculate vaccination progress
@@ -433,11 +464,11 @@ const NewbornTracking = () => {
                 (filters.progress === '76-99%' && percentage > 75 && percentage < 100) ||
                 (filters.progress === '100%' && percentage === 100);
             
-            const matchStation = filters.station === 'All' || b.station === filters.station;
+            const matchStation = matchStationHook(b.station, filters.station);
             
             return matchSearch && matchStatus && matchProgress && matchStation;
         });
-    }, [newborns, searchTerm, filters]);
+    }, [newborns, searchTerm, filters, matchStationHook]);
 
     const getVaccinationProgress = (baby) => {
         const completed = baby.vaccLog?.filter(v => v.status === 'Completed').length || 0;
@@ -536,7 +567,7 @@ const NewbornTracking = () => {
             return {
                 'Baby Name': b.babyName,
                 'Mother Name': b.motherName,
-                'Baby ID': b.id,
+                'Baby ID': formatNewbornId(b.id),
                 'Station': b.station,
                 'Birth Date': formatDateLong(b.birthDate),
                 'Vaccines Completed': progress.completed,
@@ -723,9 +754,11 @@ const NewbornTracking = () => {
                             <div className="filter-popover">
                                 <div className="popover-title">Station</div>
                                 <div className="popover-options">
-                                    <button className={`popover-opt-btn ${filters.station === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('station', 'All'); setCurrentPage(1); setActivePopover(null); }}>All Stations</button>
-                                    {availableStations.map(s => (
-                                        <button key={s} className={`popover-opt-btn ${filters.station === s ? 'selected' : ''}`} onClick={() => { handleFilter('station', s); setCurrentPage(1); setActivePopover(null); }}>{s}</button>
+                                    {(!isStationStaff || canViewOtherStations) && (
+                                        <button className={`popover-opt-btn ${filters.station === 'All' ? 'selected' : ''}`} onClick={() => { userHasChangedStationRef.current = true; handleFilter('station', 'All'); setCurrentPage(1); setActivePopover(null); }}>All Stations</button>
+                                    )}
+                                    {permittedStations.map(s => (
+                                        <button key={s} className={`popover-opt-btn ${filters.station === s ? 'selected' : ''}`} onClick={() => { userHasChangedStationRef.current = true; handleFilter('station', s); setCurrentPage(1); setActivePopover(null); }}>{s}</button>
                                     ))}
                                 </div>
                             </div>

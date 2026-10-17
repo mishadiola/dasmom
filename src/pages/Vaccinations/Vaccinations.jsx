@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import useClickOutside from '../../hooks/useClickOutside';
@@ -14,7 +14,7 @@ import {
     Search, Filter, Plus, X, Syringe, Pill, Package,
     AlertTriangle, CheckCircle2, Clock, XCircle,
     Eye, Edit2, Calendar, Download, RefreshCw, ChevronDown, ChevronUp, AlertCircle, Baby, User, Users, CalendarClock, Activity, Archive, MapPin,
-    ChevronLeft, ChevronRight
+    ChevronLeft, ChevronRight, Loader2
 } from 'lucide-react';
 import NewbornVaccinationModal from '../../components/NewbornVaccinationModal';
 import '../../styles/pages/Vaccinations.css';
@@ -26,6 +26,8 @@ import ExportModal from '../../components/ExportModal';
 import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
 import ActionTooltip from '../../components/Common/ActionTooltip';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import SearchableSelect from '../../components/Common/SearchableSelect';
+import { useDefaultStation } from '../../hooks/useDefaultStation';
 
 const inventoryService = new InventoryService();
 
@@ -46,31 +48,79 @@ const formatReadableDate = (dateString) => {
     if (isNaN(date.getTime())) return dateString;
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 };
+
+export const isMaternalOnlyVaccine = (vaccineName) => {
+    if (!vaccineName || typeof vaccineName !== 'string') return false;
+    const name = vaccineName.trim();
+    const lower = name.toLowerCase();
+
+    // Pediatric combination vaccines that protect against diphtheria, pertussis, tetanus, etc.
+    // are newborn vaccines (e.g., Pentavalent Vaccine (DPT-Hep B-Hib), DPT).
+    if (lower.includes('pentavalent') || /\bdpt\b/i.test(name)) {
+        return false;
+    }
+
+    // Explicit maternal vaccines
+    if (lower.includes('maternal')) return true;
+    if (lower.includes('tetanus')) return true;
+    if (lower.includes('toxoid')) return true;
+    if (/\btdap\b/i.test(name)) return true;
+    if (/\btd\b/i.test(name)) return true;
+    if (/\btt\b/i.test(name)) return true;
+    if (/\bttd\b/i.test(name)) return true;
+
+    return false;
+};
+
 export const RecordModal = ({ mode, initialPatientType, initialPatientName, initialAutoSelectId, onClose, onSave }) => {
     const { alert: customAlert } = useModal();
     const babyService = new BabyService();
+    const defaultPatientType = mode === 'vaccine' ? (initialPatientType || 'Newborn') : (initialPatientType || 'Mother');
     const [form, setForm] = useState({
-        patientType: mode === 'vaccine' ? 'Newborn' : initialPatientType || 'Mother', patientName: initialPatientName || '', vaccine: '',
-        supplement: '', dose: '', date: new Date().toISOString().split('T')[0], nextDue: '', staff: '', remarks: '', brand: ''
+        patientType: defaultPatientType,
+        patientName: initialPatientName || '',
+        vaccine: '',
+        supplement: '',
+        dose: '',
+        date: new Date().toISOString().split('T')[0],
+        nextDue: '',
+        staff: '',
+        remarks: '',
+        brand: ''
     });
     const [isSaving, setIsSaving] = useState(false);
-    const [selectedPatient, setSelectedPatient] = useState(null);
+
+    // 1. Separate patient search & selection states
+    const [patientSearchInput, setPatientSearchInput] = useState(initialPatientName || '');
+    const [suggestions, setSuggestions] = useState([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [isSearchingPatients, setIsSearchingPatients] = useState(false);
+    const [confirmedPatient, setConfirmedPatient] = useState(null);
+
+    // 2. Vaccine loading & schedule states
+    const [isLoadingVaccines, setIsLoadingVaccines] = useState(false);
+    const [vaccineLoadError, setVaccineLoadError] = useState(null);
+    const [patientStationId, setPatientStationId] = useState(null);
     const [pendingVaccines, setPendingVaccines] = useState([]);
+    const [vaccineTypes, setVaccineTypes] = useState([]);
+    const [vaccineSearchQuery, setVaccineSearchQuery] = useState('');
     const [selectedVaccines, setSelectedVaccines] = useState({});
     const [selectedVaccineNames, setSelectedVaccineNames] = useState([]);
     const [vaccineDoses, setVaccineDoses] = useState({});
     const [selectedVaccineBrands, setSelectedVaccineBrands] = useState({});
     const [vaccineBrandOptions, setVaccineBrandOptions] = useState({});
+
+    // 3. Supplement states
     const [supplementBrandOptions, setSupplementBrandOptions] = useState([]);
     const [selectedSupplementBrand, setSelectedSupplementBrand] = useState('');
     const [staffList, setStaffList] = useState([]);
-    const [suggestions, setSuggestions] = useState([]);
-    const [showSuggestions, setShowSuggestions] = useState(false);
     const [supplementTypes, setSupplementTypes] = useState([]);
-    const [vaccineTypes, setVaccineTypes] = useState([]);
-    const [patientStationId, setPatientStationId] = useState(null);
-    const [vaccineSearchQuery, setVaccineSearchQuery] = useState('');
+    const [supplementInventoryItems, setSupplementInventoryItems] = useState([]);
+    const [isLoadingSupplements, setIsLoadingSupplements] = useState(false);
+    const [supplementLoadError, setSupplementLoadError] = useState(null);
+
     const updateForm = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+    const selectedPatient = confirmedPatient;
 
     const resolvePatientStation = async (patientId, patientType, fallbackStationName = '') => {
         try {
@@ -144,108 +194,411 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    // Load authorized supplement inventory whenever mode is supplement
     useEffect(() => {
-        if (mode === 'supplement') {
-            const fetchSupplementTypes = async () => {
+        if (mode !== 'supplement') return;
+
+        let isMounted = true;
+        const loadSupplementInventory = async () => {
+            setIsLoadingSupplements(true);
+            setSupplementLoadError(null);
+            try {
+                let rows = [];
                 try {
-                    if (!patientStationId) {
-                        setSupplementTypes([]);
-                        return;
-                    }
-
-                    const { data: stationRows, error: stationError } = await supabase
-                        .from('station_supplement_inventory')
-                        .select('supplement_inventory_id')
-                        .eq('station_id', patientStationId)
-                        .gt('quantity', 0);
-                    if (stationError) throw stationError;
-
-                    const supplementIds = [...new Set((stationRows || []).map(item => item.supplement_inventory_id).filter(Boolean))];
-                    if (supplementIds.length === 0) {
-                        setSupplementTypes([]);
-                        return;
-                    }
-
-                    const { data, error } = await supabase
-                        .from('supplement_inventory')
-                        .select('supplement_name')
-                        .in('id', supplementIds)
-                        .order('supplement_name', { ascending: true });
-                    
-                    if (error) throw error;
-                    setSupplementTypes(data?.map(item => item.supplement_name) || []);
-                } catch (error) {
-                    console.error('Error fetching supplement types:', error);
-                    setSupplementTypes([]);
+                    rows = await inventoryService.getStationInventorySnapshot();
+                } catch (snapshotErr) {
+                    console.warn('getStationInventorySnapshot failed, falling back to getSupplementInventory:', snapshotErr);
+                    const fallbackSupp = await inventoryService.getSupplementInventory();
+                    rows = (fallbackSupp || []).map(item => ({
+                        ...item,
+                        item_type: 'Supplement'
+                    }));
                 }
-            };
-            fetchSupplementTypes();
+
+                if (!isMounted) return;
+
+                const availableSupplements = (rows || []).filter(item => {
+                    const isSupp = String(item.item_type || '').toLowerCase() === 'supplement';
+                    const hasStock = Number(item.quantity) > 0;
+                    return isSupp && hasStock;
+                });
+
+                setSupplementInventoryItems(availableSupplements);
+            } catch (err) {
+                console.error('Error loading supplement inventory:', err);
+                if (isMounted) {
+                    setSupplementLoadError(err.message || 'Failed to load supplement inventory');
+                    setSupplementInventoryItems([]);
+                }
+            } finally {
+                if (isMounted) {
+                    setIsLoadingSupplements(false);
+                }
+            }
+        };
+
+        loadSupplementInventory();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [mode]);
+
+    // Active items prioritizing patient's station if stock exists there, otherwise all authorized station inventory
+    const activeSupplementItems = useMemo(() => {
+        if (patientStationId) {
+            const stationSpecific = supplementInventoryItems.filter(item => item.station_id === patientStationId);
+            if (stationSpecific.length > 0) {
+                return stationSpecific;
+            }
+        }
+        return supplementInventoryItems;
+    }, [supplementInventoryItems, patientStationId]);
+
+    // Deduplicated Supplement Types
+    const supplementTypeOptions = useMemo(() => {
+        const typeMap = new Map();
+        for (const item of activeSupplementItems) {
+            const name = item.item_name?.trim();
+            if (!name) continue;
+
+            const existing = typeMap.get(name) || { totalStock: 0, brands: new Set(), unit: item.unit || 'tablets' };
+            existing.totalStock += Number(item.quantity) || 0;
+            if (item.brand?.trim()) {
+                existing.brands.add(item.brand.trim());
+            }
+            typeMap.set(name, existing);
         }
 
-        if (mode === 'supplement' && patientStationId && form.supplement) {
-            const fetchSupplementBrands = async () => {
-                try {
-                    const { data: stationRows, error: stationError } = await supabase
-                        .from('station_supplement_inventory')
-                        .select('supplement_inventory_id, quantity')
-                        .eq('station_id', patientStationId)
-                        .gt('quantity', 0);
-
-                    if (stationError) throw stationError;
-                    const supplementIds = [...new Set((stationRows || []).map(item => item.supplement_inventory_id).filter(Boolean))];
-                    if (supplementIds.length === 0) {
-                        setSupplementBrandOptions([]);
-                        setSelectedSupplementBrand('');
-                        return;
-                    }
-
-                    const { data, error } = await supabase
-                        .from('supplement_inventory')
-                        .select('brand')
-                        .in('id', supplementIds)
-                        .eq('supplement_name', form.supplement)
-                        .not('brand', 'is', null)
-                        .order('brand', { ascending: true });
-
-                    if (error) throw error;
-                    const brands = [...new Set((data || []).map(item => item.brand).filter(Boolean))];
-                    setSupplementBrandOptions(brands);
-                    setSelectedSupplementBrand(prev => prev && brands.includes(prev) ? prev : (brands[0] || ''));
-                } catch (error) {
-                    console.error('Error fetching supplement brands:', error);
-                    setSupplementBrandOptions([]);
-                    setSelectedSupplementBrand('');
-                }
+        return Array.from(typeMap.entries()).map(([name, data]) => {
+            const brandCount = data.brands.size;
+            const brandText = brandCount > 0 ? `${brandCount} brand${brandCount > 1 ? 's' : ''}` : 'generic';
+            return {
+                value: name,
+                label: name,
+                subtext: `${data.totalStock} ${data.unit} available (${brandText})`
             };
-            fetchSupplementBrands();
-        } else if (mode === 'supplement') {
-            setSupplementBrandOptions([]);
-            setSelectedSupplementBrand('');
+        }).sort((a, b) => a.label.localeCompare(b.label));
+    }, [activeSupplementItems]);
+
+    // Brands dependent on selected Supplement Type (form.supplement)
+    const brandOptions = useMemo(() => {
+        if (!form.supplement) return [];
+
+        const matchingItems = activeSupplementItems.filter(
+            item => item.item_name?.trim().toLowerCase() === form.supplement.trim().toLowerCase()
+        );
+
+        const brandMap = new Map();
+        for (const item of matchingItems) {
+            const brandName = item.brand?.trim() || 'Generic / Standard';
+            const existing = brandMap.get(brandName) || { stock: 0, unit: item.unit || 'tablets' };
+            existing.stock += Number(item.quantity) || 0;
+            brandMap.set(brandName, existing);
         }
 
-        // Fetch vaccine types from station inventory when in vaccine mode and patient is selected
-        if (mode === 'vaccine' && patientStationId) {
-            const fetchVaccineTypes = async () => {
-                try {
-                    const inventoryRows = await inventoryService.getStationInventorySnapshot();
-                    const availableVaccines = inventoryRows.filter(item =>
-                        item.item_type === 'Vaccine' &&
-                        item.station_id === patientStationId &&
-                        Number(item.quantity) > 0
-                    );
-                    const uniqueVaccines = [...new Set(availableVaccines.map(item => item.item_name).filter(Boolean))]
-                        .sort((a, b) => a.localeCompare(b));
-                    setVaccineTypes(uniqueVaccines);
-                } catch (error) {
-                    console.error('Error fetching vaccine types:', error);
-                    setVaccineTypes([]);
+        return Array.from(brandMap.entries()).map(([brandName, data]) => ({
+            value: brandName,
+            label: brandName,
+            subtext: `${data.stock} ${data.unit} in stock`
+        })).sort((a, b) => a.label.localeCompare(b.label));
+    }, [activeSupplementItems, form.supplement]);
+
+    // Handle initial patient auto-load if initialPatientName was provided
+    useEffect(() => {
+        if (!initialPatientName) return;
+
+        let active = true;
+        const loadInitialPatient = async () => {
+            try {
+                if (form.patientType === 'Mother') {
+                    const patientService = new PatientService();
+                    const mothers = await patientService.searchPatients(initialPatientName);
+                    if (!active) return;
+                    const matched = mothers.find(m => m.name.toLowerCase() === initialPatientName.toLowerCase()) || mothers[0];
+                    if (matched) {
+                        const patientObj = {
+                            id: matched.id,
+                            name: matched.name,
+                            station: matched.station,
+                            type: 'Mother'
+                        };
+                        setConfirmedPatient(patientObj);
+                        setPatientSearchInput(matched.name);
+                        updateForm('patientName', matched.name);
+                    }
+                } else {
+                    const newborns = await babyService.searchNewborns(initialPatientName);
+                    if (!active) return;
+                    const matched = newborns.find(n => n.name.toLowerCase() === initialPatientName.toLowerCase()) || newborns[0];
+                    if (matched) {
+                        const patientObj = {
+                            id: matched.id,
+                            name: matched.name,
+                            station: matched.station,
+                            motherName: matched.motherName,
+                            motherId: matched.motherId,
+                            birthDate: matched.birthDate,
+                            type: 'Newborn'
+                        };
+                        setConfirmedPatient(patientObj);
+                        setPatientSearchInput(matched.name);
+                        updateForm('patientName', matched.name);
+                    }
                 }
-            };
-            fetchVaccineTypes();
-        } else if (mode === 'vaccine') {
+            } catch (err) {
+                console.error('Error loading initial patient:', err);
+            }
+        };
+
+        loadInitialPatient();
+        return () => { active = false; };
+    }, [initialPatientName]);
+
+    // Debounced search for patient autocomplete suggestions
+    useEffect(() => {
+        // If confirmedPatient is set and input matches its name, do not run search
+        if (confirmedPatient && patientSearchInput.trim().toLowerCase() === confirmedPatient.name.trim().toLowerCase()) {
+            setSuggestions([]);
+            setShowSuggestions(false);
+            return;
+        }
+
+        const trimmed = patientSearchInput.trim();
+        if (trimmed.length < 2) {
+            setSuggestions([]);
+            setShowSuggestions(false);
+            setIsSearchingPatients(false);
+            return;
+        }
+
+        let isCurrent = true;
+        setIsSearchingPatients(true);
+
+        const debounceTimer = setTimeout(async () => {
+            try {
+                let matches = [];
+                if (form.patientType === 'Mother') {
+                    const patientService = new PatientService();
+                    const mothers = await patientService.searchPatients(trimmed);
+                    if (!isCurrent) return;
+                    matches = mothers.map(m => ({
+                        id: m.id,
+                        name: m.name,
+                        station: m.station,
+                        type: 'Mother'
+                    }));
+                } else {
+                    const newborns = await babyService.searchNewborns(trimmed);
+                    if (!isCurrent) return;
+                    matches = newborns.map(n => ({
+                        id: n.id,
+                        name: n.name,
+                        station: n.station,
+                        motherName: n.motherName,
+                        motherId: n.motherId,
+                        birthDate: n.birthDate,
+                        type: 'Newborn'
+                    }));
+                }
+
+                if (isCurrent) {
+                    setSuggestions(matches);
+                    setShowSuggestions(matches.length > 0);
+                    // CRITICAL: NEVER auto-select a patient on typing/searching alone!
+                }
+            } catch (err) {
+                console.error('Error searching patients:', err);
+                if (isCurrent) {
+                    setSuggestions([]);
+                    setShowSuggestions(false);
+                }
+            } finally {
+                if (isCurrent) {
+                    setIsSearchingPatients(false);
+                }
+            }
+        }, 250);
+
+        return () => {
+            isCurrent = false;
+            clearTimeout(debounceTimer);
+        };
+    }, [patientSearchInput, form.patientType, confirmedPatient]);
+
+    const handlePatientInputChange = (e) => {
+        const val = e.target.value;
+        setPatientSearchInput(val);
+        updateForm('patientName', val);
+
+        // Invalidate confirmed patient if user modifies text after selecting
+        if (confirmedPatient) {
+            setConfirmedPatient(null);
+            setPatientStationId(null);
+            setPendingVaccines([]);
+            setSelectedVaccines({});
             setVaccineTypes([]);
+            setSelectedVaccineNames([]);
+            setVaccineBrandOptions({});
+            setVaccineLoadError(null);
         }
-    }, [mode, form.patientType, form.supplement, patientStationId]);
+        setShowSuggestions(true);
+    };
+
+    const handleSelectSuggestion = (suggestion) => {
+        setPatientSearchInput(suggestion.name);
+        updateForm('patientName', suggestion.name);
+        setConfirmedPatient(suggestion);
+        setShowSuggestions(false);
+        setSuggestions([]);
+    };
+
+    const handlePatientTypeChange = (newType) => {
+        updateForm('patientType', newType);
+        setPatientSearchInput('');
+        updateForm('patientName', '');
+        setConfirmedPatient(null);
+        setSuggestions([]);
+        setShowSuggestions(false);
+        setPendingVaccines([]);
+        setSelectedVaccines({});
+        setVaccineTypes([]);
+        setSelectedVaccineNames([]);
+        setVaccineBrandOptions({});
+        setPatientStationId(null);
+        setVaccineLoadError(null);
+    };
+
+    // Load patient's pending vaccines and station inventory once patient is confirmed
+    const loadPatientVaccineData = async (patient) => {
+        if (!patient || !patient.id) {
+            setPendingVaccines([]);
+            setSelectedVaccines({});
+            setVaccineTypes([]);
+            setPatientStationId(null);
+            setIsLoadingVaccines(false);
+            setVaccineLoadError(null);
+            return;
+        }
+
+        setIsLoadingVaccines(true);
+        setVaccineLoadError(null);
+
+        try {
+            // 1. Resolve patient station
+            const { stationId, stationName } = await resolvePatientStation(patient.id, patient.type, patient.station);
+            let targetStationId = stationId;
+            try {
+                const inventoryScope = await inventoryService.getCurrentUserScope();
+                targetStationId = inventoryScope.stationId || stationId;
+            } catch (scopeErr) {
+                console.warn('Could not determine inventory user scope, using patient station:', scopeErr);
+            }
+            setPatientStationId(targetStationId);
+
+            // 2. Resolve staff for barangay / station
+            const barangayHint = stationName || patient.station || '';
+            const barangay = barangayHint.split(',')[0].trim();
+            if (barangay) {
+                const { data: staffData } = await supabase
+                    .from('staff_profiles')
+                    .select('full_name, station_ass, stations:station_ass (station_name)')
+                    .ilike('stations.station_name', `%${barangay}%`);
+
+                const staffOptions = (staffData || []).map(s => s.full_name).filter(Boolean);
+                setStaffList(staffOptions);
+                if (staffOptions.length > 0 && !staffOptions.includes(form.staff)) {
+                    updateForm('staff', staffOptions[0]);
+                }
+            } else {
+                setStaffList([]);
+            }
+
+            if (mode !== 'vaccine') {
+                setPendingVaccines([]);
+                setSelectedVaccines({});
+                setVaccineTypes([]);
+                return;
+            }
+
+            // 3. Fetch pending scheduled vaccinations for the patient
+            const pendingQuery = supabase
+                .from('vaccinations')
+                .select(`id, dose_number, scheduled_vaccination, vaccinated_date, status, vaccine_inventory (vaccine_name), notes`)
+                .eq('status', 'Pending')
+                .order('scheduled_vaccination', { ascending: true });
+
+            if (patient.type === 'Mother') {
+                pendingQuery.eq('patient_id', patient.id);
+            } else {
+                pendingQuery.eq('newborn_id', patient.id);
+            }
+
+            const { data: pendingRows, error: pendingError } = await pendingQuery;
+            if (pendingError) throw pendingError;
+
+            const pending = (pendingRows || []).map(row => ({
+                id: row.id,
+                vaccine: row.vaccine_inventory?.vaccine_name || row.notes?.trim() || 'Unknown Vaccine',
+                dose_number: row.dose_number,
+                scheduled_vaccination: row.scheduled_vaccination,
+                status: row.status
+            }));
+            setPendingVaccines(pending);
+
+            if (initialAutoSelectId) {
+                setSelectedVaccines({ [initialAutoSelectId]: true });
+            } else {
+                setSelectedVaccines({});
+            }
+
+            // 4. Fetch available vaccine inventory from station
+            let availableVaccineNames = [];
+            let inventoryCatalog = [];
+            try {
+                inventoryCatalog = await inventoryService.getStationInventorySnapshot();
+            } catch (invErr) {
+                console.warn('Failed to get station inventory snapshot:', invErr);
+            }
+
+            const stationVaccines = (inventoryCatalog || []).filter(item =>
+                item.item_type === 'Vaccine' &&
+                (!targetStationId || item.station_id === targetStationId) &&
+                Number(item.quantity) > 0
+            );
+
+            // Deduplicate vaccine item names
+            const uniqueNames = [...new Set(stationVaccines.map(item => item.item_name?.trim()).filter(Boolean))]
+                .sort((a, b) => a.localeCompare(b));
+
+            // CRITICAL: Filter out maternal-only vaccines when patient is a Newborn!
+            if (patient.type === 'Newborn') {
+                availableVaccineNames = uniqueNames.filter(v => !isMaternalOnlyVaccine(v));
+            } else {
+                availableVaccineNames = uniqueNames;
+            }
+
+            setVaccineTypes(availableVaccineNames);
+        } catch (err) {
+            console.error('Error loading patient vaccine data:', err);
+            setVaccineLoadError(err.message || 'Failed to load vaccine data');
+        } finally {
+            setIsLoadingVaccines(false);
+        }
+    };
+
+    useEffect(() => {
+        if (confirmedPatient && confirmedPatient.id) {
+            loadPatientVaccineData(confirmedPatient);
+        } else {
+            setPendingVaccines([]);
+            setSelectedVaccines({});
+            setVaccineTypes([]);
+            setPatientStationId(null);
+            setVaccineLoadError(null);
+            setIsLoadingVaccines(false);
+        }
+    }, [confirmedPatient?.id, confirmedPatient?.type, mode]);
 
     useEffect(() => {
         const loadVaccineBrands = async () => {
@@ -285,173 +638,6 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
         loadVaccineBrands();
     }, [mode, selectedVaccineNames, patientStationId]);
 
-    useEffect(() => {
-        console.log('✅ RecordModal useEffect triggered!', form.patientName, form.patientType);
-        const searchPendingVaccines = async () => {
-            console.log('🔍 Searching for patient:', form.patientName);
-            let patientId = selectedPatient?.id || null;
-            let patientLabel = selectedPatient?.label || null;
-            let stationHint = selectedPatient?.station || '';
-            let barangay = '';
-
-            if (!form.patientName || form.patientName.trim().length < 3) {
-                console.log('⏸️ Patient name too short or empty');
-                setSelectedPatient(null);
-                setPendingVaccines([]);
-                setSelectedVaccines({});
-                setStaffList([]);
-                setSuggestions([]);
-                setShowSuggestions(false);
-                setPatientStationId(null);
-                return;
-            }
-
-            try {
-                const patientService = new PatientService();
-                let allMatches = [];
-                if (!patientId) {
-                    if (form.patientType === 'Mother') {
-                        const mothers = await patientService.searchPatients(form.patientName);
-                        allMatches = mothers.map(m => ({
-                            id: m.id,
-                            name: m.name,
-                            station: m.station,
-                            type: 'Mother'
-                        }));
-                        if (mothers.length === 1) {
-                            patientId = mothers[0].id;
-                            patientLabel = mothers[0].name;
-                            stationHint = mothers[0].station || '';
-                            barangay = mothers[0].station.split(',')[0].trim();
-                            setSelectedPatient({ id: mothers[0].id, label: mothers[0].name, type: 'Mother', station: mothers[0].station });
-                            console.log('✅ Auto-selected single mother match:', mothers[0].name);
-                        }
-                    } else {
-                        const newborns = await babyService.searchNewborns(form.patientName);
-                        allMatches = newborns.map(n => ({
-                            id: n.id,
-                            name: n.name,
-                            station: n.station,
-                            type: 'Newborn'
-                        }));
-                        if (newborns.length === 1) {
-                            patientId = newborns[0].id;
-                            patientLabel = newborns[0].name;
-                            stationHint = newborns[0].station || '';
-                            setSelectedPatient({ id: newborns[0].id, label: newborns[0].name, type: 'Newborn', station: newborns[0].station });
-                            console.log('✅ Auto-selected single newborn match:', newborns[0].name);
-                            const { data: motherData, error: mError } = await supabase
-                                .from('newborns')
-                                .select('mother_id, patient_basic_info!mother_id (station_ass, stations:station_ass (station_name))')
-                                .eq('id', patientId)
-                                .maybeSingle();
-
-                            if (!mError && motherData?.patient_basic_info?.stations) {
-                                barangay = motherData.patient_basic_info.stations.station_name;
-                            }
-                        }
-                    }
-                }
-
-                setSuggestions(allMatches);
-                setShowSuggestions(allMatches.length > 0);
-                console.log('📊 Suggestions to show:', allMatches, 'Show:', allMatches.length > 0);
-
-                if (!patientId) {
-                    setSelectedPatient(null);
-                    setPendingVaccines([]);
-                    setSelectedVaccines({});
-                    setPatientStationId(null);
-                    return;
-                }
-
-                setSelectedPatient(prev => prev ? { ...prev, id: patientId, label: patientLabel || prev.label, type: form.patientType, station: stationHint || prev.station } : { id: patientId, label: patientLabel || form.patientName, type: form.patientType, station: stationHint });
-
-                const { stationId } = await resolvePatientStation(patientId, form.patientType, stationHint);
-                console.log('🏢 Final resolved station ID:', stationId, 'hint:', stationHint);
-                const inventoryScope = await inventoryService.getCurrentUserScope();
-                setPatientStationId(inventoryScope.stationId || stationId);
-
-                if (barangay) {
-                    const { data: staffData, error: staffError } = await supabase
-                        .from('staff_profiles')
-                        .select('full_name, station_ass, stations:station_ass (station_name)')
-                        .ilike('stations.station_name', `%${barangay}%`);
-
-                    console.log('👨‍⚕️ RecordModal - Staff Data:', staffData, 'Error:', staffError);
-
-                    const staffOptions = staffData ? staffData.map(s => s.full_name) : [];
-                    console.log('📋 RecordModal - Staff Options:', staffOptions);
-                    setStaffList(staffOptions);
-                    if (staffOptions.length > 0 && !staffOptions.includes(form.staff)) {
-                        updateForm('staff', staffOptions[0]);
-                    }
-                } else {
-                    console.log('⚠️ RecordModal - No barangay found');
-                    setStaffList([]);
-                }
-
-                if (mode !== 'vaccine' || form.patientType !== 'Newborn') {
-                    setPendingVaccines([]);
-                    setSelectedVaccines({});
-                    return;
-                }
-
-                const { data: pendingRows, error: pendingError } = await supabase
-                    .from('vaccinations')
-                    .select(`id, dose_number, scheduled_vaccination, vaccinated_date, status, vaccine_inventory (vaccine_name), notes`)
-                    .eq('newborn_id', patientId)
-                    .eq('status', 'Pending')
-                    .order('scheduled_vaccination', { ascending: true });
-
-                if (pendingError) {
-                    console.warn('Unable to load pending vaccinations:', pendingError);
-                    setPendingVaccines([]);
-                    setSelectedVaccines({});
-                    return;
-                }
-
-                const pending = (pendingRows || []).map(row => ({
-                    id: row.id,
-                    vaccine: row.vaccine_inventory?.vaccine_name || row.notes?.trim() || 'Unknown Vaccine',
-                    dose_number: row.dose_number,
-                    scheduled_vaccination: row.scheduled_vaccination,
-                    status: row.status
-                }));
-
-                setPendingVaccines(pending);
-                if (initialAutoSelectId) {
-                    setSelectedVaccines({ [initialAutoSelectId]: true });
-                } else {
-                    setSelectedVaccines({});
-                }
-            } catch (err) {
-                console.error('Error loading patient vaccination schedule:', err);
-                setSelectedPatient(null);
-                setPatientStationId(null);
-                setPendingVaccines([]);
-                setSelectedVaccines({});
-            }
-        };
-
-        searchPendingVaccines();
-    }, [form.patientName, form.patientType, selectedPatient?.id, selectedPatient?.label, mode]);
-
-    const handleSelectSuggestion = async (suggestion) => {
-        console.log('🎯 handleSelectSuggestion called with:', suggestion);
-        updateForm('patientName', suggestion.name);
-
-        let station = suggestion.station;
-        if (!station || station.toLowerCase().startsWith('no station')) {
-            const { stationName } = await resolvePatientStation(suggestion.id, suggestion.type);
-            station = stationName || station || '';
-        }
-
-        setSelectedPatient({ id: suggestion.id, label: suggestion.name, type: suggestion.type, station });
-        setShowSuggestions(false);
-        console.log('✅ selectedPatient set to:', { id: suggestion.id, label: suggestion.name, type: suggestion.type, station });
-    };
-
     const resolveInventoryBatch = async (itemType, itemName, brand, stationId = null) => {
         const vaccinationService = new VaccinationService();
         return vaccinationService.resolveInventoryItem({ itemType, itemName, brand, stationId });
@@ -461,55 +647,46 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
         const hasPendingSelection = mode === 'vaccine' && Object.values(selectedVaccines).some(Boolean);
         const hasCheckboxSelection = mode === 'vaccine' && selectedVaccineNames.length > 0;
 
-        console.log('🔍 handleSave - selectedPatient:', selectedPatient);
-        console.log('🔍 handleSave - form.patientName:', form.patientName);
-        console.log('🔍 handleSave - form.patientType:', form.patientType);
-
-        if (mode === 'vaccine' && form.patientType !== 'Newborn') {
-            await customAlert({ title: 'Newborn Vaccinations Only', text: 'Vaccinations can only be recorded for newborns.', iconType: 'warning' });
+        const patientId = confirmedPatient?.id;
+        if (!patientId) {
+            await customAlert({
+                title: 'Patient Required',
+                text: 'Please select a valid patient from the search suggestions dropdown.',
+                iconType: 'warning'
+            });
             return;
         }
 
-        if (!form.patientName ||
-            (mode === 'vaccine' && !hasPendingSelection && !hasCheckboxSelection && (!form.vaccine || !form.dose)) ||
-            (mode === 'supplement' && (!form.supplement || !form.dose)) ||
-            !form.date) {
-            await customAlert({ title: 'Missing Information', text: 'Please fill in all required fields.', iconType: 'warning' });
+        if (mode === 'vaccine' && !hasPendingSelection && !hasCheckboxSelection && (!form.vaccine || !form.dose)) {
+            await customAlert({
+                title: 'Vaccine Required',
+                text: 'Please select at least one pending scheduled vaccine or an available station vaccine to record.',
+                iconType: 'warning'
+            });
+            return;
+        }
+
+        if (mode === 'supplement' && (!form.supplement || !form.dose)) {
+            await customAlert({
+                title: 'Supplement Required',
+                text: 'Please fill in all required supplement fields.',
+                iconType: 'warning'
+            });
+            return;
+        }
+
+        if (!form.date) {
+            await customAlert({
+                title: 'Date Required',
+                text: 'Please select the administration date.',
+                iconType: 'warning'
+            });
             return;
         }
 
         setIsSaving(true);
         try {
             const patientService = new PatientService();
-
-            // Use selectedPatient if available (from autocomplete), otherwise search by name
-            let patientId;
-            if (selectedPatient && selectedPatient.id) {
-                patientId = selectedPatient.id;
-                console.log('✅ Using selected patient ID:', patientId);
-            } else {
-                console.log('⚠️ No selectedPatient, searching by name...');
-                // Fallback to search if no patient was selected from autocomplete
-                if (form.patientType === 'Mother') {
-                    const patients = await patientService.searchPatients(form.patientName);
-                    console.log('🔍 Search results for mothers:', patients);
-                    if (patients.length === 0) throw new Error('Patient not found. Please check the name spelling or add the patient first.');
-                    if (patients.length > 1) throw new Error(`Multiple patients found with similar names. Please select from the suggestions dropdown.`);
-                    patientId = patients[0].id;
-                } else {
-                    const newborns = await babyService.searchNewborns(form.patientName);
-                    console.log('🔍 Search results for newborns:', newborns);
-                    if (newborns.length === 0) throw new Error('Newborn not found. Please check the name spelling or add the newborn first.');
-                    if (newborns.length > 1) throw new Error(`Multiple newborns found with similar names. Please select from the suggestions dropdown.`);
-                    patientId = newborns[0].id;
-                }
-            }
-
-            // Final validation - ensure we have a patientId
-            if (!patientId) {
-                throw new Error('Patient ID could not be determined. Please select a patient from the dropdown.');
-            }
-
             const currentUser = await patientService.getCurrentUserId();
             if (!currentUser) throw new Error('No logged-in user');
             const access = await patientService.getCurrentUserAccess();
@@ -688,24 +865,66 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
 
                 }
             } else {
-                // Supplement handling: try to find in inventory first, otherwise create manual record
-                const suppInv = await resolveInventoryBatch('supplement', form.supplement, selectedSupplementBrand || null, performingStationId);
-                if (!suppInv) throw new Error('This supplement is not available in your assigned station inventory.');
+                // Supplement handling
+                const selectedBrand = selectedSupplementBrand === 'Generic / Standard' ? null : (selectedSupplementBrand || form.brand || null);
+
+                // Find inventory item from loaded active inventory
+                let suppInv = null;
+                const matchingItem = activeSupplementItems.find(item => 
+                    item.item_name?.trim().toLowerCase() === form.supplement.trim().toLowerCase() &&
+                    (selectedBrand ? item.brand?.trim().toLowerCase() === selectedBrand.trim().toLowerCase() : true)
+                );
+
+                if (matchingItem) {
+                    suppInv = {
+                        id: matchingItem.id,
+                        supplement_name: matchingItem.item_name,
+                        brand: matchingItem.brand,
+                        quantity: matchingItem.quantity
+                    };
+                }
+
+                // Fallback to resolveInventoryBatch if not found in active inventory
+                if (!suppInv) {
+                    suppInv = await resolveInventoryBatch('supplement', form.supplement, selectedBrand, performingStationId);
+                }
+
+                if (!suppInv) {
+                    throw new Error('This supplement is not available in your authorized station inventory.');
+                }
+
+                let targetPatientId = patientId;
+                let notesText = form.remarks || null;
+
+                // Handle newborn patient type
+                if (form.patientType === 'Newborn') {
+                    const { data: nb } = await supabase.from('newborns').select('mother_id, baby_name').eq('id', patientId).maybeSingle();
+                    if (nb?.mother_id) {
+                        targetPatientId = nb.mother_id;
+                        notesText = `Administered to newborn: ${nb.baby_name || form.patientName}${form.remarks ? ' - ' + form.remarks : ''}`;
+                    }
+                }
 
                 const supplementRecord = {
-                    patient_id: patientId,
+                    patient_id: targetPatientId,
                     dosage: form.dose,
                     start_date: form.date,
-                    end_date: form.date,
+                    end_date: form.nextDue || form.date,
                     created_by: currentUser,
                     administered_by: currentUser,
-                    station_ass: performingStationId
+                    station_ass: performingStationId,
+                    supplement_inventory_id: suppInv.id
                 };
 
-                supplementRecord.supplement_inventory_id = suppInv.id;
+                if (notesText) {
+                    supplementRecord.notes = notesText;
+                }
 
+                // 1. Insert record first
                 const { error: supplementError } = await supabase.from('supplements').insert([supplementRecord]);
                 if (supplementError) throw supplementError;
+
+                // 2. Decrement station inventory only after insert succeeds
                 await vaccinationService.decrementStationInventory({
                     itemType: 'supplement',
                     inventoryItem: suppInv,
@@ -731,47 +950,86 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
             <div className="vacc-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
                     <div>
-                        <h2><Syringe size={20} /> Record Vaccination</h2>
-                        <p>{mode === 'vaccine' ? 'Log a vaccine dose for a newborn.' : 'Record supplement distribution.'}</p>
+                        <h2>
+                            {mode === 'vaccine' ? (
+                                <>
+                                    <Syringe size={20} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
+                                    <span>Record Vaccination</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Pill size={20} style={{ verticalAlign: 'middle', marginRight: '6px', color: 'var(--color-rose, #803035)' }} />
+                                    <span>Record Supplement</span>
+                                </>
+                            )}
+                        </h2>
+                        <p>
+                            {mode === 'vaccine'
+                                ? 'Log a vaccine dose for a newborn.'
+                                : 'Record supplement distribution for a mother or newborn.'}
+                        </p>
                     </div>
-                    <button className="modal-close" onClick={onClose}><X size={20} /></button>
+                    <button className="modal-close" onClick={onClose} aria-label="Close modal"><X size={20} /></button>
                 </div>
                 <div className="modal-body">
                     <div className="form-grid-2">
                         <div className="form-group">
                             <label>Patient Type <span className="req">*</span></label>
-                            {mode === 'vaccine' ? (
-                                <input value="Newborn" readOnly aria-label="Patient Type" />
-                            ) : (
-                                <select value={form.patientType} onChange={e => updateForm('patientType', e.target.value)}>
-                                    <option>Mother</option>
-                                    <option>Newborn</option>
-                                </select>
-                            )}
+                            <select 
+                                value={form.patientType} 
+                                onChange={e => handlePatientTypeChange(e.target.value)}
+                                aria-label="Patient Type"
+                            >
+                                <option value="Newborn">Newborn</option>
+                                <option value="Mother">Mother</option>
+                            </select>
                         </div>
                         <div className="form-group">
                             <label>Patient Name / ID <span className="req">*</span></label>
                             <div className="patient-search-wrapper">
-                                <input 
-                                    type="text" 
-                                    placeholder="Search patient..." 
-                                    value={form.patientName} 
-                                    onChange={e => {
-                                        updateForm('patientName', e.target.value);
-                                        setShowSuggestions(true);
-                                    }}
-                                    onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
-                                />
+                                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                    <input 
+                                        type="text" 
+                                        placeholder={`Search ${form.patientType.toLowerCase()} name or ID...`}
+                                        value={patientSearchInput} 
+                                        onChange={handlePatientInputChange}
+                                        onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+                                        style={{ width: '100%', paddingRight: isSearchingPatients || confirmedPatient ? '36px' : '12px' }}
+                                        aria-label="Patient Name"
+                                    />
+                                    {isSearchingPatients && (
+                                        <div style={{ position: 'absolute', right: '12px', display: 'flex', alignItems: 'center', pointerEvents: 'none', color: '#9ca3af' }}>
+                                            <Loader2 size={16} className="animate-spin" />
+                                        </div>
+                                    )}
+                                    {!isSearchingPatients && confirmedPatient && (
+                                        <div 
+                                            title="Confirmed patient selection"
+                                            style={{ position: 'absolute', right: '12px', display: 'flex', alignItems: 'center', pointerEvents: 'none', color: '#10b981' }}
+                                        >
+                                            <CheckCircle2 size={16} />
+                                        </div>
+                                    )}
+                                </div>
                                 {showSuggestions && suggestions.length > 0 && (
                                     <div className="suggestions-dropdown">
                                         {suggestions.map((suggestion, idx) => (
                                             <div 
-                                                key={idx} 
+                                                key={suggestion.id || idx} 
                                                 className="suggestion-item"
                                                 onClick={() => handleSelectSuggestion(suggestion)}
                                             >
                                                 <div className="suggestion-name">{suggestion.name}</div>
-                                                {suggestion.station && <div className="suggestion-station">{suggestion.station}</div>}
+                                                <div className="suggestion-station">
+                                                    <span style={{ fontWeight: 600 }}>
+                                                        {suggestion.type === 'Newborn' ? formatNewbornId(suggestion.id) : formatMotherId(suggestion.id)}
+                                                    </span>
+                                                    <span> · </span>
+                                                    {suggestion.type === 'Newborn' && suggestion.motherName && (
+                                                        <span>Mother: {suggestion.motherName} · </span>
+                                                    )}
+                                                    {suggestion.station || 'No station assigned'}
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -779,102 +1037,193 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                             </div>
                         </div>
                     </div>
-                    {mode === 'vaccine' && pendingVaccines.length > 0 && (
-                        <div className="pending-vaccines-section">
-                            <h3 style={{ marginBottom: '4px' }}>Pending Scheduled Vaccines</h3>
-                            <p className="pending-vaccines-note">Check any scheduled doses that were administered today to update their records.</p>
-                            <div className="pending-vaccines-list">
-                                {pendingVaccines.map(v => {
-                                    const parts = v.vaccine.split(' - ');
-                                    const mainName = parts[0];
-                                    const desc = parts.length > 1 ? parts.slice(1).join(' - ') : '';
-                                    
-                                    return (
-                                        <label key={v.id} className={"pending-vaccine-card " + (selectedVaccines[v.id] ? 'selected' : '')}>
-                                            <input
-                                                type="checkbox"
-                                                checked={!!selectedVaccines[v.id]}
-                                                onChange={() => setSelectedVaccines(prev => ({ ...prev, [v.id]: !prev[v.id] }))}
-                                            />
-                                            <div className="pending-vaccine-details">
-                                                <div className="pending-vaccine-title">{mainName}</div>
-                                                <div className="pending-vaccine-desc">
-                                                    {desc ? desc + ' · ' : ''}Dose {v.dose_number}
-                                                </div>
-                                                <div className="pending-vaccine-date">
-                                                    Scheduled: {v.scheduled_vaccination}
-                                                </div>
-                                            </div>
-                                        </label>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
                     {mode === 'vaccine' ? (
                         <>
-                            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                                <label>Search & Select Vaccines <span className="req">*</span></label>
-                                <input 
-                                    type="text" 
-                                    placeholder="Search vaccines available at patient's station..." 
-                                    value={vaccineSearchQuery} 
-                                    onChange={(e) => setVaccineSearchQuery(e.target.value)} 
-                                    style={{ marginBottom: '10px', width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-                                />
-                                {patientStationId ? (
-                                    <div className="vaccine-checkbox-list">
-                                        {vaccineTypes
-                                            .filter(v => v.toLowerCase().includes(vaccineSearchQuery.toLowerCase()))
-                                            .map(vaccine => (
-                                        <div key={vaccine} className="vaccine-checkbox-item">
-                                            <label className="checkbox-label">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedVaccineNames.includes(vaccine)}
-                                                    onChange={(e) => {
-                                                        if (e.target.checked) {
-                                                            setSelectedVaccineNames([...selectedVaccineNames, vaccine]);
-                                                        } else {
-                                                            setSelectedVaccineNames(selectedVaccineNames.filter(v => v !== vaccine));
-                                                        }
-                                                    }}
-                                                />
-                                                <span className="vaccine-name">{vaccine}</span>
-                                            </label>
-                                            {selectedVaccineNames.includes(vaccine) && (
-                                                <div className="vaccine-dose-info">
-                                                    <select
-                                                        value={selectedVaccineBrands[vaccine] || ''}
-                                                        onChange={(e) => setSelectedVaccineBrands({ ...selectedVaccineBrands, [vaccine]: e.target.value })}
-                                                        className="dose-select"
-                                                    >
-                                                        <option value="">Select Brand</option>
-                                                        {(vaccineBrandOptions[vaccine] || []).map(brand => (
-                                                            <option key={brand} value={brand}>{brand}</option>
-                                                        ))}
-                                                    </select>
-                                                    <select
-                                                        value={vaccineDoses[vaccine] || ''}
-                                                        onChange={(e) => setVaccineDoses({...vaccineDoses, [vaccine]: e.target.value})}
-                                                        className="dose-select"
-                                                    >
-                                                        <option value="">Select Dose</option>
-                                                        <option>1st Dose</option>
-                                                        <option>2nd Dose</option>
-                                                        <option>3rd Dose</option>
-                                                        <option>Booster</option>
-                                                        <option>Annual</option>
-                                                    </select>
-                                                </div>
-                                            )}
-                                        </div>
-                                        ))}
+                            {!confirmedPatient ? (
+                                <div className="vaccine-patient-prompt" style={{
+                                    padding: '16px',
+                                    background: '#f8fafc',
+                                    borderRadius: '8px',
+                                    border: '1px dashed #cbd5e1',
+                                    textAlign: 'center',
+                                    margin: '12px 0 16px',
+                                    color: '#64748b',
+                                    fontSize: '0.9rem'
+                                }}>
+                                    <p style={{ margin: 0, fontWeight: 500 }}>
+                                        Select a patient to view scheduled and available vaccines.
+                                    </p>
+                                </div>
+                            ) : isLoadingVaccines ? (
+                                <div className="vaccine-loading-box" style={{
+                                    padding: '24px',
+                                    background: '#f8fafc',
+                                    borderRadius: '8px',
+                                    border: '1px solid #e2e8f0',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '10px',
+                                    margin: '12px 0 16px',
+                                    color: '#64748b',
+                                    fontSize: '0.9rem'
+                                }}>
+                                    <Loader2 size={18} className="animate-spin" />
+                                    <span>Loading scheduled and available vaccines...</span>
+                                </div>
+                            ) : vaccineLoadError ? (
+                                <div className="vaccine-error-box" style={{
+                                    padding: '14px 16px',
+                                    background: '#fef2f2',
+                                    borderRadius: '8px',
+                                    border: '1px solid #fecaca',
+                                    margin: '12px 0 16px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: '12px'
+                                }}>
+                                    <div style={{ color: '#b91c1c', fontSize: '0.875rem' }}>
+                                        <strong>Failed to load vaccines:</strong> {vaccineLoadError}
                                     </div>
-                                ) : (
-                                    <p style={{ color: '#666', fontStyle: 'italic', fontSize: '0.9rem' }}>Please select a valid patient to view available vaccines at their station.</p>
-                                )}
-                            </div>
+                                    <button
+                                        type="button"
+                                        className="btn btn-outline btn-sm"
+                                        onClick={() => loadPatientVaccineData(confirmedPatient)}
+                                        style={{ padding: '4px 12px', fontSize: '0.8rem' }}
+                                    >
+                                        <RefreshCw size={12} style={{ marginRight: '4px' }} /> Retry
+                                    </button>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* 1. Pending Scheduled Vaccines */}
+                                    <div className="pending-vaccines-section">
+                                        <h3 style={{ marginBottom: '4px' }}>Pending Scheduled Vaccines</h3>
+                                        <p className="pending-vaccines-note">
+                                            Check any scheduled doses that were administered today to update their records.
+                                        </p>
+                                        {pendingVaccines.length > 0 ? (
+                                            <div className="pending-vaccines-list">
+                                                {pendingVaccines.map(v => {
+                                                    const parts = v.vaccine.split(' - ');
+                                                    const mainName = parts[0];
+                                                    const desc = parts.length > 1 ? parts.slice(1).join(' - ') : '';
+                                                    
+                                                    return (
+                                                        <label key={v.id} className={"pending-vaccine-card " + (selectedVaccines[v.id] ? 'selected' : '')}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!selectedVaccines[v.id]}
+                                                                onChange={() => setSelectedVaccines(prev => ({ ...prev, [v.id]: !prev[v.id] }))}
+                                                            />
+                                                            <div className="pending-vaccine-details">
+                                                                <div className="pending-vaccine-title">{mainName}</div>
+                                                                <div className="pending-vaccine-desc">
+                                                                    {desc ? desc + ' · ' : ''}Dose {v.dose_number}
+                                                                </div>
+                                                                <div className="pending-vaccine-date">
+                                                                    Scheduled: {formatReadableDate(v.scheduled_vaccination) || v.scheduled_vaccination}
+                                                                </div>
+                                                            </div>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            <div style={{
+                                                padding: '12px 14px',
+                                                background: '#f8fafc',
+                                                borderRadius: '6px',
+                                                border: '1px solid #e2e8f0',
+                                                color: '#64748b',
+                                                fontSize: '0.875rem',
+                                                fontStyle: 'italic'
+                                            }}>
+                                                No pending scheduled vaccines for this {form.patientType.toLowerCase()}.
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* 2. Available Station Vaccines Selection */}
+                                    <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                        <label>Search & Select Vaccines <span className="req">*</span></label>
+                                        <input 
+                                            type="text" 
+                                            placeholder="Search vaccines available at patient's station..." 
+                                            value={vaccineSearchQuery} 
+                                            onChange={(e) => setVaccineSearchQuery(e.target.value)} 
+                                            style={{ marginBottom: '10px', width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                                        />
+                                        {vaccineTypes.length > 0 ? (
+                                            (() => {
+                                                const filteredVaccines = vaccineTypes.filter(v =>
+                                                    v.toLowerCase().includes(vaccineSearchQuery.toLowerCase())
+                                                );
+                                                if (filteredVaccines.length === 0) {
+                                                    return (
+                                                        <p style={{ color: '#666', fontStyle: 'italic', fontSize: '0.9rem', margin: '8px 0' }}>
+                                                            No matching vaccines found for "{vaccineSearchQuery}".
+                                                        </p>
+                                                    );
+                                                }
+                                                return (
+                                                    <div className="vaccine-checkbox-list">
+                                                        {filteredVaccines.map(vaccine => (
+                                                            <div key={vaccine} className="vaccine-checkbox-item">
+                                                                <label className="checkbox-label">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={selectedVaccineNames.includes(vaccine)}
+                                                                        onChange={(e) => {
+                                                                            if (e.target.checked) {
+                                                                                setSelectedVaccineNames([...selectedVaccineNames, vaccine]);
+                                                                            } else {
+                                                                                setSelectedVaccineNames(selectedVaccineNames.filter(v => v !== vaccine));
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                    <span className="vaccine-name">{vaccine}</span>
+                                                                </label>
+                                                                {selectedVaccineNames.includes(vaccine) && (
+                                                                    <div className="vaccine-dose-info">
+                                                                        <select
+                                                                            value={selectedVaccineBrands[vaccine] || ''}
+                                                                            onChange={(e) => setSelectedVaccineBrands({ ...selectedVaccineBrands, [vaccine]: e.target.value })}
+                                                                            className="dose-select"
+                                                                        >
+                                                                            <option value="">Select Brand</option>
+                                                                            {(vaccineBrandOptions[vaccine] || []).map(brand => (
+                                                                                <option key={brand} value={brand}>{brand}</option>
+                                                                            ))}
+                                                                        </select>
+                                                                        <select
+                                                                            value={vaccineDoses[vaccine] || ''}
+                                                                            onChange={(e) => setVaccineDoses({...vaccineDoses, [vaccine]: e.target.value})}
+                                                                            className="dose-select"
+                                                                        >
+                                                                            <option value="">Select Dose</option>
+                                                                            <option>1st Dose</option>
+                                                                            <option>2nd Dose</option>
+                                                                            <option>3rd Dose</option>
+                                                                            <option>Booster</option>
+                                                                            <option>Annual</option>
+                                                                        </select>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                );
+                                            })()
+                                        ) : (
+                                            <p style={{ color: '#666', fontStyle: 'italic', fontSize: '0.9rem', margin: '8px 0' }}>
+                                                No eligible vaccines available at this patient's station inventory.
+                                            </p>
+                                        )}
+                                    </div>
+                                </>
+                            )}
                             <div className="form-grid-2">
                                 <div className="form-group">
                                     <label>Date Administered <span className="req">*</span></label>
@@ -887,17 +1236,41 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                             <div className="form-grid-2">
                                 <div className="form-group">
                                     <label>Supplement Type <span className="req">*</span></label>
-                                    <select value={form.supplement} onChange={e => updateForm('supplement', e.target.value)}>
-                                        <option value="">Select Supplement</option>
-                                        {supplementTypes.map(s => <option key={s}>{s}</option>)}
-                                    </select>
+                                    <SearchableSelect
+                                        id="supplement-type-select"
+                                        value={form.supplement}
+                                        onChange={(val) => {
+                                            updateForm('supplement', val);
+                                            setSelectedSupplementBrand('');
+                                            updateForm('brand', '');
+                                        }}
+                                        options={supplementTypeOptions}
+                                        placeholder="Select Supplement"
+                                        searchPlaceholder="Search supplement type or name..."
+                                        loading={isLoadingSupplements}
+                                        loadingText="Loading available supplements..."
+                                        emptyText={supplementLoadError ? `Error: ${supplementLoadError}` : "No available supplements"}
+                                        notFoundText="No matching supplements found"
+                                        ariaLabel="Supplement Type"
+                                    />
                                 </div>
                                 <div className="form-group">
                                     <label>Brand</label>
-                                    <select value={selectedSupplementBrand} onChange={e => setSelectedSupplementBrand(e.target.value)}>
-                                        <option value="">Select Brand</option>
-                                        {supplementBrandOptions.map(brand => <option key={brand} value={brand}>{brand}</option>)}
-                                    </select>
+                                    <SearchableSelect
+                                        id="supplement-brand-select"
+                                        value={selectedSupplementBrand}
+                                        onChange={(val) => {
+                                            setSelectedSupplementBrand(val);
+                                            updateForm('brand', val);
+                                        }}
+                                        options={brandOptions}
+                                        placeholder={!form.supplement ? "Select a supplement first" : "Select Brand"}
+                                        searchPlaceholder="Search brand..."
+                                        disabled={!form.supplement}
+                                        emptyText={!form.supplement ? "Please select a supplement first" : "No brands available for this supplement"}
+                                        notFoundText="No matching brands found"
+                                        ariaLabel="Brand"
+                                    />
                                 </div>
                                 <div className="form-group">
                                     <label>Dose / Quantity <span className="req">*</span></label>
@@ -959,6 +1332,31 @@ const Vaccinations = () => {
     const patientService = new PatientService();
     const babyService = new BabyService();
 
+    const [availableStations, setAvailableStations] = useState([]);
+    useEffect(() => {
+        const fetchStations = async () => {
+            try {
+                const data = await patientService.getAllStations();
+                setAvailableStations(data || []);
+            } catch (err) {
+                console.error('Error fetching stations:', err);
+            }
+        };
+        fetchStations();
+    }, []);
+
+    const {
+        assignedStation,
+        isStationStaff,
+        canViewOtherStations,
+        availableStations: permittedStations,
+        matchStation,
+    } = useDefaultStation({
+        permissionKey: ['vaccine.schedule.view.other_station', 'supplement.distribute.patient.other_station', 'patient.view.other_station'],
+        allStations: availableStations,
+        isArray: false
+    });
+
     // State
     const [stats, setStats] = useState({
         patientsAdministered: 0,
@@ -979,7 +1377,21 @@ const Vaccinations = () => {
 
     const [activeTab, setActiveTab] = useState('pending');    // 'pending' | 'missed' | 'administered'
     const [searchTerm, setSearchTerm] = useState('');
-    const [filters, setFilters] = useState({ patientType: 'All', item: 'All Items' });
+    const [filters, setFilters] = useState(() => ({
+        patientType: 'All',
+        item: 'All Items',
+        station: isStationStaff && assignedStation ? assignedStation : 'All'
+    }));
+    const userHasChangedStationRef = useRef(false);
+
+    useEffect(() => {
+        if (!userHasChangedStationRef.current && isStationStaff && assignedStation) {
+            setFilters(prev => ({
+                ...prev,
+                station: prev.station !== 'All' ? prev.station : assignedStation
+            }));
+        }
+    }, [isStationStaff, assignedStation]);
 
     const [showExportModal, setShowExportModal] = useState(false);
     const [dateFilter, setDateFilter] = useState('all'); // 'all' | 'this_month' | 'this_year' | 'custom'
@@ -988,10 +1400,12 @@ const Vaccinations = () => {
     const [dateFilterError, setDateFilterError] = useState('');
     const dateFilterLabel = dateFilter === 'this_month' ? 'This Month' : dateFilter === 'this_year' ? 'This Year' : dateFilter === 'custom' ? 'Custom' : 'All';
 
-    const hasActiveFilters = filters.patientType !== 'All' || filters.item !== 'All Items' || searchTerm !== '' || dateFilter !== 'all';
+    const defaultStationVal = (isStationStaff && !canViewOtherStations) ? (assignedStation || '__UNASSIGNED__') : 'All';
+    const hasActiveFilters = filters.patientType !== 'All' || filters.item !== 'All Items' || (filters.station !== 'All' && filters.station !== defaultStationVal) || searchTerm !== '' || dateFilter !== 'all';
 
     const clearFilters = () => {
-        setFilters({ patientType: 'All', item: 'All Items' });
+        const defStation = (isStationStaff && !canViewOtherStations) ? (assignedStation || '__UNASSIGNED__') : 'All';
+        setFilters({ patientType: 'All', item: 'All Items', station: defStation });
         setSearchTerm('');
         setDateFilter('all');
         setCustomDateFrom('');
@@ -1420,6 +1834,96 @@ const Vaccinations = () => {
         fetchData(); // Refresh data to show new records
     };
 
+    // Derived dynamic stats respecting station filter
+    const activeStats = useMemo(() => {
+        const isMatchingStation = (r) => {
+            if (!filters.station || filters.station === 'All') return true;
+            return matchStation(r.station, filters.station);
+        };
+
+        const stationVacc = vaccinationRecords.filter(isMatchingStation);
+        const stationSupp = supplementRecords.filter(isMatchingStation);
+
+        const uniqueAdministeredPatients = new Set();
+        stationVacc.forEach(r => {
+            const status = (r.status || '').toLowerCase();
+            const isCompleted = status === 'completed' || status === 'administered' || Boolean(r.date);
+            if (isCompleted) {
+                if (r.type === 'Newborn' && (r.newborn_id || r.patientId)) {
+                    uniqueAdministeredPatients.add(`newborn_${r.newborn_id || r.patientId}`);
+                } else if (r.patientId) {
+                    uniqueAdministeredPatients.add(`mother_${r.patientId}`);
+                }
+            }
+        });
+
+        stationSupp.forEach(r => {
+            const status = (r.status || '').toLowerCase();
+            const isCancelled = status === 'cancelled';
+            if (!isCancelled && r.patientId) {
+                uniqueAdministeredPatients.add(`mother_${r.patientId}`);
+            }
+        });
+
+        const vaccinationsAdministeredCount = stationVacc.filter(r => {
+            const status = (r.status || '').toLowerCase();
+            return status === 'completed' || status === 'administered' || Boolean(r.date);
+        }).length;
+
+        const completedSuppRecords = stationSupp.filter(r => (r.status || '').toLowerCase() !== 'cancelled');
+        let supplementsDistributedCount = 0;
+        const unitCounts = {};
+
+        completedSuppRecords.forEach(r => {
+            const qty = parseInt(r.dose?.toString().match(/\d+/)?.[0]) || 1;
+            supplementsDistributedCount += qty;
+
+            const unitMatch = r.dose?.toString().match(/\d+\s*([a-zA-Z]+)/);
+            let unit = unitMatch ? unitMatch[1].toLowerCase() : (r.unit || 'units');
+            if (unit === 'tablet') unit = 'tablets';
+            if (unit === 'capsule') unit = 'capsules';
+            if (unit === 'sachet') unit = 'sachets';
+            if (unit === 'bottle') unit = 'bottles';
+            if (unit === 'piece' || unit === 'pc') unit = 'pcs';
+            unitCounts[unit] = (unitCounts[unit] || 0) + 1;
+        });
+
+        let distributedUnit = 'units';
+        const unitEntries = Object.entries(unitCounts);
+        if (unitEntries.length === 1) {
+            distributedUnit = unitEntries[0][0];
+        } else if (unitEntries.length > 1) {
+            unitEntries.sort((a, b) => b[1] - a[1]);
+            if (unitEntries[0][1] >= completedSuppRecords.length * 0.75) {
+                distributedUnit = unitEntries[0][0];
+            } else {
+                distributedUnit = 'units';
+            }
+        }
+        if (supplementsDistributedCount === 1 && distributedUnit.endsWith('s') && !['pcs'].includes(distributedUnit)) {
+            distributedUnit = distributedUnit.slice(0, -1);
+        }
+
+        const pendingVaccinationsCount = stationVacc.filter(r => {
+            const status = (r.status || '').toLowerCase();
+            if (status === 'completed' || status === 'administered' || status === 'cancelled') {
+                return false;
+            }
+            if (r.date && status !== 'pending' && status !== 'scheduled' && status !== 'overdue' && status !== 'missed') {
+                return false;
+            }
+            return status === 'pending' || status === 'scheduled' || status === 'overdue' || status === 'missed' || !r.date;
+        }).length;
+
+        return {
+            patientsAdministered: uniqueAdministeredPatients.size,
+            vaccinationsAdministered: vaccinationsAdministeredCount,
+            supplementsDistributed: supplementsDistributedCount,
+            supplementsDistributedUnit: distributedUnit,
+            pendingVaccinations: pendingVaccinationsCount
+        };
+    }, [vaccinationRecords, supplementRecords, filters.station, matchStation]);
+
     // Derived Stats for UI mapping - Exact requested order:
     // 1. Number of Patients Administered (Lavender, users icon)
     // 2. Vaccinations Administered (Soft Peach, syringe icon)
@@ -1428,12 +1932,12 @@ const Vaccinations = () => {
     const dynamicSummaryStats = [
         { 
             label: 'Number of Patients Administered', 
-            value: stats.patientsAdministered, 
+            value: activeStats.patientsAdministered, 
             color: 'lilac', 
             icon: Users, 
             onClick: () => {
                 setActiveTab('administered');
-                setFilters({ patientType: 'All', item: 'All Items' });
+                setFilters(prev => ({ ...prev, patientType: 'All', item: 'All Items' }));
                 setSearchTerm('');
                 setDateFilter('all');
                 document.querySelector('.vacc-tabs')?.scrollIntoView({ behavior: 'smooth' });
@@ -1441,12 +1945,12 @@ const Vaccinations = () => {
         },
         { 
             label: 'Vaccinations Administered', 
-            value: stats.vaccinationsAdministered, 
+            value: activeStats.vaccinationsAdministered, 
             color: 'orange', 
             icon: Syringe, 
             onClick: () => {
                 setActiveTab('administered');
-                setFilters({ patientType: 'All', item: 'Vaccines' });
+                setFilters(prev => ({ ...prev, patientType: 'All', item: 'Vaccines' }));
                 setSearchTerm('');
                 setDateFilter('all');
                 document.querySelector('.vacc-tabs')?.scrollIntoView({ behavior: 'smooth' });
@@ -1454,13 +1958,13 @@ const Vaccinations = () => {
         },
         { 
             label: 'Supplements Distributed', 
-            value: stats.supplementsDistributed, 
-            unit: stats.supplementsDistributedUnit || 'units', 
+            value: activeStats.supplementsDistributed, 
+            unit: activeStats.supplementsDistributedUnit || 'units', 
             color: 'sage', 
             icon: Pill, 
             onClick: () => {
                 setActiveTab('administered');
-                setFilters({ patientType: 'All', item: 'Supplements' });
+                setFilters(prev => ({ ...prev, patientType: 'All', item: 'Supplements' }));
                 setSearchTerm('');
                 setDateFilter('all');
                 document.querySelector('.vacc-tabs')?.scrollIntoView({ behavior: 'smooth' });
@@ -1468,12 +1972,12 @@ const Vaccinations = () => {
         },
         { 
             label: 'Pending Vaccinations', 
-            value: stats.pendingVaccinations, 
+            value: activeStats.pendingVaccinations, 
             color: 'rose', 
             icon: CalendarClock, 
             onClick: () => {
                 setActiveTab('pending');
-                setFilters({ patientType: 'All', item: 'Vaccines' });
+                setFilters(prev => ({ ...prev, patientType: 'All', item: 'Vaccines' }));
                 setSearchTerm('');
                 setDateFilter('all');
                 document.querySelector('.vacc-tabs')?.scrollIntoView({ behavior: 'smooth' });
@@ -1514,7 +2018,11 @@ const Vaccinations = () => {
         .filter(r => {
             // Global search
             const q = searchTerm.toLowerCase();
-            const matchSearch = (r.patientName || '').toLowerCase().includes(q) || (r.patientId || '').toLowerCase().includes(q) || (r.station || '').toLowerCase().includes(q);
+            const readableId = r.type === 'Newborn' ? formatNewbornId(r.patientId) : formatMotherId(r.patientId);
+            const matchSearch = (r.patientName || '').toLowerCase().includes(q) || 
+                (r.patientId || '').toLowerCase().includes(q) || 
+                readableId.toLowerCase().includes(q) || 
+                (r.station || '').toLowerCase().includes(q);
 
             // Dropdown filters
             const filterType = (filters.patientType || 'All').toLowerCase();
@@ -1564,7 +2072,10 @@ const Vaccinations = () => {
                 }
             }
 
-            return matchSearch && matchType && matchItem && matchTab && matchDate;
+            // Station filter
+            const matchStationVal = filters.station === 'All' || matchStation(r.station, filters.station);
+
+            return matchSearch && matchType && matchItem && matchTab && matchDate && matchStationVal;
         })
         .sort((a, b) => {
             if (!sortField) {
@@ -1636,6 +2147,10 @@ const Vaccinations = () => {
 
     const getExportData = (dateRange) => {
         let toExport = allRecords;
+
+        if (filters.station && filters.station !== 'All') {
+            toExport = toExport.filter(d => matchStation(d.station, filters.station));
+        }
         
         if (dateRange && (dateRange.from || dateRange.to)) {
             toExport = allRecords.filter(d => {
@@ -1649,7 +2164,7 @@ const Vaccinations = () => {
 
         return toExport.map(d => ({
             'Patient Name': d.patientName || d.babyName,
-            'Patient ID': d.patientId,
+            'Patient ID': d.type === 'Newborn' ? formatNewbornId(d.patientId) : formatMotherId(d.patientId),
             'Patient Type': d.type,
             'Item Type': d.itemType === 'vaccine' ? 'Vaccine' : 'Supplement',
             'Item Name': d.itemName,
@@ -1830,6 +2345,54 @@ const Vaccinations = () => {
                 </div>
                 <div className="shared-filters-row" ref={filterRowRef}>
                     <span className="filters-label"><Filter size={13} /> Filters:</span>
+
+                    {/* Station Filter */}
+                    <div className="filter-dropdown-container">
+                        <button 
+                            className={`filter-btn ${filters.station !== 'All' ? 'active-filter' : ''}`}
+                            onClick={() => {
+                                if (isStationStaff && !canViewOtherStations) return;
+                                setActivePopover(activePopover === 'station' ? null : 'station');
+                            }}
+                            title={isStationStaff && !canViewOtherStations ? "Station selection locked to your assigned station" : undefined}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: (isStationStaff && !canViewOtherStations) ? 'default' : 'pointer' }}
+                        >
+                            <MapPin size={14} className="filter-btn-icon" />
+                            <span>Station: {filters.station}</span>
+                            {(!isStationStaff || canViewOtherStations) && <ChevronDown size={14} className="filter-btn-icon" />}
+                        </button>
+                        {activePopover === 'station' && (
+                            <div className="filter-popover">
+                                <div className="popover-title">Station</div>
+                                <div className="popover-options">
+                                    <button
+                                        className={`popover-opt-btn ${filters.station === 'All' ? 'selected' : ''}`}
+                                        onClick={() => {
+                                            userHasChangedStationRef.current = true;
+                                            handleFilter('station', 'All');
+                                            setActivePopover(null);
+                                        }}
+                                    >
+                                        All Stations
+                                    </button>
+                                    {permittedStations.map(stationName => (
+                                        <button
+                                            key={stationName}
+                                            className={`popover-opt-btn ${filters.station === stationName ? 'selected' : ''}`}
+                                            onClick={() => {
+                                                userHasChangedStationRef.current = true;
+                                                handleFilter('station', stationName);
+                                                setActivePopover(null);
+                                            }}
+                                        >
+                                            {stationName}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     {/* Patient Type Filter */}
                     <div className="filter-dropdown-container">
                         <button 

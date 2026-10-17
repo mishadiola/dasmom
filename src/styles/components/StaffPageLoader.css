@@ -127,3 +127,34 @@
     background: var(--color-rose-dark, #9c5a65);
     transform: translateY(-1px);
 }
+
+/* ══════════════════════════════════════════
+   MOBILE SCREEN ADAPTATIONS (e.g. Mother Portal)
+══════════════════════════════════════════ */
+@media (max-width: 640px) {
+    .staff-loader-container {
+        min-height: 50vh;
+        padding: 24px 16px;
+    }
+
+    .staff-heartbeat-loader {
+        gap: 14px;
+    }
+
+    .staff-pulse-icon {
+        width: 44px;
+        height: 44px;
+    }
+
+    .staff-loader-message {
+        font-size: 13.5px;
+        max-width: 280px;
+        line-height: 1.4;
+    }
+
+    .staff-loader-card {
+        padding: 24px 18px;
+        width: 100%;
+        max-width: 320px;
+    }
+}

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, User, Calendar, Heart, Activity, MapPin, Phone, Mail, Baby, Clock, Thermometer, Weight, Ruler } from 'lucide-react';
 import PatientService from '../../services/patientservice';
 import '../../styles/components/ScheduledVisitModal.css'; // reuse styles
+import { formatMotherId } from '../../utils/displayIds';
 
 const PatientModal = ({ patientId, onClose }) => {
     const [patient, setPatient] = useState(null);
@@ -66,7 +67,7 @@ const PatientModal = ({ patientId, onClose }) => {
                             </div>
                             <div className="summary-info">
                                 <h3>{patient.name}</h3>
-                                <p>ID: {patient.id}</p>
+                                <p>ID: {formatMotherId(patient.id)}</p>
                                 <div className="summary-badges">
                                     <span className={`risk-badge risk-${patient.risk?.toLowerCase() || 'normal'}`}>{patient.risk || 'Normal'}</span>
                                     <span className="trimester-badge">Trimester {patient.trimester}</span>

@@ -9,15 +9,18 @@ import '../../styles/components/StaffPageLoader.css';
 const StaffPageLoader = ({ 
     message = 'Loading...', 
     error = null, 
+    errorTitle = 'Unable to load page',
     onRetry = null,
-    minHeight = '60vh'
+    minHeight = '60vh',
+    className = '',
+    iconSize = 48
 }) => {
     if (error) {
         return (
-            <div className="staff-loader-container staff-loader-error" style={{ minHeight }} role="alert">
+            <div className={`staff-loader-container staff-loader-error ${className}`.trim()} style={{ minHeight }} role="alert">
                 <div className="staff-loader-card">
                     <AlertCircle size={44} className="staff-loader-error-icon" />
-                    <h3>Unable to load page</h3>
+                    <h3>{errorTitle}</h3>
                     <p>
                         {typeof error === 'string' 
                             ? error 
@@ -34,9 +37,9 @@ const StaffPageLoader = ({
     }
 
     return (
-        <div className="staff-loader-container" style={{ minHeight }} role="status" aria-live="polite">
+        <div className={`staff-loader-container ${className}`.trim()} style={{ minHeight }} role="status" aria-live="polite">
             <div className="staff-heartbeat-loader">
-                <HeartPulse size={48} className="staff-pulse-icon" />
+                <HeartPulse size={iconSize} className="staff-pulse-icon" />
                 <p className="staff-loader-message">{message}</p>
             </div>
         </div>

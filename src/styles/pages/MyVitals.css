@@ -64,9 +64,13 @@
     display: flex;
     align-items: center;
     padding: 32px 40px !important;
-    background: linear-gradient(135deg, var(--color-pink-light) 0%, var(--color-yellow) 35%, var(--color-sage) 70%, var(--color-rose) 100%);
-    margin-bottom: 32px;
+    background: linear-gradient(135deg, var(--color-pink-light) 0%, var(--color-yellow) 35%, var(--color-sage) 70%, var(--color-rose) 100%) !important;
+    background-size: 300% 300% !important;
+    animation: bg-pan-header 18s ease infinite !important;
+    margin-bottom: 24px;
     border-radius: var(--radius-xl);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
 }
 
 .vitals-hero-content-wrapper {
@@ -84,16 +88,16 @@
 
 .vitals-hero-text-section .page-title {
     font-size: 38px;
-    margin-bottom: 28px;
+    margin-bottom: 12px;
     font-weight: 800;
 }
 
 .vitals-hero-text-section .page-subtitle {
     font-size: 17px;
     line-height: 1.5;
-    margin-bottom: 56px;
+    margin-bottom: 0;
     opacity: 0.95;
-    white-space: nowrap;
+    white-space: normal;
     font-weight: 500;
 }
 

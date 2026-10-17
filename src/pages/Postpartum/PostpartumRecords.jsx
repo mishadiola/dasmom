@@ -24,6 +24,7 @@ import ActionTooltip from '../../components/Common/ActionTooltip';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
 import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
 import { useRolePermissions } from '../../context/RolePermissionContext';
+import { useDefaultStation } from '../../hooks/useDefaultStation';
 
 const formatReadableDate = (dateString) => {
     if (!dateString || dateString === 'N/A' || dateString === 'Not scheduled' || dateString === 'None') return dateString;
@@ -213,14 +214,44 @@ const PostpartumRecords = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filters, setFilters] = useState({
-        deliveryType: 'All', station: 'All', followUp: 'All', summaryCard: 'All'
+
+    const {
+        isStationStaff,
+        assignedStation,
+        canViewOtherStations,
+        availableStations: permittedStations,
+        matchStation: matchStationHook,
+    } = useDefaultStation({
+        permissionKey: [
+            'postpartum.schedule.view.other_station',
+            'postpartum.record.other_station',
+        ],
+        allStations: availableStations,
+        isArray: false
     });
+
+    const [filters, setFilters] = useState(() => ({
+        deliveryType: 'All',
+        station: isStationStaff && assignedStation ? assignedStation : 'All',
+        followUp: 'All',
+        summaryCard: 'All'
+    }));
+    const userHasChangedStationRef = useRef(false);
+
+    useEffect(() => {
+        if (!userHasChangedStationRef.current && isStationStaff && assignedStation) {
+            setFilters(prev => ({
+                ...prev,
+                station: prev.station !== 'All' ? prev.station : assignedStation
+            }));
+        }
+    }, [isStationStaff, assignedStation]);
 
     const hasActiveFilters = filters.deliveryType !== 'All' || filters.station !== 'All' || filters.followUp !== 'All' || filters.summaryCard !== 'All' || searchTerm !== '';
 
     const clearFilters = () => {
-        setFilters({ deliveryType: 'All', station: 'All', followUp: 'All', summaryCard: 'All' });
+        const defStation = (isStationStaff && !canViewOtherStations) ? (assignedStation || '__UNASSIGNED__') : 'All';
+        setFilters({ deliveryType: 'All', station: defStation, followUp: 'All', summaryCard: 'All' });
         setSearchTerm('');
         setActivePopover(null);
     };
@@ -383,9 +414,12 @@ const PostpartumRecords = () => {
 
     const filtered = mothers.filter(m => {
         const s = searchTerm.toLowerCase();
-        const matchSearch = m.name.toLowerCase().includes(s) || m.patientId.toLowerCase().includes(s) || m.station.toLowerCase().includes(s);
+        const matchSearch = m.name.toLowerCase().includes(s) || 
+            m.patientId.toLowerCase().includes(s) || 
+            formatMotherId(m.patientId).toLowerCase().includes(s) || 
+            m.station.toLowerCase().includes(s);
         const matchDT = filters.deliveryType === 'All' || m.deliveryType === filters.deliveryType;
-        const matchStation = filters.station === 'All' || m.station === filters.station;
+        const matchStation = matchStationHook(m.station, filters.station);
         const matchFU = filters.followUp === 'All' || m.followUpStatus === filters.followUp;
                 let matchSummary = true;
         if (filters.summaryCard !== 'All') {
@@ -531,9 +565,11 @@ const PostpartumRecords = () => {
                             <div className="filter-popover">
                                 <div className="popover-title">Station</div>
                                 <div className="popover-options">
-                                    <button className={`popover-opt-btn ${filters.station === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('station', 'All'); setActivePopover(null); }}>All Stations</button>
-                                    {availableStations.map(s => (
-                                        <button key={s} className={`popover-opt-btn ${filters.station === s ? 'selected' : ''}`} onClick={() => { handleFilter('station', s); setActivePopover(null); }}>{s}</button>
+                                    {(!isStationStaff || canViewOtherStations) && (
+                                        <button className={`popover-opt-btn ${filters.station === 'All' ? 'selected' : ''}`} onClick={() => { userHasChangedStationRef.current = true; handleFilter('station', 'All'); setActivePopover(null); }}>All Stations</button>
+                                    )}
+                                    {permittedStations.map(s => (
+                                        <button key={s} className={`popover-opt-btn ${filters.station === s ? 'selected' : ''}`} onClick={() => { userHasChangedStationRef.current = true; handleFilter('station', s); setActivePopover(null); }}>{s}</button>
                                     ))}
                                 </div>
                             </div>

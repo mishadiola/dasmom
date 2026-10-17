@@ -4,6 +4,7 @@ import InventoryService from './inventoryservice';
 import { isBatchExpired } from '../utils/inventoryUtils';
 import { buildPregnancyHistory, getLatestPregnancyRecord, getPregnancyStatus } from '../utils/pregnancyUtils';
 import { numberPrenatalVisitsChronologically } from '../utils/prenatalVisitNumbering';
+import { formatMotherId, getFirstFourDigits } from '../utils/displayIds';
 
 const inventoryService = new InventoryService();
 const TIME_SLOTS_8TO4 = [
@@ -774,8 +775,34 @@ export default class PatientService {
 
     if (stationError) throw stationError;
 
+    let byId = [];
+    const isIdSearch = /^mom/i.test(term) || /^\d+$/.test(term.replace(/\s+/g, ''));
+    const digitsOnly = term.replace(/[^0-9]/g, '');
+
+    if (isIdSearch) {
+      const { data: recentPatients, error: idError } = await applyStationFilter(this.supabase
+        .from('patient_basic_info')
+        .select('id, first_name, last_name, station_ass, province, blood_type, stations:station_ass (station_name)')
+        .order('created_at', { ascending: false })
+        .limit(150));
+      if (!idError && recentPatients) {
+        const normQuery = term.toLowerCase().replace(/[\s-]+/g, '');
+        for (const p of recentPatients) {
+          const readableId = formatMotherId(p.id).toLowerCase().replace(/[\s-]+/g, '');
+          const pDigits = getFirstFourDigits(p.id);
+          if (
+            readableId.includes(normQuery) ||
+            (digitsOnly && digitsOnly.length >= 2 && pDigits.includes(digitsOnly)) ||
+            p.id.toLowerCase().includes(term.toLowerCase())
+          ) {
+            byId.push(p);
+          }
+        }
+      }
+    }
+
     // Combine and deduplicate results
-    const allPatients = [...(byFirstName || []), ...(byLastName || []), ...(byStation || [])];
+    const allPatients = [...(byFirstName || []), ...(byLastName || []), ...(byStation || []), ...byId];
     const uniquePatients = [];
     const seenIds = new Set();
 

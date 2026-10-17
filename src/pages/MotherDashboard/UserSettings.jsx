@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { 
-    Lock, HelpCircle, LogOut, 
+    Lock, Settings, HelpCircle, LogOut, 
     Shield, ChevronRight, Clock, Mail, Phone, ExternalLink, ArrowLeft,
     X, ChevronDown, ChevronUp
 } from 'lucide-react';
@@ -8,7 +8,6 @@ import { useNavigate } from 'react-router-dom';
 import { useModal } from '../../context/ModalContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { AuthContext } from '../../context/AuthContext';
-import { useContext } from 'react';
 import '../../styles/pages/UserSettings.css';
 import ResetPasswordModal from '../../components/ResetPasswordModal';
 import AuthService from '../../services/authservice';
@@ -102,15 +101,17 @@ const UserSettings = () => {
 
     return (
         <div className="user-settings-container">
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">
-                        <Lock size={22} className="header-icon" /> {t('settings_title', 'Account Settings')}
-                    </h1>
-                    <p className="page-subtitle">{t('settings_subtitle', 'Manage your account security and preferences')}</p>
+            <div className="page-header hero-header-with-img user-settings-hero-header">
+                <div className="hero-decorative-icon-bg user-settings-decorative-bg" aria-hidden="true">
+                    <Settings size={160} strokeWidth={1.2} className="hero-decorative-icon" />
                 </div>
-                <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
-
+                <div className="hero-content-wrapper">
+                    <div className="hero-text-section">
+                        <h1 className="page-title">
+                            <Settings size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('settings_title', 'Account Settings')}
+                        </h1>
+                        <p className="page-subtitle">{t('settings_subtitle', 'Manage your account security and preferences')}</p>
+                    </div>
                 </div>
             </div>
 

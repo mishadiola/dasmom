@@ -729,3 +729,144 @@ input:checked + .slider:before {
     word-break: break-word;
     height: auto;
 }
+
+
+/* ── Account Settings Hero Header (Mauve Shades Only) ── */
+.user-settings-hero-header {
+    background: linear-gradient(135deg, 
+        #f8edf4 0%, 
+        #ecd8e6 30%, 
+        #e2c2cd 65%, 
+        #c897a2 100%) !important;
+    background-size: 300% 300% !important;
+    animation: bg-pan-header 18s ease infinite !important;
+    position: relative;
+    overflow: hidden;
+    min-height: 280px;
+    display: flex;
+    align-items: center;
+    padding: 32px 40px !important;
+    border-radius: var(--radius-xl, 20px);
+    box-shadow: 0 4px 14px rgba(185, 129, 138, 0.08);
+    border: 1px solid rgba(185, 129, 138, 0.25) !important;
+    margin-bottom: 24px;
+}
+
+.user-settings-hero-header .hero-content-wrapper {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 60%;
+}
+
+.user-settings-hero-header .hero-text-section {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.user-settings-hero-header .page-title {
+    font-size: 38px;
+    margin-bottom: 12px;
+    font-weight: 800;
+    color: var(--color-text, #2d2234);
+    display: flex;
+    align-items: center;
+}
+
+.user-settings-hero-header .page-subtitle {
+    font-size: 17px;
+    line-height: 1.5;
+    margin-bottom: 0;
+    opacity: 0.95;
+    font-weight: 500;
+    color: var(--color-text, #2d2234);
+}
+
+.user-settings-decorative-bg {
+    position: absolute;
+    right: 5%;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.12;
+    color: var(--color-rose, #b9818a);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.user-settings-decorative-bg .hero-decorative-icon {
+    width: 170px;
+    height: 170px;
+    stroke-width: 1.15;
+}
+
+@media (max-width: 768px) {
+    .user-settings-hero-header {
+        min-height: 200px;
+        padding: 24px !important;
+        align-items: flex-start;
+    }
+
+    .user-settings-hero-header .hero-content-wrapper {
+        max-width: 100%;
+    }
+
+    .user-settings-hero-header .page-title {
+        font-size: 28px;
+        margin-bottom: 8px;
+    }
+
+    .user-settings-hero-header .page-subtitle {
+        font-size: 14px;
+    }
+
+    .user-settings-decorative-bg {
+        right: 2%;
+        top: 50%;
+        transform: translateY(-50%);
+        opacity: 0.08;
+    }
+
+    .user-settings-decorative-bg .hero-decorative-icon {
+        width: 110px;
+        height: 110px;
+    }
+}
+
+@media (max-width: 600px) {
+    .user-settings-hero-header {
+        min-height: 0 !important;
+        height: auto !important;
+        padding: 16px !important;
+        border-radius: 16px !important;
+        margin-bottom: 0 !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    .user-settings-hero-header .page-title {
+        font-size: 18px !important;
+        margin-bottom: 4px !important;
+    }
+
+    .user-settings-hero-header .page-subtitle {
+        font-size: 12px !important;
+        line-height: 1.4 !important;
+    }
+
+    .user-settings-decorative-bg {
+        right: 0 !important;
+        bottom: -5% !important;
+        top: auto !important;
+        transform: none !important;
+        opacity: 0.10 !important;
+    }
+
+    .user-settings-decorative-bg .hero-decorative-icon {
+        width: 90px !important;
+        height: 90px !important;
+    }
+}

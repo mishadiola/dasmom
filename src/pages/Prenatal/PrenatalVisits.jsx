@@ -7,7 +7,7 @@ import '../../styles/pages/PrenatalVisits.css';
 import {
     Search, Plus, Eye, Edit2, Trash2, CalendarCheck,
     AlertTriangle, HeartPulse, Filter, Clock, ChevronLeft,
-    ChevronRight, Calendar as CalendarIcon, Users, MapPin, X,
+    ChevronRight, ChevronDown, Calendar as CalendarIcon, Users, MapPin, X,
     CheckCircle2, Zap, RotateCcw, ArchiveRestore,
     Download, CalendarPlus
 } from 'lucide-react';
@@ -18,7 +18,6 @@ import PostpartumVisitModal from '../../components/PostpartumVisitModal';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import ExportModal from '../../components/ExportModal';
-import '../../styles/pages/PrenatalVisits.css';
 import Legend from '../../components/Legend/Legend';
 import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
 import { formatMotherId } from '../../utils/displayIds';
@@ -26,6 +25,7 @@ import VisitStaffAssignment from '../../components/Prenatal/VisitStaffAssignment
 import ActionTooltip from '../../components/Common/ActionTooltip';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
 import { useRolePermissions } from '../../context/RolePermissionContext';
+import { useDefaultStation } from '../../hooks/useDefaultStation';
 
 const toLocalDateStr = (d) => {
     const offset = d.getTimezoneOffset() * 60000;
@@ -83,11 +83,12 @@ const SearchableDropdown = ({ patients, value, onChange }) => {
     const ref = useRef(null);
 
     const selectedPatient = patients.find(p => p.id === value);
-    const displayValue = open ? query : (selectedPatient ? `${selectedPatient.name} (${selectedPatient.id})` : '');
+    const displayValue = open ? query : (selectedPatient ? `${selectedPatient.name} (${formatMotherId(selectedPatient.id)})` : '');
 
     const filtered = patients.filter(p =>
         p.name?.toLowerCase().includes(query.toLowerCase()) ||
-        p.id?.toLowerCase().includes(query.toLowerCase())
+        p.id?.toLowerCase().includes(query.toLowerCase()) ||
+        formatMotherId(p.id).toLowerCase().includes(query.toLowerCase())
     );
 
     useEffect(() => {
@@ -113,7 +114,7 @@ const SearchableDropdown = ({ patients, value, onChange }) => {
                 <Search size={14} className="sd-icon" />
                 <input
                     type="text"
-                    placeholder={selectedPatient ? `${selectedPatient.name} (${selectedPatient.id})` : 'Search by name or ID...'}
+                    placeholder={selectedPatient ? `${selectedPatient.name} (${formatMotherId(selectedPatient.id)})` : 'Search by name or ID...'}
                     value={displayValue}
                     onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
                     onFocus={() => { setOpen(true); setQuery(''); }}
@@ -138,7 +139,7 @@ const SearchableDropdown = ({ patients, value, onChange }) => {
                             onMouseDown={() => handleSelect(p)}
                         >
                             <span className="sd-name">{p.name}</span>
-                            <span className="sd-meta">{p.id}</span>
+                            <span className="sd-meta">{formatMotherId(p.id)}</span>
                         </li>
                     )) : (
                         <li className="sd-empty">No patients found</li>
@@ -159,6 +160,35 @@ const PrenatalVisits = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('All');
     const [archiveFilter, setArchiveFilter] = useState('all');
+    const [allStationsList, setAllStationsList] = useState([]);
+    const [activePopover, setActivePopover] = useState(null);
+
+    const {
+        isStationStaff,
+        assignedStation,
+        canViewOtherStations,
+        availableStations: permittedStations,
+        matchStation,
+    } = useDefaultStation({
+        permissionKey: [
+            'prenatal.schedule.view.other_station',
+            'postpartum.schedule.view.other_station',
+            'patient.reschedule.other_station'
+        ],
+        allStations: allStationsList,
+        isArray: false
+    });
+
+    const [filterStation, setFilterStation] = useState(() => (
+        isStationStaff && assignedStation ? assignedStation : 'All'
+    ));
+    const userHasChangedStationRef = useRef(false);
+
+    useEffect(() => {
+        if (!userHasChangedStationRef.current && isStationStaff && assignedStation) {
+            setFilterStation(assignedStation);
+        }
+    }, [isStationStaff, assignedStation]);
     const [currentPage, setCurrentPage] = useState(1);
     const { settings } = useSystemSettings();
     const itemsPerPage = settings?.tables?.rowsPerPage || 10;
@@ -262,6 +292,7 @@ const PrenatalVisits = () => {
                 if (stationError) throw stationError;
                 if (!active) return;
                 setAssignmentStations(stations || []);
+                setAllStationsList((stations || []).map(s => s.station_name).filter(Boolean));
                 if (access.stationId) {
                     setAddVisitForm(current => ({
                         ...current,
@@ -1041,14 +1072,16 @@ const PrenatalVisits = () => {
         const normalizedSearch = searchTerm.toLowerCase();
         return visitsTable.filter(v => {
             const matchesSearch = (v.patientName?.toLowerCase().includes(normalizedSearch) ||
-                v.patientId?.toLowerCase().includes(normalizedSearch));
+                v.patientId?.toLowerCase().includes(normalizedSearch) ||
+                formatMotherId(v.patientId).toLowerCase().includes(normalizedSearch));
             const matchesStatus = (filterStatus === 'All' || v.status === filterStatus);
             const matchesArchive =
                 archiveFilter === 'all' ||
                 (archiveFilter === 'archived' ? archivedPatientIds.has(v.patientId) : !archivedPatientIds.has(v.patientId));
-            return matchesSearch && matchesStatus && matchesArchive;
+            const matchesStation = matchStation(v.assignedStation || v.visitStation, filterStation);
+            return matchesSearch && matchesStatus && matchesArchive && matchesStation;
         });
-    }, [visitsTable, searchTerm, filterStatus, archiveFilter, archivedPatientIds]);
+    }, [visitsTable, searchTerm, filterStatus, archiveFilter, archivedPatientIds, matchStation, filterStation]);
 
     const todayOnly = new Date().toISOString().split('T')[0];
     const uniquePatients = useMemo(() => {
@@ -1130,11 +1163,13 @@ const PrenatalVisits = () => {
             activeRows = postpartumTable.filter(v => {
                 const matchesSearch = (v.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                     v.patientId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    formatMotherId(v.patientId).toLowerCase().includes(searchTerm.toLowerCase()) ||
                     v.vaccineName?.toLowerCase().includes(searchTerm.toLowerCase()));
                 const matchesArchive =
                     archiveFilter === 'all' ||
                     (archiveFilter === 'archived' ? archivedPatientIds.has(v.patientId) : !archivedPatientIds.has(v.patientId));
-                return matchesSearch && matchesArchive;
+                const matchesStation = matchStation(v.assignedStation, filterStation);
+                return matchesSearch && matchesArchive && matchesStation;
             });
         } else {
             activeRows = filteredVisits;
@@ -1263,6 +1298,7 @@ const PrenatalVisits = () => {
             && (!q
                 || visit.patientName?.toLowerCase().includes(q)
                 || visit.patientId?.toLowerCase().includes(q)
+                || formatMotherId(visit.patientId).toLowerCase().includes(q)
                 || visit.visitType?.toLowerCase().includes(q))
         );
     }, [eligibleVisitsToReschedule, rescheduleDateFilter, rescheduleSearch]);
@@ -1286,6 +1322,9 @@ const PrenatalVisits = () => {
         const typeStr = visitTypeTab.charAt(0).toUpperCase() + visitTypeTab.slice(1);
         const catStr = visitCategoryTab.charAt(0).toUpperCase() + visitCategoryTab.slice(1);
         let desc = `${monthYear} · ${typeStr} · ${catStr}`;
+        if (filterStation !== 'All') {
+            desc += ` · Station: ${filterStation}`;
+        }
         if (filterStatus !== 'All') {
             desc += ` · Status: ${filterStatus}`;
         }
@@ -1311,7 +1350,7 @@ const PrenatalVisits = () => {
 
         return filteredForExport.map(v => ({
             "Patient Name": v.patientName || 'N/A',
-            "Patient ID": v.patientId || 'N/A',
+            "Patient ID": formatMotherId(v.patientId) || 'N/A',
             "Visit Type": (v.type || v.visitType || visitTypeTab).toUpperCase(),
             "Scheduled Date": formatReadableDate(v.visitDate || v.date) || v.visitDate || v.date || 'N/A',
             "Scheduled Time": v.visitTime || v.time || 'N/A',
@@ -1363,11 +1402,12 @@ const PrenatalVisits = () => {
             const head = data.length > 0 ? [Object.keys(data[0])] : [["Patient Name", "Patient ID", "Visit Type", "Scheduled Date", "Scheduled Time", "Assigned Station", "Visit Station", "Assigned Staff", "Status"]];
             const body = data.length > 0 ? data.map(obj => Object.values(obj)) : [];
 
+            const stationText = filterStation === 'All' ? 'All Stations' : filterStation;
             exportStandardStaffPdf({
                 orientation: 'landscape',
                 title: 'Visits & Scheduling Report',
                 period: reportPeriodText || 'All Dates',
-                station: 'All Stations',
+                station: stationText,
                 scope: filterDesc || '',
                 totalRecords: data.length,
                 head: head,
@@ -1461,12 +1501,20 @@ const PrenatalVisits = () => {
                             <Legend 
                                 categories={[
                                     {
-                                        title: "Status",
+                                        title: "Appointment Status",
                                         items: [
                                             { label: "Available", style: { backgroundColor: 'rgba(122, 162, 219, 0.15)', color: '#3b5a8c' } },
                                             { label: "Scheduled", style: { backgroundColor: 'rgba(230, 184, 110, 0.2)', color: '#8a6a10' } },
                                             { label: "Attended / Completed", style: { backgroundColor: 'rgba(109, 184, 160, 0.2)', color: '#3d8870' } },
                                             { label: "Missed", style: { backgroundColor: 'rgba(224, 122, 138, 0.15)', color: '#a04070' } }
+                                        ]
+                                    },
+                                    {
+                                        title: "Visit Type & Calendar",
+                                        items: [
+                                            { label: "Routine Prenatal", style: { backgroundColor: 'rgba(122, 162, 219, 0.15)', color: '#3b5a8c' } },
+                                            { label: "Postpartum Follow-up", style: { backgroundColor: 'rgba(185, 129, 138, 0.15)', color: '#8a505b' } },
+                                            { label: "Today's Schedule (Rose Outline)", style: { backgroundColor: 'rgba(185, 129, 138, 0.08)', border: '1px solid #b9818a', color: '#8a505b' } }
                                         ]
                                     }
                                 ]}
@@ -1480,8 +1528,8 @@ const PrenatalVisits = () => {
                         <div className="day-view-container">
                             {visibleDays.map(day => {
                                 const dayItems = visitTypeTab === 'postpartum'
-                                    ? postpartumTable.filter(v => v.patientRecordAvailable && v.visitDateOnly === day.date)
-                                    : visitsTable.filter(v => v.visitDateOnly === day.date);
+                                    ? postpartumTable.filter(v => v.patientRecordAvailable && v.visitDateOnly === day.date && matchStation(v.assignedStation, filterStation))
+                                    : visitsTable.filter(v => v.visitDateOnly === day.date && matchStation(v.assignedStation || v.visitStation, filterStation));
 
                                 return (
                                     <div key={day.date} className={`day-schedule-card ${day.date === TODAY ? 'day-today' : ''}`}>
@@ -1523,8 +1571,8 @@ const PrenatalVisits = () => {
                                 <div className="week-row">
                                     {visibleDays.map(day => {
                                         const dayItems = visitTypeTab === 'postpartum'
-                                            ? postpartumTable.filter(v => v.patientRecordAvailable && v.visitDateOnly === day.date)
-                                            : visitsTable.filter(v => v.visitDateOnly === day.date);
+                                            ? postpartumTable.filter(v => v.patientRecordAvailable && v.visitDateOnly === day.date && matchStation(v.assignedStation, filterStation))
+                                            : visitsTable.filter(v => v.visitDateOnly === day.date && matchStation(v.assignedStation || v.visitStation, filterStation));
 
                                         return (
                                             <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`} onClick={() => { setCalendarView('day'); setCurrentDate(new Date(day.date)); }}>
@@ -1562,8 +1610,8 @@ const PrenatalVisits = () => {
                                         <div key={weekIndex} className="week-row">
                                             {week.map(day => {
                                                 const dayItems = visitTypeTab === 'postpartum'
-                                                    ? postpartumTable.filter(v => v.patientRecordAvailable && v.visitDateOnly === day.date)
-                                                    : visitsTable.filter(v => v.visitDateOnly === day.date);
+                                                    ? postpartumTable.filter(v => v.patientRecordAvailable && v.visitDateOnly === day.date && matchStation(v.assignedStation, filterStation))
+                                                    : visitsTable.filter(v => v.visitDateOnly === day.date && matchStation(v.assignedStation || v.visitStation, filterStation));
 
                                                 return (
                                                     <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`} onClick={() => { setCalendarView('day'); setCurrentDate(new Date(day.date)); }}>
@@ -1606,8 +1654,8 @@ const PrenatalVisits = () => {
                     <h2 className="section-title">
                         <Clock size={18} /> Visit Records
                     </h2>
-                    <div className="table-filters" style={{ flexGrow: 1, display: 'flex', justifyContent: 'flex-end' }}>
-                        <div className="shared-search-wrap" style={{ maxWidth: '400px' }}>
+                    <div className="table-filters" style={{ flexGrow: 1, display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'center' }}>
+                        <div className="shared-search-wrap" style={{ maxWidth: '350px' }}>
                             <Search size={16} className="shared-search-icon" />
                             <input 
                                 type="text" 
@@ -1616,6 +1664,41 @@ const PrenatalVisits = () => {
                                 onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                                 className="shared-search-input"
                             />
+                        </div>
+                        <div className="filter-dropdown-container" style={{ position: 'relative' }}>
+                            <button 
+                                className={`filter-btn ${filterStation !== 'All' ? 'active-filter' : ''}`}
+                                onClick={() => setActivePopover(activePopover === 'station' ? null : 'station')}
+                                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                            >
+                                <MapPin size={14} className="filter-btn-icon" />
+                                <span>{filterStation === 'All' ? 'All Stations' : filterStation}</span>
+                                <ChevronDown size={14} className="filter-btn-icon" />
+                            </button>
+                            {activePopover === 'station' && (
+                                <div className="filter-popover" style={{ right: 0, left: 'auto', minWidth: '180px' }}>
+                                    <div className="popover-title">Station</div>
+                                    <div className="popover-options">
+                                        {(!isStationStaff || canViewOtherStations) && (
+                                            <button 
+                                                className={`popover-opt-btn ${filterStation === 'All' ? 'selected' : ''}`} 
+                                                onClick={() => { userHasChangedStationRef.current = true; setFilterStation('All'); setActivePopover(null); setCurrentPage(1); }}
+                                            >
+                                                All Stations
+                                            </button>
+                                        )}
+                                        {permittedStations.map((station) => (
+                                            <button 
+                                                key={station} 
+                                                className={`popover-opt-btn ${filterStation === station ? 'selected' : ''}`} 
+                                                onClick={() => { userHasChangedStationRef.current = true; setFilterStation(station); setActivePopover(null); setCurrentPage(1); }}
+                                            >
+                                                {station}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

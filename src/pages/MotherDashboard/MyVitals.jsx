@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
 import { 
@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/MyVitals.css';
 import vitalsSilhouette from '../../assets/images/vitals-silhouette.png';
 import { useLanguage } from '../../context/LanguageContext';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 const MyVitals = () => {
     const navigate = useNavigate();
@@ -17,6 +18,8 @@ const MyVitals = () => {
     const [vitalsData, setVitalsData] = useState([]);
     const [patientInfo, setPatientInfo] = useState({});
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const loadRef = useRef(null);
     const [activeTab, setActiveTab] = useState('Current Health');
     const { t } = useLanguage();
 
@@ -76,10 +79,12 @@ const MyVitals = () => {
                 setVitalsData({ visits, chronological, riskAssessment });
             } catch (err) {
                 console.error('Failed to load vitals:', err);
+                setError(err?.message || 'Unable to load vitals data.');
             } finally {
                 setLoading(false);
             }
         };
+        loadRef.current = loadVitals;
         loadVitals();
     }, []);
 
@@ -210,18 +215,32 @@ const MyVitals = () => {
         );
     };
 
+    if (loading) {
+        return (
+            <StaffPageLoader 
+                message={t('vitals_loading') || 'Loading your health records...'} 
+                error={error} 
+                errorTitle="Unable to load vitals"
+                onRetry={() => {
+                    setLoading(true);
+                    loadRef.current?.();
+                }} 
+            />
+        );
+    }
+
     return (
-        <div className="my-vitals-page">
-            <div className="page-header vitals-hero-header-with-img">
+        <div className="my-vitals-page staff-page-ready">
+            <div className="page-header hero-header-with-img vitals-hero-header-with-img">
                 <img 
                     src={vitalsSilhouette} 
                     alt="Vitals Silhouette" 
-                    className="vitals-silhouette-bg" 
+                    className="vitals-silhouette-bg hero-silhouette-bg" 
                 />
-                <div className="vitals-hero-content-wrapper">
-                    <div className="vitals-hero-text-section">
+                <div className="vitals-hero-content-wrapper hero-content-wrapper">
+                    <div className="vitals-hero-text-section hero-text-section">
                         <h1 className="page-title">
-                            <Activity size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('vitals_title')}
+                            <Activity size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('vitals_title', 'My Vitals')}
                         </h1>
                         <p className="page-subtitle">{t('vitals_subtitle')}</p>
                     </div>

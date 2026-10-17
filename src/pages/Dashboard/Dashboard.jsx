@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useRef } from 'react';
+import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import {
     Users, Baby, AlertTriangle, CalendarCheck, TrendingUp,
     TrendingDown, Activity, Syringe, HeartPulse, MapPin,
@@ -14,6 +14,7 @@ import supabase from '../../config/supabaseclient';
 import { AuthContext } from '../../context/AuthContext';
 import { formatDate } from '../../utils/formatters';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import { useDefaultStation } from '../../hooks/useDefaultStation';
 
 const authService = new AuthService();
 const APK_DOWNLOAD_URL = 'https://hcrpdvizautiuwgmfcqc.supabase.co/storage/v1/object/public/dasmom-apk/app-release.apk';
@@ -135,7 +136,48 @@ const HealthConditionsCell = ({ conditions }) => {
 const Dashboard = () => {
     const navigate = useNavigate();
     const {user} = useContext(AuthContext);
-    const patientService = new PatientService();
+    const patientService = useMemo(() => new PatientService(), []);
+
+    const [availableStations, setAvailableStations] = useState([]);
+    useEffect(() => {
+        const fetchStations = async () => {
+            try {
+                const data = await patientService.getAllStations();
+                setAvailableStations(data || []);
+            } catch (err) {
+                console.error('Error fetching stations:', err);
+            }
+        };
+        fetchStations();
+    }, [patientService]);
+
+    const {
+        assignedStation,
+        isStationStaff,
+        canViewOtherStations,
+        availableStations: permittedStations,
+        matchStation
+    } = useDefaultStation({
+        permissionKey: [
+            'prenatal.schedule.view.other_station',
+            'postpartum.schedule.view.other_station',
+            'vaccine.schedule.view.other_station',
+            'patient.view.other_station'
+        ],
+        allStations: availableStations,
+        isArray: false
+    });
+
+    const [selectedStation, setSelectedStation] = useState(() => (
+        isStationStaff && assignedStation ? assignedStation : 'All'
+    ));
+    const userHasChangedStationRef = useRef(false);
+
+    useEffect(() => {
+        if (!userHasChangedStationRef.current && isStationStaff && assignedStation) {
+            setSelectedStation(prev => (prev !== 'All' ? prev : assignedStation));
+        }
+    }, [isStationStaff, assignedStation]);
     
     //const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -147,6 +189,13 @@ const Dashboard = () => {
     const [healthSnapshot, setHealthSnapshot] = useState({ conditions: [], trimesterDist: [] });
     const [loadingHealth, setLoadingHealth] = useState(true);
     const isFetchingStats = useRef(false);
+
+    const displayedAppointments = useMemo(() => {
+        if (!selectedStation || selectedStation === 'All') return todayAppts;
+        return todayAppts.filter(a => matchStation(a.station, selectedStation));
+    }, [todayAppts, selectedStation, matchStation]);
+
+    const displayedApptCount = displayedAppointments.length;
 
     const fetchStats = async () => {
         if (isFetchingStats.current) return;
@@ -632,7 +681,7 @@ const Dashboard = () => {
                             onKeyDown={e => { if(e.key === 'Enter') navigate('/dashboard/prenatal') }}
                             aria-label="View today's appointments"
                         >
-                            {liveStats.apptToday} appointments
+                            {displayedApptCount} appointments
                         </strong> today and <strong 
                             onClick={() => navigate('/dashboard/high-risk')}
                             style={{ cursor: 'pointer', textDecoration: 'none' }}
@@ -670,7 +719,7 @@ const Dashboard = () => {
             {/* ── Stat Cards ── */}
             <div className="stats-grid">
                 {STAT_META.map((s) => {
-                    const value = liveStats[s.key] ?? 0;
+                    const value = s.key === 'apptToday' ? displayedApptCount : (liveStats[s.key] ?? 0);
                     const Icon = s.icon;
                     return (
                         <div 
@@ -705,13 +754,44 @@ const Dashboard = () => {
 
                     {/* UPCOMING APPOINTMENTS */}
                     <div className="card clickable-card" onClick={() => navigate('/dashboard/prenatal')}>
-                        <div className="card-header">
+                        <div className="card-header" style={{ flexWrap: 'wrap', gap: '8px' }}>
                             <h2 className="card-title">
                                 <CalendarCheck size={16} />
                                 Today's Appointments
-                                <span className="card-badge card-badge--blue">{liveStats.apptToday}</span>
+                                <span className="card-badge card-badge--blue">{displayedApptCount}</span>
                             </h2>
-                            <button className="card-link" onClick={() => navigate('/dashboard/prenatal')}>View all <ChevronRight size={13} /></button>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={e => e.stopPropagation()}>
+                                {permittedStations.length > 0 && (
+                                    <select
+                                        className="st-station-filter-select"
+                                        style={{
+                                            padding: '4px 8px',
+                                            fontSize: '12px',
+                                            borderRadius: '6px',
+                                            border: '1px solid #e2e8f0',
+                                            background: '#fff',
+                                            cursor: (isStationStaff && !canViewOtherStations) ? 'default' : 'pointer'
+                                        }}
+                                        value={isStationStaff && !canViewOtherStations ? (assignedStation || 'All') : selectedStation}
+                                        disabled={isStationStaff && !canViewOtherStations}
+                                        onChange={e => {
+                                            userHasChangedStationRef.current = true;
+                                            setSelectedStation(e.target.value);
+                                        }}
+                                        aria-label="Filter today's appointments by station"
+                                    >
+                                        {(!isStationStaff || canViewOtherStations) && (
+                                            <option value="All">All Stations</option>
+                                        )}
+                                        {permittedStations.map(stationName => (
+                                            <option key={stationName} value={stationName}>
+                                                {stationName}
+                                            </option>
+                                        ))}
+                                    </select>
+                                )}
+                                <button className="card-link" onClick={() => navigate('/dashboard/prenatal')}>View all <ChevronRight size={13} /></button>
+                            </div>
                         </div>
                         <p className="card-description">Overview of patients scheduled to visit the clinic today.</p>
                         <div className="table-wrap">
@@ -725,14 +805,14 @@ const Dashboard = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {todayAppts.length === 0 ? (
+                                    {displayedAppointments.length === 0 ? (
                                         <tr>
                                             <td colSpan="4" style={{textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)'}}>
-                                                No appointments scheduled for today.
+                                                No appointments scheduled for today{selectedStation !== 'All' ? ` in ${selectedStation}` : ''}.
                                             </td>
                                         </tr>
                                     ) : (
-                                        todayAppts.map((a) => (
+                                        displayedAppointments.map((a) => (
                                             <tr key={a.id} className="table-row">
                                                 <td>
                                                     <div className="patient-cell">

@@ -1,4 +1,5 @@
 import supabase from '../config/supabaseclient';
+import { formatMotherId, getFirstFourDigits } from '../utils/displayIds';
 
 export default class DeliveryService {
     constructor() {
@@ -89,6 +90,12 @@ export default class DeliveryService {
      */
     async searchPregnantMothers(query) {
         try {
+            const term = (query || '').trim();
+            if (!term || term.length < 2) return [];
+
+            const isIdSearch = /^mom/i.test(term) || /^\d+$/.test(term.replace(/\s+/g, ''));
+            const digitsOnly = term.replace(/[^0-9]/g, '');
+
             const { data, error } = await this.supabase
                 .from('patient_basic_info')
                 .select(`
@@ -99,11 +106,45 @@ export default class DeliveryService {
                     stations:station_ass (station_name),
                     pregnancy_info (edd, pregn_postp)
                 `)
-                .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%`)
-                .limit(10);
+                .or(`first_name.ilike.%${term}%,last_name.ilike.%${term}%`)
+                .limit(15);
 
             if (error) throw error;
-            return data.map(p => ({
+
+            let matched = data || [];
+            if (isIdSearch) {
+                const { data: recent } = await this.supabase
+                    .from('patient_basic_info')
+                    .select(`
+                        id, 
+                        first_name, 
+                        last_name, 
+                        station_ass,
+                        stations:station_ass (station_name),
+                        pregnancy_info (edd, pregn_postp)
+                    `)
+                    .order('created_at', { ascending: false })
+                    .limit(100);
+
+                if (recent) {
+                    const normQuery = term.toLowerCase().replace(/[\s-]+/g, '');
+                    for (const p of recent) {
+                        const readableId = formatMotherId(p.id).toLowerCase().replace(/[\s-]+/g, '');
+                        const pDigits = getFirstFourDigits(p.id);
+                        if (
+                            readableId.includes(normQuery) ||
+                            (digitsOnly && digitsOnly.length >= 2 && pDigits.includes(digitsOnly)) ||
+                            p.id.toLowerCase().includes(term.toLowerCase())
+                        ) {
+                            if (!matched.some(m => m.id === p.id)) {
+                                matched.push(p);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return matched.map(p => ({
                 id: p.id,
                 name: `${p.first_name} ${p.last_name}`,
                 stationId: p.station_ass || null,

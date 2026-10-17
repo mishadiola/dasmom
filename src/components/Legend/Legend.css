@@ -1,53 +1,122 @@
 /* src/components/Legend/Legend.css */
+
 .shared-legend-container {
     position: relative;
     margin-left: auto;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
 }
 
-/* Match reference exactly: White background, Thin soft rose/mauve border, Rounded corners */
+/* Compact, rounded icon button following the dusty rose and deep plum palette */
 .shared-legend-btn {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 6px;
-    background: white;
-    border: 1px solid rgba(185, 129, 138, 0.4);
-    padding: 8px 12px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 700;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    margin: 0;
+    background: #ffffff;
+    border: 1.5px solid rgba(185, 129, 138, 0.4);
+    border-radius: 50%;
     color: var(--color-rose, #b9818a);
     cursor: pointer;
     font-family: inherit;
-    transition: all 0.2s ease;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    outline: none;
+    flex-shrink: 0;
 }
 
-.shared-legend-btn:hover, .shared-legend-btn.active {
-    background: rgba(185, 129, 138, 0.05);
+.shared-legend-btn:hover,
+.shared-legend-btn:focus-visible,
+.shared-legend-btn.active {
+    background: rgba(185, 129, 138, 0.08);
     border-color: var(--color-rose, #b9818a);
+    color: #8c4e5a;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(185, 129, 138, 0.2);
+}
+
+.shared-legend-btn:focus-visible {
+    box-shadow: 0 0 0 3px rgba(185, 129, 138, 0.25);
 }
 
 .shared-legend-icon {
-    color: var(--color-rose, #b9818a);
+    color: currentColor;
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
 }
 
-/* Dropdown styling */
-.shared-legend-popover {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    margin-top: 8px;
-    background: white;
-    border: 1px solid #eef0f4;
+.shared-legend-btn:hover .shared-legend-icon,
+.shared-legend-btn.active .shared-legend-icon {
+    transform: scale(1.08);
+}
+
+/* Tooltip / Popover floating portal rendered via document.body */
+.shared-legend-popover-portal {
+    background: #ffffff;
+    border: 1px solid rgba(185, 129, 138, 0.28);
     border-radius: 12px;
-    padding: 16px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-    z-index: 50;
-    min-width: 180px;
+    padding: 14px 16px;
+    box-shadow: 0 10px 32px rgba(59, 48, 68, 0.16), 0 3px 10px rgba(0, 0, 0, 0.05);
+    z-index: 9999;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
     text-align: left;
+    box-sizing: border-box;
+    animation: legendFadeIn 0.15s ease-out;
+    pointer-events: auto;
+    font-family: var(--font, system-ui, -apple-system, sans-serif);
+}
+
+@keyframes legendFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.shared-legend-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #f0f2f5;
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--color-rose, #b9818a);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
+
+.shared-legend-header-icon {
+    color: var(--color-rose, #b9818a);
+    flex-shrink: 0;
+}
+
+.shared-legend-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+/* Custom scrollbar for legend body if needed */
+.shared-legend-body::-webkit-scrollbar {
+    width: 4px;
+}
+.shared-legend-body::-webkit-scrollbar-thumb {
+    background: rgba(185, 129, 138, 0.3);
+    border-radius: 4px;
 }
 
 .shared-legend-category {
@@ -55,12 +124,12 @@
     flex-direction: column;
 }
 
-/* Category headings in the same uppercase style */
+/* Category headings in uppercase style */
 .shared-legend-title {
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 800;
     color: #3b3044;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -69,10 +138,10 @@
 .shared-legend-items {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
-/* Colored pills with full width, rounded radius, centered text */
+/* Colored pills with rounded radius */
 .shared-legend-badge {
     font-size: 11.5px;
     font-weight: 700;
@@ -82,11 +151,12 @@
     text-align: center;
     width: 100%;
     box-sizing: border-box;
+    transition: filter 0.15s ease;
 }
 
 .shared-legend-item-icon {
     display: inline-flex;
     align-items: center;
-    margin-right: 4px;
+    margin-right: 5px;
     vertical-align: middle;
 }

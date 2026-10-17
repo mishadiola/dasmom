@@ -39,12 +39,14 @@ import { useModal } from '../../context/ModalContext';
 import * as XLSX from 'xlsx';
 import ExportModal from '../../components/ExportModal';
 import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
-import { isBatchExpired, getInventoryStatus } from '../../utils/inventoryUtils';
+import { isBatchExpired, isBatchExpiringSoon, getInventoryStatus } from '../../utils/inventoryUtils';
 import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/Inventory.css';
 import { formatDate } from '../../utils/formatters';
 import ActionTooltip from '../../components/Common/ActionTooltip';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import FieldInfoTooltip from '../../components/Common/FieldInfoTooltip';
+import { useDefaultStation } from '../../hooks/useDefaultStation';
 
 
 const inventoryService = new InventoryService();
@@ -76,6 +78,15 @@ const Inventory = () => {
     userId: user?.id || null
   }));
   const [availableStations, setAvailableStations] = useState([]);
+  const {
+    assignedStation,
+    isStationStaff,
+    matchStation
+  } = useDefaultStation({
+    permissionKey: ['inventory.station.view.other_station', 'inventory.main.distribute.to_stations'],
+    allStations: availableStations,
+    isArray: false
+  });
   const isAdmin = isAdminRole(userScope.role);
   const canDistributeToStations = isAdmin || hasPermission('inventory.main.distribute.to_stations');
   const canViewMainInventory = isAdmin
@@ -91,8 +102,9 @@ const Inventory = () => {
     || canDistributeToStations;
   const visibleStations = useMemo(() => {
     if (canViewOtherStations) return availableStations;
-    return userScope.stationName ? [userScope.stationName] : [];
-  }, [availableStations, canViewOtherStations, userScope.stationName]);
+    const st = userScope.stationName || assignedStation;
+    return st ? [st] : [];
+  }, [availableStations, canViewOtherStations, userScope.stationName, assignedStation]);
   const [activeTab, setActiveTab] = useState('vaccines');
   const [mainTab, setMainTab] = useState('inventory');
   const [distPage, setDistPage] = useState(1);
@@ -113,24 +125,53 @@ const Inventory = () => {
   useClickOutside(filterRowRef, () => setActivePopover(null));
   const [activeSummaryFilter, setActiveSummaryFilter] = useState(null);
   const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
+  const [archivedIds, setArchivedIds] = useState(() => {
+    try {
+      const stored = localStorage.getItem('inventory_archived_ids');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
   const [dateFilter, setDateFilter] = useState('all');
   const [customDateFrom, setCustomDateFrom] = useState('');
   const [customDateTo, setCustomDateTo] = useState('');
   const [dateFilterError, setDateFilterError] = useState('');
 
-  const hasActiveFilters = statusFilter !== 'All' || archiveFilter !== 'active' || searchTerm !== '' || dateFilter !== 'all';
+  const hasActiveFilters = statusFilter !== 'All' || archiveFilter !== 'active' || searchTerm !== '' || dateFilter !== 'all' || activeSummaryFilter !== null;
 
   useEffect(() => {
+    if (!location.state) return;
 
-    if (location.state?.filterStatus) {
+    if (location.state.highlightItemId) {
+      const targetId = String(location.state.highlightItemId);
+      const allLoaded = [
+        ...(vaccines || []).map(v => ({ ...v, _tab: 'vaccines' })),
+        ...(supplements || []).map(s => ({ ...s, _tab: 'supplements' }))
+      ];
 
-        setStatusFilter(location.state.filterStatus);
+      if (allLoaded.length === 0) return;
 
+      const targetItem = allLoaded.find(i => String(i.id) === targetId);
+      if (targetItem) {
+        setActiveTab(targetItem._tab);
+        const isArchived = archivedIds.includes(targetItem.id) || targetItem.status === 'archived';
+        if (isArchived) {
+          setArchiveFilter('archived');
+        } else {
+          setArchiveFilter('active');
+        }
+        setSearchTerm(targetItem.item_name || '');
+        setStatusFilter(location.state.filterStatus || 'All');
+        setActiveSummaryFilter(null);
+        setMainTab('inventory');
         window.history.replaceState({}, document.title);
-
+      }
+    } else if (location.state.filterStatus) {
+      setStatusFilter(location.state.filterStatus);
+      window.history.replaceState({}, document.title);
     }
-
-  }, [location.state]);
+  }, [location.state, vaccines, supplements, archivedIds]);
 
   useEffect(() => {
     setUserScope({
@@ -148,6 +189,7 @@ const Inventory = () => {
 
   const clearFilters = () => {
       setStatusFilter('All');
+      setActiveSummaryFilter(null);
       setArchiveFilter('active');
       setSearchTerm('');
       setDateFilter('all');
@@ -156,14 +198,6 @@ const Inventory = () => {
       setDateFilterError('');
       setActivePopover(null);
   };
-  const [archivedIds, setArchivedIds] = useState(() => {
-    try {
-      const stored = localStorage.getItem('inventory_archived_ids');
-      return stored ? JSON.parse(stored) : [];
-    } catch (e) {
-      return [];
-    }
-  });
   const [pendingVaccinations, setPendingVaccinations] = useState([]);
 
   // Station Distribution states
@@ -183,7 +217,17 @@ const Inventory = () => {
 
   // History section filters state
   const [historySearch, setHistorySearch] = useState('');
-  const [historyStationFilter, setHistoryStationFilter] = useState('All');
+  const [historyStationFilter, setHistoryStationFilter] = useState(() => (
+    isStationStaff && assignedStation ? assignedStation : 'All'
+  ));
+  const userHasChangedHistoryStationRef = useRef(false);
+
+  useEffect(() => {
+    if (!userHasChangedHistoryStationRef.current && isStationStaff && assignedStation) {
+      setHistoryStationFilter(prev => (prev !== 'All' ? prev : assignedStation));
+    }
+  }, [isStationStaff, assignedStation]);
+
   const [historyTypeFilter, setHistoryTypeFilter] = useState('All');
   const [historyDateFilter, setHistoryDateFilter] = useState('all');
   const [historyCustomDateFrom, setHistoryCustomDateFrom] = useState('');
@@ -202,6 +246,10 @@ const Inventory = () => {
     const grouped = {};
 
     stationCurrentInventory.forEach(row => {
+      if (historyStationFilter && historyStationFilter !== 'All' && !matchStation(row.station, historyStationFilter)) {
+        return;
+      }
+
       const groupKey = `${row.station || 'Unknown'}||${row.item_type || 'Unknown'}||${row.item_name || 'Unknown'}`;
 
       if (!grouped[groupKey]) {
@@ -236,7 +284,7 @@ const Inventory = () => {
       if (typeCmp !== 0) return typeCmp;
       return (a.item_name || '').localeCompare(b.item_name || '');
     });
-  }, [stationCurrentInventory]);
+  }, [stationCurrentInventory, historyStationFilter, matchStation]);
 
   // Handle auto-populating user info when context resolves
   useEffect(() => {
@@ -642,81 +690,92 @@ const Inventory = () => {
 
   const currentItems = activeTab === 'vaccines' ? groupVaccinesByName(vaccines) : groupSupplementsByName(supplements);
 
-  const filteredItems = currentItems
-    .filter(item => item && typeof item === 'object')
-    .map(item => {
-      // Filter the items within the group based on the archiveFilter
-      const filteredSubItems = item.items.filter(i => {
-        const isArchived = archivedIds.includes(i.id) || i.status === 'archived';
-        if (archiveFilter === 'active' && isArchived) return false;
-        if (archiveFilter === 'archived' && !isArchived) return false;
-        
-        if (dateFilter !== 'all') {
-          const dDate = i.created_at ? new Date(i.created_at) : null;
-          if (!dDate || isNaN(dDate.getTime())) return false;
+  // Grouped items scoped to archiveFilter and dateFilter
+  const scopedItems = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return currentItems
+      .filter(item => item && typeof item === 'object')
+      .map(item => {
+        // Filter the items within the group based on the archiveFilter and dateFilter
+        const filteredSubItems = (item.items || []).filter(i => {
+          const isArchived = archivedIds.includes(i.id) || i.status === 'archived';
+          if (archiveFilter === 'active' && isArchived) return false;
+          if (archiveFilter === 'archived' && !isArchived) return false;
           
-          const now = new Date();
-          if (dateFilter === 'this_month') {
-              if (dDate.getMonth() !== now.getMonth() || dDate.getFullYear() !== now.getFullYear()) return false;
-          } else if (dateFilter === 'this_year') {
-              if (dDate.getFullYear() !== now.getFullYear()) return false;
-          } else if (dateFilter === 'custom' && customDateFrom && customDateTo) {
-              const from = new Date(`${customDateFrom}T00:00:00`);
-              const to = new Date(`${customDateTo}T23:59:59.999`);
-              if (dDate < from || dDate > to) return false;
+          if (dateFilter !== 'all') {
+            const dDate = i.created_at ? new Date(i.created_at) : null;
+            if (!dDate || isNaN(dDate.getTime())) return false;
+            
+            const now = new Date();
+            if (dateFilter === 'this_month') {
+                if (dDate.getMonth() !== now.getMonth() || dDate.getFullYear() !== now.getFullYear()) return false;
+            } else if (dateFilter === 'this_year') {
+                if (dDate.getFullYear() !== now.getFullYear()) return false;
+            } else if (dateFilter === 'custom' && customDateFrom && customDateTo) {
+                const from = new Date(`${customDateFrom}T00:00:00`);
+                const to = new Date(`${customDateTo}T23:59:59.999`);
+                if (dDate < from || dDate > to) return false;
+            }
           }
-        }
-        
-        return true;
-      }).map(i => {
-        // If it's in our local storage archived list, enforce the status so UI reflects it
-        if (archivedIds.includes(i.id)) {
-            return { ...i, status: 'archived' };
-        }
-        return i;
-      });
+          
+          return true;
+        }).map(i => {
+          // If it's in our local storage archived list, enforce the status so UI reflects it
+          if (archivedIds.includes(i.id)) {
+              return { ...i, status: 'archived' };
+          }
+          return i;
+        });
 
-      const total_quantity = filteredSubItems.reduce((sum, i) => sum + (i.isExpired ? 0 : (i.quantity || 0)), 0);
-      const total_max_stock = filteredSubItems.reduce((sum, i) => sum + (i.max_stock || i.max_quantity || i.max_quant || 0), 0);
-      const hasExpiredStock = filteredSubItems.some(i => i.isExpired && (i.quantity || 0) > 0);
+        const total_quantity = filteredSubItems.reduce((sum, i) => sum + (i.isExpired ? 0 : (i.quantity || 0)), 0);
+        const total_max_stock = filteredSubItems.reduce((sum, i) => sum + (i.max_stock || i.max_quantity || i.max_quant || 0), 0);
+        const hasExpiredStock = filteredSubItems.some(i => i.isExpired && (i.quantity || 0) > 0);
+        const hasExpiringSoonStock = filteredSubItems.some(i => !i.isExpired && (i.quantity || 0) > 0 && isBatchExpiringSoon(i.expiration_date || i.expiry_date, 30));
 
-      return {
-        ...item,
-        items: filteredSubItems,
-        total_quantity,
-        total_max_stock,
-        hasExpiredStock
-      };
-    })
-    .filter(item => {
-      // Only show groups that have at least one item matching the archive filter
-      if (item.items.length === 0) return false;
+        return {
+          ...item,
+          items: filteredSubItems,
+          total_quantity,
+          total_max_stock,
+          hasExpiredStock,
+          hasExpiringSoonStock
+        };
+      })
+      .filter(item => item.items.length > 0);
+  }, [currentItems, archiveFilter, archivedIds, dateFilter, customDateFrom, customDateTo]);
 
+  const filteredItems = useMemo(() => {
+    return scopedItems.filter(item => {
       const matchesSearch = (item.item_name || '').toLowerCase().includes(searchTerm.toLowerCase());
       const status = getStatus(item.total_quantity || 0, item.total_max_stock, item.hasExpiredStock).label;
       const matchesStatus = statusFilter === 'All' || status === statusFilter || (statusFilter === 'Expired' && status === 'EXPIRED');
       
-      // Apply summary card filter
+      // Apply summary card / alert filter
       let matchesSummary = true;
       if (activeSummaryFilter === 'lowStock') {
         const percentage = item.total_max_stock ? Math.round((item.total_quantity || 0) / item.total_max_stock * 100) : 0;
-        matchesSummary = !item.hasExpiredStock && (item.total_quantity || 0) > 0 && percentage <= 20;
+        matchesSummary = (item.total_quantity || 0) > 0 && percentage <= 20;
       } else if (activeSummaryFilter === 'mediumStock') {
         const percentage = item.total_max_stock ? Math.round((item.total_quantity || 0) / item.total_max_stock * 100) : 0;
-        matchesSummary = !item.hasExpiredStock && percentage > 20 && percentage <= 50;
+        matchesSummary = percentage > 20 && percentage <= 50;
       } else if (activeSummaryFilter === 'normalStock') {
         const percentage = item.total_max_stock ? Math.round((item.total_quantity || 0) / item.total_max_stock * 100) : 0;
-        matchesSummary = !item.hasExpiredStock && percentage > 50;
+        matchesSummary = percentage > 50;
       } else if (activeSummaryFilter === 'outOfStock') {
-        matchesSummary = !item.hasExpiredStock && (item.total_quantity || 0) <= 0;
+        matchesSummary = (item.total_quantity || 0) <= 0;
       } else if (activeSummaryFilter === 'expiredStock') {
         matchesSummary = !!item.hasExpiredStock;
+      } else if (activeSummaryFilter === 'expiringSoon') {
+        matchesSummary = !!item.hasExpiringSoonStock;
       }
       
       return matchesSearch && matchesStatus && matchesSummary;
     });
+  }, [scopedItems, searchTerm, statusFilter, activeSummaryFilter]);
 
-  const totalItems = (currentItems || []).length;
+  const totalItems = (scopedItems || []).length;
   const getStockCount = (items) => {
     const lowStockCount = items.filter(i => {
       const percentage = i?.total_max_stock ? Math.round((i?.total_quantity || 0) / i?.total_max_stock * 100) : 0;
@@ -733,16 +792,23 @@ const Inventory = () => {
     const outOfStockCount = items.filter(i => (i?.total_quantity || 0) <= 0).length;
     return { lowStockCount, mediumStockCount, normalCount, outOfStockCount };
   };
-  const { lowStockCount, mediumStockCount, normalCount, outOfStockCount } = getStockCount(currentItems);
+  const { lowStockCount, mediumStockCount, outOfStockCount } = getStockCount(scopedItems);
 
   const inventoryAlerts = useMemo(() => {
     const alerts = [];
     const now = new Date();
     now.setHours(0, 0, 0, 0);
     
-    const allItems = [...(vaccines || []), ...(supplements || [])].filter(item => 
-      !archivedIds.includes(item.id) && item.status !== 'archived'
-    );
+    // Scope all items strictly according to the selected archiveFilter (active vs archived)
+    const allItems = [
+      ...(vaccines || []).map(v => ({ ...v, _type: 'vaccines' })),
+      ...(supplements || []).map(s => ({ ...s, _type: 'supplements' }))
+    ].filter(item => {
+      const isArchived = archivedIds.includes(item.id) || item.status === 'archived';
+      if (archiveFilter === 'active') return !isArchived;
+      if (archiveFilter === 'archived') return isArchived;
+      return true; // 'all'
+    });
 
     let outOfStockGroups = [];
     let lowStockGroups = [];
@@ -753,24 +819,39 @@ const Inventory = () => {
     const groupedByName = {};
     allItems.forEach(item => {
       const name = item.item_name;
-      if (!groupedByName[name]) {
-        groupedByName[name] = { name, totalQuantity: 0, totalMaxStock: 0, usableQuantity: 0, unit: item.unit || 'units' };
+      if (!name) return;
+      const groupKey = `${item._type}:${name}`;
+      if (!groupedByName[groupKey]) {
+        groupedByName[groupKey] = { 
+          key: groupKey,
+          name, 
+          itemType: item._type,
+          totalQuantity: 0, 
+          totalMaxStock: 0, 
+          usableQuantity: 0, 
+          unit: item.unit || 'units',
+          hasExpired: false,
+          hasExpiringSoon: false
+        };
       }
-      const group = groupedByName[name];
+      const group = groupedByName[groupKey];
       group.totalQuantity += item.quantity || 0;
-      group.totalMaxStock += item.max_stock || 0;
+      group.totalMaxStock += (item.max_stock || item.max_quantity || item.max_quant || 0);
       
       let isExpired = false;
-      
-      if (item.expiration_date) {
-        const expDate = new Date(item.expiration_date);
-        expDate.setHours(0, 0, 0, 0);
-        const daysUntil = Math.ceil((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-        if (daysUntil < 0) {
+      const expDateVal = item.expiration_date || item.expiry_date;
+      if (expDateVal) {
+        if (isBatchExpired(expDateVal)) {
           isExpired = true;
-          if (item.quantity > 0) expiredBatches.push(item);
-        } else if (daysUntil <= 30) {
-          if (item.quantity > 0) expiringSoonBatches.push(item);
+          if ((item.quantity || 0) > 0) {
+            expiredBatches.push(item);
+            group.hasExpired = true;
+          }
+        } else if (isBatchExpiringSoon(expDateVal, 30)) {
+          if ((item.quantity || 0) > 0) {
+            expiringSoonBatches.push(item);
+            group.hasExpiringSoon = true;
+          }
         }
       }
       
@@ -780,18 +861,20 @@ const Inventory = () => {
     });
 
     const demandByItemName = {};
-    (pendingVaccinations || []).forEach(row => {
-      if (row.vaccine_inventory_id) {
-        const matchedItem = allItems.find(i => i.id === row.vaccine_inventory_id);
-        if (matchedItem && matchedItem.item_name) {
-          demandByItemName[matchedItem.item_name] = (demandByItemName[matchedItem.item_name] || 0) + 1;
+    if (archiveFilter !== 'archived') {
+      (pendingVaccinations || []).forEach(row => {
+        if (row.vaccine_inventory_id) {
+          const matchedItem = allItems.find(i => i.id === row.vaccine_inventory_id);
+          if (matchedItem && matchedItem.item_name) {
+            demandByItemName[matchedItem.item_name] = (demandByItemName[matchedItem.item_name] || 0) + 1;
+          }
         }
-      }
-    });
+      });
+    }
 
     Object.values(groupedByName).forEach(group => {
       const demand = demandByItemName[group.name] || 0;
-      if (demand > group.usableQuantity) {
+      if (group.itemType === 'vaccines' && demand > group.usableQuantity) {
         insufficientStockAlerts.push({ group, shortage: demand - group.usableQuantity, demand });
       }
 
@@ -816,8 +899,13 @@ const Inventory = () => {
           : `${outOfStockGroups.length} inventory items are currently out of stock.`,
         color: '#e05c73',
         onClick: () => {
-          setActiveSummaryFilter('outOfStock');
-          setSearchTerm(outOfStockGroups.length === 1 ? outOfStockGroups[0].name : '');
+          setActiveSummaryFilter(prev => prev === 'outOfStock' ? null : 'outOfStock');
+          setStatusFilter('All');
+          setSearchTerm('');
+          const hasInCurrent = outOfStockGroups.some(g => g.itemType === activeTab);
+          if (!hasInCurrent && outOfStockGroups.length > 0) {
+            setActiveTab(outOfStockGroups[0].itemType);
+          }
           setMainTab('inventory');
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }
@@ -835,10 +923,15 @@ const Inventory = () => {
           : `${expiredBatches.length} inventory batches have expired and require attention.`,
         color: '#e05c73',
         onClick: () => {
-           setSearchTerm(expiredBatches.length === 1 ? expiredBatches[0].item_name : '');
-           setActiveSummaryFilter('expiredStock');
-           setMainTab('inventory');
-           window.scrollTo({ top: 0, behavior: 'smooth' });
+          setActiveSummaryFilter(prev => prev === 'expiredStock' ? null : 'expiredStock');
+          setStatusFilter('All');
+          setSearchTerm('');
+          const hasInCurrent = expiredBatches.some(b => b._type === activeTab);
+          if (!hasInCurrent && expiredBatches.length > 0) {
+            setActiveTab(expiredBatches[0]._type);
+          }
+          setMainTab('inventory');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }
       });
     }
@@ -854,10 +947,12 @@ const Inventory = () => {
           : `${insufficientStockAlerts.length} items have insufficient stock for upcoming scheduled vaccinations.`,
         color: '#e05c73',
         onClick: () => {
-           setSearchTerm(insufficientStockAlerts.length === 1 ? insufficientStockAlerts[0].group.name : '');
-           setActiveSummaryFilter(null);
-           setMainTab('inventory');
-           window.scrollTo({ top: 0, behavior: 'smooth' });
+          setActiveSummaryFilter(null);
+          setStatusFilter('All');
+          setSearchTerm(insufficientStockAlerts.length === 1 ? insufficientStockAlerts[0].group.name : '');
+          setActiveTab('vaccines');
+          setMainTab('inventory');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }
       });
     }
@@ -873,8 +968,13 @@ const Inventory = () => {
           : `${lowStockGroups.length} inventory items are running low on stock.`,
         color: '#e05c73',
         onClick: () => {
-          setActiveSummaryFilter('lowStock');
-          setSearchTerm(lowStockGroups.length === 1 ? lowStockGroups[0].name : '');
+          setActiveSummaryFilter(prev => prev === 'lowStock' ? null : 'lowStock');
+          setStatusFilter('All');
+          setSearchTerm('');
+          const hasInCurrent = lowStockGroups.some(g => g.itemType === activeTab);
+          if (!hasInCurrent && lowStockGroups.length > 0) {
+            setActiveTab(lowStockGroups[0].itemType);
+          }
           setMainTab('inventory');
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }
@@ -892,16 +992,21 @@ const Inventory = () => {
           : `${expiringSoonBatches.length} inventory batches will expire soon.`,
         color: '#e8b84b',
         onClick: () => {
-           setSearchTerm(expiringSoonBatches.length === 1 ? expiringSoonBatches[0].item_name : '');
-           setActiveSummaryFilter(null);
-           setMainTab('inventory');
-           window.scrollTo({ top: 0, behavior: 'smooth' });
+          setActiveSummaryFilter(prev => prev === 'expiringSoon' ? null : 'expiringSoon');
+          setStatusFilter('All');
+          setSearchTerm('');
+          const hasInCurrent = expiringSoonBatches.some(b => b._type === activeTab);
+          if (!hasInCurrent && expiringSoonBatches.length > 0) {
+            setActiveTab(expiringSoonBatches[0]._type);
+          }
+          setMainTab('inventory');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }
       });
     }
 
     return alerts.sort((a, b) => a.priority - b.priority);
-  }, [vaccines, supplements, archivedIds, pendingVaccinations]);
+  }, [vaccines, supplements, archivedIds, pendingVaccinations, archiveFilter, activeTab]);
 
   // Pagination logic
   const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
@@ -919,7 +1024,17 @@ const Inventory = () => {
     const typeStr = activeTab.charAt(0).toUpperCase() + activeTab.slice(1);
     let desc = `Type: ${typeStr}`;
     if (statusFilter !== 'All') desc += ` · Status: ${statusFilter}`;
-    if (activeSummaryFilter) desc += ` · Summary: ${activeSummaryFilter}`;
+    if (activeSummaryFilter) {
+      const summaryLabels = {
+        lowStock: 'Low Stock',
+        mediumStock: 'Medium Stock',
+        normalStock: 'Normal Stock',
+        outOfStock: 'Out of Stock',
+        expiredStock: 'Expired Stock',
+        expiringSoon: 'Expiring Soon'
+      };
+      desc += ` · Alert/Summary: ${summaryLabels[activeSummaryFilter] || activeSummaryFilter}`;
+    }
     if (archiveFilter !== 'active') desc += ` · Archive: ${archiveFilter}`;
     if (searchTerm) desc += ` · Search: "${searchTerm}"`;
     return desc;
@@ -1015,8 +1130,11 @@ const Inventory = () => {
     const { format, dateRange, reportPeriodText } = exportConfig;
     
     let toExport = distributionHistory;
+    if (historyStationFilter && historyStationFilter !== 'All') {
+      toExport = toExport.filter(d => matchStation(d.destination_station, historyStationFilter));
+    }
     if (dateRange && (dateRange.from || dateRange.to)) {
-      toExport = distributionHistory.filter(d => {
+      toExport = toExport.filter(d => {
         const dDate = d.distribution_date ? new Date(d.distribution_date) : null;
         if (!dDate) return false;
         if (dateRange.from && dDate < dateRange.from) return false;
@@ -1365,7 +1483,7 @@ const Inventory = () => {
   const filteredDistHistory = distributionHistory.filter(rec => {
     const search = historySearch.toLowerCase();
     const matchesSearch = !search || rec.item_name?.toLowerCase().includes(search) || rec.destination_station?.toLowerCase().includes(search) || rec.released_by?.toLowerCase().includes(search);
-    const matchesStation = historyStationFilter === 'All' || rec.destination_station === historyStationFilter;
+    const matchesStation = historyStationFilter === 'All' || matchStation(rec.destination_station, historyStationFilter);
     const matchesType = historyTypeFilter === 'All' || rec.item_type === historyTypeFilter;
     
     let matchesDate = true;
@@ -1399,17 +1517,21 @@ const Inventory = () => {
     const thisMonth = now.getMonth();
     const thisYear = now.getFullYear();
 
-    const totalDistributed = distributionHistory.reduce((sum, rec) => sum + (Number(rec.quantity) || 0), 0);
-    const thisMonthDists = distributionHistory.filter(rec => {
+    const scopedHistory = (historyStationFilter && historyStationFilter !== 'All')
+      ? distributionHistory.filter(r => matchStation(r.destination_station, historyStationFilter))
+      : distributionHistory;
+
+    const totalDistributed = scopedHistory.reduce((sum, rec) => sum + (Number(rec.quantity) || 0), 0);
+    const thisMonthDists = scopedHistory.filter(rec => {
       const d = new Date(rec.distribution_date);
       return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
     });
     const distributionsThisMonth = thisMonthDists.length;
-    const stationsSupplied = [...new Set(distributionHistory.map(r => r.destination_station).filter(Boolean))].length;
-    const itemsDistributed = [...new Set(distributionHistory.map(r => r.item_name).filter(Boolean))].length;
+    const stationsSupplied = [...new Set(scopedHistory.map(r => r.destination_station).filter(Boolean))].length;
+    const itemsDistributed = [...new Set(scopedHistory.map(r => r.item_name).filter(Boolean))].length;
 
     return { totalDistributed, distributionsThisMonth, stationsSupplied, itemsDistributed };
-  }, [distributionHistory]);
+  }, [distributionHistory, historyStationFilter, matchStation]);
 
   if (loading) {
     return (
@@ -1489,7 +1611,7 @@ const Inventory = () => {
         </div>
         <div 
           className={`stat-card stat-card--rose ${activeSummaryFilter === 'lowStock' ? 'stat-card--active' : ''}`}
-          onClick={() => setActiveSummaryFilter('lowStock')}
+          onClick={() => setActiveSummaryFilter(prev => prev === 'lowStock' ? null : 'lowStock')}
           style={{ cursor: 'pointer', transition: 'all 0.2s ease', background: '#e29b9d' }}
         >
           <div className="stat-top">
@@ -1502,7 +1624,7 @@ const Inventory = () => {
         </div>
         <div 
           className={`stat-card stat-card--orange ${activeSummaryFilter === 'mediumStock' ? 'stat-card--active' : ''}`}
-          onClick={() => setActiveSummaryFilter('mediumStock')}
+          onClick={() => setActiveSummaryFilter(prev => prev === 'mediumStock' ? null : 'mediumStock')}
           style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
         >
           <div className="stat-top">
@@ -1515,7 +1637,7 @@ const Inventory = () => {
         </div>
         <div 
           className={`stat-card ${activeSummaryFilter === 'outOfStock' ? 'stat-card--active' : ''}`}
-          onClick={() => setActiveSummaryFilter('outOfStock')}
+          onClick={() => setActiveSummaryFilter(prev => prev === 'outOfStock' ? null : 'outOfStock')}
           style={{ cursor: 'pointer', transition: 'all 0.2s ease', background: '#d1d5db' }}
         >
           <div className="stat-top">
@@ -1663,6 +1785,47 @@ const Inventory = () => {
                 </div>
             )}
           </div>
+          {activeSummaryFilter && (
+            <span className="active-summary-chip" style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: '16px',
+              fontSize: '12px',
+              fontWeight: '500',
+              background: '#fef2f2',
+              color: '#991b1b',
+              border: '1px solid #fecaca'
+            }}>
+              <span>Alert: {
+                activeSummaryFilter === 'expiredStock' ? 'Expired Stock' :
+                activeSummaryFilter === 'lowStock' ? 'Low Stock' :
+                activeSummaryFilter === 'expiringSoon' ? 'Expiring Soon' :
+                activeSummaryFilter === 'outOfStock' ? 'Out of Stock' :
+                activeSummaryFilter === 'mediumStock' ? 'Medium Stock' :
+                activeSummaryFilter === 'normalStock' ? 'Normal Stock' : activeSummaryFilter
+              }</span>
+              <button 
+                onClick={() => setActiveSummaryFilter(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '0 2px',
+                  color: '#991b1b',
+                  fontSize: '14px',
+                  lineHeight: '1',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+                title="Clear alert filter"
+              >
+                ×
+              </button>
+            </span>
+          )}
           {hasActiveFilters && (
               <button className="clear-filters-btn" onClick={clearFilters}>Clear All</button>
           )}
@@ -1718,7 +1881,7 @@ const Inventory = () => {
                 </tr>
               ) : paginatedItems.length > 0 ? (
                 paginatedItems.map((item, index) => {
-                  const status = getStatus(item.total_quantity, item.total_max_stock);
+                  const status = getStatus(item.total_quantity, item.total_max_stock, item.hasExpiredStock);
                   const percentage = getStockPercentage(item.total_quantity || 0, item.total_max_stock || 500);
                   const rowNumber = startIndex + index + 1;
                   return (
@@ -2016,8 +2179,20 @@ const Inventory = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={canAddMainStock ? 7 : 6} className="text-center py-8">
-                    No items found
+                  <td colSpan={canAddMainStock ? 7 : 6} className="text-center py-8" style={{ color: 'var(--color-text-muted)', fontSize: '13px', padding: '32px 16px' }}>
+                    {archiveFilter === 'archived' ? (
+                      activeSummaryFilter === 'expiredStock' ? 'No expired stock found in archived inventory.' :
+                      activeSummaryFilter === 'lowStock' ? 'No low stock items found in archived inventory.' :
+                      activeSummaryFilter === 'expiringSoon' ? 'No items expiring soon found in archived inventory.' :
+                      activeSummaryFilter === 'outOfStock' ? 'No out of stock items found in archived inventory.' :
+                      'No archived items found'
+                    ) : (
+                      activeSummaryFilter === 'expiredStock' ? 'No expired stock found.' :
+                      activeSummaryFilter === 'lowStock' ? 'No low stock items found.' :
+                      activeSummaryFilter === 'expiringSoon' ? 'No items expiring soon found.' :
+                      activeSummaryFilter === 'outOfStock' ? 'No out of stock items found.' :
+                      'No items found'
+                    )}
                   </td>
                 </tr>
               )}
@@ -2056,45 +2231,64 @@ const Inventory = () => {
 
       <div className="inv-side-col">
         <div className="inv-card">
-          <div className="inv-card-head" style={{ padding: '16px 20px', borderBottom: '1px solid #f0f2f5' }}>
+          <div className="inv-card-head" style={{ padding: '16px 20px', borderBottom: '1px solid #f0f2f5', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <h2 style={{ fontSize: '15px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <AlertTriangle size={16} /> Notifications & Alerts
             </h2>
+            {archiveFilter === 'archived' && (
+              <span style={{ fontSize: '11px', fontWeight: '600', color: '#b45309', background: '#fef3c7', padding: '2px 8px', borderRadius: '12px' }}>
+                Archived Scope
+              </span>
+            )}
           </div>
           <div className="alerts-list" style={{ padding: '8px 16px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {inventoryAlerts.length > 0 ? (
-              inventoryAlerts.map((alert, index) => (
-                <div 
-                  key={`${alert.id}-${index}`}
-                  className="alert-item clickable-alert" 
-                  style={{ 
-                    background: `${alert.color}12`, // 0.07 opacity using hex alpha approximation
-                    display: 'flex', 
-                    gap: '10px', 
-                    padding: '10px', 
-                    borderRadius: '10px', 
-                    alignItems: 'center' 
-                  }}
-                  onClick={alert.onClick}
-                  tabIndex="0"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      alert.onClick();
-                    }
-                  }}
-                >
-                  <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, background: alert.color }}></div>
-                  <div className="alert-body" style={{ flex: 1 }}>
-                    <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px', color: alert.color }}>{alert.title}</p>
-                    <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{alert.message}</span>
+              inventoryAlerts.map((alert, index) => {
+                const isSelected = 
+                  (alert.id === 'outOfStock' && activeSummaryFilter === 'outOfStock') ||
+                  (alert.id === 'expired' && activeSummaryFilter === 'expiredStock') ||
+                  (alert.id === 'lowStock' && activeSummaryFilter === 'lowStock') ||
+                  (alert.id === 'expiringSoon' && activeSummaryFilter === 'expiringSoon');
+
+                return (
+                  <div 
+                    key={`${alert.id}-${index}`}
+                    className={`alert-item clickable-alert ${isSelected ? 'alert-item--active' : ''}`}
+                    style={{ 
+                      background: isSelected ? `${alert.color}22` : `${alert.color}12`,
+                      border: isSelected ? `1.5px solid ${alert.color}` : '1.5px solid transparent',
+                      display: 'flex', 
+                      gap: '10px', 
+                      padding: '10px', 
+                      borderRadius: '10px', 
+                      alignItems: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onClick={alert.onClick}
+                    tabIndex="0"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        alert.onClick();
+                      }
+                    }}
+                  >
+                    <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, background: alert.color }}></div>
+                    <div className="alert-body" style={{ flex: 1 }}>
+                      <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px', color: alert.color, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span>{alert.title}</span>
+                        {isSelected && <span style={{ fontSize: '10px', fontWeight: '500', opacity: 0.8 }}>(Active)</span>}
+                      </p>
+                      <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{alert.message}</span>
+                    </div>
+                    <ChevronRight size={14} style={{ color: alert.color, opacity: isSelected ? 1 : 0.7 }} />
                   </div>
-                  <ChevronRight size={14} style={{ color: alert.color, opacity: 0.7 }} />
-                </div>
-              ))
+                );
+              })
             ) : (
               <div style={{ textAlign: 'center', padding: '20px', fontSize: '12px', fontStyle: 'italic', color: 'var(--color-text-muted)' }}>
-                No inventory alerts at this time.
+                {archiveFilter === 'archived' ? 'No archived inventory alerts at this time.' : 'No inventory alerts at this time.'}
               </div>
             )}
           </div>
@@ -2216,7 +2410,10 @@ const Inventory = () => {
           <span className="filters-label"><Filter size={13} /> Filters:</span>
           <select
             value={canViewOtherStations ? historyStationFilter : (visibleStations.includes(historyStationFilter) ? historyStationFilter : (visibleStations[0] || 'All'))}
-            onChange={e => setHistoryStationFilter(e.target.value)}
+            onChange={e => {
+              userHasChangedHistoryStationRef.current = true;
+              setHistoryStationFilter(e.target.value);
+            }}
             disabled={!canViewOtherStations && visibleStations.length <= 1}
             className="filter-btn"
             style={{ cursor: !canViewOtherStations && visibleStations.length <= 1 ? 'not-allowed' : 'pointer' }}
@@ -2299,8 +2496,16 @@ const Inventory = () => {
             )}
           </div>
 
-          {(historySearch || historyStationFilter !== 'All' || historyTypeFilter !== 'All' || historyDateFilter !== 'all') && (
-            <button className="clear-filters-btn" onClick={() => { setHistorySearch(''); setHistoryStationFilter('All'); setHistoryTypeFilter('All'); setHistoryDateFilter('all'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); }}>Clear All</button>
+          {(historySearch || historyStationFilter !== (isStationStaff && !canViewOtherStations ? (assignedStation || 'All') : 'All') || historyTypeFilter !== 'All' || historyDateFilter !== 'all') && (
+            <button className="clear-filters-btn" onClick={() => {
+              setHistorySearch('');
+              setHistoryStationFilter(isStationStaff && !canViewOtherStations ? (assignedStation || 'All') : 'All');
+              setHistoryTypeFilter('All');
+              setHistoryDateFilter('all');
+              setHistoryCustomDateFrom('');
+              setHistoryCustomDateTo('');
+              setHistoryDateFilterError('');
+            }}>Clear All</button>
           )}
         </div>
       </div>
@@ -2682,7 +2887,13 @@ const Inventory = () => {
                     />
                   </div>
                   <div className="form-group">
-                    <label>Maximum Stock Capacity</label>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <span>Maximum Stock Capacity</span>
+                      <FieldInfoTooltip
+                        title="Maximum Stock Capacity"
+                        text="The maximum number of stock units configured for this inventory item or batch. It uses the selected Unit (e.g., doses, vials, tablets) and is used to calculate stock capacity and inventory indicators. It is not a medical dosage limit."
+                      />
+                    </label>
                     <input
                       type="number"
                       required
@@ -2773,7 +2984,13 @@ const Inventory = () => {
                     />
                   </div>
                   <div className="form-group">
-                    <label>Max Capacity</label>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <span>Maximum Stock Capacity</span>
+                      <FieldInfoTooltip
+                        title="Maximum Stock Capacity"
+                        text="The maximum number of stock units configured for this inventory item or batch. It uses the selected Unit (e.g., doses, vials, tablets) and is used to calculate stock capacity and inventory indicators. It is not a medical dosage limit."
+                      />
+                    </label>
                     <input
                       type="number"
                       required

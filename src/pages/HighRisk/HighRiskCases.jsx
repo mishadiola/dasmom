@@ -32,6 +32,7 @@ import '../../styles/pages/HighRiskCases.css';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
 import { formatMotherId } from '../../utils/displayIds';
 import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
+import { useDefaultStation } from '../../hooks/useDefaultStation';
 
 const getCategoryTheme = (category) => {
   const lower = String(category || '').toLowerCase();
@@ -65,18 +66,42 @@ const HighRiskCases = () => {
   });
   const [patients, setPatients] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStation, setFilterStation] = useState('All');
+  const [availableStations, setAvailableStations] = useState([]);
+  const [assignmentAccess, setAssignmentAccess] = useState({ role: '', stationId: null });
+
+  const {
+    isStationStaff,
+    assignedStation,
+    canViewOtherStations,
+    availableStations: permittedStations,
+    matchStation,
+  } = useDefaultStation({
+    permissionKey: 'patient.view.other_station',
+    allStations: availableStations,
+    isArray: false,
+  });
+
+  const [filterStation, setFilterStation] = useState(() => (
+    isStationStaff && assignedStation ? assignedStation : 'All'
+  ));
+  const userHasChangedStationRef = useRef(false);
+
+  useEffect(() => {
+    if (!userHasChangedStationRef.current && isStationStaff && assignedStation) {
+      setFilterStation(assignedStation);
+    }
+  }, [isStationStaff, assignedStation]);
+
   const [filterType, setFilterType] = useState('All');
   const [filterRiskLevel, setFilterRiskLevel] = useState('All');
   const [filterTrimester, setFilterTrimester] = useState('All');
   const [filterDateRange, setFilterDateRange] = useState('All');
-  const [availableStations, setAvailableStations] = useState([]);
-  const [assignmentAccess, setAssignmentAccess] = useState({ role: '', stationId: null });
 
   const hasActiveFilters = filterStation !== 'All' || filterType !== 'All' || filterRiskLevel !== 'All' || filterTrimester !== 'All' || filterDateRange !== 'All' || searchTerm !== '';
 
   const clearFilters = () => {
-      setFilterStation('All');
+      const defStation = (isStationStaff && !canViewOtherStations) ? (assignedStation || '__UNASSIGNED__') : 'All';
+      setFilterStation(defStation);
       setFilterType('All');
       setFilterRiskLevel('All');
       setFilterTrimester('All');
@@ -234,7 +259,7 @@ const HighRiskCases = () => {
       (p.name || '').toLowerCase().includes(search) ||
       (p.id || '').toLowerCase().includes(search) ||
       conditionMatches;
-    const matchesStation = filterStation === 'All' || p.station === filterStation;
+    const matchesStation = matchStation(p.station, filterStation);
     const matchesType = filterType === 'All' || (p.type || 'Mother') === filterType;
     
     // Risk Level Filter
@@ -368,7 +393,7 @@ const HighRiskCases = () => {
               Health Conditions
             </h1>
             <span className="title-statistic-badge">
-              Patients with Health Conditions: <strong>{stats.totalWithConditions ?? stats.totalHighRisk}</strong>
+              Patients with Health Conditions: <strong>{filteredPatients.length}</strong>
             </span>
           </div>
           <p className="page-subtitle">
@@ -419,9 +444,11 @@ const HighRiskCases = () => {
                   <div className="filter-popover">
                       <div className="popover-title">Station</div>
                       <div className="popover-options">
-                          <button className={`popover-opt-btn ${filterStation === 'All' ? 'selected' : ''}`} onClick={() => { setFilterStation('All'); setActivePopover(null); setCurrentPage(1); }}>All Stations</button>
-                          {availableStations.map((station) => (
-                              <button key={station} className={`popover-opt-btn ${filterStation === station ? 'selected' : ''}`} onClick={() => { setFilterStation(station); setActivePopover(null); setCurrentPage(1); }}>{station}</button>
+                          {(!isStationStaff || canViewOtherStations) && (
+                              <button className={`popover-opt-btn ${filterStation === 'All' ? 'selected' : ''}`} onClick={() => { userHasChangedStationRef.current = true; setFilterStation('All'); setActivePopover(null); setCurrentPage(1); }}>All Stations</button>
+                          )}
+                          {permittedStations.map((station) => (
+                              <button key={station} className={`popover-opt-btn ${filterStation === station ? 'selected' : ''}`} onClick={() => { userHasChangedStationRef.current = true; setFilterStation(station); setActivePopover(null); setCurrentPage(1); }}>{station}</button>
                           ))}
                       </div>
                   </div>

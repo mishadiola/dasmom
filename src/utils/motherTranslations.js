@@ -23,20 +23,20 @@ export const translations = {
         // Bottom nav (mobile)
         bottom_home: 'Home',
         bottom_visits: 'Visits',
-        bottom_records: 'Records',
+        bottom_records: 'Vitals',
         bottom_vaccines: 'Vaccines',
         bottom_more: 'More',
 
         // Mobile more menu
         more_options: 'More Options',
-        more_pregnancy_info: 'Pregnancy Information',
-        more_daily_tips: 'Daily Health Tips',
+        more_pregnancy_info: 'Pregnancy & Delivery Info',
+        more_daily_tips: 'Pregnancy Tips',
         more_my_profile: 'My Profile',
-        more_settings: 'Settings',
+        more_settings: 'Account Settings',
 
         // User menu
         menu_view_account: 'My Profile',
-        menu_settings: 'Settings',
+        menu_settings: 'Account Settings',
         menu_logout: 'Logout',
 
         // Topbar
@@ -53,6 +53,10 @@ export const translations = {
         // MOTHER DASHBOARD
         // ═══════════════════════════════════════════════
         dash_hello: 'Hello, Mommy! 🤍',
+        dash_loading: 'Loading your dashboard...',
+        appt_loading: 'Loading your appointments...',
+        vitals_loading: 'Loading your health records...',
+        vac_loading: 'Loading vaccination records...',
         dash_weeks_pregnant: "You're {weeks} weeks pregnant.",
         dash_baby_expected: 'Your baby is expected in {days} days.',
         dash_next_appointment: 'Next Appointment',
@@ -122,7 +126,7 @@ export const translations = {
         // ═══════════════════════════════════════════════
         // VITALS
         // ═══════════════════════════════════════════════
-        vitals_title: 'Vital Records',
+        vitals_title: 'My Vitals',
         vitals_subtitle: 'View your pregnancy health records and vital signs history',
         vitals_download: 'Download PDF',
         vitals_tab_current: 'Current Health',
@@ -162,7 +166,7 @@ export const translations = {
         // ═══════════════════════════════════════════════
         // VACCINATIONS
         // ═══════════════════════════════════════════════
-        vac_title: 'Vaccinations',
+        vac_title: 'Vaccination Info',
         vac_subtitle: "Keep track of your and your baby's vaccinations to ensure safety and healthy development",
         vac_print: 'Print',
         vac_download: 'Download',
@@ -237,7 +241,7 @@ export const translations = {
         // ═══════════════════════════════════════════════
         // USER SETTINGS
         // ═══════════════════════════════════════════════
-        settings_title: 'Settings',
+        settings_title: 'Account Settings',
         settings_subtitle: 'Manage your personal information and security',
         settings_security: 'Security',
         settings_change_password: 'Change Password',
@@ -323,7 +327,7 @@ export const translations = {
         // ═══════════════════════════════════════════════
         // PREGNANCY & DELIVERY INFO
         // ═══════════════════════════════════════════════
-        pdi_title: 'Delivery Information',
+        pdi_title: 'Pregnancy & Delivery Info',
         pdi_subtitle: 'View your previous pregnancy and delivery records',
         pdi_history_title: 'My Delivery History',
         pdi_history_desc: 'Your previous delivery records recorded by your healthcare team.',
@@ -508,7 +512,7 @@ export const translations = {
         nav_section_dashboard: 'Aking Dashboard',
         nav_section_health: 'Impormasyon sa Kalusugan',
         nav_home: 'Tahanan',
-        nav_my_vitals: 'Aking Vital Records',
+        nav_my_vitals: 'Aking Vitals',
         nav_appointments: 'Mga Appointment',
         nav_pregnancy_tips: 'Mga Tip sa Pagbubuntis',
         nav_vaccination_info: 'Impormasyon sa Bakuna',
@@ -518,20 +522,20 @@ export const translations = {
         // Bottom nav (mobile)
         bottom_home: 'Tahanan',
         bottom_visits: 'Bisita',
-        bottom_records: 'Rekord',
+        bottom_records: 'Vitals',
         bottom_vaccines: 'Bakuna',
         bottom_more: 'Iba pa',
 
         // Mobile more menu
         more_options: 'Iba Pang Opsyon',
-        more_pregnancy_info: 'Impormasyon sa Pagbubuntis',
-        more_daily_tips: 'Araw-araw na Tip sa Kalusugan',
+        more_pregnancy_info: 'Pagbubuntis at Panganganak',
+        more_daily_tips: 'Mga Tip sa Pagbubuntis',
         more_my_profile: 'Aking Profile',
-        more_settings: 'Mga Setting',
+        more_settings: 'Mga Setting ng Account',
 
         // User menu
-        menu_view_account: 'My Profile',
-        menu_settings: 'Mga Setting',
+        menu_view_account: 'Aking Profile',
+        menu_settings: 'Mga Setting ng Account',
         menu_logout: 'Mag-logout',
 
         // Topbar
@@ -548,6 +552,10 @@ export const translations = {
         // MOTHER DASHBOARD
         // ═══════════════════════════════════════════════
         dash_hello: 'Kumusta, Mommy! 🤍',
+        dash_loading: 'Naglo-load ng iyong dashboard...',
+        appt_loading: 'Naglo-load ng iyong mga appointment...',
+        vitals_loading: 'Naglo-load ng iyong mga tala sa kalusugan...',
+        vac_loading: 'Naglo-load ng mga rekord ng bakuna...',
         dash_weeks_pregnant: '{weeks} linggo ka nang buntis.',
         dash_baby_expected: 'Inaasahan ang iyong baby sa loob ng {days} araw.',
         dash_next_appointment: 'Susunod na Appointment',
@@ -617,7 +625,7 @@ export const translations = {
         // ═══════════════════════════════════════════════
         // VITALS
         // ═══════════════════════════════════════════════
-        vitals_title: 'Mga Vital Record',
+        vitals_title: 'Aking Vitals',
         vitals_subtitle: 'Tingnan ang iyong mga rekord sa kalusugan ng pagbubuntis at kasaysayan ng vital signs',
         vitals_download: 'I-download ang PDF',
         vitals_tab_current: 'Kasalukuyang Kalusugan',
@@ -657,7 +665,7 @@ export const translations = {
         // ═══════════════════════════════════════════════
         // VACCINATIONS
         // ═══════════════════════════════════════════════
-        vac_title: 'Mga Bakuna',
+        vac_title: 'Impormasyon sa Bakuna',
         vac_subtitle: 'Subaybayan ang iyong mga bakuna at ng iyong baby upang masiguro ang kaligtasan at malusog na pag-unlad',
         vac_print: 'I-print',
         vac_download: 'I-download',
@@ -698,7 +706,7 @@ export const translations = {
         // ═══════════════════════════════════════════════
         // USER ACCOUNT
         // ═══════════════════════════════════════════════
-        acct_title: 'My Profile',
+        acct_title: 'Aking Profile',
         acct_subtitle: 'Tingnan ang iyong personal na impormasyon',
         acct_loading: 'Nilo-load ang iyong personal na impormasyon...',
         acct_loading_text: 'Naglo-load...',
@@ -732,7 +740,7 @@ export const translations = {
         // ═══════════════════════════════════════════════
         // USER SETTINGS
         // ═══════════════════════════════════════════════
-        settings_title: 'Mga Setting',
+        settings_title: 'Mga Setting ng Account',
         settings_subtitle: 'Pamahalaan ang iyong personal na impormasyon at seguridad',
         settings_security: 'Seguridad',
         settings_change_password: 'Palitan ang Password',
@@ -818,7 +826,7 @@ export const translations = {
         // ═══════════════════════════════════════════════
         // PREGNANCY & DELIVERY INFO
         // ═══════════════════════════════════════════════
-        pdi_title: 'Impormasyon sa Panganganak',
+        pdi_title: 'Pagbubuntis at Panganganak',
         pdi_subtitle: 'Tingnan ang iyong mga nakaraang rekord ng pagbubuntis at panganganak',
         pdi_history_title: 'Aking Kasaysayan ng Panganganak',
         pdi_history_desc: 'Ang iyong mga nakaraang rekord ng panganganak na nairekord ng iyong healthcare team.',

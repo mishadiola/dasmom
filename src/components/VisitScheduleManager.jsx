@@ -3,8 +3,18 @@ import { createPortal } from 'react-dom';
 import { Calendar, Plus, Trash2, X } from 'lucide-react';
 import PatientService from '../services/patientservice';
 import { useRolePermissions } from '../context/RolePermissionContext';
+import '../styles/components/VisitScheduleManager.css';
 
 const today = () => new Date().toISOString().slice(0, 10);
+
+const getStatusClass = (status) => {
+    const s = String(status || '').toLowerCase().trim();
+    if (['attended', 'completed', 'vaccinated'].includes(s)) return 'vsm-status--attended';
+    if (['scheduled', 'pending'].includes(s)) return 'vsm-status--scheduled';
+    if (['missed', 'overdue'].includes(s)) return 'vsm-status--missed';
+    if (['cancelled', 'canceled'].includes(s)) return 'vsm-status--cancelled';
+    return 'vsm-status--scheduled';
+};
 
 const preserveManilaTime = (date, timestamp) => {
     const scheduled = timestamp ? new Date(timestamp) : null;
@@ -323,59 +333,212 @@ const VisitScheduleManager = ({ patientId, onClose, onChanged }) => {
     ];
 
     return createPortal(
-        <div className="modal-overlay" onClick={onClose}>
-            <section className="modal-content" role="dialog" aria-modal="true" aria-labelledby="visit-schedule-title"
-                onClick={event => event.stopPropagation()} style={{ maxWidth: 850, maxHeight: '90vh', overflowY: 'auto' }}>
-                <header className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                        <h2 id="visit-schedule-title"><Calendar size={18} /> Manage visit schedule</h2>
+        <div className="vsm-modal-overlay" onClick={onClose}>
+            <section
+                className="vsm-modal-container"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="visit-schedule-title"
+                onClick={event => event.stopPropagation()}
+            >
+                <header className="vsm-modal-header">
+                    <div className="vsm-header-text">
+                        <h2 id="visit-schedule-title">
+                            <span className="vsm-header-icon-wrap">
+                                <Calendar size={18} />
+                            </span>
+                            Manage Visit Schedule
+                        </h2>
                         <p>Edit or cancel future visits. Completed and historical records are retained.</p>
                     </div>
-                    <button type="button" className="btn btn-outline" onClick={onClose} aria-label="Close schedule manager"><X /></button>
+                    <button
+                        type="button"
+                        className="vsm-close-btn"
+                        onClick={onClose}
+                        aria-label="Close schedule manager"
+                    >
+                        <X size={18} />
+                    </button>
                 </header>
-                <div className="modal-body" style={{ padding: 20 }}>
-                    {error && <div role="alert" style={{ color: '#b91c1c', marginBottom: 12 }}>{error}</div>}
-                    {!canManage && <p role="alert">Your account is not authorized to manage visit schedules.</p>}
-                    {canManage && !canScheduleCurrentKind && (
-                        <p role="alert">You do not have permission to schedule this type of visit for this patient.</p>
-                    )}
-                    <form onSubmit={addVisit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 20 }}>
-                        <label>Visit category
-                            <select value={kind} onChange={event => setKind(event.target.value)}>
-                                {kindOptions.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
-                            </select>
-                        </label>
-                        {kind === 'newborn_vaccination' && <label>Newborn
-                            <select value={newbornId} onChange={event => setNewbornId(event.target.value)}>
-                                {newborns.map(child => <option key={child.id} value={child.id}>{child.baby_name || 'Newborn'}</option>)}
-                            </select>
-                        </label>}
-                        <label>Date
-                            <input type="date" min={today()} required value={date} onChange={event => setDate(event.target.value)} />
-                        </label>
-                        <label>Visit details
-                            <input value={label} maxLength={120} onChange={event => setLabel(event.target.value)} placeholder="Optional description" />
-                        </label>
-                        <button type="submit" className="btn btn-primary" disabled={busy || !canManage || !canScheduleCurrentKind || !patient}><Plus size={16} /> Add visit</button>
-                    </form>
-                    {visits.length === 0 ? <p>No visits are recorded for this patient.</p> : (
-                        <div style={{ display: 'grid', gap: 8 }}>
-                            {visits.map(visit => (
-                                <div key={`${visit.category}-${visit.id}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, border: '1px solid #e2e8f0', borderRadius: 8, padding: 10 }}>
-                                    <div>
-                                        <strong>{visit.display}</strong>
-                                        <div>{visit.scheduledDate || 'Date unavailable'} · {visit.status}</div>
-                                    </div>
-                                    {canManage && isEligible(visit) && (
-                                        <div style={{ display: 'flex', gap: 8 }}>
-                                            <button type="button" className="btn btn-outline" disabled={busy} onClick={() => updateDate(visit)}>Edit date</button>
-                                            <button type="button" className="btn btn-outline" disabled={busy} onClick={() => cancelVisit(visit)} aria-label={`Cancel ${visit.display}`}><Trash2 size={15} /> Cancel</button>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
+
+                <div className="vsm-modal-body">
+                    {error && (
+                        <div className="vsm-alert vsm-alert--error" role="alert">
+                            {error}
                         </div>
                     )}
+                    {!canManage && (
+                        <div className="vsm-alert vsm-alert--warning" role="alert">
+                            Your account is not authorized to manage visit schedules.
+                        </div>
+                    )}
+                    {canManage && !canScheduleCurrentKind && (
+                        <div className="vsm-alert vsm-alert--warning" role="alert">
+                            You do not have permission to schedule this type of visit for this patient.
+                        </div>
+                    )}
+
+                    <div className="vsm-add-section">
+                        <div className="vsm-section-header">
+                            <span className="vsm-section-title">Schedule New Visit</span>
+                            <span className="vsm-section-subtitle">Select category and date for the upcoming appointment</span>
+                        </div>
+                        <form onSubmit={addVisit} className="vsm-form-grid">
+                            <div className="vsm-field-group">
+                                <label className="vsm-label" htmlFor="vsm-kind-select">
+                                    Visit category
+                                </label>
+                                <select
+                                    id="vsm-kind-select"
+                                    className="vsm-select"
+                                    value={kind}
+                                    onChange={event => setKind(event.target.value)}
+                                    disabled={busy || !canManage}
+                                >
+                                    {kindOptions.map(([value, text]) => (
+                                        <option key={value} value={value}>{text}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {kind === 'newborn_vaccination' && (
+                                <div className="vsm-field-group">
+                                    <label className="vsm-label" htmlFor="vsm-newborn-select">
+                                        Newborn
+                                    </label>
+                                    <select
+                                        id="vsm-newborn-select"
+                                        className="vsm-select"
+                                        value={newbornId}
+                                        onChange={event => setNewbornId(event.target.value)}
+                                        disabled={busy || !canManage}
+                                    >
+                                        {newborns.map(child => (
+                                            <option key={child.id} value={child.id}>
+                                                {child.baby_name || 'Newborn'}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
+                            <div className="vsm-field-group">
+                                <label className="vsm-label" htmlFor="vsm-date-input">
+                                    Date <span className="vsm-req">*</span>
+                                </label>
+                                <input
+                                    id="vsm-date-input"
+                                    type="date"
+                                    className="vsm-input"
+                                    min={today()}
+                                    required
+                                    value={date}
+                                    onChange={event => setDate(event.target.value)}
+                                    disabled={busy || !canManage}
+                                />
+                            </div>
+
+                            <div className="vsm-field-group vsm-field-group--details">
+                                <label className="vsm-label" htmlFor="vsm-details-input">
+                                    Visit details
+                                </label>
+                                <input
+                                    id="vsm-details-input"
+                                    type="text"
+                                    className="vsm-input"
+                                    value={label}
+                                    maxLength={120}
+                                    onChange={event => setLabel(event.target.value)}
+                                    placeholder="Optional description"
+                                    disabled={busy || !canManage}
+                                />
+                            </div>
+
+                            <div className="vsm-field-group vsm-field-group--btn">
+                                <button
+                                    type="submit"
+                                    className="vsm-add-btn"
+                                    disabled={busy || !canManage || !canScheduleCurrentKind || !patient}
+                                >
+                                    <Plus size={16} />
+                                    <span>Add visit</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div className="vsm-visits-section">
+                        <div className="vsm-section-header">
+                            <div className="vsm-section-title-wrap">
+                                <span className="vsm-section-title">Visit History & Upcoming Schedule</span>
+                                <span className="vsm-count-badge">{visits.length}</span>
+                            </div>
+                            <span className="vsm-section-subtitle">
+                                Future visits can be edited or cancelled. Past visits are preserved.
+                            </span>
+                        </div>
+
+                        {visits.length === 0 ? (
+                            <div className="vsm-empty-state">
+                                <Calendar size={32} className="vsm-empty-icon" />
+                                <p>No visits are recorded for this patient.</p>
+                            </div>
+                        ) : (
+                            <div className="vsm-visits-list">
+                                {visits.map(visit => {
+                                    const eligible = canManage && isEligible(visit);
+                                    return (
+                                        <div
+                                            key={`${visit.category}-${visit.id}`}
+                                            className={`vsm-visit-card ${eligible ? 'vsm-visit-card--future' : 'vsm-visit-card--past'}`}
+                                        >
+                                            <div className="vsm-visit-info">
+                                                <div className="vsm-visit-primary">
+                                                    <span className="vsm-visit-name">{visit.display}</span>
+                                                    <span className={`vsm-status-badge ${getStatusClass(visit.status)}`}>
+                                                        {visit.status || 'Scheduled'}
+                                                    </span>
+                                                </div>
+                                                <div className="vsm-visit-meta">
+                                                    <Calendar size={13} className="vsm-meta-icon" />
+                                                    <span>{visit.scheduledDate || 'Date unavailable'}</span>
+                                                    {visit.notes && visit.notes !== visit.display && (
+                                                        <span className="vsm-meta-note">({visit.notes})</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {eligible ? (
+                                                <div className="vsm-visit-actions">
+                                                    <button
+                                                        type="button"
+                                                        className="vsm-btn-action vsm-btn-edit"
+                                                        disabled={busy}
+                                                        onClick={() => updateDate(visit)}
+                                                    >
+                                                        Edit date
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="vsm-btn-action vsm-btn-cancel"
+                                                        disabled={busy}
+                                                        onClick={() => cancelVisit(visit)}
+                                                        aria-label={`Cancel ${visit.display}`}
+                                                    >
+                                                        <Trash2 size={13} />
+                                                        <span>Cancel</span>
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <span className="vsm-readonly-tag">
+                                                    {visit.status === 'Attended' || visit.status === 'Completed' ? 'Completed record' : 'Historical record'}
+                                                </span>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </section>
         </div>,

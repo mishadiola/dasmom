@@ -304,6 +304,7 @@ export default class AuthService {
       displayName: profile.displayName,
       fullName: profile.fullName,
       station: profile.assigned_station,
+      stationId: profile.stationId || null,
       lastSignInAt: loginTimestamp,
     };
 
@@ -315,12 +316,13 @@ export default class AuthService {
     let fullName = null;
     let displayName = null;
     let assignedStation = null;
+    let assignedStationId = null;
 
     try {
       if (role === 'admin' || role.includes('staff') || role === 'cho personnel' || role.includes('midwife') || role.includes('doctor')) {
         const { data, error } = await this.supabase
           .from('staff_profiles')
-          .select('full_name, station_ass, stations:station_ass(station_name)')
+          .select('full_name, station_ass, stations:station_ass(id, station_name)')
           .eq('id', userId)
           .maybeSingle();
         
@@ -331,6 +333,7 @@ export default class AuthService {
         if (data?.stations?.station_name) {
           assignedStation = data.stations.station_name;
         }
+        assignedStationId = data?.station_ass || data?.stations?.id || null;
       } else if (role === 'mother' || role === 'patient') {
         const { data, error } = await this.supabase
           .from('patient_basic_info')
@@ -353,7 +356,7 @@ export default class AuthService {
       fullName = displayName;
     }
 
-    return { fullName, displayName, assigned_station: assignedStation };
+    return { fullName, displayName, assigned_station: assignedStation, stationId: assignedStationId };
   }
 
   async getAuthUser() {
@@ -454,6 +457,7 @@ export default class AuthService {
       displayName: profile.displayName,
       fullName: profile.fullName,
       station: profile.assigned_station,
+      stationId: profile.stationId || null,
       lastSignInAt: authUser.last_sign_in_at || null,
     };
 

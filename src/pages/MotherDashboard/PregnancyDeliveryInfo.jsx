@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { 
     Baby, Heart, ShieldCheck, ChevronRight, Calendar, 
     MapPin, User, Stethoscope, Activity, X
@@ -10,6 +10,7 @@ import supabase from '../../config/supabaseclient';
 import deliverySilhouette from '../../assets/images/pregnancy-silhouette.png';
 import { useLanguage } from '../../context/LanguageContext';
 import { isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 const PregnancyDeliveryInfo = () => {
     const { t } = useLanguage();
@@ -17,6 +18,8 @@ const PregnancyDeliveryInfo = () => {
     const [pastPregnancies, setPastPregnancies] = useState([]);
     const [patientInfo, setPatientInfo] = useState({});
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const loadRef = useRef(null);
 
     useEffect(() => {
         let channel = null;
@@ -47,10 +50,12 @@ const PregnancyDeliveryInfo = () => {
                 });
             } catch (error) {
                 console.error('Failed to load pregnancy and delivery records:', error);
+                setError(error?.message || 'Unable to load pregnancy history.');
             } finally {
                 setLoading(false);
             }
         };
+        loadRef.current = loadRecords;
         loadRecords();
         return () => {
             if (channel) supabase.removeChannel(channel);
@@ -66,8 +71,22 @@ const PregnancyDeliveryInfo = () => {
         };
     };
 
+    if (loading) {
+        return (
+            <StaffPageLoader 
+                message={t('pdi_loading') || 'Loading records...'} 
+                error={error} 
+                errorTitle="Unable to load pregnancy history"
+                onRetry={() => {
+                    setLoading(true);
+                    loadRef.current?.();
+                }} 
+            />
+        );
+    }
+
     return (
-        <div className="pdi-page">
+        <div className="pdi-page staff-page-ready">
             {/* ══════════════════════════════════════════════════
                 PAGE HEADER
             ══════════════════════════════════════════════════ */}
@@ -80,7 +99,7 @@ const PregnancyDeliveryInfo = () => {
                 <div className="hero-content-wrapper">
                     <div className="hero-text-section">
                         <h1 className="page-title">
-                            <Baby size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('pdi_title')}
+                            <Baby size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('pdi_title', 'Pregnancy & Delivery Info')}
                         </h1>
                         <p className="page-subtitle">{t('pdi_subtitle')}</p>
                     </div>
@@ -108,7 +127,7 @@ const PregnancyDeliveryInfo = () => {
                 </div>
 
                 <div className="pdi-cards-list">
-                        {loading ? <p>{t('pdi_loading')}</p> : pastPregnancies.length > 0 ? (
+                    {pastPregnancies.length > 0 ? (
                         pastPregnancies.map((pregnancy) => {
                             const delivery = pregnancy.deliveries?.[0];
                             const outcome = pregnancy.miscarriage_info?.outcome

@@ -1089,3 +1089,203 @@
     display: flex;
     align-items: center;
 }
+
+/* ══════════════════════════════════════════════════════════
+   GESTATIONAL AGE AT EVENT INDICATOR & OUTCOME VALIDATION
+══════════════════════════════════════════════════════════ */
+.ga-outcome-form-group {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+.ga-event-indicator-wrapper {
+    margin-bottom: 6px;
+}
+
+.ga-event-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 11.5px;
+    font-weight: 500;
+    background: #f8fafc;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+    line-height: 1.35;
+    width: 100%;
+    box-sizing: border-box;
+    flex-wrap: wrap;
+    transition: all 0.2s ease;
+}
+
+.ga-event-indicator.ga-status-calculated {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+    color: #166534;
+}
+
+.ga-event-indicator.ga-status-inconsistent {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #991b1b;
+}
+
+.ga-event-indicator.ga-status-missing_dating {
+    background: #fffbeb;
+    border-color: #fde68a;
+    color: #92400e;
+}
+
+.ga-event-indicator.ga-status-no_event_date {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    color: #64748b;
+}
+
+.ga-indicator-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: inherit;
+    opacity: 0.85;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.ga-indicator-value {
+    font-weight: 700;
+    color: inherit;
+}
+
+.ga-trimester-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-size: 10.5px;
+    font-weight: 600;
+    line-height: 1.2;
+    margin-left: auto;
+}
+
+.ga-trimester-badge.badge-t1 {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.ga-trimester-badge.badge-t2 {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.ga-trimester-badge.badge-t3 {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+/* Concise inline advisory box */
+.ga-outcome-advisory {
+    margin-top: 8px;
+    padding: 9px 11px;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.45;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-left: 3.5px solid;
+    animation: fadeInAdvisory 0.2s ease-in-out;
+    box-sizing: border-box;
+}
+
+@keyframes fadeInAdvisory {
+    from {
+        opacity: 0;
+        transform: translateY(-3px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.ga-outcome-advisory.advisory-warning {
+    background: #fffbeb;
+    border-color: #f59e0b;
+    color: #92400e;
+}
+
+.ga-outcome-advisory.advisory-danger {
+    background: #fef2f2;
+    border-color: #ef4444;
+    color: #991b1b;
+}
+
+.ga-outcome-advisory.advisory-info {
+    background: #f0f9ff;
+    border-color: #0284c7;
+    color: #075985;
+}
+
+.ga-advisory-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+    font-size: 11.5px;
+    letter-spacing: 0.2px;
+}
+
+.ga-advisory-header svg {
+    flex-shrink: 0;
+}
+
+.ga-advisory-text {
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: inherit;
+}
+
+.ga-advisory-guideline {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 7px;
+    background: rgba(0, 0, 0, 0.04);
+    border-radius: 4px;
+    line-height: 1.35;
+}
+
+.ga-confirmation-checkbox {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding-top: 6px;
+    margin-top: 2px;
+    border-top: 1px dashed rgba(0, 0, 0, 0.12);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 500;
+    color: inherit;
+    user-select: none;
+    line-height: 1.4;
+}
+
+.ga-confirmation-checkbox input[type="checkbox"] {
+    margin-top: 2px;
+    width: 14px;
+    height: 14px;
+    accent-color: #b33951;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.ga-field-error-msg {
+    color: #b91c1c;
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 3px;
+    line-height: 1.3;
+}
+

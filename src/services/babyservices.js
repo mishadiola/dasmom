@@ -1,6 +1,7 @@
 import supabase from '../config/supabaseclient';
 import PatientService from './patientservice';
 import { buildPregnancyHistory, getLatestPregnancyRecord, getPregnancyForDelivery } from '../utils/pregnancyUtils';
+import { formatMotherId, formatNewbornId, getFirstFourDigits } from '../utils/displayIds';
 
 class BabyService {
   constructor() {
@@ -13,6 +14,8 @@ class BabyService {
       if (!term || term.length < 2) return [];
 
       const safeTerm = term.replace(/%/g, '\\%');
+      const isIdSearch = /^mom/i.test(term) || /^\d+$/.test(term.replace(/\s+/g, ''));
+      const digitsOnly = term.replace(/[^0-9]/g, '');
       const patientSelect = `
           id,
           first_name,
@@ -21,16 +24,45 @@ class BabyService {
           stations:station_ass (station_name),
           province
         `;
-      const [firstNameResult, lastNameResult, stationResult] = await Promise.all([
+
+      const searchQueries = [
         supabase.from('patient_basic_info').select(patientSelect).ilike('first_name', `%${safeTerm}%`).order('created_at', { ascending: false }).limit(10),
         supabase.from('patient_basic_info').select(patientSelect).ilike('last_name', `%${safeTerm}%`).order('created_at', { ascending: false }).limit(10),
         supabase.from('patient_basic_info').select(patientSelect).ilike('stations.station_name', `%${safeTerm}%`).order('created_at', { ascending: false }).limit(10)
-      ]);
+      ];
 
-      const queryError = firstNameResult.error || lastNameResult.error || stationResult.error;
+      if (isIdSearch) {
+        searchQueries.push(
+          supabase.from('patient_basic_info').select(patientSelect).order('created_at', { ascending: false }).limit(150)
+        );
+      }
+
+      const results = await Promise.all(searchQueries);
+      const firstNameResult = results[0];
+      const lastNameResult = results[1];
+      const stationResult = results[2];
+      const idResult = isIdSearch ? results[3] : null;
+
+      const queryError = firstNameResult.error || lastNameResult.error || stationResult.error || idResult?.error;
       if (queryError) throw queryError;
 
-      const patients = [...(firstNameResult.data || []), ...(lastNameResult.data || []), ...(stationResult.data || [])]
+      let idMatchedPatients = [];
+      if (idResult?.data) {
+        const normQuery = term.toLowerCase().replace(/\s+/g, '');
+        for (const p of idResult.data) {
+          const readableId = formatMotherId(p.id).toLowerCase().replace(/\s+/g, '');
+          const pDigits = getFirstFourDigits(p.id);
+          if (
+            readableId.includes(normQuery) ||
+            (digitsOnly && digitsOnly.length >= 2 && pDigits.includes(digitsOnly)) ||
+            p.id.toLowerCase().includes(term.toLowerCase())
+          ) {
+            idMatchedPatients.push(p);
+          }
+        }
+      }
+
+      const patients = [...(firstNameResult.data || []), ...(lastNameResult.data || []), ...(stationResult.data || []), ...idMatchedPatients]
         .filter((patient, index, rows) => rows.findIndex(row => row.id === patient.id) === index);
 
       if (patients.length === 0) return [];
@@ -96,6 +128,8 @@ class BabyService {
           isPregnant: preg?.pregn_postp?.toLowerCase() === 'pregnant',
           pregnancyType: preg?.pregnancy_type || 'Singleton',
           lmp: preg?.lmd || null,
+          edd: preg?.edd || null,
+          pregnancyId: preg?.id || null,
           gestationalAge: gestationalAge,
           gravida: preg?.gravida || 1,
           para: preg?.para || 0
@@ -171,8 +205,50 @@ class BabyService {
       newbornsByMother = newbornsByMotherData || [];
     }
 
+    let idMatchedNewborns = [];
+    const isNbIdSearch = /^nb/i.test(term) || /^mom/i.test(term) || /^\d+$/.test(term.replace(/\s+/g, ''));
+    const digitsOnly = term.replace(/[^0-9]/g, '');
+
+    if (isNbIdSearch) {
+      const { data: recentNewborns, error: nbIdError } = await supabase
+        .from('newborns')
+        .select(`
+          id,
+          baby_name,
+          mother_id,
+          deliveries!inner (delivery_date),
+          patient_basic_info!mother_id (
+            first_name,
+            last_name,
+            station_ass,
+            stations:station_ass (station_name),
+            province
+          )
+        `)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (!nbIdError && recentNewborns) {
+        const normQuery = term.toLowerCase().replace(/\s+/g, '');
+        for (const nb of recentNewborns) {
+          const readableNbId = formatNewbornId(nb.id).toLowerCase().replace(/\s+/g, '');
+          const readableMotherId = formatMotherId(nb.mother_id).toLowerCase().replace(/\s+/g, '');
+          const nbDigits = getFirstFourDigits(nb.id);
+          const motherDigits = getFirstFourDigits(nb.mother_id);
+          if (
+            readableNbId.includes(normQuery) ||
+            readableMotherId.includes(normQuery) ||
+            (digitsOnly && digitsOnly.length >= 2 && (nbDigits.includes(digitsOnly) || motherDigits.includes(digitsOnly))) ||
+            nb.id.toLowerCase().includes(term.toLowerCase())
+          ) {
+            idMatchedNewborns.push(nb);
+          }
+        }
+      }
+    }
+
     // Combine and deduplicate results
-    const allNewborns = [...(newbornsByName || []), ...newbornsByMother];
+    const allNewborns = [...(newbornsByName || []), ...newbornsByMother, ...idMatchedNewborns];
     const uniqueNewborns = [];
     const seenIds = new Set();
 
@@ -321,7 +397,7 @@ class BabyService {
       const [{ data: mothers }, { data: pregnancies }, { data: visits }] = motherIds.length
         ? await Promise.all([
           supabase.from('patient_basic_info').select('id, date_of_birth').in('id', motherIds),
-          supabase.from('pregnancy_info').select('id, patient_id, pregnancy_type, gravida, place_of_delivery, created_at').in('patient_id', motherIds).order('created_at', { ascending: false }),
+          supabase.from('pregnancy_info').select('id, patient_id, pregnancy_type, gravida, place_of_delivery, lmd, edd, created_at').in('patient_id', motherIds).order('created_at', { ascending: false }),
           supabase.from('prenatal_visits').select('patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm').in('patient_id', motherIds).eq('status', 'Attended').order('visit_date', { ascending: false })
         ])
         : [{ data: [] }, { data: [] }, { data: [] }];
@@ -369,6 +445,8 @@ class BabyService {
           patientName: `${d.patient_basic_info?.first_name || ''} ${d.patient_basic_info?.last_name || ''}`.trim(),
           stationId: d.station_ass || null,
           station: d.stations?.station_name || 'Unassigned',
+          lmp: matchedPregnancy?.lmd || null,
+          edd: matchedPregnancy?.edd || null,
           deliveryDate: d.delivery_date,
           deliveryTime: d.delivery_time,
           deliveryType: d.delivery_type,

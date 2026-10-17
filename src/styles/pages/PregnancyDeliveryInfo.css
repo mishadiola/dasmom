@@ -15,8 +15,29 @@
 }
 
 .pdi-custom-hero {
-    background: linear-gradient(135deg, var(--color-pink-light) 0%, #ecd6dc 30%, var(--color-rose-light) 70%, var(--color-rose) 100%) !important;
-    border: 1px solid rgba(185, 129, 138, 0.15);
+    background: linear-gradient(135deg,
+        var(--color-pink-light) 0%,
+        var(--color-yellow) 35%,
+        var(--color-sage) 70%,
+        var(--color-rose) 100%) !important;
+    background-size: 300% 300% !important;
+    animation: bg-pan-header 18s ease infinite !important;
+    border: 1px solid rgba(255, 255, 255, 0.6) !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+}
+
+.pdi-page .hero-text-section .page-title {
+    font-size: 38px;
+    margin-bottom: 12px;
+    font-weight: 800;
+}
+
+.pdi-page .hero-text-section .page-subtitle {
+    font-size: 17px;
+    line-height: 1.5;
+    margin-bottom: 0;
+    opacity: 0.95;
+    font-weight: 500;
 }
 
 /* ─────────────────────────────────────────────
@@ -485,6 +506,8 @@
         margin-bottom: 4px !important;
         display: flex;
         align-items: center;
+        flex-wrap: wrap;
+        word-break: break-word;
     }
     
     .pdi-page .page-title .header-icon {
