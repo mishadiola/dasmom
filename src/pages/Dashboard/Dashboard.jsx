@@ -177,7 +177,13 @@ const Dashboard = () => {
                   .neq('status', 'Missed')
                   .order('created_at', { ascending: true }),
                 supabase.from('postpartum_visits').select(`
-                    id, patient_id, delivery_id, visit_type, visit_number, scheduled_date, scheduled_at, status, created_at
+                    id, patient_id, delivery_id, visit_type, visit_number, scheduled_date, scheduled_at, status, created_at,
+                    delivery:deliveries!postpartum_visits_delivery_id_fkey (
+                        mother_id,
+                        patient_basic_info!deliveries_mother_id_fkey (
+                            id, first_name, last_name, station_ass, stations:station_ass (station_name), date_of_birth
+                        )
+                    )
                 `).or(`scheduled_date.eq.${todayStr},and(scheduled_date.is.null,scheduled_at.gte.${todayStart.toISOString()},scheduled_at.lt.${tomorrowStart.toISOString()})`)
                   .neq('status', 'Cancelled')
                   .neq('status', 'Missed'),
@@ -197,7 +203,9 @@ const Dashboard = () => {
             if (vaccinationError) throw vaccinationError;
             if (!dashboardOverview) throw new Error('Dashboard overview returned no data');
 
-            const archivedPatientIds = new Set(dashboardOverview.archivedPatientIds || []);
+            const getPostpartumPatientId = visit =>
+                visit.delivery?.mother_id || visit.delivery?.patient_basic_info?.id || visit.patient_id;
+
             const highRiskPatients = dashboardOverview.highRiskPatients || [];
             const highRiskPatientMap = new Map(
                 highRiskPatients.filter(patient => patient.id).map(patient => [patient.id, patient])
@@ -234,24 +242,25 @@ const Dashboard = () => {
             }
 
             const todayPrenatalFiltered = (prenatalApptData || []).filter(v => {
-                if (!v.visit_date || archivedPatientIds.has(v.patient_id)) return false;
+                if (!v.visit_date) return false;
                 return isTodayMatch(v.visit_date);
             });
 
             const todayPostpartumFiltered = (postpartumApptData || []).filter(v => {
-                if (!v.patient_id || archivedPatientIds.has(v.patient_id)) return false;
+                const patientId = getPostpartumPatientId(v);
+                if (!patientId) return false;
                 return isTodayMatch(v.scheduled_date || v.scheduled_at);
             });
 
             const todayVaccinationsFiltered = (vaccinationApptData || []).filter(v => {
                 const pid = v.patient_id || newbornToMotherMap.get(v.newborn_id);
-                if (!pid || archivedPatientIds.has(pid)) return false;
+                if (!pid) return false;
                 return isTodayMatch(v.scheduled_vaccination);
             });
 
             const appointmentPatientIds = [...new Set([
                 ...todayPrenatalFiltered.map(v => v.patient_id),
-                ...todayPostpartumFiltered.map(v => v.patient_id),
+                ...todayPostpartumFiltered.map(getPostpartumPatientId),
                 ...todayVaccinationsFiltered.map(v => v.patient_id || newbornToMotherMap.get(v.newborn_id))
             ].filter(Boolean))];
 
@@ -291,9 +300,13 @@ const Dashboard = () => {
                     patientInfoMap.set(v.patient_id, v.patient_basic_info);
                 }
             });
+            todayPostpartumFiltered.forEach(visit => {
+                const patient = visit.delivery?.patient_basic_info;
+                if (patient?.id) patientInfoMap.set(patient.id, patient);
+            });
 
             const missingPatientIds = [
-                ...todayPostpartumFiltered.map(v => v.patient_id),
+                ...todayPostpartumFiltered.map(getPostpartumPatientId),
                 ...todayVaccinationsFiltered.map(v => v.patient_id || newbornToMotherMap.get(v.newborn_id))
             ].filter(id => id && !patientInfoMap.has(id));
 
@@ -324,7 +337,7 @@ const Dashboard = () => {
                 patientVisitsMap.set(v.patient_id, list);
             });
 
-            const postpartumScheduledSet = new Set(todayPostpartumFiltered.map(v => v.patient_id).filter(Boolean));
+            const postpartumScheduledSet = new Set(todayPostpartumFiltered.map(getPostpartumPatientId).filter(Boolean));
             const vaccinationScheduledSet = new Set(todayVaccinationsFiltered.map(v => v.patient_id || newbornToMotherMap.get(v.newborn_id)).filter(Boolean));
             const deliveryMap = new Map();
             (deliveriesData || []).forEach(d => {
@@ -451,29 +464,32 @@ const Dashboard = () => {
                 };
             });
 
-            const mappedPostpartum = todayPostpartumFiltered.map(v => {
-                const info = patientInfoMap.get(v.patient_id) || {};
-                let age = '?';
-                if (info.date_of_birth) {
-                    const bd = new Date(info.date_of_birth);
-                    age = now.getFullYear() - bd.getFullYear();
-                    if (now.getMonth() < bd.getMonth() || (now.getMonth() === bd.getMonth() && now.getDate() < bd.getDate())) age--;
-                }
+            const mappedPostpartum = todayPostpartumFiltered
+                .filter(v => patientInfoMap.has(getPostpartumPatientId(v)))
+                .map(v => {
+                    const patientId = getPostpartumPatientId(v);
+                    const info = patientInfoMap.get(patientId);
+                    let age = '?';
+                    if (info.date_of_birth) {
+                        const bd = new Date(info.date_of_birth);
+                        age = now.getFullYear() - bd.getFullYear();
+                        if (now.getMonth() < bd.getMonth() || (now.getMonth() === bd.getMonth() && now.getDate() < bd.getDate())) age--;
+                    }
 
-                const conditions = getConditionsForPatient(v.patient_id, null);
+                    const conditions = getConditionsForPatient(patientId, null);
 
-                return {
-                    id: v.id,
-                    patientId: v.patient_id,
-                    name: `${info.first_name || ''} ${info.last_name || ''}`.trim() || 'Unknown',
-                    station: info.stations?.station_name || 'N/A',
-                    age: age,
-                    weeks: null,
-                    type: 'Postpartum',
-                    conditions: conditions,
-                    created_at: v.created_at || v.scheduled_at
-                };
-            });
+                    return {
+                        id: v.id,
+                        patientId,
+                        name: `${info.first_name || ''} ${info.last_name || ''}`.trim(),
+                        station: info.stations?.station_name || 'N/A',
+                        age: age,
+                        weeks: null,
+                        type: 'Postpartum',
+                        conditions: conditions,
+                        created_at: v.created_at || v.scheduled_at
+                    };
+                });
 
             const mappedVaccinations = todayVaccinationsFiltered.map(v => {
                 const patientId = v.patient_id || newbornToMotherMap.get(v.newborn_id);

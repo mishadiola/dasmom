@@ -72,7 +72,7 @@ const ScheduledVisitModal = ({ visit, onClose, onScheduleChanged }) => {
                     .from('patient_basic_info')
                     .select('station_ass, stations:station_ass (station_name)')
                     .eq('id', visit.patientId)
-                    .single();
+                    .maybeSingle();
                 if (error) throw error;
                 setPatientStation(data?.stations?.station_name || '');
             } catch (error) {

@@ -159,7 +159,7 @@ const PrenatalVisits = () => {
     const [initialError, setInitialError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('All');
-    const [archiveFilter, setArchiveFilter] = useState('active');
+    const [archiveFilter, setArchiveFilter] = useState('all');
     const [currentPage, setCurrentPage] = useState(1);
     const { settings } = useSystemSettings();
     const itemsPerPage = settings?.tables?.rowsPerPage || 10;
@@ -491,7 +491,7 @@ const PrenatalVisits = () => {
                     const patient = patientById.get(visit.patient_id);
                     const patientName = patient
                         ? `${patient.first_name || ''} ${patient.last_name || ''}`.trim()
-                        : visit.patient_id;
+                        : 'Unlinked patient';
                     const status = visit.status === 'Attended'
                         ? 'Attended'
                         : visit.status === 'Cancelled'
@@ -504,7 +504,8 @@ const PrenatalVisits = () => {
                         id: visit.id,
                         deliveryId: visit.delivery_id,
                         patientId: visit.patient_id,
-                        patientName: patientName || visit.patient_id,
+                        patientName: patientName || 'Unlinked patient',
+                        patientRecordAvailable: Boolean(patient),
                         vaccineName: visit.visit_type,
                         doseText: '',
                         assignedStaffId: visit.assigned_staff || null,
@@ -1146,6 +1147,7 @@ const PrenatalVisits = () => {
                 id: v.id,
                 patientId: v.patientId,
                 patientName: v.patientName,
+                patientRecordAvailable: v.patientRecordAvailable !== false,
                 hasHealthConditions: pat?.hasHealthConditions,
                 risk: pat?.hasHealthConditions ? 'Documented Conditions' : 'None Reported',
                 assignedStaffId: v.assignedStaffId || null,
@@ -1492,7 +1494,7 @@ const PrenatalVisits = () => {
                         <div className="day-view-container">
                             {visibleDays.map(day => {
                                 const dayItems = visitTypeTab === 'postpartum'
-                                    ? postpartumTable.filter(v => v.visitDateOnly === day.date)
+                                    ? postpartumTable.filter(v => v.patientRecordAvailable && v.visitDateOnly === day.date)
                                     : visitsTable.filter(v => v.visitDateOnly === day.date);
 
                                 return (
@@ -1535,7 +1537,7 @@ const PrenatalVisits = () => {
                                 <div className="week-row">
                                     {visibleDays.map(day => {
                                         const dayItems = visitTypeTab === 'postpartum'
-                                            ? postpartumTable.filter(v => v.visitDateOnly === day.date)
+                                            ? postpartumTable.filter(v => v.patientRecordAvailable && v.visitDateOnly === day.date)
                                             : visitsTable.filter(v => v.visitDateOnly === day.date);
 
                                         return (
@@ -1574,7 +1576,7 @@ const PrenatalVisits = () => {
                                         <div key={weekIndex} className="week-row">
                                             {week.map(day => {
                                                 const dayItems = visitTypeTab === 'postpartum'
-                                                    ? postpartumTable.filter(v => v.visitDateOnly === day.date)
+                                                    ? postpartumTable.filter(v => v.patientRecordAvailable && v.visitDateOnly === day.date)
                                                     : visitsTable.filter(v => v.visitDateOnly === day.date);
 
                                                 return (
@@ -1775,7 +1777,9 @@ const PrenatalVisits = () => {
                                             <td>
                                                 <div className="p-info">
                                                     <span className="p-name">{visit.patientName}</span>
-                                                    <span className="p-id">{formatMotherId(visit.patientId)}</span>
+                                                    <span className="p-id">
+                                                        {visit.patientRecordAvailable ? formatMotherId(visit.patientId) : 'Patient record unavailable'}
+                                                    </span>
                                                 </div>
                                             </td>
                                             <td>
@@ -1794,7 +1798,7 @@ const PrenatalVisits = () => {
                                                 </span>
                                             </td>
                                             <td className="text-right">
-                                                <div className="row-actions">
+                                                {visit.patientRecordAvailable ? <div className="row-actions">
                                                     <ActionTooltip text="View Details">
                                                         <button className="action-btn-text action-btn-secondary" onClick={() => setSelectedVisit({ ...visit, type: 'Postpartum' })} style={{ padding: '6px 8px', minWidth: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                             <Eye size={14} />
@@ -1810,7 +1814,7 @@ const PrenatalVisits = () => {
                                                             <Users size={14} /> Profile
                                                         </button>
                                                     </ActionTooltip>
-                                                </div>
+                                                </div> : <span className="p-id">Actions unavailable: patient link is missing</span>}
                                             </td>
                                         </tr>
                                     ))
