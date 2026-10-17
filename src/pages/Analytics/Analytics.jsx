@@ -12,6 +12,7 @@ import PatientService from '../../services/patientservice';
 import '../../styles/pages/Analytics.css';
 import ExportModal from '../../components/ExportModal';
 import { getSystemSettings } from '../../utils/systemSettings';
+import { buildPregnancyRiskTrend } from '../../utils/analyticsTrendUtils';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 /* ════════════════════════════════════════════════════════════════
@@ -569,33 +570,25 @@ const Analytics = () => {
             visitsByPatient.set(visit.patient_id, visits);
         });
         const newbornById = new Map(dbData.newborns.map(newborn => [newborn.id, newborn]));
-        const latestRiskByPatient = {};
-        dbData.visits.forEach(visit => {
-            if (!visit.patient_id || !visit.calculated_risk) return;
-            const current = latestRiskByPatient[visit.patient_id];
-            if (!current || new Date(visit.visit_date) > new Date(current.visit_date)) latestRiskByPatient[visit.patient_id] = visit;
-        });
         const bucket = (dateValue) => weeks.findIndex(week => {
             const date = new Date(dateValue);
             return !Number.isNaN(date.getTime()) && isWithin(date, week.start, week.end);
         });
-        const totalVal = weeks.map(() => 0);
-        const highRiskVal = weeks.map(() => 0);
+        const riskService = new PatientService();
+        const { totalVal, highRiskVal } = buildPregnancyRiskTrend({
+            patients: dbData.patients,
+            pregnancies: dbData.pregnancies,
+            visits: dbData.visits,
+            selectedPatientIds,
+            weeks,
+            getRiskAssessment: (patient, pregnancy, visit) =>
+                riskService.getPregnancyRisk(patient, pregnancy, visit)
+        });
         const deliveriesVal = weeks.map(() => 0);
         const vaccNewborn = weeks.map(() => ({ completed: 0, total: 0 }));
         const postpartum = weeks.map(() => ({ eligible: 0, completed: 0 }));
         const visitsByWeek = weeks.map(() => ({ missed: 0, total: 0 }));
 
-        dbData.pregnancies.forEach(pregnancy => {
-            if (!selectedPatientIds.has(pregnancy.patient_id) || String(pregnancy.pregn_postp || '').toLowerCase() !== 'pregnant') return;
-            const index = bucket(pregnancy.created_at);
-            if (index >= 0) {
-                totalVal[index]++;
-                const pregnancyRisk = String(pregnancy.risk_level || '').toLowerCase();
-                const visitRisk = String(latestRiskByPatient[pregnancy.patient_id]?.calculated_risk || '').toLowerCase();
-                if (pregnancyRisk.includes('high') || visitRisk.includes('high')) highRiskVal[index]++;
-            }
-        });
         dbData.deliveries.forEach(delivery => {
             if (!selectedPatientIds.has(delivery.mother_id)) return;
             const index = bucket(delivery.delivery_date);
