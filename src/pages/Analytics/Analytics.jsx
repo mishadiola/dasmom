@@ -142,9 +142,18 @@ const Analytics = () => {
         let isMounted = true;
         let pollingTimer = null;
         let refreshTimer = null;
-        let latestRequestId = 0;
-        let hasLoadedOnce = false;
         const realtimeTables = ['patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'deliveries', 'vaccinations', 'newborns', 'stations'];
+        const tableKeys = {
+            patient_basic_info: 'patients',
+            pregnancy_info: 'pregnancies',
+            prenatal_visits: 'visits',
+            deliveries: 'deliveries',
+            vaccinations: 'vaccinations',
+            newborns: 'newborns',
+            stations: 'stations'
+        };
+        const tableRequestIds = Object.fromEntries(realtimeTables.map(table => [table, 0]));
+        const pendingTables = new Set();
 
         const startPollingFallback = (fetchData) => {
             if (pollingTimer || !isMounted) return;
@@ -157,57 +166,77 @@ const Analytics = () => {
             pollingTimer = null;
         };
 
-        const fetchAllData = async () => {
-            const requestId = ++latestRequestId;
-            try {
-                if (!hasLoadedOnce) setLoading(true);
-                setFetchError(null);
-                const [
-                    { data: patients },
-                    { data: pregnancies },
-                    { data: visits },
-                    { data: deliveries },
-                    { data: vaccinations },
-                    { data: newborns },
-                    { data: stations }
-                ] = await Promise.all([
-                    supabase.from('patient_basic_info').select('id, first_name, last_name, station_ass, stations:station_ass(station_name), date_of_birth, created_at'),
-                    supabase.from('pregnancy_info').select('patient_id, pregn_postp, pregnancy_type, lmd, edd, gravida, para, miscarriage_info, created_at'),
-                    supabase.from('prenatal_visits').select('id, patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm, next_appt_date, next_appt_type'),
-                    supabase.from('deliveries').select('id, mother_id, station_ass, stations:station_ass(station_name), delivery_date, delivery_type, complications, risk_level'),
-                    supabase.from('vaccinations').select('id, newborn_id, status, dose_number, scheduled_vaccination, vaccinated_date').not('newborn_id', 'is', null),
-                    supabase.from('newborns').select('id, mother_id, delivery_id'),
-                    supabase.from('stations').select('id, station_name').order('station_name')
-                ]);
+        const fetchTableData = (table) => {
+            switch (table) {
+                case 'patient_basic_info':
+                    return supabase.from(table).select('id, first_name, last_name, station_ass, stations:station_ass(station_name), date_of_birth, created_at');
+                case 'pregnancy_info':
+                    return supabase.from(table).select('patient_id, pregn_postp, pregnancy_type, lmd, edd, gravida, para, miscarriage_info, created_at');
+                case 'prenatal_visits':
+                    return supabase.from(table).select('id, patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm, next_appt_date, next_appt_type');
+                case 'deliveries':
+                    return supabase.from(table).select('id, mother_id, station_ass, stations:station_ass(station_name), delivery_date, delivery_type, complications, risk_level');
+                case 'vaccinations':
+                    return supabase.from(table).select('id, newborn_id, status, dose_number, scheduled_vaccination, vaccinated_date').not('newborn_id', 'is', null);
+                case 'newborns':
+                    return supabase.from(table).select('id, mother_id, delivery_id');
+                case 'stations':
+                    return supabase.from(table).select('id, station_name').order('station_name');
+                default:
+                    throw new Error(`Unsupported analytics table: ${table}`);
+            }
+        };
 
-                if (isMounted && requestId === latestRequestId) setDbData({
-                    patients: patients || [],
-                    pregnancies: pregnancies || [],
-                    visits: visits || [],
-                    deliveries: deliveries || [],
-                    vaccinations: vaccinations || [],
-                    newborns: newborns || [],
-                    stations: stations || []
+        const fetchTables = async (tables, isInitialLoad = false) => {
+            const requests = tables.map(async table => {
+                const requestId = ++tableRequestIds[table];
+                const { data, error } = await fetchTableData(table);
+                if (error) throw error;
+                return { table, requestId, data: data || [] };
+            });
+
+            try {
+                setFetchError(null);
+                const results = await Promise.all(requests);
+                if (!isMounted) return;
+                setDbData(current => {
+                    const next = { ...current };
+                    results.forEach(({ table, requestId, data }) => {
+                        if (requestId === tableRequestIds[table]) {
+                            next[tableKeys[table]] = data;
+                        }
+                    });
+                    return next;
                 });
-                if (isMounted && requestId === latestRequestId) hasLoadedOnce = true;
             } catch (error) {
                 console.error('Error fetching Supabase data in Analytics:', error);
-                if (isMounted && requestId === latestRequestId) setFetchError(error);
+                if (isMounted) setFetchError(error);
             } finally {
-                if (isMounted && requestId === latestRequestId) setLoading(false);
+                if (isMounted && isInitialLoad) setLoading(false);
             }
+        };
+
+        const fetchAllData = () => fetchTables(realtimeTables, true);
+
+        const scheduleRefresh = (table) => {
+            pendingTables.add(table);
+            if (table === 'stations') {
+                pendingTables.add('patient_basic_info');
+                pendingTables.add('deliveries');
+            }
+            if (refreshTimer) clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(() => {
+                const tablesToRefresh = [...pendingTables];
+                pendingTables.clear();
+                fetchTables(tablesToRefresh);
+            }, 250);
         };
 
         fetchAllData();
 
-        const scheduleRefresh = () => {
-            if (refreshTimer) clearTimeout(refreshTimer);
-            refreshTimer = setTimeout(fetchAllData, 250);
-        };
-
         const channel = supabase.channel('analytics-live-data');
         realtimeTables.forEach(table => {
-            channel.on('postgres_changes', { event: '*', schema: 'public', table }, scheduleRefresh);
+            channel.on('postgres_changes', { event: '*', schema: 'public', table }, () => scheduleRefresh(table));
         });
         channel.subscribe(status => {
                 if (status === 'SUBSCRIBED') {
