@@ -1055,43 +1055,69 @@ const Vaccinations = () => {
             setLoading(true);
             setError(null);
 
-            const archivedIds = await patientService.getArchivedPatientIds();
+            const [
+                archivedIds,
+                vaccinationResult,
+                supplementResult,
+                patientsResult,
+                newbornsResult,
+                staffResult,
+                vaccineInvData,
+                suppInvData
+            ] = await Promise.all([
+                patientService.getArchivedPatientIds(),
+                supabase
+                    .from('vaccinations')
+                    .select(`
+                        id,
+                        patient_id,
+                        newborn_id,
+                        delivery_id,
+                        vaccine_inventory_id,
+                        dose_number,
+                        status,
+                        vaccinated_date,
+                        scheduled_vaccination,
+                        reschedule_reason,
+                        vaccinated_by,
+                        assigned_staff,
+                        notes,
+                        created_at,
+                        created_by,
+                        vaccine_inventory (vaccine_name, brand, unit, doses, batch, expiration_date)
+                    `)
+                    .or('patient_id.not.is.null,newborn_id.not.is.null')
+                    .order('created_at', { ascending: false }),
+                supabase
+                    .from('supplements')
+                    .select('id, patient_id, supplement_inventory_id, dosage, start_date, end_date, created_by, administered_by, station_ass, notes, status')
+                    .order('created_at', { ascending: false }),
+                supabase
+                    .from('patient_basic_info')
+                    .select('id, first_name, last_name, station_ass, stations:station_ass (station_name), province'),
+                supabase
+                    .from('newborns')
+                    .select('id, baby_name, mother_id, created_at'),
+                supabase
+                    .from('staff_profiles')
+                    .select('id, full_name'),
+                inventoryService.getVaccineInventory(),
+                inventoryService.getSupplementInventory()
+            ]);
+
+            const { data: vaccRecords, error: vaccError } = vaccinationResult;
+            const { data: suppRecords, error: suppError } = supplementResult;
+            const { data: allPatients, error: patientsError } = patientsResult;
+            const { data: allNewborns, error: newbornsError } = newbornsResult;
+            const { data: staff, error: staffError } = staffResult;
+            if (vaccError) throw vaccError;
+            if (suppError) throw suppError;
+            if (patientsError) throw patientsError;
+            if (newbornsError) throw newbornsError;
+            if (staffError) throw staffError;
+
             setArchivedPatientIds(archivedIds);
-
-            const { data: vaccRecords, error: vaccError } = await supabase
-                .from('vaccinations')
-                .select(`
-                    id,
-                    patient_id,
-                    newborn_id,
-                    delivery_id,
-                    vaccine_inventory_id,
-                    dose_number,
-                    status,
-                    vaccinated_date,
-                    scheduled_vaccination,
-                    reschedule_reason,
-                    vaccinated_by,
-                    assigned_staff,
-                    notes,
-                    created_at,
-                    created_by,
-                    staff_profiles!vaccinations_created_by_fkey (full_name),
-                    vaccine_inventory (vaccine_name, brand, unit, doses, batch, expiration_date)
-                `)
-                .or('patient_id.not.is.null,newborn_id.not.is.null')
-                .order('created_at', { ascending: false });
             console.log('💉 Fetched vaccination records:', vaccRecords?.length || 0);
-            const { data: suppRecords } = await supabase.from('supplements').select('*').order('created_at', { ascending: false });
-
-            const { data: allPatients } = await supabase
-                .from('patient_basic_info')
-                .select('id, first_name, last_name, station_ass, stations:station_ass (station_name), province');
-
-            // Fetch all newborns to create a map
-            const { data: allNewborns } = await supabase
-                .from('newborns')
-                .select('id, baby_name, mother_id, created_at');
 
             const archivedNewbornIds = new Set(
                 (allNewborns || [])
@@ -1100,32 +1126,18 @@ const Vaccinations = () => {
             );
 
             // Get maps for names
-            const { data: vaccineInv } = await supabase.from('vaccine_inventory').select('id, vaccine_name');
-            const vaccineMap = new Map(vaccineInv.map(v => [v.id, v.vaccine_name]));
-            const { data: suppInv } = await supabase.from('supplement_inventory').select('id, supplement_name, unit');
-            const suppMap = new Map((suppInv || []).map(s => [s.id, s.supplement_name]));
-            const suppUnitMap = new Map((suppInv || []).map(s => [s.id, s.unit]));
-            const { data: staff } = await supabase.from('staff_profiles').select('id, full_name');
-            const staffMap = new Map(staff.map(s => [s.id, s.full_name]));
+            const vaccineMap = new Map((vaccineInvData || []).map(v => [v.id, v.item_name || v.vaccine_name]));
+            const suppMap = new Map((suppInvData || []).map(s => [s.id, s.item_name || s.supplement_name]));
+            const suppUnitMap = new Map((suppInvData || []).map(s => [s.id, s.unit]));
+            const staffMap = new Map((staff || []).map(s => [s.id, s.full_name]));
             
-            console.log('📋 Fetched patients:', allPatients?.length || 0);
             const patientMap = new Map(allPatients?.map(p => [p.id, {
                 name: `${p.first_name || ''} ${p.last_name || ''}`.trim(),
                 station: `${p.stations?.station_name || 'N/A'}, ${p.province || 'N/A'}`
             }]) || []);
-            console.log('🗺️ PatientMap size:', patientMap.size);
-            console.log('🗺️ Sample PatientMap entries:', Array.from(patientMap.entries()).slice(0, 5));
-            console.log('🗺️ All PatientMap keys:', Array.from(patientMap.keys()).slice(0, 20));
 
-            console.log('👶 Fetched newborns:', allNewborns?.length || 0);
-            console.log('👶 Sample newborn records:', allNewborns?.slice(0, 5).map(n => ({
-                id: n.id,
-                baby_name: n.baby_name,
-                mother_id: n.mother_id
-            })));
             const newbornMap = new Map(allNewborns?.map(n => {
                 const motherInfo = patientMap.get(n.mother_id);
-                console.log('🔍 Mapping newborn:', n.id, 'mother_id:', n.mother_id, 'motherInfo:', motherInfo);
                 return [n.id, {
                     babyName: n.baby_name,
                     motherId: n.mother_id,
@@ -1245,12 +1257,8 @@ const Vaccinations = () => {
             setVaccinationRecords(transformedVaccRecords);
             setSupplementRecords(transformedSuppRecords);
 
-            // Update stats (will be set after inventory logic)
+            // Update stats
 
-            // Update inventory
-            const vaccineInvData = await inventoryService.getVaccineInventory();
-            const suppInvData = await inventoryService.getSupplementInventory();
-            
 
             // 1. Number of Patients Administered:
             // Count unique mothers and newborns who have received at least one recorded vaccine or supplement.

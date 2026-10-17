@@ -19,27 +19,47 @@ export const RolePermissionProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const loadedUserId = useRef(null);
+    const refreshInFlightRef = useRef(false);
+    const lastRefreshAtRef = useRef(0);
 
-    const refresh = useCallback(async (isSilent = false) => {
+    const refresh = useCallback(async (options = {}) => {
+        const isLegacyBoolean = typeof options === 'boolean';
+        const force = !isLegacyBoolean && !!options?.force;
+        const suppressLoading = isLegacyBoolean ? options : !!options?.suppressLoading;
+
         if (!user?.id) {
             loadedUserId.current = null;
+            lastRefreshAtRef.current = 0;
             setPermissions({});
             setError(null);
             setLoading(false);
             return false;
         }
 
+        const now = Date.now();
+        const hasRecentRefresh = !force && now - lastRefreshAtRef.current < 60000 && loadedUserId.current === user.id;
+
+        if (refreshInFlightRef.current && loadedUserId.current === user.id) {
+            return false;
+        }
+
+        if (hasRecentRefresh) {
+            return false;
+        }
+
         const isUserChanged = loadedUserId.current !== user.id;
         if (isUserChanged) {
             setPermissions({});
-            if (!isSilent) {
+            if (!suppressLoading) {
                 setLoading(true);
             }
-        } else if (!isSilent && !loadedUserId.current) {
+        } else if (!suppressLoading && !loadedUserId.current) {
             setLoading(true);
         }
 
+        refreshInFlightRef.current = true;
         setError(null);
+
         try {
             const { data, error: permissionError } = await supabase.rpc('get_my_permissions');
             if (permissionError) {
@@ -52,11 +72,15 @@ export const RolePermissionProvider = ({ children }) => {
                 return false;
             }
 
-            setPermissions(Object.fromEntries(
+            const nextPermissions = Object.fromEntries(
                 (data || []).map(row => [row.permission_key, row.is_allowed === true])
-            ));
+            );
+
+            setPermissions(nextPermissions);
             loadedUserId.current = user.id;
+            lastRefreshAtRef.current = Date.now();
             setError(null);
+            setLoading(false);
             return true;
         } catch (err) {
             console.warn('RolePermissionContext: permission check failed:', err);
@@ -65,36 +89,43 @@ export const RolePermissionProvider = ({ children }) => {
             }
             return false;
         } finally {
+            refreshInFlightRef.current = false;
             setLoading(false);
         }
     }, [user?.id]);
 
     useEffect(() => {
         let mounted = true;
-        const load = async (silent = false) => {
+
+        const loadPermissions = async () => {
             if (!mounted) return;
-            await refresh(silent);
-        };
-        const refreshWhenVisible = () => {
-            if (document.visibilityState === 'visible') load(true);
-        };
-        const refreshWhenFocused = () => {
-            load(true);
+            await refresh({ suppressLoading: loadedUserId.current === user?.id });
         };
 
-        // Initial load for this user (silent if already loaded for this user)
-        load(loadedUserId.current === user?.id);
+        const refreshWhenVisible = () => {
+            if (!mounted || document.visibilityState !== 'visible') return;
+            const now = Date.now();
+            if (now - lastRefreshAtRef.current < 60000) return;
+            refresh({ suppressLoading: true });
+        };
+
+        const refreshWhenFocused = () => {
+            if (!mounted) return;
+            const now = Date.now();
+            if (now - lastRefreshAtRef.current < 60000) return;
+            refresh({ suppressLoading: true });
+        };
+
+        loadPermissions();
         window.addEventListener('focus', refreshWhenFocused);
         document.addEventListener('visibilitychange', refreshWhenVisible);
-        const interval = window.setInterval(() => load(true), 60_000);
 
         return () => {
             mounted = false;
             window.removeEventListener('focus', refreshWhenFocused);
             document.removeEventListener('visibilitychange', refreshWhenVisible);
-            window.clearInterval(interval);
         };
-    }, [refresh, user?.id]);
+    }, [user?.id, refresh]);
 
     const value = useMemo(() => ({
         permissions,

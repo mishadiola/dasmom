@@ -108,6 +108,8 @@ const Inventory = () => {
   const filterRowRef = useRef(null);
   const fetchDataInFlightRef = useRef(false);
   const fetchDataQueuedRef = useRef(false);
+  const mainDataRefreshTimerRef = useRef(null);
+  const lastMainFetchAtRef = useRef(0);
   useClickOutside(filterRowRef, () => setActivePopover(null));
   const [activeSummaryFilter, setActiveSummaryFilter] = useState(null);
   const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
@@ -329,11 +331,18 @@ const Inventory = () => {
   };
 
   const fetchData = async (isSilent = false) => {
+    const now = Date.now();
     if (fetchDataInFlightRef.current) {
       fetchDataQueuedRef.current = true;
       return;
     }
 
+    if (now - lastMainFetchAtRef.current < 1000) {
+      fetchDataQueuedRef.current = true;
+      return;
+    }
+
+    lastMainFetchAtRef.current = now;
     fetchDataInFlightRef.current = true;
     try {
       do {
@@ -359,8 +368,6 @@ const Inventory = () => {
             'City Health Office 3'
           ]);
 
-          console.log('Inventory data fetched - vaccines:', vaxData?.length || 0, 'supplements:', suppData?.length || 0);
-
           await loadPendingVaccinations();
 
           const mappedVaccines = (vaxData || []).map(row => ({
@@ -369,7 +376,7 @@ const Inventory = () => {
             quantity: row?.quantity || 0,
             max_stock: row?.max_quantity || row?.max_stock || 500,
             unit: row?.unit || 'vials',
-            status: row?.status || 'active', // Note: This is a custom status field, not from DB
+            status: row?.status || 'active',
             brand: row?.brand || '',
             expiration_date: row?.expiration_date || null,
             doses: row?.doses || null,
@@ -383,15 +390,13 @@ const Inventory = () => {
             quantity: row?.quantity || 0,
             max_stock: row?.max_quant || row?.max_stock || 1000,
             unit: row?.unit || 'tablets',
-            status: row?.status || 'active', // Note: This is a custom status field, not from DB
+            status: row?.status || 'active',
             brand: row?.brand || '',
             expiration_date: row?.expiration_date || null,
             batch_number: row?.batch_number || null,
             manufactured_date: row?.manufactured_date || null,
             created_at: row?.created_at || null
           }));
-
-          console.log('Mapped vaccines:', mappedVaccines.length, 'Mapped supplements:', mappedSupplements.length);
 
           setVaccines(mappedVaccines);
           setSupplements(mappedSupplements);
@@ -405,6 +410,13 @@ const Inventory = () => {
     } finally {
       fetchDataInFlightRef.current = false;
     }
+  };
+
+  const scheduleMainDataRefresh = (isSilent = true) => {
+    clearTimeout(mainDataRefreshTimerRef.current);
+    mainDataRefreshTimerRef.current = setTimeout(() => {
+      fetchData(isSilent);
+    }, 200);
   };
 
   useEffect(() => {
@@ -423,14 +435,15 @@ const Inventory = () => {
     fetchData(false);
 
     const vaxSub = canViewMainInventory
-      ? inventoryService.subscribeToInventory('vaccine_inventory', () => fetchData(true))
+      ? inventoryService.subscribeToInventory('vaccine_inventory', () => scheduleMainDataRefresh(true))
       : null;
     const suppSub = canViewMainInventory
-      ? inventoryService.subscribeToInventory('supplement_inventory', () => fetchData(true))
+      ? inventoryService.subscribeToInventory('supplement_inventory', () => scheduleMainDataRefresh(true))
       : null;
 
     return () => {
       isCurrent = false;
+      clearTimeout(mainDataRefreshTimerRef.current);
       vaxSub?.unsubscribe();
       suppSub?.unsubscribe();
     };
@@ -490,7 +503,7 @@ const Inventory = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'station_vaccine_inventory' }, () => {
         if (isCurrent) {
           scheduleStationDataRefresh();
-          if (!isAdmin) fetchData(true);
+          if (!isAdmin) scheduleMainDataRefresh(true);
         }
       })
       .subscribe();
@@ -500,7 +513,7 @@ const Inventory = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'station_supplement_inventory' }, () => {
         if (isCurrent) {
           scheduleStationDataRefresh();
-          if (!isAdmin) fetchData(true);
+          if (!isAdmin) scheduleMainDataRefresh(true);
         }
       })
       .subscribe();
@@ -526,7 +539,6 @@ const Inventory = () => {
   // Group vaccines by name only (not brand), keep all batches
   const groupVaccinesByName = (vaccineList) => {
     if (!vaccineList || vaccineList.length === 0) {
-      console.log('Debug: No vaccines to group');
       return [];
     }
     
@@ -574,14 +586,12 @@ const Inventory = () => {
       return group;
     });
     
-    console.log('Debug: Grouped vaccines:', result.length, 'Sample:', result[0]?.item_name);
     return result;
   };
 
   // Group supplements by name only (not brand), keep all batches
   const groupSupplementsByName = (supplementList) => {
     if (!supplementList || supplementList.length === 0) {
-      console.log('Debug: No supplements to group');
       return [];
     }
     
@@ -627,14 +637,10 @@ const Inventory = () => {
       return group;
     });
     
-    console.log('Debug: Grouped supplements:', result.length, 'Sample:', result[0]?.item_name);
     return result;
   };
 
   const currentItems = activeTab === 'vaccines' ? groupVaccinesByName(vaccines) : groupSupplementsByName(supplements);
-
-  // Debug: Log data flow
-  console.log('Debug Inventory - vaccines:', vaccines.length, 'supplements:', supplements.length, 'currentItems:', currentItems.length);
 
   const filteredItems = currentItems
     .filter(item => item && typeof item === 'object')
@@ -1716,7 +1722,7 @@ const Inventory = () => {
                   const percentage = getStockPercentage(item.total_quantity || 0, item.total_max_stock || 500);
                   const rowNumber = startIndex + index + 1;
                   return (
-                    <>
+                    <React.Fragment key={`${item.items[0]?.id || item.item_name}-${index}`}>
                     <tr key={`${item.item_name}-${index}`} className="inv-row">
                       <td className="row-number-cell">
                         {item.items.length > 0 && (
@@ -2005,7 +2011,7 @@ const Inventory = () => {
                         </td>
                       </tr>
                     )}
-                    </>
+                    </React.Fragment>
                   );
                 })
               ) : (

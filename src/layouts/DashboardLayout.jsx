@@ -13,7 +13,14 @@ import PatientService from '../services/patientservice';
 import supabase from '../config/supabaseclient';
 import { useModal } from '../context/ModalContext';
 import { useLanguage } from '../context/LanguageContext';
-import MotherAIChatAssistant from '../components/MotherDashboard/MotherAIChatAssistant';
+import StaffPageLoader from '../components/Common/StaffPageLoader';
+
+const MotherAIChatAssistant = React.lazy(() => import('../components/MotherDashboard/MotherAIChatAssistant'));
+const DashboardOutlet = React.memo(() => (
+    <React.Suspense fallback={<StaffPageLoader />}>
+        <Outlet />
+    </React.Suspense>
+));
 
 const NAV_ITEMS = [
     {
@@ -126,10 +133,17 @@ const DashboardLayout = () => {
 
     // Fetch real notifications from database
     useEffect(() => {
+        let active = true;
+        let latestRequest = 0;
+        let notificationRefreshTimer = null;
+
         const fetchNotifications = async () => {
+            const requestId = ++latestRequest;
             if (!user || isUserView) {
-                setNotifications([]);
-                setNotifCount(0);
+                if (active) {
+                    setNotifications([]);
+                    setNotifCount(0);
+                }
                 return;
             }
 
@@ -256,40 +270,42 @@ const DashboardLayout = () => {
                     n.isResolved = resolvedIds.includes(n.id);
                 });
 
-                setNotifications(notifList);
-                setNotifCount(notifList.filter(n => !n.isResolved).length);
+                if (active && requestId === latestRequest) {
+                    setNotifications(notifList);
+                    setNotifCount(notifList.filter(n => !n.isResolved).length);
+                }
             } catch (error) {
                 console.error('Error fetching notifications:', error);
-                setNotifications([]);
-                setNotifCount(0);
+                if (active && requestId === latestRequest) {
+                    setNotifications([]);
+                    setNotifCount(0);
+                }
             }
+        };
+
+        const scheduleNotificationRefresh = () => {
+            if (notificationRefreshTimer) clearTimeout(notificationRefreshTimer);
+            notificationRefreshTimer = setTimeout(fetchNotifications, 250);
         };
 
         fetchNotifications();
 
         if (!user || isUserView) {
-            return;
+            return () => { active = false; };
         }
 
-        let debounceTimer = null;
-        const debouncedFetch = () => {
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => {
-                fetchNotifications();
-            }, 1000);
-        };
-
         const subscription = supabase
-            .channel('notifications-live-channel')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'prenatal_visits' }, debouncedFetch)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'vaccine_inventory' }, debouncedFetch)
+            .channel('notifications-channel')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'prenatal_visits' }, scheduleNotificationRefresh)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'vaccine_inventory' }, scheduleNotificationRefresh)
             .subscribe();
 
         return () => {
-            clearTimeout(debounceTimer);
+            active = false;
+            if (notificationRefreshTimer) clearTimeout(notificationRefreshTimer);
             supabase.removeChannel(subscription);
         };
-    }, [user?.id, isUserView]);
+    }, [user, isUserView]);
 
     const handleNotificationClick = (notif) => {
         setNotifOpen(false);
@@ -629,7 +645,7 @@ const DashboardLayout = () => {
 
                 {/* ── Page Content ── */}
                 <main className="page-content" id="main-content" tabIndex={-1}>
-                    <Outlet />
+                    <DashboardOutlet />
                 </main>
 
                 {/* ── Mobile Bottom Navigation (User View) ── */}
@@ -701,7 +717,11 @@ const DashboardLayout = () => {
 
             {/* ── Mother Portal AI Chat Assistant ── */}
             <div style={{ display: (isUserView && mobileMoreOpen) ? 'none' : 'block' }}>
-                {isUserView && <MotherAIChatAssistant />}
+                {isUserView && (
+                    <React.Suspense fallback={null}>
+                        <MotherAIChatAssistant />
+                    </React.Suspense>
+                )}
             </div>
         </div>
     );

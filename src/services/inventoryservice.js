@@ -2,6 +2,7 @@ import supabase from '../config/supabaseclient';
 import AuthService from './authservice'; // ← now you have real AuthService
 
 let currentUserScopeRequest = null;
+const stationInventoryCatalogRequests = new Map();
 
 const normalizeInventoryRole = (value) => {
   const normalized = String(value ?? '').trim().toLowerCase().replace(/[_-]/g, ' ');
@@ -76,6 +77,27 @@ class InventoryService {
         });
     }
     return currentUserScopeRequest;
+  }
+
+  async _getStationInventoryCatalog(scope) {
+    const requestKey = `${scope.userId}:${scope.stationId}`;
+    let request = stationInventoryCatalogRequests.get(requestKey);
+    if (!request) {
+      request = this.supabase.rpc('get_station_inventory_catalog', {
+        p_station_id: scope.stationId
+      });
+      stationInventoryCatalogRequests.set(requestKey, request);
+    }
+
+    try {
+      const { data, error } = await request;
+      if (error) throw error;
+      return data || [];
+    } finally {
+      if (stationInventoryCatalogRequests.get(requestKey) === request) {
+        stationInventoryCatalogRequests.delete(requestKey);
+      }
+    }
   }
 
   async _loadCurrentUserScope() {
@@ -501,11 +523,8 @@ class InventoryService {
 
       if (!includeMain) {
         if (!scope.stationId) throw new Error('Your account has no assigned station');
-        const { data: catalog, error } = await this.supabase.rpc('get_station_inventory_catalog', {
-          p_station_id: scope.stationId
-        });
-        if (error) throw error;
-        return (catalog || [])
+        const catalog = await this._getStationInventoryCatalog(scope);
+        return catalog
           .filter(row => row.item_type === 'Vaccine')
           .map(row => ({
             id: row.item_id,
@@ -585,11 +604,8 @@ class InventoryService {
 
       if (!includeMain) {
         if (!scope.stationId) throw new Error('Your account has no assigned station');
-        const { data: catalog, error } = await this.supabase.rpc('get_station_inventory_catalog', {
-          p_station_id: scope.stationId
-        });
-        if (error) throw error;
-        return (catalog || [])
+        const catalog = await this._getStationInventoryCatalog(scope);
+        return catalog
           .filter(row => row.item_type === 'Supplement')
           .map(row => ({
             id: row.item_id,

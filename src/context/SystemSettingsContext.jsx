@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useMemo } from 'react';
 import { getSystemSettings, saveSystemSettings } from '../utils/systemSettings';
 
 const SystemSettingsContext = createContext();
@@ -18,10 +18,10 @@ export const SystemSettingsProvider = ({ children }) => {
         return () => window.removeEventListener('dasmom:system-settings-changed', handleSettingsChanged);
     }, []);
     
-
+    const contextValue = useMemo(() => ({ settings, saveSystemSettings }), [settings]);
 
     return (
-        <SystemSettingsContext.Provider value={{ settings, saveSystemSettings }}>
+        <SystemSettingsContext.Provider value={contextValue}>
             {children}
         </SystemSettingsContext.Provider>
     );

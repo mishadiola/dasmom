@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useContext } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -12,7 +12,7 @@ import PatientService from '../../services/patientservice';
 import Legend from '../../components/Legend/Legend';
 import supabase from '../../config/supabaseclient';
 import ExportModal from '../../components/ExportModal';
-import * as XLSX from 'xlsx';
+import ActionTooltip from '../../components/Common/ActionTooltip';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
 import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
 import { AuthContext } from '../../context/AuthContext';
@@ -79,6 +79,14 @@ const StationReports = () => {
     const [expandedRow, setExpandedRow] = useState(null);
     const [showCharts, setShowCharts] = useState(true);
     const [stations, setStations] = useState([]);
+    const [pregnancyAgeRows, setPregnancyAgeRows] = useState([]);
+    const [showPregnancyAgeReport, setShowPregnancyAgeReport] = useState(false);
+    const [pregnancyAgeLoading, setPregnancyAgeLoading] = useState(false);
+    const [pregnancyAgeError, setPregnancyAgeError] = useState(null);
+    const pregnancyAgeLoaded = useRef(false);
+    const mounted = useRef(false);
+    const reportRequestId = useRef(0);
+    const ageReportRequestId = useRef(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [summaryStats, setSummaryStats] = useState([
@@ -89,7 +97,7 @@ const StationReports = () => {
         { label: 'Supplements Distributed', value: 0, color: 'pink', icon: Pill, path: '/dashboard/inventory', filter: 'supplements' },
     ]);
 
-    const patientService = new PatientService();
+    const patientService = useMemo(() => new PatientService(), []);
 
     // Determine authorized stations based on role:
     // Station Staff sees ONLY their assigned station; Admin and CHO Personnel see all stations.
@@ -105,49 +113,15 @@ const StationReports = () => {
 
     const activeStationFilter = isStationStaff ? (authorizedStations[0]?.name || userStation || '') : stationFilter;
 
-    useEffect(() => {
-        let pollingTimer = null;
-
-        const startPollingFallback = () => {
-            if (pollingTimer) return;
-            pollingTimer = setInterval(() => fetchStationData(true), 30000);
-        };
-
-        const stopPollingFallback = () => {
-            if (!pollingTimer) return;
-            clearInterval(pollingTimer);
-            pollingTimer = null;
-        };
-
-        fetchStationData(false);
-
-        const channel = supabase
-            .channel('station-reports-live-data')
-            .on('postgres_changes', { event: '*', schema: 'public' }, payload => {
-                const tables = ['stations', 'patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'deliveries', 'newborns', 'vaccinations', 'supplements'];
-                if (tables.includes(payload.table)) fetchStationData(true);
-            })
-            .subscribe(status => {
-                if (status === 'SUBSCRIBED') {
-                    stopPollingFallback();
-                } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
-                    startPollingFallback();
-                }
-            });
-
-        return () => {
-            stopPollingFallback();
-            supabase.removeChannel(channel);
-        };
-    }, []);
-
-    const fetchStationData = async (isSilent = false) => {
+    const fetchStationData = useCallback(async (isSilent = false) => {
+        const requestId = ++reportRequestId.current;
         try {
             if (!isSilent && stations.length === 0) {
                 setLoading(true);
             }
             setError(null);
             const data = await patientService.getStationReports();
+            if (!mounted.current || requestId !== reportRequestId.current) return;
             setStations(data);
 
             // Calculate summary stats from station data (scoped to authorized stations if Station Staff)
@@ -173,10 +147,87 @@ const StationReports = () => {
             ]);
         } catch (error) {
             console.error('Error fetching station data:', error);
-            setError(error);
+            if (mounted.current && requestId === reportRequestId.current) setError(error);
         } finally {
-            setLoading(false);
+            if (mounted.current && requestId === reportRequestId.current) setLoading(false);
         }
+    }, [patientService, stations.length, isStationStaff, userStation]);
+
+    const refreshPregnancyAgeReport = useCallback(async () => {
+        const requestId = ++ageReportRequestId.current;
+        try {
+            const rows = await patientService.getStationPregnancyAgeReport();
+            if (!mounted.current || requestId !== ageReportRequestId.current) return;
+            setPregnancyAgeRows(rows);
+            pregnancyAgeLoaded.current = true;
+            setPregnancyAgeError(null);
+        } catch (reportError) {
+            console.error('Error fetching pregnancy age report:', reportError);
+            if (mounted.current && requestId === ageReportRequestId.current) setPregnancyAgeError(reportError);
+        } finally {
+            if (mounted.current && requestId === ageReportRequestId.current) setPregnancyAgeLoading(false);
+        }
+    }, [patientService]);
+
+    useEffect(() => {
+        let pollingTimer = null;
+        let refreshTimer = null;
+        mounted.current = true;
+
+        const startPollingFallback = () => {
+            if (!pollingTimer) {
+                pollingTimer = setInterval(() => {
+                    fetchStationData();
+                    if (pregnancyAgeLoaded.current) refreshPregnancyAgeReport();
+                }, 30000);
+            }
+        };
+        const stopPollingFallback = () => {
+            if (!pollingTimer) return;
+            clearInterval(pollingTimer);
+            pollingTimer = null;
+        };
+
+        fetchStationData();
+        const channel = supabase
+            .channel('station-reports-live-data');
+        const scheduleRefresh = () => {
+            if (refreshTimer) clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(() => {
+                fetchStationData();
+                if (pregnancyAgeLoaded.current) refreshPregnancyAgeReport();
+            }, 250);
+        };
+        const realtimeTables = ['stations', 'patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'deliveries', 'newborns', 'vaccinations', 'supplements'];
+        realtimeTables.forEach(table => {
+            channel.on('postgres_changes', { event: '*', schema: 'public', table }, scheduleRefresh);
+        });
+        channel.subscribe(status => {
+                if (status === 'SUBSCRIBED') {
+                    stopPollingFallback();
+                } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
+                    startPollingFallback();
+                }
+            });
+
+        return () => {
+            mounted.current = false;
+            reportRequestId.current += 1;
+            ageReportRequestId.current += 1;
+            stopPollingFallback();
+            if (refreshTimer) clearTimeout(refreshTimer);
+            supabase.removeChannel(channel);
+        };
+    }, [fetchStationData, refreshPregnancyAgeReport]);
+
+    const togglePregnancyAgeReport = async () => {
+        const willShow = !showPregnancyAgeReport;
+        setShowPregnancyAgeReport(willShow);
+        if (!willShow || pregnancyAgeLoaded.current) return;
+
+        setPregnancyAgeLoading(true);
+        setPregnancyAgeError(null);
+        await refreshPregnancyAgeReport();
     };
 
     const filtered = useMemo(() => {
@@ -191,7 +242,7 @@ const StationReports = () => {
 
     const [showExportModal, setShowExportModal] = useState(false);
 
-    const handleExport = (exportConfig) => {
+    const handleExport = async (exportConfig) => {
         const { format, reportPeriodText } = exportConfig;
         const exportData = (isStationStaff ? authorizedStations : (activeStationFilter === 'All' ? stations : stations.filter(s => s.name === activeStationFilter))).map(s => ({
             'Station': s.name,
@@ -210,6 +261,7 @@ const StationReports = () => {
         }));
 
         if (format === 'excel') {
+            const XLSX = await import('xlsx');
             let worksheetData = [
                 ['Report: DASMOM+ Station Reports'],
                 [`Generated: ${new Date().toLocaleString()}`],
@@ -256,7 +308,7 @@ const StationReports = () => {
     const totalDeliveries = authorizedStations.reduce((sum, s) => sum + s.recentDeliveries, 0);
     const totalNewborns = authorizedStations.reduce((sum, s) => sum + s.newborns, 0);
 
-    if (loading) {
+    if (loading || error) {
         return (
             <StaffPageLoader 
                 message="Loading station reports..." 
@@ -276,6 +328,9 @@ const StationReports = () => {
                     <p className="page-subtitle">Compare patient records, documented health conditions, and maternal-newborn care services across CHO III stations.</p>
                 </div>
                 <div className="header-actions">
+                    <button className="btn btn-outline" onClick={togglePregnancyAgeReport}>
+                        <Users size={16} /> {showPregnancyAgeReport ? 'Hide Pregnancy Report' : 'Show Pregnancy Report'}
+                    </button>
                     <button className="btn btn-primary" onClick={() => setShowExportModal(true)}>
                         <Download size={16} /> Export Report
                     </button>
@@ -580,6 +635,12 @@ const StationReports = () => {
                 {showCharts && <ChartsSection stations={authorizedStations} isStationStaff={isStationStaff} />}
             </div>
 
+            {showPregnancyAgeReport && (pregnancyAgeLoading
+                ? <StaffPageLoader message="Loading pregnancy age report..." />
+                : pregnancyAgeError
+                    ? <div className="st-age-empty" role="alert">Could not load the pregnancy age report. Close and reopen the report to retry.</div>
+                    : <PregnancyAgeReport rows={pregnancyAgeRows} />)}
+
             {/* ── Footer Timestamp ── */}
             <div className="st-footer-timestamp">
                 <Clock size={13} />
@@ -599,6 +660,181 @@ const StationReports = () => {
 };
 
 export default StationReports;
+
+/* ════════════════════════════
+   PREGNANCY AGE REPORT
+════════════════════════════ */
+const PregnancyAgeReport = ({ rows }) => {
+    const [filters, setFilters] = useState({ period: 'All', station: 'All', outcome: 'All', deliveryType: 'All' });
+    const [currentPage, setCurrentPage] = useState(1);
+    const rowsPerPage = 50;
+
+    const stationOptions = useMemo(() => [...new Set(rows.map(row => row.station).filter(Boolean))].sort(), [rows]);
+    const deliveryTypeOptions = useMemo(
+        () => [...new Set(rows.map(row => row.deliveryType).filter(type => type && type !== 'N/A'))].sort(),
+        [rows]
+    );
+
+    const filteredRows = useMemo(() => rows.filter(row => {
+        const date = new Date(row.eventDate);
+        const now = new Date();
+        const isSameMonth = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+        const startOfWeek = new Date(now);
+        startOfWeek.setHours(0, 0, 0, 0);
+        startOfWeek.setDate(now.getDate() - now.getDay());
+        const matchPeriod = filters.period === 'All'
+            || (filters.period === 'Month' && isSameMonth && date.getFullYear() === now.getFullYear())
+            || (filters.period === 'Year' && date.getFullYear() === now.getFullYear())
+            || (filters.period === 'Week' && date >= startOfWeek && date <= now);
+        return matchPeriod
+            && (filters.station === 'All' || row.station === filters.station)
+            && (filters.outcome === 'All' || row.outcome === filters.outcome)
+            && (filters.deliveryType === 'All' || row.deliveryType === filters.deliveryType);
+    }), [rows, filters]);
+    const totalPages = Math.ceil(filteredRows.length / rowsPerPage);
+    const visiblePage = Math.min(currentPage, Math.max(1, totalPages));
+    const visibleRows = filteredRows.slice((visiblePage - 1) * rowsPerPage, visiblePage * rowsPerPage);
+
+    const { ageData, maxAgeCount } = useMemo(() => {
+        const ageCounts = filteredRows.reduce((counts, row) => {
+            if (row.age === null) return counts;
+            counts[row.age] = (counts[row.age] || 0) + 1;
+            return counts;
+        }, {});
+        const data = Object.entries(ageCounts).map(([age, count]) => ({ age: Number(age), count }))
+            .sort((a, b) => a.age - b.age);
+        return { ageData: data, maxAgeCount: Math.max(...data.map(item => item.count), 1) };
+    }, [filteredRows]);
+
+    const updateFilter = (key, value) => {
+        setFilters(current => ({ ...current, [key]: value }));
+        setCurrentPage(1);
+    };
+    const formatDate = date => new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    return (
+        <section className="st-age-report">
+            <div className="st-age-report-header">
+                <div>
+                    <h2 className="st-overview-title"><Users size={18} /> Pregnancy Age &amp; Outcome Report</h2>
+                    <p className="st-overview-subtitle">Maternal age at the recorded pregnancy event, grouped by station and outcome</p>
+                </div>
+                <span className="st-station-count">{filteredRows.length} record{filteredRows.length !== 1 ? 's' : ''}</span>
+            </div>
+
+            <div className="st-age-filters">
+                <div className="st-filter-group">
+                    <label>Period</label>
+                    <div className="st-select-wrapper">
+                        <select value={filters.period} onChange={event => updateFilter('period', event.target.value)}>
+                            <option value="All">All Time</option>
+                            <option value="Month">This Month</option>
+                            <option value="Week">This Week</option>
+                            <option value="Year">This Year</option>
+                        </select>
+                        <ChevronDown size={14} className="st-select-arrow" />
+                    </div>
+                </div>
+                <div className="st-filter-group">
+                    <label>Station</label>
+                    <div className="st-select-wrapper">
+                        <select value={filters.station} onChange={event => updateFilter('station', event.target.value)}>
+                            <option value="All">All Stations</option>
+                            {stationOptions.map(station => <option key={station} value={station}>{station}</option>)}
+                        </select>
+                        <ChevronDown size={14} className="st-select-arrow" />
+                    </div>
+                </div>
+                <div className="st-filter-group">
+                    <label>Outcome</label>
+                    <div className="st-select-wrapper">
+                        <select value={filters.outcome} onChange={event => updateFilter('outcome', event.target.value)}>
+                            <option value="All">All Outcomes</option>
+                            <option value="Successful">Successful</option>
+                            <option value="Unsuccessful">Unsuccessful</option>
+                            <option value="Pending">Pending</option>
+                        </select>
+                        <ChevronDown size={14} className="st-select-arrow" />
+                    </div>
+                </div>
+                <div className="st-filter-group">
+                    <label>Delivery Type</label>
+                    <div className="st-select-wrapper">
+                        <select value={filters.deliveryType} onChange={event => updateFilter('deliveryType', event.target.value)}>
+                            <option value="All">All Delivery Types</option>
+                            {deliveryTypeOptions.map(type => <option key={type} value={type}>{type}</option>)}
+                        </select>
+                        <ChevronDown size={14} className="st-select-arrow" />
+                    </div>
+                </div>
+            </div>
+
+            <div className="st-age-content">
+                <div className="st-age-chart-panel">
+                    <div className="st-chart-header">
+                        <div className="st-chart-icon st-chart-icon--patients"><BarChart3 size={18} /></div>
+                        <div className="st-chart-title-group">
+                            <h3 className="st-chart-title">Age by Pregnancy Record</h3>
+                            <p className="st-chart-subtitle">Number of records at each maternal age</p>
+                        </div>
+                    </div>
+                    {ageData.length > 0 ? (
+                        <div className="st-age-bars">
+                            {ageData.map(item => (
+                                <div className="st-age-bar-row" key={item.age}>
+                                    <span className="st-age-label">{item.age} yrs</span>
+                                    <div className="st-age-bar-track"><div className="st-age-bar-fill" style={{ width: `${(item.count / maxAgeCount) * 100}%` }} /></div>
+                                    <strong>{item.count}</strong>
+                                </div>
+                            ))}
+                        </div>
+                    ) : <div className="st-age-empty">No age records match these filters.</div>}
+                </div>
+
+                <div className="st-age-table-panel">
+                    <div className="st-age-table-wrap">
+                        <table className="st-age-table">
+                            <thead><tr><th>Patient</th><th>Age</th><th>Station</th><th>Date</th><th>Outcome</th><th>Delivery Type</th></tr></thead>
+                            <tbody>
+                                {visibleRows.map(row => (
+                                    <tr key={row.id}>
+                                        <td>{row.patientName}</td>
+                                        <td>{row.age === null ? 'N/A' : `${row.age} yrs`}</td>
+                                        <td>{row.station}</td>
+                                        <td>{formatDate(row.eventDate)}</td>
+                                        <td><span className={`st-age-outcome st-age-outcome--${row.outcome.toLowerCase()}`}>{row.outcome}</span></td>
+                                        <td>{row.deliveryType}</td>
+                                    </tr>
+                                ))}
+                                {filteredRows.length === 0 && <tr><td colSpan="6" className="st-age-empty">No pregnancy records match these filters.</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                    {filteredRows.length > rowsPerPage && (
+                        <div className="st-age-pagination">
+                            <span>Showing {(visiblePage - 1) * rowsPerPage + 1}–{Math.min(visiblePage * rowsPerPage, filteredRows.length)} of {filteredRows.length}</span>
+                            <button
+                                className="btn btn-outline"
+                                onClick={() => setCurrentPage(page => Math.max(1, Math.min(page, totalPages) - 1))}
+                                disabled={visiblePage === 1}
+                            >
+                                Previous
+                            </button>
+                            <span>Page {visiblePage} of {totalPages}</span>
+                            <button
+                                className="btn btn-outline"
+                                onClick={() => setCurrentPage(page => Math.min(totalPages, Math.min(page, totalPages) + 1))}
+                                disabled={visiblePage >= totalPages}
+                            >
+                                Next
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </section>
+    );
+};
 
 /* ════════════════════════════
    CHARTS SECTION
@@ -950,7 +1186,7 @@ const DetailModal = ({ station, onClose, navigate }) => {
     const [tab, setTab] = useState('overview');
     const [showDetailExportModal, setShowDetailExportModal] = useState(false);
 
-    const handleDetailExport = (exportConfig) => {
+    const handleDetailExport = async (exportConfig) => {
         const { format, reportPeriodText } = exportConfig;
         const exportData = [{
             'Station': station.name,
@@ -971,6 +1207,7 @@ const DetailModal = ({ station, onClose, navigate }) => {
         }];
 
         if (format === 'excel') {
+            const XLSX = await import('xlsx');
             let worksheetData = [
                 [`Report: ${station.name} — Station Detail Report`],
                 [`Generated: ${new Date().toLocaleString()}`],

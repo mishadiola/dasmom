@@ -239,20 +239,35 @@ export default class PatientService {
 
   async getAllPatients({ includeArchived = false } = {}) {
     try {
-      const archivedPatientIds = await this.getArchivedPatientIds();
+      const [
+        archivedPatientIds,
+        patientsResult,
+        pregnanciesResult,
+        visitsResult,
+        deliveriesResult
+      ] = await Promise.all([
+        includeArchived ? Promise.resolve(new Set()) : this.getArchivedPatientIds(),
+        this.supabase
+          .from('patient_basic_info')
+          .select('id, first_name, last_name, station_ass, municipality, date_of_birth, created_at, emergency_contact, stations:station_ass (station_name)')
+          .order('created_at', { ascending: false }),
+        this.supabase
+          .from('pregnancy_info')
+          .select('patient_id, lmd, edd, pregn_postp, pregnancy_type, gravida, para, miscarriage_info, created_at'),
+        this.supabase
+          .from('prenatal_visits')
+          .select('patient_id, assigned_staff, visit_date, next_appt_date, status, risk_factors, calculated_risk, bp_systolic, bp_diastolic, weight_kg, height_cm, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm')
+          .order('visit_date', { ascending: false }),
+        this.supabase
+          .from('deliveries')
+          .select('mother_id, delivery_date')
+          .order('delivery_date', { ascending: false })
+      ]);
 
-      let patientsQuery = this.supabase
-        .from('patient_basic_info')
-        .select('id, first_name, last_name, station_ass, municipality, date_of_birth, created_at, emergency_contact, stations:station_ass (station_name)');
-
-      const { data: patients, error: err1 } = await patientsQuery.order('created_at', { ascending: false });
-
+      const { data: patients, error: err1 } = patientsResult;
       if (err1) throw err1;
 
-      // 2. Get all pregnancy history rows so current patient status is based on the latest entry.
-      const { data: pregnancies, error: err2 } = await this.supabase
-        .from('pregnancy_info')
-        .select('patient_id, lmd, edd, pregn_postp, pregnancy_type, gravida, para, miscarriage_info, created_at');
+      const { data: pregnancies, error: err2 } = pregnanciesResult;
       if (err2) throw err2;
 
       const latestPregMap = new Map();
@@ -266,10 +281,7 @@ export default class PatientService {
       });
 
       // 3. Get prenatal visits and compute attended visit totals plus the next appointment reference.
-      const { data: visits, error: err3 } = await this.supabase
-        .from('prenatal_visits')
-        .select('patient_id, assigned_staff, visit_date, next_appt_date, status, risk_factors, calculated_risk, bp_systolic, bp_diastolic, weight_kg, height_cm, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm')
-        .order('visit_date', { ascending: false });
+      const { data: visits, error: err3 } = visitsResult;
       if (err3) throw err3;
 
       const nextApptMap = new Map();
@@ -304,10 +316,7 @@ export default class PatientService {
         }
       });
 
-      const { data: deliveries, error: err4 } = await this.supabase
-        .from('deliveries')
-        .select('mother_id, delivery_date')
-        .order('delivery_date', { ascending: false });
+      const { data: deliveries, error: err4 } = deliveriesResult;
       if (err4) throw err4;
 
   
@@ -1174,33 +1183,6 @@ export default class PatientService {
   try {
     const archivedPatientIds = includeArchived ? new Set() : await this.getArchivedPatientIds();
 
-    // Get all deliveries to identify postpartum patients
-    const { data: deliveries } = await this.supabase
-      .from('deliveries')
-      .select('mother_id');
-    
-    const deliveredPatients = new Set();
-    (deliveries || []).forEach(d => {
-      if (d.mother_id) deliveredPatients.add(d.mother_id);
-    });
-
-    // Get latest pregnancy status for each patient
-    const { data: pregnancies } = await this.supabase
-      .from('pregnancy_info')
-      .select('patient_id, pregn_postp, created_at')
-      .order('created_at', { ascending: false });
-    
-    const latestPregMap = new Map();
-    (pregnancies || []).forEach(p => {
-      if (!p.patient_id) return;
-      const existing = latestPregMap.get(p.patient_id);
-      const currentTime = new Date(p.created_at).getTime() || 0;
-      const existingTime = existing ? new Date(existing.created_at).getTime() || 0 : 0;
-      if (!existing || currentTime > existingTime) {
-        latestPregMap.set(p.patient_id, p);
-      }
-    });
-
     const { data, error } = await this.supabase
       .from('prenatal_visits')
       .select(`
@@ -1300,33 +1282,6 @@ export default class PatientService {
   try {
     const { includeArchived = false } = options;
     const archivedPatientIds = includeArchived ? new Set() : await this.getArchivedPatientIds();
-
-    // Get all deliveries to identify postpartum patients
-    const { data: deliveries } = await this.supabase
-      .from('deliveries')
-      .select('mother_id');
-    
-    const deliveredPatients = new Set();
-    (deliveries || []).forEach(d => {
-      if (d.mother_id) deliveredPatients.add(d.mother_id);
-    });
-
-    // Get latest pregnancy status for each patient
-    const { data: pregnancies } = await this.supabase
-      .from('pregnancy_info')
-      .select('patient_id, pregn_postp, created_at')
-      .order('created_at', { ascending: false });
-    
-    const latestPregMap = new Map();
-    (pregnancies || []).forEach(p => {
-      if (!p.patient_id) return;
-      const existing = latestPregMap.get(p.patient_id);
-      const currentTime = new Date(p.created_at).getTime() || 0;
-      const existingTime = existing ? new Date(existing.created_at).getTime() || 0 : 0;
-      if (!existing || currentTime > existingTime) {
-        latestPregMap.set(p.patient_id, p);
-      }
-    });
 
     let query = this.supabase
       .from('prenatal_visits')
@@ -1801,23 +1756,71 @@ async getSlotCount(dateStr, timeSlot) {
     }
   }
 
-async getHighRiskPatients({ includeArchived = false } = {}) {
+async getHighRiskPatients({ includeArchived = false, archivedPatientIds: providedArchivedPatientIds = null } = {}) {
   try {
-    const archivedPatientIds = includeArchived ? new Set() : await this.getArchivedPatientIds();
-    const { data: deliveries } = await this.supabase
-      .from('deliveries')
-      .select('mother_id')
-      .order('delivery_date', { ascending: false });
+    const [
+      archivedPatientIds,
+      deliveryResult,
+      pregnancyResult,
+      visitResult
+    ] = await Promise.all([
+      includeArchived
+        ? Promise.resolve(new Set())
+        : providedArchivedPatientIds
+          ? Promise.resolve(providedArchivedPatientIds)
+          : this.getArchivedPatientIds(),
+      this.supabase
+        .from('deliveries')
+        .select('mother_id')
+        .order('delivery_date', { ascending: false }),
+      this.supabase
+        .from('pregnancy_info')
+        .select('patient_id, pregn_postp, pregnancy_type, gravida, created_at')
+        .order('created_at', { ascending: false }),
+      this.supabase
+        .from('prenatal_visits')
+        .select(`
+          patient_id,
+          visit_date,
+          status,
+          bp_systolic,
+          bp_diastolic,
+          temp_c,
+          pulse_bpm,
+          resp_rate_cpm,
+          fhr_bpm,
+          assigned_staff,
+          next_appt_date,
+          next_appt_type,
+          weight_kg,
+          height_cm,
+          calculated_risk,
+          risk_factors,
+          gestational_age,
+          patient_basic_info!inner(
+            id,
+            first_name,
+            last_name,
+            station_ass,
+            municipality,
+            date_of_birth,
+            created_at,
+            stations:station_ass(station_name)
+          )
+        `)
+        .order('visit_date', { ascending: false })
+    ]);
+
+    const { data: deliveries, error: deliveryError } = deliveryResult;
+    if (deliveryError) throw deliveryError;
 
     const deliveredPatients = new Set();
     (deliveries || []).forEach(d => {
       if (d.mother_id) deliveredPatients.add(d.mother_id);
     });
 
-    const { data: pregnancies } = await this.supabase
-      .from('pregnancy_info')
-      .select('patient_id, pregn_postp, pregnancy_type, gravida, created_at')
-      .order('created_at', { ascending: false });
+    const { data: pregnancies, error: pregnancyError } = pregnancyResult;
+    if (pregnancyError) throw pregnancyError;
 
     const latestPregMap = new Map();
     (pregnancies || []).forEach(p => {
@@ -1830,38 +1833,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       }
     });
 
-    const { data, error } = await this.supabase
-      .from('prenatal_visits')
-      .select(`
-        patient_id,
-        visit_date,
-        status,
-        bp_systolic,
-        bp_diastolic,
-        temp_c,
-        pulse_bpm,
-        resp_rate_cpm,
-        fhr_bpm,
-        assigned_staff,
-        next_appt_date,
-        next_appt_type,
-        weight_kg,
-        height_cm,
-        calculated_risk,
-        risk_factors,
-        gestational_age,
-        patient_basic_info!inner(
-          id,
-          first_name,
-          last_name,
-          station_ass,
-          municipality,
-          date_of_birth,
-          created_at,
-          stations:station_ass(station_name)
-        )
-      `)
-      .order('visit_date', { ascending: false });
+    const { data, error } = visitResult;
 
     if (error) throw error;
 
@@ -2121,115 +2093,35 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
   }
 
   async getPatientById(patientId) {
-    // Fetch patient basic info
-    const { data: patientData } = await this.supabase
-      .from('patient_basic_info')
-      .select('*, stations:station_ass (station_name)')
-      .eq('id', patientId)
-      .single();
-
-    if (!patientData) return null;
-
-    const { data: userData, error: userError } = await this.supabase
-      .from('users')
-      .select('is_archived, is_deactivated, email_address')
-      .eq('id', patientId)
-      .maybeSingle();
-
-    if (userError) throw userError;
-
-    let patientEmail = userData?.email_address || null;
-    if (!patientEmail) {
-      const { data: emailData, error: emailError } = await this.supabase
-        .rpc('get_patient_email', { p_patient_id: patientId });
-
-      if (emailError) throw emailError;
-      patientEmail = emailData?.[0]?.email_address || null;
-    }
-
-    // Fetch pregnancy info
-    const { data: pregnancyData, error: pregnancyError } = await this.supabase
-      .from('pregnancy_info')
-      .select('*')
-      .eq('patient_id', patientId)
-      .order('created_at', { ascending: false });
-    if (pregnancyError) throw pregnancyError;
-
-    // Fetch prenatal visits
-    const { data: visitsData, error: visitsError } = await this.supabase
-      .from('prenatal_visits')
-      .select(`
-        *,
-        staff_profiles:assigned_staff (
-          id, full_name, station_ass,
-          stations:station_ass (station_name)
-        ),
-        performed_staff:performed_by (
-          id, full_name, station_ass,
-          stations:station_ass (station_name)
-        )
-      `)
-      .eq('patient_id', patientId)
-      .order('visit_date', { ascending: false });
-    if (visitsError) throw visitsError;
-
-    // Fetch supplements
-    const { data: supplementsData } = await this.supabase
-      .from('supplements')
-      .select(`
-        *,
-        supplement_inventory (
-          supplement_name
-        )
-      `)
-      .eq('patient_id', patientId)
-      .order('created_at', { ascending: false });
-
-    const { data: maternalVaccinationsData, error: maternalVaccinationsError } = await this.supabase
-      .from('vaccinations')
-      .select(`
-        id, patient_id, vaccine_inventory_id, dose_number, scheduled_vaccination,
-        vaccinated_date, status, notes, vaccinated_by, assigned_staff, station_ass,
-        vaccine_inventory (vaccine_name, brand, unit, doses, batch, expiration_date),
-        staff_profiles:assigned_staff (
-          id, full_name, station_ass,
-          stations:station_ass (station_name)
-        )
-      `)
-      .eq('patient_id', patientId)
-      .order('scheduled_vaccination', { ascending: true, nullsFirst: false });
-    if (maternalVaccinationsError) throw maternalVaccinationsError;
-
-    // Fetch deliveries for this patient (via mother_id relationship)
-    const { data: deliveriesData, error: deliveriesError } = await this.supabase
-      .from('deliveries')
-      .select(`
-        *,
-        stations:station_ass (station_name),
-        pregnancy_info!deliveries_pregnancy_id_fkey (place_of_delivery),
-        staff_profiles!deliveries_attending_staff_fkey (
-          id, full_name, station_ass,
-          stations:station_ass (station_name)
-        )
-      `)
-      .eq('mother_id', patientId)
-      .order('delivery_date', { ascending: false });
-    if (deliveriesError) throw deliveriesError;
-
-    const deliveryIds = (deliveriesData || []).map(delivery => delivery.id);
-    const { data: postpartumVisitsData, error: postpartumVisitsError } = deliveryIds.length
-      ? await this.supabase
-        .from('postpartum_visits')
+    const [
+      patientResult,
+      userResult,
+      pregnancyResult,
+      visitsResult,
+      supplementsResult,
+      maternalVaccinationsResult,
+      deliveriesResult,
+      newbornsResult
+    ] = await Promise.all([
+      this.supabase
+        .from('patient_basic_info')
+        .select('*, stations:station_ass (station_name)')
+        .eq('id', patientId)
+        .maybeSingle(),
+      this.supabase
+        .from('users')
+        .select('is_archived, is_deactivated, email_address')
+        .eq('id', patientId)
+        .maybeSingle(),
+      this.supabase
+        .from('pregnancy_info')
+        .select('*')
+        .eq('patient_id', patientId)
+        .order('created_at', { ascending: false }),
+      this.supabase
+        .from('prenatal_visits')
         .select(`
-          id, delivery_id, patient_id, visit_number, visit_type, scheduled_date, scheduled_at,
-          status, attended_date, missed_reason, assigned_staff, assigned_station, station_ass,
-          personnel_present, performed_by, created_by, assessment, notes,
-          bp_systolic, bp_diastolic, weight_kg, temp_c, pulse_bpm, resp_rate_cpm,
-          uterine_involution, lochia_assessment, perineal_or_wound_condition, pain_assessment,
-          breast_assessment, breastfeeding_status, urination_and_bowel_status,
-          mental_health_assessment, danger_signs, clinical_notes, advice_given,
-          treatments_given, medications_review, family_planning_counseling,
-          is_referred, referred_to, referral_reason, next_appt_date, next_appt_type,
+          *,
           staff_profiles:assigned_staff (
             id, full_name, station_ass,
             stations:station_ass (station_name)
@@ -2239,29 +2131,125 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
             stations:station_ass (station_name)
           )
         `)
-        .in('delivery_id', deliveryIds)
-        .order('scheduled_at', { ascending: true })
-      : { data: [], error: null };
-    if (postpartumVisitsError) throw postpartumVisitsError;
-
-    // Fetch newborns for this patient (via mother_id relationship)
-    const { data: newbornsData, error: newbornsError } = await this.supabase
-      .from('newborns')
-      .select(`
-        *,
-        vaccinations (
-          id, vaccine_inventory_id, dose_number, notes, status, scheduled_vaccination, vaccinated_date,
-          vaccinated_by, assigned_staff, station_ass,
+        .eq('patient_id', patientId)
+        .order('visit_date', { ascending: false }),
+      this.supabase
+        .from('supplements')
+        .select(`
+          *,
+          supplement_inventory (
+            supplement_name
+          )
+        `)
+        .eq('patient_id', patientId)
+        .order('created_at', { ascending: false }),
+      this.supabase
+        .from('vaccinations')
+        .select(`
+          id, patient_id, vaccine_inventory_id, dose_number, scheduled_vaccination,
+          vaccinated_date, status, notes, vaccinated_by, assigned_staff, station_ass,
           vaccine_inventory (vaccine_name, brand, unit, doses, batch, expiration_date),
           staff_profiles:assigned_staff (
             id, full_name, station_ass,
             stations:station_ass (station_name)
           )
-        )
-      `)
-      .eq('mother_id', patientId)
-      .order('created_at', { ascending: false });
+        `)
+        .eq('patient_id', patientId)
+        .order('scheduled_vaccination', { ascending: true, nullsFirst: false }),
+      this.supabase
+        .from('deliveries')
+        .select(`
+          *,
+          stations:station_ass (station_name),
+          pregnancy_info!deliveries_pregnancy_id_fkey (place_of_delivery),
+          staff_profiles!deliveries_attending_staff_fkey (
+            id, full_name, station_ass,
+            stations:station_ass (station_name)
+          )
+        `)
+        .eq('mother_id', patientId)
+        .order('delivery_date', { ascending: false }),
+      this.supabase
+        .from('newborns')
+        .select(`
+          *,
+          vaccinations (
+            id, vaccine_inventory_id, dose_number, notes, status, scheduled_vaccination, vaccinated_date,
+            vaccinated_by, assigned_staff, station_ass,
+            vaccine_inventory (vaccine_name, brand, unit, doses, batch, expiration_date),
+            staff_profiles:assigned_staff (
+              id, full_name, station_ass,
+              stations:station_ass (station_name)
+            )
+          )
+        `)
+        .eq('mother_id', patientId)
+        .order('created_at', { ascending: false })
+    ]);
+
+    const { data: patientData, error: patientError } = patientResult;
+    if (patientError) throw patientError;
+    if (!patientData) return null;
+
+    const { data: userData, error: userError } = userResult;
+    if (userError) throw userError;
+
+    const { data: pregnancyData, error: pregnancyError } = pregnancyResult;
+    if (pregnancyError) throw pregnancyError;
+
+    const { data: visitsData, error: visitsError } = visitsResult;
+    if (visitsError) throw visitsError;
+
+    const { data: supplementsData, error: supplementsError } = supplementsResult;
+    if (supplementsError) throw supplementsError;
+
+    const { data: maternalVaccinationsData, error: maternalVaccinationsError } = maternalVaccinationsResult;
+    if (maternalVaccinationsError) throw maternalVaccinationsError;
+
+    const { data: deliveriesData, error: deliveriesError } = deliveriesResult;
+    if (deliveriesError) throw deliveriesError;
+
+    const { data: newbornsData, error: newbornsError } = newbornsResult;
     if (newbornsError) throw newbornsError;
+
+    const deliveryIds = (deliveriesData || []).map(delivery => delivery.id);
+    const [emailResult, postpartumVisitsResult] = await Promise.all([
+      userData?.email_address
+        ? Promise.resolve(null)
+        : this.supabase.rpc('get_patient_email', { p_patient_id: patientId }),
+      deliveryIds.length
+        ? this.supabase
+          .from('postpartum_visits')
+          .select(`
+            id, delivery_id, patient_id, visit_number, visit_type, scheduled_date, scheduled_at,
+            status, attended_date, missed_reason, assigned_staff, assigned_station, station_ass,
+            personnel_present, performed_by, created_by, assessment, notes,
+            bp_systolic, bp_diastolic, weight_kg, temp_c, pulse_bpm, resp_rate_cpm,
+            uterine_involution, lochia_assessment, perineal_or_wound_condition, pain_assessment,
+            breast_assessment, breastfeeding_status, urination_and_bowel_status,
+            mental_health_assessment, danger_signs, clinical_notes, advice_given,
+            treatments_given, medications_review, family_planning_counseling,
+            is_referred, referred_to, referral_reason, next_appt_date, next_appt_type,
+            staff_profiles:assigned_staff (
+              id, full_name, station_ass,
+              stations:station_ass (station_name)
+            ),
+            performed_staff:performed_by (
+              id, full_name, station_ass,
+              stations:station_ass (station_name)
+            )
+          `)
+          .in('delivery_id', deliveryIds)
+          .order('scheduled_at', { ascending: true })
+        : Promise.resolve({ data: [], error: null })
+    ]);
+
+    let patientEmail = userData?.email_address || null;
+    if (emailResult?.error) throw emailResult.error;
+    if (!patientEmail) patientEmail = emailResult?.data?.[0]?.email_address || null;
+
+    const { data: postpartumVisitsData, error: postpartumVisitsError } = postpartumVisitsResult;
+    if (postpartumVisitsError) throw postpartumVisitsError;
 
     const assignedStaffIds = [...new Set([
       patientData.retained_staff,
@@ -2276,6 +2264,15 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         visit.personnel_present,
         visit.performed_by
       ])
+    ].filter(Boolean))];
+
+    const stationIds = [...new Set([
+      ...(visitsData || []).flatMap(visit => [visit.assigned_station, visit.station_ass]),
+      ...(supplementsData || []).map(supplement => supplement.station_ass),
+      ...(maternalVaccinationsData || []).map(vaccination => vaccination.station_ass),
+      ...(newbornsData || []).flatMap(newborn => (newborn.vaccinations || []).map(vaccination => vaccination.station_ass)),
+      ...(deliveriesData || []).map(delivery => delivery.station_ass),
+      ...(postpartumVisitsData || []).flatMap(visit => [visit.assigned_station, visit.station_ass])
     ].filter(Boolean))];
 
     let assignedStaffById = {};
@@ -2310,21 +2307,22 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       registerStaffProfile(d.staff_profiles);
     });
 
-    // 2. Fetch any missing assigned staff from staff_profiles
+    // 2. Fetch any missing assigned staff from staff_profiles and stations in parallel
     const missingStaffIds = assignedStaffIds.filter(id => !assignedStaffById[id]);
-    if (missingStaffIds.length > 0) {
-      try {
-        const { data: staffProfiles, error: staffError } = await this.supabase
+    const [staffResult, stationsResult] = await Promise.all([
+      missingStaffIds.length
+        ? this.supabase
           .from('staff_profiles')
           .select('id, full_name, station_ass, stations:station_ass (station_name)')
-          .in('id', missingStaffIds);
+          .in('id', missingStaffIds)
+        : Promise.resolve({ data: [], error: null }),
+      stationIds.length
+        ? this.supabase.from('stations').select('id, station_name').in('id', stationIds)
+        : Promise.resolve({ data: [], error: null })
+    ]);
 
-        if (!staffError && staffProfiles?.length) {
-          staffProfiles.forEach(registerStaffProfile);
-        }
-      } catch (err) {
-        console.warn('Direct staff_profiles lookup failed:', err);
-      }
+    if (!staffResult?.error && staffResult?.data?.length) {
+      staffResult.data.forEach(registerStaffProfile);
     }
 
     // 3. Fallback to get_assigned_staff_names RPC for any still-unmapped staff IDs
@@ -2349,25 +2347,15 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       }
     }
 
+    const { data: visitStations } = stationsResult || {};
+    const stationNameById = Object.fromEntries((visitStations || []).map(station => [station.id, station.station_name]));
+
     const preg = getLatestPregnancyRecord(pregnancyData || []) || {};
     const latestRecordedHeight = (visitsData || []).find(visit => Number(visit.height_cm) > 0)?.height_cm;
     const riskPatient = {
       ...patientData,
       height_cm: patientData.height_cm || latestRecordedHeight,
     };
-
-    const stationIds = [...new Set([
-      ...(visitsData || []).flatMap(visit => [visit.assigned_station, visit.station_ass]),
-      ...(supplementsData || []).map(supplement => supplement.station_ass),
-      ...(maternalVaccinationsData || []).map(vaccination => vaccination.station_ass),
-      ...(newbornsData || []).flatMap(newborn => (newborn.vaccinations || []).map(vaccination => vaccination.station_ass)),
-      ...(deliveriesData || []).map(delivery => delivery.station_ass),
-      ...(postpartumVisitsData || []).flatMap(visit => [visit.assigned_station, visit.station_ass])
-    ].filter(Boolean))];
-    const { data: visitStations } = stationIds.length
-      ? await this.supabase.from('stations').select('id, station_name').in('id', stationIds)
-      : { data: [] };
-    const stationNameById = Object.fromEntries((visitStations || []).map(station => [station.id, station.station_name]));
 
     const normalizedVisits = (visitsData || []).map(visit => {
       const assignedStaffId = visit.assigned_staff || visit.retained_staff || patientData.retained_staff || null;
@@ -3391,24 +3379,37 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         .select('id, first_name, last_name, date_of_birth, station_ass, municipality, stations:station_ass (station_name)');
       if (isStationRestricted) patientsQuery = patientsQuery.eq('station_ass', stationId);
 
-      const [{ data: patients, error: patientsError }, { data: pregnancies, error: pregnanciesError }, { data: deliveries, error: deliveriesError }, { data: newborns, error: newbornsError }] = await Promise.all([
-        patientsQuery,
-        this.supabase
-          .from('pregnancy_info')
-          .select('id, patient_id, pregn_postp, miscarriage_info, created_at')
-          .order('created_at', { ascending: false }),
-        this.supabase
-          .from('deliveries')
-          .select('id, mother_id, station_ass, stations:station_ass (station_name), delivery_date, delivery_type, delivery_mode'),
-        this.supabase
-          .from('newborns')
-          .select('id, mother_id, delivery_id, condition_at_birth')
+      const { data: patients, error: patientsError } = await patientsQuery;
+      if (patientsError) throw patientsError;
+      const patientIds = (patients || []).map(patient => patient.id).filter(Boolean);
+      if (patientIds.length === 0) return [];
+
+      let deliveriesQuery = this.supabase
+        .from('deliveries')
+        .select('id, mother_id, station_ass, stations:station_ass (station_name), delivery_date, delivery_type, delivery_mode');
+      if (isStationRestricted) deliveriesQuery = deliveriesQuery.in('mother_id', patientIds);
+      let pregnanciesQuery = this.supabase
+        .from('pregnancy_info')
+        .select('id, patient_id, pregn_postp, miscarriage_info, created_at')
+        .order('created_at', { ascending: false });
+      if (isStationRestricted) pregnanciesQuery = pregnanciesQuery.in('patient_id', patientIds);
+      let newbornsQuery = this.supabase
+        .from('newborns')
+        .select('id, mother_id, delivery_id, condition_at_birth');
+      if (isStationRestricted) newbornsQuery = newbornsQuery.in('mother_id', patientIds);
+
+      const [pregnancyResult, deliveryResult, newbornResult] = await Promise.all([
+        pregnanciesQuery,
+        deliveriesQuery,
+        newbornsQuery
       ]);
 
-      if (patientsError) throw patientsError;
-      if (pregnanciesError) throw pregnanciesError;
-      if (deliveriesError) throw deliveriesError;
-      if (newbornsError) throw newbornsError;
+      if (pregnancyResult.error) throw pregnancyResult.error;
+      if (deliveryResult.error) throw deliveryResult.error;
+      if (newbornResult.error) throw newbornResult.error;
+      const pregnancies = pregnancyResult.data;
+      const deliveries = deliveryResult.data;
+      const newborns = newbornResult.data;
 
       const patientMap = new Map((patients || []).map(patient => [patient.id, patient]));
       const latestPregnancyMap = new Map();
@@ -3500,7 +3501,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         .sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate));
     } catch (error) {
       console.error('Error fetching station pregnancy age report:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -3758,19 +3759,20 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         .select('id, station_name')
         .order('station_name', { ascending: true });
       if (isStationRestricted) stationsQuery = stationsQuery.eq('id', stationId);
-      const { data: stationRows, error: stationError } = await stationsQuery;
-
-      if (stationError) throw stationError;
-
-      const allStations = [...new Set(stationRows?.map(s => s.station_name).filter(Boolean))];
-
       let patientsQuery = this.supabase
         .from('patient_basic_info')
-        .select('id, station_ass, station_ass, municipality, province, date_of_birth, stations:station_ass (station_name)');
+        .select('id, station_ass, municipality, date_of_birth, stations:station_ass (station_name)');
       if (isStationRestricted) patientsQuery = patientsQuery.eq('station_ass', stationId);
-      const { data: patients, error: patientsError } = await patientsQuery;
+      const [{ data: stationRows, error: stationError }, { data: patients, error: patientsError }] = await Promise.all([
+        stationsQuery,
+        patientsQuery
+      ]);
 
+      if (stationError) throw stationError;
       if (patientsError) throw patientsError;
+
+      const allStations = [...new Set(stationRows?.map(s => s.station_name).filter(Boolean))];
+      const patientIds = (patients || []).map(patient => patient.id).filter(Boolean);
 
       const getPatientStationLabel = patient =>
         patient.stations?.station_name || patient.municipality || 'Unknown';
@@ -3829,12 +3831,29 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         }
       });
 
-      const { data: pregnancies, error: pregError } = await this.supabase
+      const emptyResult = { data: [], error: null };
+      let pregnancyQuery = this.supabase
         .from('pregnancy_info')
         .select('patient_id, pregn_postp, pregnancy_type, gravida, lmd, edd, created_at')
         .order('created_at', { ascending: false });
+      let visitsQuery = this.supabase
+        .from('prenatal_visits')
+        .select('patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm, trimester')
+        .order('visit_date', { ascending: false });
+      if (isStationRestricted && patientIds.length > 0) {
+        pregnancyQuery = pregnancyQuery.in('patient_id', patientIds);
+        visitsQuery = visitsQuery.in('patient_id', patientIds);
+      } else if (patientIds.length === 0) {
+        pregnancyQuery = Promise.resolve(emptyResult);
+        visitsQuery = Promise.resolve(emptyResult);
+      }
+      const [{ data: pregnancies, error: pregError }, { data: visits, error: visitsError }] = await Promise.all([
+        pregnancyQuery,
+        visitsQuery
+      ]);
 
       if (pregError) throw pregError;
+      if (visitsError) throw visitsError;
 
       const latestPregMap = new Map();
       (pregnancies || []).forEach(p => {
@@ -3846,13 +3865,6 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           latestPregMap.set(p.patient_id, p);
         }
       });
-
-      const { data: visits, error: visitsError } = await this.supabase
-        .from('prenatal_visits')
-        .select('patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm, trimester')
-        .order('visit_date', { ascending: false });
-
-      if (visitsError) throw visitsError;
 
       const latestAttendedVisitMap = new Map();
       const patientVisitsMap = new Map();
@@ -3875,31 +3887,52 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       const month = now.getMonth();
       const firstDay = new Date(year, month, 1).toISOString().slice(0, 10);
       const lastDay = new Date(year, month + 1, 0).toISOString().slice(0, 10);
-      const { data: deliveries, error: deliveriesError } = await this.supabase
+      let deliveriesQuery = this.supabase
         .from('deliveries')
         .select('mother_id, station_ass, stations:station_ass (station_name), delivery_date, delivery_type, complications')
         .gte('delivery_date', firstDay)
         .lte('delivery_date', lastDay);
-
-      if (deliveriesError) throw deliveriesError;
-
-      const { data: newborns, error: newbornsError } = await this.supabase
+      if (isStationRestricted) deliveriesQuery = deliveriesQuery.eq('station_ass', stationId);
+      let newbornsQuery = this.supabase
         .from('newborns')
         .select('id, mother_id, birth_weight, condition_at_birth, risk_level');
-
-      if (newbornsError) throw newbornsError;
-
-      const { data: vaccinations, error: vaccError } = await this.supabase
-        .from('vaccinations')
-        .select('newborn_id, status');
-
-      if (vaccError) throw vaccError;
-
-      const { data: supplements, error: suppError } = await this.supabase
+      let supplementsQuery = this.supabase
         .from('supplements')
         .select('patient_id, status');
-
+      if (isStationRestricted && patientIds.length > 0) {
+        newbornsQuery = newbornsQuery.in('mother_id', patientIds);
+        supplementsQuery = supplementsQuery.in('patient_id', patientIds);
+      } else if (patientIds.length === 0) {
+        newbornsQuery = Promise.resolve(emptyResult);
+        supplementsQuery = Promise.resolve(emptyResult);
+      }
+      const [{ data: deliveries, error: deliveriesError }, { data: newborns, error: newbornsError }, { data: supplements, error: suppError }] = await Promise.all([
+        deliveriesQuery,
+        newbornsQuery,
+        supplementsQuery
+      ]);
+      if (deliveriesError) throw deliveriesError;
+      if (newbornsError) throw newbornsError;
       if (suppError) throw suppError;
+
+      const newbornIds = (newborns || []).map(newborn => newborn.id).filter(Boolean);
+      const { data: vaccinations, error: vaccError } = newbornIds.length > 0
+        ? await this.supabase.from('vaccinations').select('newborn_id, status').in('newborn_id', newbornIds)
+        : emptyResult;
+      if (vaccError) throw vaccError;
+
+      const completedSupplementsByPatient = new Set(
+        (supplements || []).filter(supplement => supplement.status === 'Completed').map(supplement => supplement.patient_id)
+      );
+      const newbornsByMother = new Map();
+      (newborns || []).forEach(newborn => {
+        const motherNewborns = newbornsByMother.get(newborn.mother_id) || [];
+        motherNewborns.push(newborn);
+        newbornsByMother.set(newborn.mother_id, motherNewborns);
+      });
+      const vaccinatedNewbornIds = new Set(
+        (vaccinations || []).filter(vaccination => vaccination.status === 'Completed').map(vaccination => vaccination.newborn_id)
+      );
 
       (patients || []).forEach(patient => {
         const stationName = getPatientStationLabel(patient);
@@ -3958,17 +3991,15 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
             station.withHealthConditions++;
           }
 
-          const patientSupplements = (supplements || []).filter(s => s.patient_id === patientId && s.status === 'Completed');
-          if (patientSupplements.length > 0) station.totalSupplementsGiven++;
+          if (completedSupplementsByPatient.has(patientId)) station.totalSupplementsGiven++;
         }
 
-        const patientNewborns = (newborns || []).filter(n => n.mother_id === patientId);
+        const patientNewborns = newbornsByMother.get(patientId) || [];
         station.newborns += patientNewborns.length;
         patientNewborns.forEach(n => {
           if (n.birth_weight && n.birth_weight < 2500) station.lbwBabies++;
           if (n.condition_at_birth?.toLowerCase().includes('nicu') || n.risk_level?.toLowerCase() === 'high') station.nicuBabies++;
-          const newbornVaccinations = (vaccinations || []).filter(v => v.newborn_id === n.id && v.status === 'Completed');
-          if (newbornVaccinations.length > 0) station.totalNewbornVaccinated++;
+          if (vaccinatedNewbornIds.has(n.id)) station.totalNewbornVaccinated++;
         });
       });
 
@@ -4015,7 +4046,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       return stationsReport;
     } catch (error) {
       console.error('Error fetching station reports:', error);
-      return [];
+      throw error;
     }
   }
 

@@ -224,8 +224,10 @@ const NewbornTracking = () => {
         upcomingDoses: 0
     });
     const [newborns, setNewborns] = useState([]);
+    const newbornRequestId = useRef(0);
 
     const loadNewbornData = useCallback(async (isSilent = false) => {
+        const requestId = ++newbornRequestId.current;
         try {
             if (!isSilent && newborns.length === 0) {
                 setLoading(true);
@@ -233,6 +235,7 @@ const NewbornTracking = () => {
             setError(null);
             const service = new NewbornService();
             const newbornsData = await service.getAllNewborns();
+            if (requestId !== newbornRequestId.current) return;
             
             // Show ALL newborns, not just those with vaccination records
             const allNewborns = newbornsData || [];
@@ -267,10 +270,11 @@ const NewbornTracking = () => {
             });
             setNewborns(allNewborns);
         } catch (err) {
+            if (requestId !== newbornRequestId.current) return;
             console.error('Error loading newborn data:', err);
             setError(err);
         } finally {
-            setLoading(false);
+            if (requestId === newbornRequestId.current) setLoading(false);
         }
     }, [newborns.length]);
 
@@ -290,11 +294,22 @@ const NewbornTracking = () => {
         loadNewbornData(false);
 
         const service = new NewbornService();
+        let refreshTimer;
+        let mounted = true;
+        const scheduleRefresh = () => {
+            window.clearTimeout(refreshTimer);
+            refreshTimer = window.setTimeout(() => {
+                if (mounted) loadNewbornData(true);
+            }, 150);
+        };
         const subscription = service.subscribeToNewbornChanges(() => {
-            loadNewbornData(true);
+            scheduleRefresh();
         });
 
         return () => {
+            mounted = false;
+            window.clearTimeout(refreshTimer);
+            newbornRequestId.current += 1;
             subscription.unsubscribe();
         };
     }, [loadNewbornData]);

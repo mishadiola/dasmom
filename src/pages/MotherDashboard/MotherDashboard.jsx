@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
     Calendar, Clock, Heart, Activity, 
     Baby, Star, ChevronRight, Bell,
@@ -42,6 +42,7 @@ const MotherDashboard = () => {
     const [healthRecords, setHealthRecords] = useState([]);
     const [postpartumVisit, setPostpartumVisit] = useState(null);
     const [loading, setLoading] = useState(true);
+    const dashboardRequestId = useRef(0);
 
     // Ensure all buttons release stuck focus/active states when returning from external apps (e.g. Phone dialer, Facebook)
     useEffect(() => {
@@ -70,9 +71,13 @@ const MotherDashboard = () => {
         const patientService = new PatientService();
         let channel = null;
         let welcomeChecked = false;
+        let loadedOnce = false;
+        let isMounted = true;
+        let refreshTimer;
 
         const load = async (isSilent = false) => {
-            if (!isSilent) setLoading(true);
+            const requestId = ++dashboardRequestId.current;
+            if (!isSilent && !loadedOnce) setLoading(true);
             try {
                 const authUser = await auth.getAuthUser();
                 if (!authUser?.id) return;
@@ -94,15 +99,16 @@ const MotherDashboard = () => {
                         .on('postgres_changes', {
                             event: '*', schema: 'public', table: 'pregnancy_info',
                             filter: `patient_id=eq.${authUser.id}`
-                        }, () => load(true))
+                        }, scheduleRefresh)
                         .on('postgres_changes', {
                             event: '*', schema: 'public', table: 'deliveries',
                             filter: `mother_id=eq.${authUser.id}`
-                        }, () => load(true))
+                        }, scheduleRefresh)
                         .subscribe();
                 }
 
                 const patient = await patientService.getPatientById(authUser.id);
+                if (!isMounted || requestId !== dashboardRequestId.current) return;
                 if (patient) {
                     const currentPregnancy = patient.currentPregnancy;
                     const currentPregnancyRecord = currentPregnancy || patient.pregnancyRecord;
@@ -282,14 +288,28 @@ const MotherDashboard = () => {
                     setHealthRecords(records);
                 }
             } catch (err) {
+                if (!isMounted || requestId !== dashboardRequestId.current) return;
                 console.error('Error loading mother dashboard data:', err);
             } finally {
-                setLoading(false);
+                if (isMounted && requestId === dashboardRequestId.current) {
+                    loadedOnce = true;
+                    setLoading(false);
+                }
             }
+        };
+
+        const scheduleRefresh = () => {
+            window.clearTimeout(refreshTimer);
+            refreshTimer = window.setTimeout(() => {
+                if (isMounted) load(true);
+            }, 150);
         };
 
         load();
         return () => {
+            isMounted = false;
+            window.clearTimeout(refreshTimer);
+            dashboardRequestId.current += 1;
             if (channel) supabase.removeChannel(channel);
         };
     }, []);

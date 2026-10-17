@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { translations } from '../utils/motherTranslations';
 
 const LanguageContext = createContext(null);
@@ -33,8 +33,10 @@ export const LanguageProvider = ({ children }) => {
         return fallback !== undefined ? fallback : key;
     }, [language]);
 
+    const contextValue = useMemo(() => ({ language, toggleLanguage, t }), [language, toggleLanguage, t]);
+
     return (
-        <LanguageContext.Provider value={{ language, toggleLanguage, t }}>
+        <LanguageContext.Provider value={contextValue}>
             {children}
         </LanguageContext.Provider>
     );

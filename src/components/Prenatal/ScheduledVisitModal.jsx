@@ -70,13 +70,11 @@ const ScheduledVisitModal = ({ visit, onClose, onScheduleChanged }) => {
             try {
                 const { data, error } = await supabase
                     .from('patient_basic_info')
-                    .select('station')
+                    .select('station_ass, stations:station_ass (station_name)')
                     .eq('id', visit.patientId)
-                    .single();
-                
-                if (data?.station) {
-                    setPatientStation(data.station);
-                }
+                    .maybeSingle();
+                if (error) throw error;
+                setPatientStation(data?.stations?.station_name || '');
             } catch (error) {
                 console.error('Error fetching patient station:', error);
             }
