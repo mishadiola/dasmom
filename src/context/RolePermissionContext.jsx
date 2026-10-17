@@ -18,59 +18,95 @@ export const RolePermissionProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const loadedUserId = useRef(null);
+    const refreshInFlightRef = useRef(false);
+    const lastRefreshAtRef = useRef(0);
 
-    const refresh = useCallback(async () => {
+    const refresh = useCallback(async (options = {}) => {
+        const { force = false, suppressLoading = false } = options;
+
         if (!user?.id) {
             setPermissions({});
             setError(null);
             setLoading(false);
             loadedUserId.current = null;
+            lastRefreshAtRef.current = 0;
+            return false;
+        }
+
+        const now = Date.now();
+        const hasRecentRefresh = !force && now - lastRefreshAtRef.current < 60000 && loadedUserId.current === user.id;
+
+        if (refreshInFlightRef.current && loadedUserId.current === user.id) {
+            return false;
+        }
+
+        if (hasRecentRefresh) {
             return false;
         }
 
         if (loadedUserId.current !== user.id) {
             setPermissions({});
-            setLoading(true);
+            if (!suppressLoading) {
+                setLoading(true);
+            }
         }
+
+        refreshInFlightRef.current = true;
         setError(null);
-        const { data, error: permissionError } = await supabase.rpc('get_my_permissions');
-        if (permissionError) {
+
+        try {
+            const { data, error: permissionError } = await supabase.rpc('get_my_permissions');
+            if (permissionError) {
+                setPermissions({});
+                setError(permissionError);
+                setLoading(false);
+                return false;
+            }
+
+            const nextPermissions = Object.fromEntries(
+                (data || []).map(row => [row.permission_key, row.is_allowed === true])
+            );
+
+            setPermissions(nextPermissions);
+            loadedUserId.current = user.id;
+            lastRefreshAtRef.current = Date.now();
+            setLoading(false);
+            return true;
+        } catch (permissionError) {
             setPermissions({});
             setError(permissionError);
             setLoading(false);
             return false;
+        } finally {
+            refreshInFlightRef.current = false;
         }
-
-        setPermissions(Object.fromEntries(
-            (data || []).map(row => [row.permission_key, row.is_allowed === true])
-        ));
-        loadedUserId.current = user.id;
-        setLoading(false);
-        return true;
     }, [user?.id]);
 
     useEffect(() => {
         let mounted = true;
-        const load = async () => {
+
+        const loadPermissions = async () => {
             if (!mounted) return;
-            await refresh();
-        };
-        const refreshWhenVisible = () => {
-            if (document.visibilityState === 'visible') load();
+            await refresh({ suppressLoading: false });
         };
 
-        load();
+        const refreshWhenVisible = () => {
+            if (!mounted || document.visibilityState !== 'visible') return;
+            const now = Date.now();
+            if (now - lastRefreshAtRef.current < 60000) return;
+            refresh({ suppressLoading: true });
+        };
+
+        loadPermissions();
         window.addEventListener('focus', refreshWhenVisible);
         document.addEventListener('visibilitychange', refreshWhenVisible);
-        const interval = window.setInterval(load, 60_000);
 
         return () => {
             mounted = false;
             window.removeEventListener('focus', refreshWhenVisible);
             document.removeEventListener('visibilitychange', refreshWhenVisible);
-            window.clearInterval(interval);
         };
-    }, [refresh]);
+    }, [user?.id, refresh]);
 
     const value = useMemo(() => ({
         permissions,
