@@ -135,6 +135,7 @@ const DashboardLayout = () => {
     useEffect(() => {
         let active = true;
         let latestRequest = 0;
+        let notificationRefreshTimer = null;
 
         const fetchNotifications = async () => {
             const requestId = ++latestRequest;
@@ -283,6 +284,11 @@ const DashboardLayout = () => {
             }
         };
 
+        const scheduleNotificationRefresh = () => {
+            if (notificationRefreshTimer) clearTimeout(notificationRefreshTimer);
+            notificationRefreshTimer = setTimeout(fetchNotifications, 250);
+        };
+
         fetchNotifications();
 
         if (!user || isUserView) {
@@ -291,11 +297,13 @@ const DashboardLayout = () => {
 
         const subscription = supabase
             .channel('notifications-channel')
-            .on('postgres_changes', { event: '*', schema: 'public' }, fetchNotifications)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'prenatal_visits' }, scheduleNotificationRefresh)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'vaccine_inventory' }, scheduleNotificationRefresh)
             .subscribe();
 
         return () => {
             active = false;
+            if (notificationRefreshTimer) clearTimeout(notificationRefreshTimer);
             supabase.removeChannel(subscription);
         };
     }, [user, isUserView]);

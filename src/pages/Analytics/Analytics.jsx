@@ -200,14 +200,16 @@ const Analytics = () => {
 
         fetchAllData();
 
-        const channel = supabase
-            .channel('analytics-live-data')
-            .on('postgres_changes', { event: '*', schema: 'public' }, payload => {
-                if (!realtimeTables.includes(payload.table)) return;
-                if (refreshTimer) clearTimeout(refreshTimer);
-                refreshTimer = setTimeout(fetchAllData, 150);
-            })
-            .subscribe(status => {
+        const scheduleRefresh = () => {
+            if (refreshTimer) clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(fetchAllData, 250);
+        };
+
+        const channel = supabase.channel('analytics-live-data');
+        realtimeTables.forEach(table => {
+            channel.on('postgres_changes', { event: '*', schema: 'public', table }, scheduleRefresh);
+        });
+        channel.subscribe(status => {
                 if (status === 'SUBSCRIBED') {
                     stopPollingFallback();
                 } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {

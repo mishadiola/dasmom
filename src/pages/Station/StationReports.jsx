@@ -114,17 +114,19 @@ const StationReports = () => {
 
         fetchStationData();
         const channel = supabase
-            .channel('station-reports-live-data')
-            .on('postgres_changes', { event: '*', schema: 'public' }, payload => {
-                const tables = ['stations', 'patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'deliveries', 'newborns', 'vaccinations', 'supplements'];
-                if (!tables.includes(payload.table)) return;
-                if (refreshTimer) clearTimeout(refreshTimer);
-                refreshTimer = setTimeout(() => {
-                    fetchStationData();
-                    if (pregnancyAgeLoaded.current) refreshPregnancyAgeReport();
-                }, 150);
-            })
-            .subscribe(status => {
+            .channel('station-reports-live-data');
+        const scheduleRefresh = () => {
+            if (refreshTimer) clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(() => {
+                fetchStationData();
+                if (pregnancyAgeLoaded.current) refreshPregnancyAgeReport();
+            }, 250);
+        };
+        const realtimeTables = ['stations', 'patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'deliveries', 'newborns', 'vaccinations', 'supplements'];
+        realtimeTables.forEach(table => {
+            channel.on('postgres_changes', { event: '*', schema: 'public', table }, scheduleRefresh);
+        });
+        channel.subscribe(status => {
                 if (status === 'SUBSCRIBED') {
                     stopPollingFallback();
                 } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
