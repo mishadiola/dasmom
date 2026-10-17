@@ -4,7 +4,7 @@ import {
     TrendingDown, Activity, Syringe, HeartPulse, MapPin,
     ChevronRight, Plus, FileText, Eye, Filter,
     CheckCircle2, XCircle, Circle, Dot, MoreHorizontal,
-    ArrowUpRight, Star
+    ArrowUpRight, Star, Smartphone, Download, QrCode
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/Dashboard.css';
@@ -16,6 +16,7 @@ import { formatDate } from '../../utils/formatters';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 const authService = new AuthService();
+const APK_DOWNLOAD_URL = 'https://hcrpdvizautiuwgmfcqc.supabase.co/storage/v1/object/public/dasmom-apk/app-release.apk';
 
 
 /* ════════════════════════════
@@ -689,7 +690,7 @@ const Dashboard = () => {
                             { label: 'Health Conditions', icon: AlertTriangle, color: 'blue', path: '/dashboard/high-risk' },
                             { label: 'Log Delivery', icon: Baby, color: 'pink', path: '/dashboard/deliveries', state: { openRecordDelivery: true } },
                             { label: 'Issue Vaccine', icon: Syringe, color: 'orange', path: '/dashboard/vaccinations', state: { openRecordVaccination: true } },
-                            { label: 'Generate Report', icon: FileText, color: 'purple', path: '/dashboard/analytics' },
+                            { label: 'Generate Report', icon: FileText, color: 'purple', path: ['staff', 'station staff'].includes(String(user?.role || '').toLowerCase()) ? '/dashboard/stations' : '/dashboard/analytics' },
                         ].map(({ label, icon: Icon, color, path, state }) => (
                             <button key={label} className={`quick-btn quick-btn--${color}`} onClick={() => navigate(path, state ? { state } : undefined)}>
                                 <Icon size={15} />
@@ -918,6 +919,46 @@ const Dashboard = () => {
                                     ))}
                                 </>
                             )}
+                        </div>
+                    </div>
+
+                    {/* MOTHER APP DOWNLOAD CARD */}
+                    <div className="card mother-app-card">
+                        <div className="mother-app-header">
+                            <div className="mother-app-icon-badge">
+                                <Smartphone size={18} />
+                            </div>
+                            <div className="mother-app-title-group">
+                                <h2 className="card-title">DASMOM+ Mother App</h2>
+                                <span className="mother-app-badge">Android APK</span>
+                            </div>
+                        </div>
+
+                        <p className="mother-app-desc">
+                            Help mothers access their appointments, health records, and vaccination updates.
+                        </p>
+
+                        <div className="mother-app-body">
+                            <div className="mother-app-actions">
+                                <a 
+                                    href={APK_DOWNLOAD_URL}
+                                    download="dasmom-mother-app.apk"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="btn-download-apk"
+                                >
+                                    <Download size={15} />
+                                    <span>Download APK</span>
+                                </a>
+                            </div>
+
+                            {/* QR Code slot ready for future generation */}
+                            <div className="mother-app-qr-slot">
+                                <div className="qr-slot-placeholder" title="QR Code direct mobile scanner coming soon">
+                                    <QrCode size={15} className="qr-slot-icon" />
+                                    <span className="qr-slot-text">QR code coming soon</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

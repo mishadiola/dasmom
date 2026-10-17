@@ -4,6 +4,39 @@ import { X, User, Phone, MapPin, Shield, Save, AlertCircle } from 'lucide-react'
 import PatientService from '../../services/patientservice';
 import './EditPatientModal.css';
 
+const RELATIONSHIP_OPTIONS = ['Spouse', 'Partner', 'Parent', 'Sibling', 'Guardian', 'Other'];
+
+const extractEmergencyContact = (patient) => {
+    if (!patient) return { name: '', relationship: '', phone: '' };
+
+    let raw = patient.emergencyContact || patient.emergency_contact;
+    if (typeof raw === 'string') {
+        try {
+            raw = JSON.parse(raw);
+        } catch {
+            raw = {};
+        }
+    }
+    raw = raw || {};
+
+    const name = raw.name || raw.full_name || raw.contact_name || patient.emergency_contact_name || patient.emergencyContactName || '';
+    const rawRel = raw.relationship || raw.relation || patient.emergency_contact_relationship || patient.emergencyContactRelationship || '';
+    const phone = raw.phone || raw.contact_no || raw.contact_number || raw.phoneNumber || patient.emergency_contact_phone || patient.emergencyContactPhone || '';
+
+    let relationship = '';
+    if (rawRel) {
+        const trimmedRel = String(rawRel).trim();
+        const matched = RELATIONSHIP_OPTIONS.find(opt => opt.toLowerCase() === trimmedRel.toLowerCase());
+        relationship = matched || trimmedRel;
+    }
+
+    return {
+        name: typeof name === 'string' ? name : '',
+        relationship,
+        phone: typeof phone === 'string' ? phone : ''
+    };
+};
+
 const EditPatientModal = ({ patient, onClose, onSave }) => {
     const [formData, setFormData] = useState({
         firstName: '',
@@ -65,25 +98,49 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
         if (patient) {
             // Split full name into first and last name
             const nameParts = patient.name ? patient.name.split(' ') : ['', ''];
-            const firstName = nameParts[0] || '';
-            const lastName = nameParts.slice(1).join(' ') || '';
+            const firstName = patient.firstName || patient.first_name || nameParts[0] || '';
+            const lastName = patient.lastName || patient.last_name || (nameParts.length > 1 ? nameParts.slice(1).join(' ') : '') || '';
+            const ec = extractEmergencyContact(patient);
 
             setFormData({
                 firstName: firstName,
                 lastName: lastName,
-                dateOfBirth: patient.dob || '',
-                age: patient.age || calculateAge(patient.dob),
-                civilStatus: patient.civilStatus || '',
-                bloodType: patient.bloodType || 'Unknown / Not Yet Determined',
-                philhealth: patient.philhealth || '',
-                phone: patient.phone || '',
-                address: patient.address || '',
-                station: patient.station || '',
+                dateOfBirth: patient.dob || patient.date_of_birth || '',
+                age: patient.age || calculateAge(patient.dob || patient.date_of_birth),
+                civilStatus: patient.civilStatus || patient.civil_status || '',
+                bloodType: patient.bloodType || patient.blood_type || 'Unknown / Not Yet Determined',
+                philhealth: patient.philhealth || patient.philhealthnumber || '',
+                phone: patient.phone || patient.contact_no || '',
+                address: patient.address || patient.house_no || '',
+                station: patient.station || patient.stations?.station_name || '',
                 municipality: patient.municipality || '',
-                emergencyContactName: patient.emergencyContact?.name || '',
-                emergencyContactRelationship: patient.emergencyContact?.relationship || '',
-                emergencyContactPhone: patient.emergencyContact?.phone || ''
+                emergencyContactName: ec.name,
+                emergencyContactRelationship: ec.relationship,
+                emergencyContactPhone: ec.phone
             });
+            setErrors({});
+            setSuccess(false);
+            setSuccessMessage('');
+        } else {
+            setFormData({
+                firstName: '',
+                lastName: '',
+                dateOfBirth: '',
+                age: '',
+                civilStatus: '',
+                bloodType: '',
+                philhealth: '',
+                phone: '',
+                address: '',
+                station: '',
+                municipality: '',
+                emergencyContactName: '',
+                emergencyContactRelationship: '',
+                emergencyContactPhone: ''
+            });
+            setErrors({});
+            setSuccess(false);
+            setSuccessMessage('');
         }
     }, [patient]);
 
@@ -144,6 +201,9 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
         if (!formData.station.trim()) {
             newErrors.station = 'Station is required';
         }
+        if (formData.emergencyContactPhone && (formData.emergencyContactPhone.length !== 11 || !formData.emergencyContactPhone.startsWith('09'))) {
+            newErrors.emergencyContactPhone = 'Contact number must start with 09 and be 11 digits long';
+        }
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -194,23 +254,33 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
             
             // Call the onSave callback to update the parent component
             if (onSave) {
+                const updatedContact = {
+                    name: formData.emergencyContactName,
+                    relationship: formData.emergencyContactRelationship,
+                    phone: formData.emergencyContactPhone
+                };
                 onSave({
                     ...patient,
-                    name: `${formData.firstName} ${formData.lastName}`,
+                    name: `${formData.firstName} ${formData.lastName}`.trim(),
+                    first_name: formData.firstName,
+                    last_name: formData.lastName,
                     dob: formData.dateOfBirth,
+                    date_of_birth: formData.dateOfBirth,
                     age: calculateAge(formData.dateOfBirth),
                     civilStatus: formData.civilStatus,
+                    civil_status: formData.civilStatus,
                     bloodType: formData.bloodType,
+                    blood_type: formData.bloodType,
                     philhealth: formData.philhealth,
+                    philhealthnumber: formData.philhealth,
                     phone: formData.phone,
+                    contact_no: formData.phone,
                     address: formData.address,
+                    house_no: formData.address,
                     station: formData.station,
                     municipality: formData.municipality,
-                    emergencyContact: {
-                        name: formData.emergencyContactName,
-                        relationship: formData.emergencyContactRelationship,
-                        phone: formData.emergencyContactPhone
-                    }
+                    emergencyContact: updatedContact,
+                    emergency_contact: updatedContact
                 });
             }
 
@@ -446,6 +516,9 @@ const EditPatientModal = ({ patient, onClose, onSave }) => {
                                         <option value="Sibling">Sibling</option>
                                         <option value="Guardian">Guardian</option>
                                         <option value="Other">Other</option>
+                                        {formData.emergencyContactRelationship && !RELATIONSHIP_OPTIONS.includes(formData.emergencyContactRelationship) && (
+                                            <option value={formData.emergencyContactRelationship}>{formData.emergencyContactRelationship}</option>
+                                        )}
                                     </select>
                                 </div>
                                 <div className="form-group full-width">

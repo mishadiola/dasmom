@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import useClickOutside from '../../hooks/useClickOutside';
 import { useNavigate } from 'react-router-dom';
@@ -18,7 +19,8 @@ import {
   Archive,
   ChevronDown,
   FileText,
-  Info
+  Info,
+  X
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ExportModal from '../../components/ExportModal';
@@ -30,6 +32,14 @@ import '../../styles/pages/HighRiskCases.css';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
 import { formatMotherId } from '../../utils/displayIds';
 import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
+
+const getCategoryTheme = (category) => {
+  const lower = String(category || '').toLowerCase();
+  if (lower.includes('pre-existing') || lower.includes('preexisting')) return 'pre-existing';
+  if (lower.includes('pregnancy-related') || lower.includes('pregnancy related')) return 'pregnancy-related';
+  if (lower.includes('obstetric') || lower.includes('history')) return 'obstetric-history';
+  return 'pre-existing';
+};
 
 const TrimesterBadge = ({ weeks }) => {
   let trim = 1;
@@ -60,11 +70,10 @@ const HighRiskCases = () => {
   const [filterRiskLevel, setFilterRiskLevel] = useState('All');
   const [filterTrimester, setFilterTrimester] = useState('All');
   const [filterDateRange, setFilterDateRange] = useState('All');
-  const [filterAssignment, setFilterAssignment] = useState('All');
   const [availableStations, setAvailableStations] = useState([]);
   const [assignmentAccess, setAssignmentAccess] = useState({ role: '', stationId: null });
 
-  const hasActiveFilters = filterStation !== 'All' || filterType !== 'All' || filterRiskLevel !== 'All' || filterTrimester !== 'All' || filterDateRange !== 'All' || filterAssignment !== 'All' || searchTerm !== '';
+  const hasActiveFilters = filterStation !== 'All' || filterType !== 'All' || filterRiskLevel !== 'All' || filterTrimester !== 'All' || filterDateRange !== 'All' || searchTerm !== '';
 
   const clearFilters = () => {
       setFilterStation('All');
@@ -72,10 +81,59 @@ const HighRiskCases = () => {
       setFilterRiskLevel('All');
       setFilterTrimester('All');
       setFilterDateRange('All');
-      setFilterAssignment('All');
       setSearchTerm('');
       setActivePopover(null);
       setCurrentPage(1);
+  };
+
+  const [conditionPopover, setConditionPopover] = useState(null);
+
+  useEffect(() => {
+    if (!conditionPopover) return;
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.conditions-popover-card') && !e.target.closest('.condition-more-btn')) {
+        setConditionPopover(null);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setConditionPopover(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [conditionPopover]);
+
+  const handleOpenConditionPopover = (e, patient) => {
+    e.stopPropagation();
+    if (conditionPopover && conditionPopover.patient?.id === patient.id) {
+      setConditionPopover(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const popoverWidth = 320;
+    const popoverEstimatedHeight = 260;
+    let top = rect.bottom + 6;
+    if (top + popoverEstimatedHeight > window.innerHeight && rect.top - popoverEstimatedHeight > 10) {
+      top = rect.top - popoverEstimatedHeight - 6;
+    }
+    let left = rect.left;
+    if (left + popoverWidth > window.innerWidth - 16) {
+      left = window.innerWidth - popoverWidth - 16;
+    }
+    if (left < 16) left = 16;
+
+    setConditionPopover({
+      patient,
+      top,
+      left
+    });
   };
 
   const [activePopover, setActivePopover] = useState(null);
@@ -167,12 +225,16 @@ const HighRiskCases = () => {
 
   const filteredPatients = patients.filter((p) => {
     const search = searchTerm.toLowerCase();
+    const conditionMatches = (p.activeCategories || []).some(cat => 
+      cat.category.toLowerCase().includes(search) ||
+      cat.conditions.some(cond => cond.toLowerCase().includes(search))
+    ) || (p.documentedConditions || []).some(c => c.toLowerCase().includes(search));
+
     const matchesSearch =
       (p.name || '').toLowerCase().includes(search) ||
-      (p.id || '').toLowerCase().includes(search);
+      (p.id || '').toLowerCase().includes(search) ||
+      conditionMatches;
     const matchesStation = filterStation === 'All' || p.station === filterStation;
-    const matchesAssignment = filterAssignment === 'All'
-      || (filterAssignment === 'Unassigned' ? !p.assignedStaffId : Boolean(p.assignedStaffId));
     const matchesType = filterType === 'All' || (p.type || 'Mother') === filterType;
     
     // Risk Level Filter
@@ -210,7 +272,7 @@ const HighRiskCases = () => {
       }
     }
     
-    return matchesSearch && matchesStation && matchesAssignment && matchesType && matchesRiskLevel && matchesTrimester && matchesDateRange && matchesPostpartum;
+    return matchesSearch && matchesStation && matchesType && matchesRiskLevel && matchesTrimester && matchesDateRange && matchesPostpartum;
   });
 
   const totalPages = Math.ceil(filteredPatients.length / itemsPerPage);
@@ -231,7 +293,9 @@ const HighRiskCases = () => {
         'Station': p.station || 'Unassigned',
         'Age': p.age || 'N/A',
         'Gestation': p.weeks ? `${p.weeks} weeks` : 'N/A',
-        'Documented Health Conditions': p.condition || 'None Reported',
+        'Documented Health Conditions': (p.activeCategories && p.activeCategories.length > 0)
+            ? p.activeCategories.map(cat => `${cat.category}: ${cat.conditions.join(', ')}`).join('; ')
+            : (p.condition || 'None Reported'),
         'Next Appointment': p.nextVisit || 'Initial'
     }));
 
@@ -338,18 +402,7 @@ const HighRiskCases = () => {
           <span className="filters-label">
             <Filter size={13} /> Filters:
           </span>
-          <label className="patient-assignment-filter">
-            <span>Health worker</span>
-            <select
-              value={filterAssignment}
-              onChange={event => { setFilterAssignment(event.target.value); setCurrentPage(1); }}
-              aria-label="Filter by health worker assignment"
-            >
-              <option value="All">All</option>
-              <option value="Unassigned">Unassigned</option>
-              <option value="Assigned">Assigned</option>
-            </select>
-          </label>
+          
           
           {/* Station Filter */}
           <div className="filter-dropdown-container">
@@ -410,6 +463,14 @@ const HighRiskCases = () => {
           <Legend 
               categories={[
                   {
+                      title: "Health Conditions",
+                      items: [
+                          { label: "Pre-existing Medical Conditions", className: "category-badge category-badge--pre-existing" },
+                          { label: "Pregnancy-Related Conditions", className: "category-badge category-badge--pregnancy-related" },
+                          { label: "Relevant Obstetric History", className: "category-badge category-badge--obstetric-history" }
+                      ]
+                  },
+                  {
                       title: "Gestation",
                       items: [
                           { label: "1st Trim", className: "trim-1" },
@@ -444,7 +505,6 @@ const HighRiskCases = () => {
                     <th>Gestation</th>
                     <th>Documented Health Conditions</th>
                     <th>Due Date</th>
-                    <th>BP</th>
                     <th>Next Visit</th>
                   </tr>
                 </thead>
@@ -485,12 +545,64 @@ const HighRiskCases = () => {
                           <TrimesterBadge weeks={p.weeks} />
                         </td>
                         <td>
-                          <div className="condition-wrap">
-                            <span className="condition-main">{p.condition}</span>
-                            <span className="condition-meta">
-                              {p.isMultipleBirth && <span style={{display: 'block', marginTop: '4px'}}>Multiple births</span>}
+                          {(!p.activeCategories || p.activeCategories.length === 0) ? (
+                            <span 
+                              className="risk-badge condition-none"
+                              onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/${p.id}?from=high-risk&tab=history`); }}
+                              style={{ cursor: 'pointer', transition: 'opacity 0.2s' }}
+                              title="View Medical History"
+                            >
+                              None Reported
                             </span>
-                          </div>
+                          ) : (
+                            <div className="patient-conditions-cell" onClick={(e) => e.stopPropagation()}>
+                              {p.activeCategories.slice(0, 2).map((catGroup, catIdx) => {
+                                const theme = getCategoryTheme(catGroup.category);
+                                const allConditions = catGroup.conditions || [];
+                                const displayConditions = allConditions.slice(0, 2);
+                                const extraConditionsCount = allConditions.length - displayConditions.length;
+
+                                return (
+                                  <div key={catIdx} className="category-group">
+                                    <span 
+                                      className={`category-badge category-badge--${theme}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate(`/dashboard/patients/${p.id}?from=high-risk&tab=history`);
+                                      }}
+                                      title="View in Medical History"
+                                    >
+                                      {catGroup.category}
+                                    </span>
+                                    <div className="category-conditions-text">
+                                      {displayConditions.join(', ')}
+                                      {extraConditionsCount > 0 && (
+                                        <button
+                                          type="button"
+                                          className="condition-more-btn"
+                                          onClick={(e) => handleOpenConditionPopover(e, p)}
+                                          title="View all documented conditions"
+                                        >
+                                          +{extraConditionsCount} more
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+
+                              {p.activeCategories.length > 2 && (
+                                <button
+                                  type="button"
+                                  className="condition-more-btn condition-more-btn--categories"
+                                  onClick={(e) => handleOpenConditionPopover(e, p)}
+                                  title="View all categories & conditions"
+                                >
+                                  +{p.activeCategories.length - 2} more {p.activeCategories.length - 2 === 1 ? 'category' : 'categories'}
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td>
                           <span className="due-date-val">
@@ -505,11 +617,6 @@ const HighRiskCases = () => {
                         </td>
                         <td>
                           <span>
-                            {p.bp || 'No Data'}
-                          </span>
-                        </td>
-                        <td>
-                          <span>
                             {p.nextVisit || 'Initial'}
                           </span>
                         </td>
@@ -517,7 +624,7 @@ const HighRiskCases = () => {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="7" className="hr-empty">
+                      <td colSpan="6" className="hr-empty">
                         <AlertTriangle size={28} />
                         <p>No patients with documented health conditions found matching your criteria.</p>
                       </td>
@@ -575,6 +682,71 @@ const HighRiskCases = () => {
           onExport={handleExport} 
           hideDateRange={true}
       />
+
+      {conditionPopover && createPortal(
+        <div 
+          className="conditions-popover-card" 
+          style={{
+            position: 'fixed',
+            top: `${conditionPopover.top}px`,
+            left: `${conditionPopover.left}px`,
+            zIndex: 9999
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="conditions-popover-header">
+            <div>
+              <h4 className="conditions-popover-title">Documented Health Conditions</h4>
+              <p className="conditions-popover-sub">
+                {conditionPopover.patient.name} &middot; {formatMotherId(conditionPopover.patient.id)}
+              </p>
+            </div>
+            <button 
+              type="button" 
+              className="conditions-popover-close" 
+              onClick={() => setConditionPopover(null)}
+              aria-label="Close"
+            >
+              <X size={15} />
+            </button>
+          </div>
+
+          <div className="conditions-popover-body">
+            {(conditionPopover.patient.activeCategories || []).map((catGroup, idx) => {
+              const theme = getCategoryTheme(catGroup.category);
+              return (
+                <div key={idx} className="conditions-popover-group">
+                  <span className={`category-badge category-badge--${theme}`}>
+                    {catGroup.category}
+                  </span>
+                  <div className="conditions-popover-tags">
+                    {(catGroup.conditions || []).map((c, cIdx) => (
+                      <span key={cIdx} className="conditions-popover-tag">
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="conditions-popover-footer">
+            <button 
+              type="button"
+              className="conditions-popover-history-link"
+              onClick={() => {
+                const patientId = conditionPopover.patient.id;
+                setConditionPopover(null);
+                navigate(`/dashboard/patients/${patientId}?from=high-risk&tab=history`);
+              }}
+            >
+              View Full Medical History &rarr;
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

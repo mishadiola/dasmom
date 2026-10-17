@@ -943,6 +943,265 @@
     box-shadow: 0 0 0 3px rgba(185, 129, 138, 0.15);
 }
 
+/* Inline Other Condition Entry inside Category Cards */
+.maternal-inline-other-wrap {
+    margin-top: 4px;
+    margin-bottom: 4px;
+    padding: 8px 10px;
+    background: #ffffff;
+    border: 1px dashed #d1d5db;
+    border-radius: 8px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.maternal-inline-other-input {
+    flex: 1;
+    padding: 6px 10px;
+    font-size: 12.5px;
+    font-family: inherit;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    outline: none;
+    background: #f8fafc;
+    transition: all 0.2s ease;
+}
+
+.maternal-inline-other-input:focus {
+    background: #ffffff;
+    border-color: var(--color-rose);
+}
+
+.maternal-inline-other-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--color-primary, #b9818a);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    transition: background 0.15s ease;
+}
+
+.maternal-inline-other-btn:hover {
+    background: #a36f78;
+}
+
+/* Custom Condition Builder Card */
+.maternal-custom-builder {
+    margin-top: 18px;
+    background: #ffffff;
+    border: 1px solid #eef1f5;
+    border-radius: 12px;
+    padding: 16px 18px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
+}
+
+.maternal-custom-head {
+    margin-bottom: 12px;
+}
+
+.maternal-custom-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin: 0 0 3px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.maternal-custom-desc {
+    font-size: 12px;
+    color: #64748b;
+    margin: 0;
+}
+
+.maternal-custom-form {
+    display: grid;
+    grid-template-columns: 240px 1fr auto;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+.maternal-custom-select,
+.maternal-custom-input {
+    width: 100%;
+    padding: 9px 12px;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--color-text);
+    background: #fbfbfc;
+    border: 1.5px solid #edf0f5;
+    border-radius: 8px;
+    outline: none;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+}
+
+.maternal-custom-select:focus,
+.maternal-custom-input:focus {
+    background: #ffffff;
+    border-color: var(--color-rose);
+    box-shadow: 0 0 0 3px rgba(185, 129, 138, 0.15);
+}
+
+.maternal-custom-add-btn {
+    padding: 9px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    background: var(--color-primary, #b9818a);
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    transition: background 0.15s ease;
+    height: 40px;
+}
+
+.maternal-custom-add-btn:hover {
+    background: #a36f78;
+}
+
+.maternal-custom-error {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #dc2626;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+/* Documented Custom Conditions Chips */
+.maternal-custom-list-wrap {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid #f1f5f9;
+}
+
+.maternal-custom-list-label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #64748b;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.maternal-custom-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.maternal-custom-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px 6px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    font-size: 13px;
+    color: #1e293b;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.maternal-custom-chip-name {
+    font-weight: 600;
+}
+
+.maternal-cat-pill {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 12px;
+    white-space: nowrap;
+}
+
+.maternal-cat-pill--pre-existing {
+    background: #edf7ed;
+    color: #1e4620;
+    border: 1px solid #c8e6c9;
+}
+
+.maternal-cat-pill--pregnancy-related {
+    background: #fff8e1;
+    color: #855302;
+    border: 1px solid #ffe082;
+}
+
+.maternal-cat-pill--obstetric-history {
+    background: #f3e8ff;
+    color: #581c87;
+    border: 1px solid #e9d5ff;
+}
+
+.maternal-custom-chip-remove {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+    border-radius: 50%;
+    transition: all 0.15s ease;
+}
+
+.maternal-custom-chip-remove:hover {
+    color: #dc2626;
+    background: #fee2e2;
+}
+
+/* Clinical Notes & Medical Observations Section */
+.maternal-notes-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.maternal-notes-hint {
+    font-size: 11.5px;
+    color: #64748b;
+    margin: 2px 0 0 0;
+}
+
+.maternal-notes-action-btn {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-primary, #b9818a);
+    background: #fdf2f4;
+    border: 1px solid #f9d8de;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.15s ease;
+}
+
+.maternal-notes-action-btn:hover {
+    background: #fce7ec;
+    border-color: #f4bac5;
+}
+
 /* Responsive Breakdown */
 @media (max-width: 1024px) {
     .maternal-cards-grid {
@@ -952,6 +1211,10 @@
 
 @media (max-width: 680px) {
     .maternal-cards-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .maternal-custom-form {
         grid-template-columns: 1fr;
     }
     

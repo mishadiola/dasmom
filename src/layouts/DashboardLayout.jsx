@@ -336,7 +336,10 @@ const DashboardLayout = () => {
         return roleStr.toUpperCase();
     };
 
-    const canViewReports = ['admin', 'cho personnel'].includes(String(user?.role || '').toLowerCase());
+    const userRole = String(user?.role || '').toLowerCase();
+    const canViewAnalytics = ['admin', 'cho personnel'].includes(userRole);
+    const canViewStationReports = ['admin', 'cho personnel', 'staff', 'station staff'].includes(userRole);
+
     const filteredNavItems = isUserView ? [
         {
             section: t('nav_section_dashboard'),
@@ -354,7 +357,17 @@ const DashboardLayout = () => {
                 { label: t('nav_delivery_info'), icon: ClipboardList, path: '/mother-home/user-delivery-info' },
             ]
         }
-    ] : NAV_ITEMS.filter(group => group.section !== 'Reports' || canViewReports);
+    ] : NAV_ITEMS.map(group => {
+        if (group.section === 'Reports') {
+            const items = group.items.filter(item => {
+                if (item.path === '/dashboard/analytics') return canViewAnalytics;
+                if (item.path === '/dashboard/stations') return canViewStationReports;
+                return true;
+            });
+            return { ...group, items };
+        }
+        return group;
+    }).filter(group => group.items.length > 0);
 
     return (
         <div className={`app-shell ${sidebarOpen ? 'sidebar-expanded' : 'sidebar-collapsed'}`}>

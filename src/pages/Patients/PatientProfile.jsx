@@ -140,6 +140,14 @@ const getOrdinalSuffix = (num) => {
     return num + 'th';
 };
 
+const getCategoryTheme = (category) => {
+    const lower = String(category || '').toLowerCase();
+    if (lower.includes('pre-existing') || lower.includes('preexisting')) return 'pre-existing';
+    if (lower.includes('pregnancy-related') || lower.includes('pregnancy related')) return 'pregnancy-related';
+    if (lower.includes('obstetric') || lower.includes('history')) return 'obstetric-history';
+    return 'pre-existing';
+};
+
 const TABS = [
     { id: 'info', label: 'Basic Info', icon: User },
     { id: 'history', label: 'Medical History', icon: History },
@@ -201,7 +209,7 @@ const PatientProfile = () => {
     };
 
     const handlePatientUpdate = (updatedPatient) => {
-        setP(updatedPatient);
+        setP(prev => ({ ...prev, ...updatedPatient }));
     };
 
     const handlePrintProfile = () => {
@@ -336,15 +344,15 @@ const PatientProfile = () => {
                         </div>
                         <div class="info-item">
                             <span class="info-label">Emergency Contact:</span>
-                            <span class="info-value">${p.emergencyContact?.name || 'N/A'}</span>
+                            <span class="info-value">${p.emergencyContact?.name || p.emergency_contact?.name || 'N/A'}</span>
                         </div>
                         <div class="info-item">
                             <span class="info-label">Relationship:</span>
-                            <span class="info-value">${p.emergencyContact?.relationship || 'N/A'}</span>
+                            <span class="info-value">${p.emergencyContact?.relationship || p.emergency_contact?.relationship || 'N/A'}</span>
                         </div>
                         <div class="info-item">
                             <span class="info-label">Emergency Phone:</span>
-                            <span class="info-value">${p.emergencyContact?.phone || 'N/A'}</span>
+                            <span class="info-value">${p.emergencyContact?.phone || p.emergency_contact?.phone || 'N/A'}</span>
                         </div>
                     </div>
                 </div>
@@ -370,7 +378,7 @@ const PatientProfile = () => {
                         </div>
                         <div class="info-item">
                             <span class="info-label">Health Conditions:</span>
-                            <span class="info-value">${p.hasHealthConditions ? ((p.documentedConditions && p.documentedConditions.length > 0) ? p.documentedConditions.join(', ') : 'Documented Conditions') : 'None Reported'}</span>
+                            <span class="info-value">${p.hasHealthConditions ? ((p.documentedConditions && p.documentedConditions.length > 0) ? p.documentedConditions.map(c => patientService.getConditionName(c)).join(', ') : 'Documented Conditions') : 'None Reported'}</span>
                         </div>
                     </div>
                 </div>
@@ -524,7 +532,7 @@ const PatientProfile = () => {
             <body>
                 <div class="header">
                     <h1 class="patient-name">${p.name}</h1>
-                    <p class="patient-info">Patient ID: ${getShortPatientId(p.id)} | Age: ${p.age} years | Station: ${p.station} | Risk: ${p.risk ? p.risk.toLowerCase().replace(/\b\w/g, l => l.toUpperCase()) : ''}</p>
+                    <p class="patient-info">Patient ID: ${getShortPatientId(p.id)} | Age: ${p.age} years | Station: ${p.station} | Health Conditions: ${p.hasHealthConditions ? 'With Health Conditions' : 'None Reported'}</p>
                     <p class="patient-info">Prenatal Visits Schedule</p>
                     <p class="patient-info">Generated on: ${formatDate(new Date())}</p>
                 </div>
@@ -611,13 +619,46 @@ const PatientProfile = () => {
                     <div className="profile-title-block">
                         <div className="profile-title-row">
                             <h1 className="profile-name">{p.name}</h1>
-                            <span className={`risk-badge ${p.hasHealthConditions ? 'condition-present risk-with' : 'condition-none risk-none'}`}>
-                                {p.hasHealthConditions ? 'WITH HEALTH CONDITIONS' : 'NONE REPORTED'}
-                            </span>
                         </div>
                         <p className="profile-meta">
                             ID: {getShortPatientId(p.id)} · {p.age} years old · <MapPin size={12} /> {p.station}
                         </p>
+                        {(() => {
+                            const categories = (p.activeCategories && p.activeCategories.length > 0)
+                                ? p.activeCategories
+                                : (p.documentedConditions && p.documentedConditions.length > 0)
+                                    ? [{ category: 'Pre-existing Medical Conditions', conditions: p.documentedConditions }]
+                                    : [];
+
+                            if (categories.length === 0) {
+                                return (
+                                    <div className="profile-conditions-header-wrap">
+                                        <span className="risk-badge condition-none">NONE REPORTED</span>
+                                    </div>
+                                );
+                            }
+
+                            return (
+                                <div className="profile-conditions-header-wrap">
+                                    {categories.map((catGroup, idx) => {
+                                        const theme = getCategoryTheme(catGroup.category);
+                                        const conditions = catGroup.conditions || [];
+                                        return (
+                                            <div key={idx} className="profile-header-cat-group">
+                                                <span className={`category-badge category-badge--${theme}`}>
+                                                    {catGroup.category}
+                                                </span>
+                                                {conditions.length > 0 && (
+                                                    <span className="category-conditions-text">
+                                                        {conditions.join(', ')}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })()}
                     </div>
                 </div>
                 <div className="profile-header-right">
@@ -786,12 +827,12 @@ const PatientProfile = () => {
                                 </div>
                                 <div className="mc-body alert-bg-light">
                                     <div className="mc-field">
-                                        <label>{p.emergencyContact?.relationship || 'Contact Person'}</label>
-                                        <span className="highlight-text">{p.emergencyContact?.name || 'N/A'}</span>
+                                        <label>{p.emergencyContact?.relationship || p.emergency_contact?.relationship || 'Contact Person'}</label>
+                                        <span className="highlight-text">{p.emergencyContact?.name || p.emergency_contact?.name || 'N/A'}</span>
                                     </div>
                                     <div className="mc-field">
                                         <label>Phone Number</label>
-                                        <span>{p.emergencyContact?.phone || 'N/A'}</span>
+                                        <span>{p.emergencyContact?.phone || p.emergency_contact?.phone || 'N/A'}</span>
                                     </div>
                                 </div>
                             </div>
@@ -879,7 +920,7 @@ const PatientProfile = () => {
                                                                 <div className="condition-badges-list">
                                                                     {riskFactors.map((condition, i) => (
                                                                         <span key={i} className="condition-badge condition-present">
-                                                                            {condition}
+                                                                            {patientService.getConditionName(condition)}
                                                                         </span>
                                                                     ))}
                                                                 </div>
@@ -1511,6 +1552,7 @@ const PatientProfile = () => {
 
             {editModalOpen && (
                 <EditPatientModal 
+                    key={p?.id || 'edit-patient-modal'}
                     patient={p}
                     onClose={() => setEditModalOpen(false)}
                     onSave={handlePatientUpdate}

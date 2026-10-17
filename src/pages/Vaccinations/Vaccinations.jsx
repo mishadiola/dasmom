@@ -13,7 +13,7 @@ import { useRolePermissions } from '../../context/RolePermissionContext';
 import {
     Search, Filter, Plus, X, Syringe, Pill, Package,
     AlertTriangle, CheckCircle2, Clock, XCircle,
-    Eye, Edit2, Calendar, Download, RefreshCw, ChevronDown, ChevronUp, AlertCircle, Baby, User, Activity, Archive, MapPin,
+    Eye, Edit2, Calendar, Download, RefreshCw, ChevronDown, ChevronUp, AlertCircle, Baby, User, Users, CalendarClock, Activity, Archive, MapPin,
     ChevronLeft, ChevronRight
 } from 'lucide-react';
 import NewbornVaccinationModal from '../../components/NewbornVaccinationModal';
@@ -961,10 +961,11 @@ const Vaccinations = () => {
 
     // State
     const [stats, setStats] = useState({
-        totalAdministered: 0,
-        newbornsPending: 0,
+        patientsAdministered: 0,
+        vaccinationsAdministered: 0,
         supplementsDistributed: 0,
-        lowStockAlerts: 0
+        supplementsDistributedUnit: 'units',
+        pendingVaccinations: 0
     });
     const [inventory, setInventory] = useState([]);
     const [vaccinationRecords, setVaccinationRecords] = useState([]);
@@ -1101,8 +1102,9 @@ const Vaccinations = () => {
             // Get maps for names
             const { data: vaccineInv } = await supabase.from('vaccine_inventory').select('id, vaccine_name');
             const vaccineMap = new Map(vaccineInv.map(v => [v.id, v.vaccine_name]));
-            const { data: suppInv } = await supabase.from('supplement_inventory').select('id, supplement_name');
-            const suppMap = new Map(suppInv.map(s => [s.id, s.supplement_name]));
+            const { data: suppInv } = await supabase.from('supplement_inventory').select('id, supplement_name, unit');
+            const suppMap = new Map((suppInv || []).map(s => [s.id, s.supplement_name]));
+            const suppUnitMap = new Map((suppInv || []).map(s => [s.id, s.unit]));
             const { data: staff } = await supabase.from('staff_profiles').select('id, full_name');
             const staffMap = new Map(staff.map(s => [s.id, s.full_name]));
             
@@ -1224,7 +1226,9 @@ const Vaccinations = () => {
                     station: patientMap.get(record.patient_id)?.station || 'Unknown',
                     type: 'Mother',
                     supplement: suppMap.get(record.supplement_inventory_id) || 'Unknown',
+                    supplement_inventory_id: record.supplement_inventory_id,
                     dose: record.dosage,
+                    unit: suppUnitMap.get(record.supplement_inventory_id) || 'units',
                     date: record.start_date,
                     nextDue: record.end_date,
                     expirationDate: expirationDate,
@@ -1247,45 +1251,100 @@ const Vaccinations = () => {
             const vaccineInvData = await inventoryService.getVaccineInventory();
             const suppInvData = await inventoryService.getSupplementInventory();
             
-            const groupByName = (list, isVaccine) => {
-                const grouped = {};
-                (list || []).forEach(item => {
-                    const name = isVaccine ? item.vaccine_name : item.supplement_name;
-                    if (!name) return;
-                    if (!grouped[name]) {
-                        grouped[name] = { total_quantity: 0, total_max_stock: 0 };
-                    }
-                    
-                    let isExpired = false;
-                    if (item.expiration_date) {
-                        const expDate = new Date(item.expiration_date);
-                        expDate.setHours(0, 0, 0, 0);
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        isExpired = expDate <= today;
-                    }
-                    
-                    if (!isExpired) {
-                        grouped[name].total_quantity += item.quantity || 0;
-                    }
-                    const maxStock = isVaccine ? (item.max_quantity || item.max_stock) : (item.max_quant || item.max_stock);
-                    grouped[name].total_max_stock += maxStock || (isVaccine ? 500 : 1000);
-                });
-                return Object.values(grouped);
-            };
 
-            const vaxGroups = groupByName(vaccineInvData, true);
-            const suppGroups = groupByName(suppInvData, false);
-            const lowStockCount = [...vaxGroups, ...suppGroups].filter(i => {
-                const percentage = i.total_max_stock ? Math.round((i.total_quantity / i.total_max_stock) * 100) : 0;
-                return i.total_quantity > 0 && percentage <= 20;
+            // 1. Number of Patients Administered:
+            // Count unique mothers and newborns who have received at least one recorded vaccine or supplement.
+            // Do not double-count patients with multiple administrations.
+            const uniqueAdministeredPatients = new Set();
+
+            transformedVaccRecords.forEach(r => {
+                const status = (r.status || '').toLowerCase();
+                const isCompleted = status === 'completed' || status === 'administered' || Boolean(r.date);
+                if (isCompleted) {
+                    if (r.type === 'Newborn' && (r.newborn_id || r.patientId)) {
+                        uniqueAdministeredPatients.add(`newborn_${r.newborn_id || r.patientId}`);
+                    } else if (r.patientId) {
+                        uniqueAdministeredPatients.add(`mother_${r.patientId}`);
+                    }
+                }
+            });
+
+            transformedSuppRecords.forEach(r => {
+                const status = (r.status || '').toLowerCase();
+                const isCancelled = status === 'cancelled';
+                if (!isCancelled && r.patientId) {
+                    uniqueAdministeredPatients.add(`mother_${r.patientId}`);
+                }
+            });
+
+            const patientsAdministeredCount = uniqueAdministeredPatients.size;
+
+            // 2. Vaccinations Administered:
+            // Count all successfully recorded vaccine administrations for mothers and newborns.
+            const vaccinationsAdministeredCount = transformedVaccRecords.filter(r => {
+                const status = (r.status || '').toLowerCase();
+                return status === 'completed' || status === 'administered' || Boolean(r.date);
+            }).length;
+
+            // 3. Supplements Distributed:
+            // Display the total quantity of supplements actually distributed, using recorded quantities and their appropriate units.
+            // Do not use current inventory stock as the distributed quantity.
+            const completedSuppRecords = transformedSuppRecords.filter(r => (r.status || '').toLowerCase() !== 'cancelled');
+            let supplementsDistributedCount = 0;
+            const unitCounts = {};
+
+            completedSuppRecords.forEach(r => {
+                const qty = parseInt(r.dose?.toString().match(/\d+/)?.[0]) || 1;
+                supplementsDistributedCount += qty;
+
+                const unitMatch = r.dose?.toString().match(/\d+\s*([a-zA-Z]+)/);
+                let unit = unitMatch ? unitMatch[1].toLowerCase() : (r.unit || 'units');
+                if (unit === 'tablet') unit = 'tablets';
+                if (unit === 'capsule') unit = 'capsules';
+                if (unit === 'sachet') unit = 'sachets';
+                if (unit === 'bottle') unit = 'bottles';
+                if (unit === 'piece' || unit === 'pc') unit = 'pcs';
+                unitCounts[unit] = (unitCounts[unit] || 0) + 1;
+            });
+
+            let distributedUnit = 'units';
+            const unitEntries = Object.entries(unitCounts);
+            if (unitEntries.length === 1) {
+                distributedUnit = unitEntries[0][0];
+            } else if (unitEntries.length > 1) {
+                unitEntries.sort((a, b) => b[1] - a[1]);
+                if (unitEntries[0][1] >= completedSuppRecords.length * 0.75) {
+                    distributedUnit = unitEntries[0][0];
+                } else {
+                    distributedUnit = 'units';
+                }
+            }
+            if (supplementsDistributedCount === 1 && distributedUnit.endsWith('s') && !['pcs'].includes(distributedUnit)) {
+                distributedUnit = distributedUnit.slice(0, -1);
+            }
+
+            // 4. Pending Vaccinations:
+            // Count outstanding scheduled vaccinations for mothers and newborns.
+            // Include overdue vaccinations that remain pending.
+            // Exclude completed and cancelled records.
+            // Supplements must not be included.
+            const pendingVaccinationsCount = transformedVaccRecords.filter(r => {
+                const status = (r.status || '').toLowerCase();
+                if (status === 'completed' || status === 'administered' || status === 'cancelled') {
+                    return false;
+                }
+                if (r.date && status !== 'pending' && status !== 'scheduled' && status !== 'overdue' && status !== 'missed') {
+                    return false;
+                }
+                return status === 'pending' || status === 'scheduled' || status === 'overdue' || status === 'missed' || !r.date;
             }).length;
 
             setStats({
-                totalAdministered: transformedVaccRecords.filter(r => r.status === 'Completed').length,
-                newbornsPending: transformedVaccRecords.filter(r => r.type === 'Newborn' && r.status === 'Pending').length,
-                supplementsDistributed: transformedSuppRecords.reduce((sum, r) => sum + (parseInt(r.dose?.toString().match(/\d+/)?.[0]) || 1), 0),
-                lowStockAlerts: lowStockCount
+                patientsAdministered: patientsAdministeredCount,
+                vaccinationsAdministered: vaccinationsAdministeredCount,
+                supplementsDistributed: supplementsDistributedCount,
+                supplementsDistributedUnit: distributedUnit,
+                pendingVaccinations: pendingVaccinationsCount
             });
 
             const inventory = [...(vaccineInvData || []).map(v => ({ ...v, type: 'vaccine', threshold: 20, status: v.quantity < 10 ? 'Critical' : v.quantity < 20 ? 'Low' : 'Sufficient' })), ...(suppInvData || []).map(s => ({ ...s, type: 'supplement', threshold: 50, status: s.quantity < 25 ? 'Critical' : s.quantity < 50 ? 'Low' : 'Sufficient' }))];
@@ -1353,32 +1412,65 @@ const Vaccinations = () => {
         fetchData(); // Refresh data to show new records
     };
 
-    // Derived Stats for UI mapping
+    // Derived Stats for UI mapping - Exact requested order:
+    // 1. Number of Patients Administered (Lavender, users icon)
+    // 2. Vaccinations Administered (Soft Peach, syringe icon)
+    // 3. Supplements Distributed (Soft Sage, pill icon)
+    // 4. Pending Vaccinations (Dusty Rose, calendar-clock icon)
     const dynamicSummaryStats = [
-        { label: 'Total Vaccinations Administered', value: stats.totalAdministered, color: 'lilac', icon: Syringe, onClick: () => {
-            setActiveTab('administered');
-            setFilters({ patientType: 'All', item: 'Vaccines' });
-            setSearchTerm('');
-            setDateFilter('all');
-            document.querySelector('.vacc-tabs')?.scrollIntoView({ behavior: 'smooth' });
-        } },
-        { label: 'Newborns Pending Vaccines', value: stats.newbornsPending, color: 'orange', icon: AlertCircle, onClick: () => {
-            setActiveTab('pending');
-            setFilters({ patientType: 'Newborn', item: 'Vaccines' });
-            setSearchTerm('');
-            setDateFilter('all');
-            document.querySelector('.vacc-tabs')?.scrollIntoView({ behavior: 'smooth' });
-        } },
-        { label: 'Supplements Distributed', value: stats.supplementsDistributed, unit: 'units', color: 'sage', icon: Pill, onClick: () => {
-            setActiveTab('administered');
-            setFilters({ patientType: 'All', item: 'Supplements' });
-            setSearchTerm('');
-            setDateFilter('all');
-            document.querySelector('.vacc-tabs')?.scrollIntoView({ behavior: 'smooth' });
-        } },
-        { label: 'Low Stock Items', value: stats.lowStockAlerts, color: 'rose', icon: Package, onClick: () => {
-            navigate('/inventory', { state: { filterStatus: 'Low Stock' } });
-        } },
+        { 
+            label: 'Number of Patients Administered', 
+            value: stats.patientsAdministered, 
+            color: 'lilac', 
+            icon: Users, 
+            onClick: () => {
+                setActiveTab('administered');
+                setFilters({ patientType: 'All', item: 'All Items' });
+                setSearchTerm('');
+                setDateFilter('all');
+                document.querySelector('.vacc-tabs')?.scrollIntoView({ behavior: 'smooth' });
+            } 
+        },
+        { 
+            label: 'Vaccinations Administered', 
+            value: stats.vaccinationsAdministered, 
+            color: 'orange', 
+            icon: Syringe, 
+            onClick: () => {
+                setActiveTab('administered');
+                setFilters({ patientType: 'All', item: 'Vaccines' });
+                setSearchTerm('');
+                setDateFilter('all');
+                document.querySelector('.vacc-tabs')?.scrollIntoView({ behavior: 'smooth' });
+            } 
+        },
+        { 
+            label: 'Supplements Distributed', 
+            value: stats.supplementsDistributed, 
+            unit: stats.supplementsDistributedUnit || 'units', 
+            color: 'sage', 
+            icon: Pill, 
+            onClick: () => {
+                setActiveTab('administered');
+                setFilters({ patientType: 'All', item: 'Supplements' });
+                setSearchTerm('');
+                setDateFilter('all');
+                document.querySelector('.vacc-tabs')?.scrollIntoView({ behavior: 'smooth' });
+            } 
+        },
+        { 
+            label: 'Pending Vaccinations', 
+            value: stats.pendingVaccinations, 
+            color: 'rose', 
+            icon: CalendarClock, 
+            onClick: () => {
+                setActiveTab('pending');
+                setFilters({ patientType: 'All', item: 'Vaccines' });
+                setSearchTerm('');
+                setDateFilter('all');
+                document.querySelector('.vacc-tabs')?.scrollIntoView({ behavior: 'smooth' });
+            } 
+        },
     ];
 
     const handleFilter = (k, v) => setFilters(prev => ({ ...prev, [k]: v }));

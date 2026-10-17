@@ -347,21 +347,55 @@ export default class PatientService {
         const visitsToInspect = currentPregnancyVisits.length > 0 ? currentPregnancyVisits : patientVisits;
 
         const conditionSet = new Set();
+        const categorizedMap = new Map();
+
+        const processVisitRiskFactors = (rf) => {
+          if (!rf) return;
+          const conds = this.getDocumentedHealthConditions(rf);
+          conds.forEach(c => conditionSet.add(c));
+
+          const categorizedList = this.getCategorizedHealthConditions(rf);
+          categorizedList.forEach(item => {
+            const key = `${item.category}:::${item.name.toLowerCase()}`;
+            if (!categorizedMap.has(key)) {
+              categorizedMap.set(key, item);
+            }
+          });
+        };
+
         visitsToInspect.forEach(v => {
-          if (v.risk_factors) {
-            const conds = this.getDocumentedHealthConditions(v.risk_factors);
-            conds.forEach(c => conditionSet.add(c));
-          }
+          processVisitRiskFactors(v.risk_factors);
         });
 
         if (latestVisit?.risk_factors) {
-          const latestConds = this.getDocumentedHealthConditions(latestVisit.risk_factors);
-          latestConds.forEach(c => conditionSet.add(c));
+          processVisitRiskFactors(latestVisit.risk_factors);
         }
 
         const documentedConditions = Array.from(conditionSet);
-        const hasHealthConditions = documentedConditions.length > 0;
-        const conditionDisplay = documentedConditions.join(', ') || 'None Reported';
+
+        // Group categorized conditions by category
+        const conditionsByCategory = {
+          'Pre-existing Medical Conditions': [],
+          'Pregnancy-Related Conditions': [],
+          'Relevant Obstetric History': []
+        };
+
+        Array.from(categorizedMap.values()).forEach(item => {
+          const cat = this.normalizeCategoryName(item.category);
+          if (!conditionsByCategory[cat]) {
+            conditionsByCategory[cat] = [];
+          }
+          if (!conditionsByCategory[cat].includes(item.name)) {
+            conditionsByCategory[cat].push(item.name);
+          }
+        });
+
+        const activeCategories = Object.entries(conditionsByCategory)
+          .filter(([_, list]) => list.length > 0)
+          .map(([category, conditions]) => ({ category, conditions }));
+
+        const hasHealthConditions = activeCategories.length > 0 || documentedConditions.length > 0;
+        const conditionDisplay = documentedConditions.join(', ') || (activeCategories.length > 0 ? 'Documented Conditions' : 'None Reported');
         const riskLevelDisplay = hasHealthConditions ? 'With Health Conditions' : 'None Reported';
 
         const rawNextAppt = nextApptMap.get(p.id) || null;
@@ -408,9 +442,26 @@ export default class PatientService {
           archiveStatus = 'archived';
         }
 
+        let rawEC = p.emergency_contact || {};
+        if (typeof rawEC === 'string') {
+          try {
+            rawEC = JSON.parse(rawEC);
+          } catch {
+            rawEC = {};
+          }
+        }
+        const emergencyContact = {
+          name: rawEC.name || rawEC.full_name || rawEC.contact_name || '',
+          relationship: rawEC.relationship || rawEC.relation || '',
+          phone: rawEC.phone || rawEC.contact_no || rawEC.contact_number || rawEC.phone_number || '',
+          address: rawEC.address || ''
+        };
+
         return {
           id: p.id,
           stationId: p.station_ass,
+          emergencyContact,
+          emergency_contact: rawEC,
           name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown Patient',
           station: p.stations?.station_name || p.municipality || 'N/A',
           assignedStaffId: assignedStaffMap.get(p.id) || null,
@@ -424,6 +475,9 @@ export default class PatientService {
           hasHealthConditions,
           documentedConditions,
           medicalConditions: documentedConditions,
+          categorizedConditions: Array.from(categorizedMap.values()),
+          conditionsByCategory,
+          activeCategories,
           condition: conditionDisplay,
           conditionsList: documentedConditions,
           edd: pgi?.edd || null,
@@ -1813,7 +1867,14 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
 
     const assignedStaffByPatient = new Map();
     const heightByPatientMap = new Map();
+    const visitsByPatientMap = new Map();
     (data || []).forEach((visit) => {
+      if (!visit.patient_id) return;
+      if (!visitsByPatientMap.has(visit.patient_id)) {
+        visitsByPatientMap.set(visit.patient_id, []);
+      }
+      visitsByPatientMap.get(visit.patient_id).push(visit);
+
       if (Number(visit.height_cm) > 0 && !heightByPatientMap.has(visit.patient_id)) {
         heightByPatientMap.set(visit.patient_id, visit.height_cm);
       }
@@ -1841,9 +1902,54 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         height_cm: visit.patient_basic_info?.height_cm || heightByPatientMap.get(visit.patient_id),
       };
       const pregnancy = latestPregMap.get(visit.patient_id) || {};
-      const riskFactors = this.getRiskFactors(visit.risk_factors);
-      const hasHealthConditions = this.getDocumentedHealthConditions(visit.risk_factors).length > 0;
-      const conditionDisplay = riskFactors.join(', ') || 'None Reported';
+
+      const patientVisits = visitsByPatientMap.get(visit.patient_id) || [visit];
+      const conditionSet = new Set();
+      const categorizedMap = new Map();
+
+      const processVisitRiskFactors = (rf) => {
+        if (!rf) return;
+        const conds = this.getDocumentedHealthConditions(rf);
+        conds.forEach(c => conditionSet.add(c));
+
+        const categorizedList = this.getCategorizedHealthConditions(rf);
+        categorizedList.forEach(item => {
+          const key = `${item.category}:::${item.name.toLowerCase()}`;
+          if (!categorizedMap.has(key)) {
+            categorizedMap.set(key, item);
+          }
+        });
+      };
+
+      patientVisits.forEach(v => {
+        processVisitRiskFactors(v.risk_factors);
+      });
+      processVisitRiskFactors(visit.risk_factors);
+
+      const documentedConditions = Array.from(conditionSet);
+
+      const conditionsByCategory = {
+        'Pre-existing Medical Conditions': [],
+        'Pregnancy-Related Conditions': [],
+        'Relevant Obstetric History': []
+      };
+
+      Array.from(categorizedMap.values()).forEach(item => {
+        const cat = this.normalizeCategoryName(item.category);
+        if (!conditionsByCategory[cat]) {
+          conditionsByCategory[cat] = [];
+        }
+        if (!conditionsByCategory[cat].includes(item.name)) {
+          conditionsByCategory[cat].push(item.name);
+        }
+      });
+
+      const activeCategories = Object.entries(conditionsByCategory)
+        .filter(([_, list]) => list.length > 0)
+        .map(([category, conditions]) => ({ category, conditions }));
+
+      const hasHealthConditions = activeCategories.length > 0 || documentedConditions.length > 0;
+      const conditionDisplay = documentedConditions.join(', ') || (activeCategories.length > 0 ? 'Documented Conditions' : 'None Reported');
 
       const gestationalAge = visit.gestational_age ? parseInt(visit.gestational_age) || 0 : 0;
       const weeks = gestationalAge;
@@ -1872,8 +1978,12 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         created_at: patient.created_at,
         riskLevel: hasHealthConditions ? 'Health Conditions Documented' : 'None Reported',
         hasHealthConditions,
+        documentedConditions,
+        activeCategories,
+        conditionsByCategory,
+        categorizedConditions: Array.from(categorizedMap.values()),
         condition: conditionDisplay,
-        conditionsList: riskFactors,
+        conditionsList: documentedConditions,
         gravida: pregnancy.gravida || null,
         lmd: lmd ? lmd.toISOString().split('T')[0] : null,
         edd: edd ? edd.toISOString().split('T')[0] : null,
@@ -2377,26 +2487,65 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       : normalizedVisits;
 
     const patientConditionsSet = new Set();
+    const categorizedMap = new Map();
     (currentVisits || []).forEach(v => {
       const rawConds = this.getDocumentedHealthConditions(v.raw_risk_factors || v.risk_factors);
       const calcConds = this.getDocumentedHealthConditions(v.risk_factors);
       [...rawConds, ...calcConds].forEach(c => patientConditionsSet.add(c));
+
+      const list1 = this.getCategorizedHealthConditions(v.raw_risk_factors || v.risk_factors);
+      const list2 = this.getCategorizedHealthConditions(v.risk_factors);
+      [...list1, ...list2].forEach(item => {
+        const key = `${item.category}:::${item.name.toLowerCase()}`;
+        if (!categorizedMap.has(key)) categorizedMap.set(key, item);
+      });
     });
     const patientDocumentedConditions = Array.from(patientConditionsSet);
-    const patientHasHealthConditions = patientDocumentedConditions.length > 0;
+
+    const conditionsByCategory = {
+      'Pre-existing Medical Conditions': [],
+      'Pregnancy-Related Conditions': [],
+      'Relevant Obstetric History': []
+    };
+
+    Array.from(categorizedMap.values()).forEach(item => {
+      const cat = this.normalizeCategoryName(item.category);
+      if (!conditionsByCategory[cat]) {
+        conditionsByCategory[cat] = [];
+      }
+      if (!conditionsByCategory[cat].includes(item.name)) {
+        conditionsByCategory[cat].push(item.name);
+      }
+    });
+
+    const activeCategories = Object.entries(conditionsByCategory)
+      .filter(([_, list]) => list.length > 0)
+      .map(([category, conditions]) => ({ category, conditions }));
+
+    const patientHasHealthConditions = activeCategories.length > 0 || patientDocumentedConditions.length > 0;
 
     // preg is already defined earlier
-    const rawEmergencyContact = patientData.emergency_contact || {};
+    let rawEmergencyContact = patientData.emergency_contact || {};
+    if (typeof rawEmergencyContact === 'string') {
+      try {
+        rawEmergencyContact = JSON.parse(rawEmergencyContact);
+      } catch {
+        rawEmergencyContact = {};
+      }
+    }
     const emergencyContact = {
-      name: rawEmergencyContact.name || rawEmergencyContact.full_name || '',
+      name: rawEmergencyContact.name || rawEmergencyContact.full_name || rawEmergencyContact.contact_name || '',
       relationship: rawEmergencyContact.relationship || rawEmergencyContact.relation || '',
-      phone: rawEmergencyContact.phone || rawEmergencyContact.contact_no || ''
+      phone: rawEmergencyContact.phone || rawEmergencyContact.contact_no || rawEmergencyContact.contact_number || rawEmergencyContact.phone_number || '',
+      address: rawEmergencyContact.address || rawEmergencyContact.house_no || ''
     };
 
     const archiveStatus = userData?.is_archived ? 'archived' : 'active';
 
     return {
       ...patientData,
+      emergencyContact,
+      emergency_contact: rawEmergencyContact,
       isArchived: Boolean(userData?.is_archived),
       isDeactivated: Boolean(userData?.is_deactivated),
       archiveStatus,
@@ -2415,6 +2564,9 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
       bloodType: patientData.blood_type || patientData.bloodtype || 'Unknown',
       medicalConditions: patientDocumentedConditions,
       documentedConditions: patientDocumentedConditions,
+      categorizedConditions: Array.from(categorizedMap.values()),
+      conditionsByCategory,
+      activeCategories,
       hasHealthConditions: patientHasHealthConditions,
       risk: patientHasHealthConditions ? 'With Health Conditions' : 'None Reported',
       riskLevel: patientHasHealthConditions ? 'With Health Conditions' : 'None Reported',
@@ -2466,6 +2618,53 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         .single();
       if (currentPatientError) throw currentPatientError;
 
+      let currentEmergencyContact = currentPatient.emergency_contact || {};
+      if (typeof currentEmergencyContact === 'string') {
+        try {
+          currentEmergencyContact = JSON.parse(currentEmergencyContact);
+        } catch {
+          currentEmergencyContact = {};
+        }
+      }
+
+      const hasEmergencyContactUpdate =
+        updateData.emergency_contact_name !== undefined ||
+        updateData.emergencyContactName !== undefined ||
+        updateData.emergency_contact_relationship !== undefined ||
+        updateData.emergencyContactRelationship !== undefined ||
+        updateData.emergency_contact_phone !== undefined ||
+        updateData.emergencyContactPhone !== undefined ||
+        updateData.emergency_contact !== undefined ||
+        updateData.emergencyContact !== undefined;
+
+      const rawUpdatedContact = updateData.emergency_contact || updateData.emergencyContact || {};
+
+      const resolveValue = (providedVal, fallbackVal) => {
+        if (providedVal !== undefined) {
+          return typeof providedVal === 'string' ? (providedVal.trim() || null) : providedVal;
+        }
+        return fallbackVal ?? null;
+      };
+
+      const resolvedEmergencyContact = hasEmergencyContactUpdate ? {
+        name: resolveValue(
+          updateData.emergency_contact_name ?? updateData.emergencyContactName ?? rawUpdatedContact.name ?? rawUpdatedContact.full_name,
+          currentEmergencyContact.name || currentEmergencyContact.full_name
+        ),
+        relationship: resolveValue(
+          updateData.emergency_contact_relationship ?? updateData.emergencyContactRelationship ?? rawUpdatedContact.relationship ?? rawUpdatedContact.relation,
+          currentEmergencyContact.relationship || currentEmergencyContact.relation
+        ),
+        phone: resolveValue(
+          updateData.emergency_contact_phone ?? updateData.emergencyContactPhone ?? rawUpdatedContact.phone ?? rawUpdatedContact.contact_no,
+          currentEmergencyContact.phone || currentEmergencyContact.contact_no
+        ),
+        address: resolveValue(
+          updateData.emergency_contact_address ?? rawUpdatedContact.address,
+          currentEmergencyContact.address
+        )
+      } : currentEmergencyContact;
+
       const profilePayload = {
         first_name: updateData.first_name,
         last_name: updateData.last_name,
@@ -2476,15 +2675,24 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         contact_no: updateData.phone,
         house_no: updateData.address,
         municipality: updateData.municipality,
-        emergency_contact: {
-          name: updateData.emergency_contact_name,
-          relationship: updateData.emergency_contact_relationship,
-          phone: updateData.emergency_contact_phone
-        }
+        emergency_contact: resolvedEmergencyContact
       };
-      const profileChanged = Object.entries(profilePayload).some(([key, value]) =>
-        JSON.stringify(currentPatient[key] ?? null) !== JSON.stringify(value ?? null)
-      );
+
+      const isEmergencyContactEqual = (a, b) => {
+        const normA = a && typeof a === 'object' ? a : {};
+        const normB = b && typeof b === 'object' ? b : {};
+        return (normA.name || null) === (normB.name || null) &&
+               (normA.relationship || null) === (normB.relationship || null) &&
+               (normA.phone || null) === (normB.phone || null) &&
+               (normA.address || null) === (normB.address || null);
+      };
+
+      const profileChanged = Object.entries(profilePayload).some(([key, value]) => {
+        if (key === 'emergency_contact') {
+          return !isEmergencyContactEqual(currentEmergencyContact, value);
+        }
+        return JSON.stringify(currentPatient[key] ?? null) !== JSON.stringify(value ?? null);
+      });
       const stationChanged = stationId && stationId !== currentPatient.station_ass;
       let data = currentPatient;
       let profileUpdateSkipped = false;
@@ -2513,8 +2721,17 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
         if (stationError) throw stationError;
       }
 
+      const finalEmergencyContact = {
+        name: resolvedEmergencyContact.name || '',
+        relationship: resolvedEmergencyContact.relationship || '',
+        phone: resolvedEmergencyContact.phone || '',
+        address: resolvedEmergencyContact.address || null
+      };
+
       return {
         ...data,
+        emergencyContact: finalEmergencyContact,
+        emergency_contact: resolvedEmergencyContact,
         station_ass: stationId || currentPatient.station_ass,
         profileUpdateSkipped
       };
@@ -3049,7 +3266,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     }
   }
 
-  async recordVitals(patientId, vitals, supplements) {
+  async recordVitals(patientId, vitals, supplements = []) {
     const createdBy = await this.getCurrentUserId();
     if (!createdBy) throw new Error('No logged-in user');
     const [patientContext, access] = await Promise.all([
@@ -3108,10 +3325,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     visitData.calculated_risk = riskAssessment.riskLevel;
     visitData.risk_factors = riskAssessment.riskFactors.join(', ') || null;
 
-    if (existingVisit) {
-      if (existingVisit.status === 'Attended' && (await this.getCurrentUserAccess()).role !== 'admin') {
-        throw new Error('Completed prenatal visits are read-only.');
-      }
+    if (existingVisit && existingVisit.status === 'Scheduled') {
       await this.completePrenatalVisit(existingVisit.id, visitData);
     } else {
       const { data: patient, error: patientError } = await this.supabase
@@ -3139,7 +3353,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     }
 
     // Handle supplements
-    for (const sup of supplements) {
+    for (const sup of (supplements || [])) {
       const amount = parseInt(sup.amount);
       if (amount <= 0) continue;
 
@@ -3290,6 +3504,138 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     }
   }
 
+  getConditionName(item) {
+    if (!item) return '';
+    if (typeof item === 'object') return item.name || '';
+    const str = String(item).trim();
+    const match = str.match(/^(.*?)\s*\[(?:category:\s*)?([^\]]+)\]$/i);
+    return match ? match[1].trim() : str;
+  }
+
+  getConditionCategory(item) {
+    const parsed = this.parseCategorizedCondition(item);
+    return parsed ? parsed.category : null;
+  }
+
+  normalizeCategoryName(catRaw) {
+    if (!catRaw) return 'Pre-existing Medical Conditions';
+    const catLower = String(catRaw).trim().toLowerCase();
+    if (catLower.includes('pre-existing') || catLower.includes('preexisting')) {
+      return 'Pre-existing Medical Conditions';
+    } else if (catLower.includes('pregnancy-related') || catLower.includes('pregnancy related')) {
+      return 'Pregnancy-Related Conditions';
+    } else if (catLower.includes('obstetric') || catLower.includes('history')) {
+      return 'Relevant Obstetric History';
+    }
+    return String(catRaw).trim();
+  }
+
+  parseCategorizedCondition(conditionInput) {
+    if (!conditionInput) return null;
+    if (typeof conditionInput === 'object') {
+      return {
+        name: conditionInput.name || '',
+        category: this.normalizeCategoryName(conditionInput.category || 'Pre-existing Medical Conditions')
+      };
+    }
+    const str = String(conditionInput).trim();
+    if (!str || ['none', 'none reported', 'no documented conditions'].includes(str.toLowerCase())) return null;
+
+    // Check bracket at end: "Asthma [Pre-existing Medical Conditions]"
+    const bracketMatch = str.match(/^(.*?)\s*\[(?:category:\s*)?([^\]]+)\]$/i);
+    if (bracketMatch) {
+      const name = bracketMatch[1].trim();
+      const catRaw = bracketMatch[2].trim();
+      return { name, category: this.normalizeCategoryName(catRaw) };
+    }
+
+    // Check bracket at start: "[Pre-existing Medical Conditions] Asthma"
+    const startBracketMatch = str.match(/^\[(?:category:\s*)?([^\]]+)\]\s*(.*)$/i);
+    if (startBracketMatch) {
+      const catRaw = startBracketMatch[1].trim();
+      const name = startBracketMatch[2].trim();
+      return { name, category: this.normalizeCategoryName(catRaw) };
+    }
+
+    // Check colon prefix: "Pre-existing Medical Conditions: Asthma"
+    const colonMatch = str.match(/^(Pre-existing Medical Conditions|Pregnancy-Related Conditions|Relevant Obstetric History|Pre-existing|Pregnancy-Related|Relevant Obstetric):\s*(.*)$/i);
+    if (colonMatch) {
+      const catRaw = colonMatch[1].trim();
+      const name = colonMatch[2].trim();
+      return { name, category: this.normalizeCategoryName(catRaw) };
+    }
+
+    // Exclude non-condition patterns (vitals, demographics, pregnancy type)
+    const nonConditionPatterns = [
+      /^age\b/i,
+      /^teenage/i,
+      /^advanced maternal age/i,
+      /^singleton/i,
+      /^twins/i,
+      /^multiple/i,
+      /^(undetermined|not yet determined|unknown)(\s+pregnancy(\s+type)?)?$/i,
+      /^pregnancy\s+type\b/i,
+      /bmi$/i,
+      /^(high|low|normal|elevated)\s+bp$/i,
+      /^hypertension\s*\((high|low)\)$/i,
+      /^hypotension/i,
+      /^fever$/i,
+      /^hypothermia$/i,
+      /^abnormal (pulse|respiratory rate|fetal heart rate)$/i,
+      /^(high|medium|low|normal)\s+risk$/i,
+      /^risk\s+(level|classification|category)\b/i,
+      /^gravida\b/i,
+      /^para\b/i,
+      /^none$/i,
+      /^none reported$/i
+    ];
+    if (nonConditionPatterns.some(pattern => pattern.test(str))) {
+      return null;
+    }
+
+    const obstetricHistory = [
+      'previous c-section', 'previous c section', 'c-section', 'cesarean',
+      'previous preterm birth', 'preterm birth', 'preterm delivery',
+      'previous stillbirth', 'stillbirth',
+      'previous miscarriage', 'miscarriage', 'recurrent miscarriage',
+      'previous ectopic', 'ectopic pregnancy',
+      'other relevant obstetric history', 'obstetric history'
+    ];
+    const pregnancyRelated = [
+      'gestational hypertension', 'gestational diabetes', 'preeclampsia', 'pre-eclampsia',
+      'eclampsia', 'anemia during pregnancy', 'anemia', 'anaemia', 'maternal anemia',
+      'hyperemesis', 'placenta previa', 'placental abruption', 'oligohydramnios',
+      'polyhydramnios', 'iugr', 'other pregnancy-related condition'
+    ];
+    const preExisting = [
+      'chronic hypertension', 'pre-existing diabetes', 'diabetes', 'type 1 diabetes', 'type 2 diabetes',
+      'heart disease', 'cardiac disease', 'asthma', 'thyroid', 'hypothyroidism', 'hyperthyroidism',
+      'epilepsy', 'renal disease', 'kidney disease', 'autoimmune', 'lupus',
+      'other pre-existing condition'
+    ];
+
+    const lower = str.toLowerCase();
+    if (obstetricHistory.some(o => lower.includes(o))) return { name: str, category: 'Relevant Obstetric History' };
+    if (pregnancyRelated.some(p => lower.includes(p))) return { name: str, category: 'Pregnancy-Related Conditions' };
+    if (preExisting.some(pe => lower.includes(pe))) return { name: str, category: 'Pre-existing Medical Conditions' };
+    return null;
+  }
+
+  getCategorizedHealthConditions(riskFactorsInput) {
+    const rawFactors = this.getRiskFactors(riskFactorsInput);
+    const parsedList = [];
+    const seen = new Set();
+
+    for (const factor of rawFactors) {
+      const parsed = this.parseCategorizedCondition(factor);
+      if (parsed && parsed.name && !seen.has(parsed.name.toLowerCase())) {
+        seen.add(parsed.name.toLowerCase());
+        parsedList.push(parsed);
+      }
+    }
+    return parsedList;
+  }
+
   getRiskFactors(riskFactorsInput) {
     if (!riskFactorsInput) return [];
     let factorList = [];
@@ -3307,7 +3653,7 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
     }
 
     return factorList
-      .map(item => String(item || '').trim())
+      .map(item => (typeof item === 'object' && item !== null ? item.name : String(item || '').trim()))
       .filter(trimmed => trimmed && !['none', 'none reported'].includes(trimmed.toLowerCase()));
   }
 
@@ -3339,6 +3685,11 @@ async getHighRiskPatients({ includeArchived = false } = {}) {
           lower === 'at risk' ||
           lower === 'risk'
         ) {
+          return false;
+        }
+
+        // 2. Obstetric History alone must NOT count as an active health condition
+        if (lower.includes('[relevant obstetric history]') || lower.includes('[category: relevant obstetric history]')) {
           return false;
         }
 
