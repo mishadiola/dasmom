@@ -12,6 +12,7 @@ import WelcomeMotherModal from '../../components/MotherDashboard/WelcomeMotherMo
 import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
 import supabase from '../../config/supabaseclient';
+import { CHO3_FACEBOOK_URL } from '../../config/appConfig';
 import pregnancySilhouette from '../../assets/images/pregnancy-silhouette.png';
 import { calculateEDD, calculateTimeRemaining, calculateGestationalAge, getTrimester, isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
 import { useLanguage } from '../../context/LanguageContext';
@@ -649,7 +650,7 @@ const MotherDashboard = () => {
                                 {t('dash_call_cho')}
                             </a>
                             <a 
-                                href="https://www.facebook.com/Cho3dasmarinas/" 
+                                href={CHO3_FACEBOOK_URL} 
                                 target="_blank" 
                                 rel="noopener noreferrer" 
                                 className="support-btn support-btn-secondary" 

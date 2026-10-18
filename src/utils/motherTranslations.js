@@ -86,6 +86,8 @@ export const translations = {
         // ═══════════════════════════════════════════════
         appt_title: 'Appointments',
         appt_subtitle: 'Keep track of your upcoming visits and health schedule',
+        appt_calendar_section: 'Calendar',
+        appt_visit_list_section: 'Visit List',
         appt_all: 'All',
         appt_prenatal: 'Prenatal',
         appt_vaccination: 'Vaccination',
@@ -447,6 +449,7 @@ export const translations = {
         settings_browser: 'Browser / Web Browser',
         settings_support: 'Support & Contact',
         settings_contact_cho: 'Contact CHO',
+        settings_contact_cho_fb: 'Contact CHO III',
         settings_hotline: 'Emergency Hotline',
         settings_faq: 'Frequently Asked Questions',
         settings_faq_desc: 'Find answers to common questions',
@@ -585,6 +588,8 @@ export const translations = {
         // ═══════════════════════════════════════════════
         appt_title: 'Mga Appointment',
         appt_subtitle: 'Subaybayan ang iyong mga paparating na bisita at iskedyul sa kalusugan',
+        appt_calendar_section: 'Kalendaryo',
+        appt_visit_list_section: 'Listahan ng Bisita',
         appt_all: 'Lahat',
         appt_prenatal: 'Prenatal',
         appt_vaccination: 'Bakuna',
@@ -946,6 +951,7 @@ export const translations = {
         settings_browser: 'Browser / Web Browser',
         settings_support: 'Suporta at Makipag-ugnayan',
         settings_contact_cho: 'Makipag-ugnayan sa CHO',
+        settings_contact_cho_fb: 'Makipag-ugnayan sa CHO III',
         settings_hotline: 'Emergency Hotline',
         settings_faq: 'Mga Madalas Itanong (FAQ)',
         settings_faq_desc: 'Humanap ng mga sagot sa mga karaniwang tanong',

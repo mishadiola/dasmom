@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { 
-    Mail, Lock, Eye, EyeOff, Loader2, Chrome,
+    Mail, Lock, Eye, EyeOff, Loader2,
     Calendar, Activity, Heart, Baby, ArrowLeft, X, AlertCircle
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -13,6 +13,7 @@ import supabase from '../../config/supabaseclient';
 import { useLanguage } from '../../context/LanguageContext';
 import { DASMOM_APP_URL } from '../../config/appConfig';
 import ResetPasswordModal from '../../components/ResetPasswordModal';
+import GoogleIcon from '../../components/Common/GoogleIcon';
 
 const MotherLogin = () => {
     const navigate = useNavigate();
@@ -204,7 +205,7 @@ const MotherLogin = () => {
                             </div>
                         </form>
                         <button type="button" className="ml-google-btn" onClick={handleGoogleLogin} disabled={isLoading}>
-                            <Chrome size={18} aria-hidden="true" />
+                            <GoogleIcon size={18} aria-hidden="true" />
                             Sign in with Google
                         </button>
                     </div>

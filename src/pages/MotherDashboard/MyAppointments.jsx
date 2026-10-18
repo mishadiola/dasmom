@@ -54,7 +54,7 @@ const sanitizeUUID = (str, fallback) => {
 const MyAppointments = () => {
     const navigate = useNavigate();
     const [currentDate, setCurrentDate] = useState(new Date());
-    const [calendarView, setCalendarView] = useState('day'); // 'day', 'week', 'month'
+    const [calendarView, setCalendarView] = useState('month'); // 'day', 'week', 'month'
     const [typeFilter, setTypeFilter] = useState('All'); // 'All', 'Prenatal', 'Vaccination', 'Postpartum'
     const [statusFilter, setStatusFilter] = useState('Upcoming'); // 'All', 'Upcoming', 'Attended', 'Missed'
     const [selectedAppt, setSelectedAppt] = useState(null);
@@ -542,6 +542,11 @@ const MyAppointments = () => {
             </div>
 
             <div className="appt-content">
+                {/* ── Calendar Section ── */}
+                <div className="appt-section-title-wrap">
+                    <h2 className="appt-section-title">{t('appt_calendar_section', 'Calendar')}</h2>
+                </div>
+
                 {/* Event Category Tabs */}
                 <div className="visit-type-tabs">
                     <button
@@ -570,7 +575,7 @@ const MyAppointments = () => {
                     </button>
                 </div>
 
-                <div className="pv-calendar-section" style={{marginBottom: '32px'}}>
+                <div className="pv-calendar-section">
                     <div className="section-head-bar">
                         <div className="date-nav">
                             <button className="icon-btn-sm" onClick={handlePrev} title="Previous">
@@ -723,8 +728,15 @@ const MyAppointments = () => {
                         </div>
                     </div>
 
+                {/* ── Section Divider ── */}
+                <div className="appt-section-divider" />
 
                 <div className="list-container">
+                    {/* ── Visit List Section ── */}
+                    <div className="appt-section-title-wrap">
+                        <h2 className="appt-section-title">{t('appt_visit_list_section', 'Visit List')}</h2>
+                    </div>
+
                     <div className="list-filters">
                         <button
                             className={`filter-btn ${statusFilter === 'All' ? 'active' : ''}`}

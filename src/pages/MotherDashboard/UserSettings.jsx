@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { 
     Lock, Settings, HelpCircle, LogOut, 
-    Shield, ChevronRight, Clock, Mail, Phone, ExternalLink, ArrowLeft,
+    Shield, ChevronRight, Clock, Facebook, Phone, ExternalLink, ArrowLeft,
     X, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -11,6 +11,7 @@ import { AuthContext } from '../../context/AuthContext';
 import '../../styles/pages/UserSettings.css';
 import ResetPasswordModal from '../../components/ResetPasswordModal';
 import AuthService from '../../services/authservice';
+import { CHO3_FACEBOOK_URL } from '../../config/appConfig';
 import { formatLoginDateTime } from '../../utils/formatters';
 
 const UserSettings = () => {
@@ -171,13 +172,19 @@ const UserSettings = () => {
                         <h2>{t('settings_support', 'Support & Contact')}</h2>
                     </div>
                     <div className="support-links">
-                        <a href="mailto:cho3.salawag@gmail.com" className="support-item" onClick={(e) => e.currentTarget.blur()}>
-                            <div className="support-icon-wrap"><Mail size={16} /></div>
+                        <a 
+                            href={CHO3_FACEBOOK_URL} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="support-item" 
+                            onClick={(e) => e.currentTarget.blur()}
+                        >
+                            <div className="support-icon-wrap"><Facebook size={16} /></div>
                             <div className="support-text">
-                                <h3>{t('settings_contact_cho_email', 'Contact CHO III')}</h3>
+                                <h3>{t('settings_contact_cho_fb', 'Contact CHO III')}</h3>
                                 <p className="support-info-line">
-                                    <span className="support-info-label">Email:</span>{' '}
-                                    <span className="support-info-val">cho3.salawag@gmail.com</span>
+                                    <span className="support-info-label">Facebook:</span>{' '}
+                                    <span className="support-info-val">CHO III</span>
                                 </p>
                             </div>
                             <ExternalLink size={15} className="support-arrow-icon" />

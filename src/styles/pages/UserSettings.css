@@ -401,7 +401,7 @@ input:checked + .slider:before {
     color: var(--color-text-muted, #64748b);
     line-height: 1.4;
     margin: 0;
-    word-break: break-all;
+    word-break: break-word;
     overflow-wrap: anywhere;
 }
 

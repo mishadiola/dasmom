@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Loader2, ShieldCheck, CheckCircle2, Clock, User, X, Mail, Lock, AlertCircle, Chrome } from 'lucide-react';
+import { Eye, EyeOff, Loader2, ShieldCheck, CheckCircle2, Clock, User, X, Mail, Lock, AlertCircle } from 'lucide-react';
+import GoogleIcon from '../../components/Common/GoogleIcon';
 import '../../styles/pages/Login.css';
 import logo from '../../assets/images/dasmom_logo.png';
 import AuthService from '../../services/authservice.js';
@@ -380,7 +381,7 @@ export default function Login() {
                 </form>
 
                 <button type="button" className="google-login-btn" onClick={handleGoogleLogin} disabled={isLoading || isLocked}>
-                    <Chrome size={18} aria-hidden="true" />
+                    <GoogleIcon size={18} aria-hidden="true" />
                     Sign in with Google
                 </button>
 
