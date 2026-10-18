@@ -64,6 +64,7 @@ const MyAppointments = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const loadRef = useRef(null);
+    const missingStaffNamesRpc = useRef(false);
     
     const [selectedMobileDate, setSelectedMobileDate] = useState(() => new Date().toISOString().split('T')[0]);
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -124,7 +125,7 @@ const MyAppointments = () => {
                 const [prenatalResult, postpartumResult] = await Promise.all([
                     patientService.supabase
                         .from('prenatal_visits')
-                        .select('id, visit_date, visit_number, next_appt_type, status, assigned_staff, clinical_notes, missed_reason, staff_profiles:assigned_staff (id, full_name)')
+                        .select('id, visit_date, visit_number, next_appt_type, status, assigned_staff, performed_by, clinical_notes, advice_given, missed_reason, staff_profiles:assigned_staff (id, full_name), performed_staff:performed_by (id, full_name)')
                         .eq('patient_id', authUser.id)
                         .order('visit_date', { ascending: true }),
                     patientService.supabase
@@ -137,49 +138,60 @@ const MyAppointments = () => {
                 if (postpartumResult.error) throw postpartumResult.error;
                 const prenatalVisits = prenatalResult.data || [];
                 const postpartumVisits = postpartumResult.data || [];
-                const postpartumStaffIds = [...new Set((postpartumVisits || [])
-                    .map(visit => visit.assigned_staff)
-                    .filter(Boolean))];
-                const prenatalStaffIds = [...new Set(prenatalVisits.map(visit => visit.assigned_staff).filter(Boolean))];
-                const staffIds = [...new Set([...postpartumStaffIds, ...prenatalStaffIds])];
+                const staffIds = [...new Set([
+                    ...prenatalVisits.flatMap(visit => [visit.assigned_staff, visit.performed_by]),
+                    ...postpartumVisits.map(visit => visit.assigned_staff)
+                ].filter(Boolean))];
 
-                const postpartumStaffNames = new Map();
+                const staffNamesById = new Map();
                 // 1. Harvest embedded staff profiles
                 (prenatalVisits || []).forEach(v => {
                     const sp = Array.isArray(v.staff_profiles) ? v.staff_profiles[0] : v.staff_profiles;
-                    if (sp?.id && sp?.full_name) postpartumStaffNames.set(sp.id, sp.full_name);
+                    if (sp?.id && sp?.full_name) staffNamesById.set(sp.id, sp.full_name);
+                    const performer = Array.isArray(v.performed_staff) ? v.performed_staff[0] : v.performed_staff;
+                    if (performer?.id && performer?.full_name) staffNamesById.set(performer.id, performer.full_name);
                 });
                 (postpartumVisits || []).forEach(v => {
                     const sp = Array.isArray(v.staff_profiles) ? v.staff_profiles[0] : v.staff_profiles;
-                    if (sp?.id && sp?.full_name) postpartumStaffNames.set(sp.id, sp.full_name);
+                    if (sp?.id && sp?.full_name) staffNamesById.set(sp.id, sp.full_name);
                 });
 
                 // 2. Direct lookup for remaining staff IDs
-                const remainingStaffIds = staffIds.filter(id => !postpartumStaffNames.has(id));
+                const remainingStaffIds = staffIds.filter(id => !staffNamesById.has(id));
                 if (remainingStaffIds.length > 0) {
-                    try {
-                        const { data: postpartumStaff } = await patientService.supabase
-                            .from('staff_profiles')
-                            .select('id, full_name')
-                            .in('id', remainingStaffIds);
-                        (postpartumStaff || []).forEach(staff => {
-                            if (staff.id && staff.full_name) postpartumStaffNames.set(staff.id, staff.full_name);
-                        });
-                    } catch (err) {
-                        console.warn('Direct staff lookup in MyAppointments failed:', err);
+                    const { data: staffProfiles, error: directLookupError } = await patientService.supabase
+                        .from('staff_profiles')
+                        .select('id, full_name')
+                        .in('id', remainingStaffIds);
+                    if (directLookupError) {
+                        console.error('Direct staff lookup in MyAppointments failed:', directLookupError);
                     }
+                    (staffProfiles || []).forEach(staff => {
+                        if (staff.id && staff.full_name) staffNamesById.set(staff.id, staff.full_name);
+                    });
                 }
 
                 // 3. Security definer RPC fallback
-                const stillMissingIds = staffIds.filter(id => !postpartumStaffNames.has(id));
-                if (stillMissingIds.length > 0) {
+                const stillMissingIds = staffIds.filter(id => !staffNamesById.has(id));
+                if (stillMissingIds.length > 0 && !missingStaffNamesRpc.current) {
                     try {
-                        const { data: rpcStaff } = await patientService.supabase
+                        const { data: rpcStaff, error: rpcError } = await patientService.supabase
                             .rpc('get_assigned_staff_names', { p_staff_ids: stillMissingIds });
-                        (rpcStaff || []).forEach(staff => {
-                            if (staff.id && staff.full_name) postpartumStaffNames.set(staff.id, staff.full_name);
-                        });
-                    } catch (_) {}
+                        if (rpcError) {
+                            if (rpcError.code === 'PGRST202') {
+                                missingStaffNamesRpc.current = true;
+                                console.error('Assigned staff names are unavailable because the get_assigned_staff_names Supabase migration has not been applied.', rpcError);
+                            } else {
+                                console.error('Assigned staff name lookup failed:', rpcError);
+                            }
+                        } else {
+                            (rpcStaff || []).forEach(staff => {
+                                if (staff.id && staff.full_name) staffNamesById.set(staff.id, staff.full_name);
+                            });
+                        }
+                    } catch (rpcError) {
+                        console.error('Assigned staff name lookup failed:', rpcError);
+                    }
                 }
                 const pregnancyNumberByVisitId = new Map((patient.pregnancyHistory || [])
                     .flatMap(pregnancy => (pregnancy.visits || []).map(visit => [visit.id, pregnancy.pregnancyNumber])));
@@ -193,8 +205,11 @@ const MyAppointments = () => {
                             ? 'Missed'
                             : visit.status || 'Scheduled',
                         location: sanitizeUUID(patient.station, 'Health Station'),
-                        staffName: postpartumStaffNames.get(visit.assigned_staff) || null,
+                        staffName: staffNamesById.get(visit.assigned_staff)
+                            || staffNamesById.get(visit.performed_by)
+                            || null,
                         notes: visit.missed_reason || visit.clinical_notes || visit.next_appt_type || '',
+                        adviceGiven: visit.advice_given || '',
                         pregnancyNumber: pregnancyNumberByVisitId.get(visit.id),
                         color: 'green'
                     }));
@@ -236,7 +251,7 @@ const MyAppointments = () => {
                             type: visit.visit_type,
                             status,
                             location: sanitizeUUID(patient.station, 'Health Station'),
-                            staffName: postpartumStaffNames.get(visit.assigned_staff) || null,
+                            staffName: staffNamesById.get(visit.assigned_staff) || null,
                             notes: status === 'Completed'
                                 ? t('appt_postpartum_attended')
                                 : status === 'Missed'
@@ -859,6 +874,12 @@ const MyAppointments = () => {
                                     <div style={{marginTop: '8px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0'}}>
                                         <span style={{display: 'block', color: '#64748b', fontSize: '12px', fontWeight: 600, marginBottom: '4px'}}>{t('appt_notes')}</span>
                                         <p style={{margin: 0, fontSize: '13px', color: '#334155', lineHeight: '1.5'}}>{selectedAppt.notes}</p>
+                                    </div>
+                                )}
+                                {selectedAppt.type === 'Prenatal' && (
+                                    <div style={{marginTop: '8px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0'}}>
+                                        <span style={{display: 'block', color: '#64748b', fontSize: '12px', fontWeight: 600, marginBottom: '4px'}}>Advice given</span>
+                                        <p style={{margin: 0, fontSize: '13px', color: '#334155', lineHeight: '1.5'}}>{selectedAppt.adviceGiven || 'No advice recorded'}</p>
                                     </div>
                                 )}
                             </div>
