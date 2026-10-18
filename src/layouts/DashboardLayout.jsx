@@ -9,7 +9,6 @@ import {
 import '../styles/layouts/DashboardLayout.css';
 import logo from '../assets/images/dasmom_logo.png';
 import { AuthContext } from '../context/AuthContext';
-import PatientService from '../services/patientservice';
 import supabase from '../config/supabaseclient';
 import { useModal } from '../context/ModalContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -79,7 +78,6 @@ const DashboardLayout = () => {
     const { user, logout: authLogout } = useContext(AuthContext);
     const { confirm } = useModal();
     const { language, toggleLanguage, t } = useLanguage();
-    const patientService = new PatientService();
 
     // Determine if we are in User View based on path
     const isUserView = location.pathname.startsWith('/mother-home');

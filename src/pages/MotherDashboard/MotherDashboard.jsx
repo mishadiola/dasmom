@@ -10,7 +10,7 @@ import '../../styles/pages/MotherDashboard.css';
 import PregnancyProgressCard from '../../components/MotherDashboard/PregnancyProgressCard';
 import WelcomeMotherModal from '../../components/MotherDashboard/WelcomeMotherModal';
 import AuthService from '../../services/authservice';
-import PatientService from '../../services/patientservice';
+import { getMotherDashboardData } from '../../services/motherDashboardService';
 import supabase from '../../config/supabaseclient';
 import { CHO3_FACEBOOK_URL } from '../../config/appConfig';
 import pregnancySilhouette from '../../assets/images/pregnancy-silhouette.png';
@@ -72,12 +72,27 @@ const MotherDashboard = () => {
 
     useEffect(() => {
         const auth = new AuthService();
-        const patientService = new PatientService();
         let channel = null;
         let welcomeChecked = false;
         let loadedOnce = false;
         let isMounted = true;
         let refreshTimer;
+
+        const checkWelcome = async () => {
+            try {
+                const { data: welcomeData, error: welcomeError } = await supabase.functions.invoke('mother-welcome', {
+                    body: { action: 'claim' },
+                });
+                if (!isMounted) return;
+                if (welcomeError) {
+                    console.error('Error checking first-login welcome status:', welcomeError);
+                } else if (welcomeData?.showWelcome) {
+                    setShowWelcome(true);
+                }
+            } catch (welcomeCatchErr) {
+                console.error('Error checking first-login welcome status:', welcomeCatchErr);
+            }
+        };
 
         const load = async (isSilent = false) => {
             const requestId = ++dashboardRequestId.current;
@@ -93,18 +108,7 @@ const MotherDashboard = () => {
 
                 if (!welcomeChecked && (authUser.role === 'mother' || authUser.role === 'patient')) {
                     welcomeChecked = true;
-                    try {
-                        const { data: welcomeData, error: welcomeError } = await supabase.functions.invoke('mother-welcome', {
-                            body: { action: 'claim' },
-                        });
-                        if (welcomeError) {
-                            console.error('Error checking first-login welcome status:', welcomeError);
-                        } else if (welcomeData?.showWelcome) {
-                            setShowWelcome(true);
-                        }
-                    } catch (welcomeCatchErr) {
-                        console.error('Error checking first-login welcome status:', welcomeCatchErr);
-                    }
+                    void checkWelcome();
                 }
 
                 if (!channel) {
@@ -120,7 +124,7 @@ const MotherDashboard = () => {
                         .subscribe();
                 }
 
-                const patient = await patientService.getPatientById(authUser.id);
+                const patient = await getMotherDashboardData(authUser.id);
                 if (!isMounted || requestId !== dashboardRequestId.current) return;
                 if (patient) {
                     const currentPregnancy = patient.currentPregnancy;
