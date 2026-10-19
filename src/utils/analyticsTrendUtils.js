@@ -32,7 +32,9 @@ export const buildPregnancyRiskTrend = ({
         const pregnancy = latestPregnancyByPatient.get(patient.id);
         if (String(pregnancy?.pregn_postp || '').toLowerCase() !== 'pregnant') return;
 
-        const createdAt = new Date(pregnancy.created_at);
+        const dateStr = pregnancy.created_at || patient.created_at || pregnancy.lmd;
+        if (!dateStr) return;
+        const createdAt = new Date(dateStr);
         if (Number.isNaN(createdAt.getTime())) return;
         const index = weeks.findIndex(week => createdAt >= week.start && createdAt < week.end);
         if (index < 0) return;

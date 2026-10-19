@@ -118,22 +118,30 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    flex-wrap: wrap;
+    gap: 20px;
     box-shadow: 0 6px 20px rgba(185, 129, 138, 0.25);
+    box-sizing: border-box;
+}
+
+.welcome-left {
+    flex: 1 1 auto;
+    min-width: 220px;
 }
 
 .welcome-greeting {
     font-size: 18px;
     font-weight: 700;
     color: #fff;
-    margin: 0 0 4px;
+    margin: 0 0 6px;
+    line-height: 1.3;
 }
 
 .welcome-sub {
     font-size: 13.5px;
-    color: rgba(255, 255, 255, 0.85);
+    color: rgba(255, 255, 255, 0.88);
     margin: 0;
+    line-height: 1.55;
+    max-width: 520px;
 }
 
 .welcome-sub strong {
@@ -146,12 +154,21 @@
     -webkit-backdrop-filter: blur(10px);
     border: 1.5px solid rgba(255, 255, 255, 0.45);
     border-radius: 14px;
-    padding: 14px 18px;
+    padding: 12px 16px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    min-width: 300px;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 16px rgba(0,0,0,0.1);
+    gap: 8px;
+    flex: 0 1 auto;
+    max-width: 540px;
+    min-width: 260px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 4px 16px rgba(0, 0, 0, 0.1);
+    box-sizing: border-box;
+}
+
+@media (min-width: 1600px) {
+    .welcome-actions-panel {
+        max-width: 780px;
+    }
 }
 
 .welcome-actions-title {
@@ -174,7 +191,7 @@
 
 /* Base button inside banner */
 .welcome-actions .quick-btn {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 5px;
     padding: 6px 12px;
@@ -185,11 +202,12 @@
     border: 1.5px solid transparent;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
     white-space: nowrap;
+    box-sizing: border-box;
 }
 
 .welcome-actions .quick-btn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 /* Per-button pastel accent colors */
@@ -228,8 +246,6 @@
     color: #6e4fa0;
     border-color: #d5c8ee;
 }
-
-
 
 /* ══════════════════════════════════════════
    DASHBOARD 2-COLUMN GRID
@@ -1435,6 +1451,26 @@
     }
 }
 
+@media (max-width: 768px) {
+    .welcome-banner {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+        padding: 18px 20px;
+    }
+
+    .welcome-left {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .welcome-actions-panel {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+    }
+}
+
 @media (max-width: 700px) {
     .stats-grid {
         grid-template-columns: repeat(2, 1fr);
@@ -1456,12 +1492,12 @@
 
 @media (max-width: 480px) {
     .welcome-banner {
-        flex-direction: column;
-        align-items: flex-start;
+        padding: 16px;
     }
 
-    .welcome-actions-panel {
-        min-width: 100%;
+    .welcome-actions .quick-btn {
+        flex: 1 1 calc(50% - 6px);
+        justify-content: center;
     }
 
     .stats-grid {

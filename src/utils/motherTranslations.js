@@ -16,7 +16,7 @@ export const translations = {
         nav_my_vitals: 'My Vitals',
         nav_appointments: 'Appointments',
         nav_pregnancy_tips: 'Pregnancy Tips',
-        nav_vaccination_info: 'Vaccination Info',
+        nav_vaccination_info: 'Vaccines & Supplements',
         nav_delivery_info: 'Pregnancy & Delivery Info',
         nav_logout: 'Logout',
 
@@ -56,7 +56,7 @@ export const translations = {
         dash_loading: 'Loading your dashboard...',
         appt_loading: 'Loading your appointments...',
         vitals_loading: 'Loading your health records...',
-        vac_loading: 'Loading vaccination records...',
+        vac_loading: 'Loading vaccines and supplements...',
         dash_weeks_pregnant: "You're {weeks} weeks pregnant.",
         dash_baby_expected: 'Your baby is expected in {days} days.',
         dash_next_appointment: 'Next Appointment',
@@ -166,10 +166,10 @@ export const translations = {
         vitals_diastolic: 'Diastolic',
 
         // ═══════════════════════════════════════════════
-        // VACCINATIONS
+        // VACCINES & SUPPLEMENTS
         // ═══════════════════════════════════════════════
-        vac_title: 'Vaccination Info',
-        vac_subtitle: "Keep track of your and your baby's vaccinations to ensure safety and healthy development",
+        vac_title: 'Vaccines & Supplements',
+        vac_subtitle: "Stay informed about your and your baby's vaccinations and supplements for better maternal and child health.",
         vac_print: 'Print',
         vac_download: 'Download',
         vac_progress: 'Overall Progress',
@@ -518,7 +518,7 @@ export const translations = {
         nav_my_vitals: 'Aking Vitals',
         nav_appointments: 'Mga Appointment',
         nav_pregnancy_tips: 'Mga Tip sa Pagbubuntis',
-        nav_vaccination_info: 'Impormasyon sa Bakuna',
+        nav_vaccination_info: 'Mga Bakuna at Suplemento',
         nav_delivery_info: 'Pagbubuntis at Panganganak',
         nav_logout: 'Mag-logout',
 
@@ -558,7 +558,7 @@ export const translations = {
         dash_loading: 'Naglo-load ng iyong dashboard...',
         appt_loading: 'Naglo-load ng iyong mga appointment...',
         vitals_loading: 'Naglo-load ng iyong mga tala sa kalusugan...',
-        vac_loading: 'Naglo-load ng mga rekord ng bakuna...',
+        vac_loading: 'Kinakarga ang mga bakuna at suplemento...',
         dash_weeks_pregnant: '{weeks} linggo ka nang buntis.',
         dash_baby_expected: 'Inaasahan ang iyong baby sa loob ng {days} araw.',
         dash_next_appointment: 'Susunod na Appointment',
@@ -668,10 +668,10 @@ export const translations = {
         vitals_diastolic: 'Diastolic',
 
         // ═══════════════════════════════════════════════
-        // VACCINATIONS
+        // VACCINES & SUPPLEMENTS
         // ═══════════════════════════════════════════════
-        vac_title: 'Impormasyon sa Bakuna',
-        vac_subtitle: 'Subaybayan ang iyong mga bakuna at ng iyong baby upang masiguro ang kaligtasan at malusog na pag-unlad',
+        vac_title: 'Mga Bakuna at Suplemento',
+        vac_subtitle: 'Manatiling may alam tungkol sa mga bakuna at suplemento para sa iyo at sa iyong baby para sa mas mabuting kalusugan ng ina at anak.',
         vac_print: 'I-print',
         vac_download: 'I-download',
         vac_progress: 'Kabuuang Progreso',

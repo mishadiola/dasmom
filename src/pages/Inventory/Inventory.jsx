@@ -29,7 +29,8 @@ import {
   Calendar,
   Send,
   Hash,
-  Download
+  Download,
+  Building2
 } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
 import { useRolePermissions } from '../../context/RolePermissionContext';
@@ -215,18 +216,112 @@ const Inventory = () => {
     remarks: '',
   });
 
+  // Preferred station ordering: 1. City Health Office 3, 2. Dasma 1, 3. Dasma 3, 4. Dasma 4, 5. Salawag Proper, 6. Armstrong, 7. San Marino
+  const PREFERRED_STATION_RANKS = [
+    (s) => s.includes('city health') || s.includes('cho 3') || s.includes('cho iii') || s === 'cho3' || s === 'cho',
+    (s) => (/\bdasma\s*(1|i)\b/i.test(s) && !/\bdasma\s*(1[0-9]|iv|ix)\b/i.test(s)) || s === 'dasma-1' || s === 'dasma1',
+    (s) => /\bdasma\s*(3|iii)\b/i.test(s) || s === 'dasma-3' || s === 'dasma3',
+    (s) => /\bdasma\s*(4|iv)\b/i.test(s) || s === 'dasma-4' || s === 'dasma4',
+    (s) => s.includes('salawag'),
+    (s) => s.includes('armstrong'),
+    (s) => s.includes('san marino'),
+  ];
+
+  const getStationOrderRank = (station) => {
+    const norm = String(station || '').toLowerCase().trim();
+    for (let i = 0; i < PREFERRED_STATION_RANKS.length; i++) {
+      if (PREFERRED_STATION_RANKS[i](norm)) return i;
+    }
+    return 999;
+  };
+
+  const isSameStationName = (stA, stB) => {
+    if (!stA || !stB) return false;
+    const a = String(stA).trim().toLowerCase();
+    const b = String(stB).trim().toLowerCase();
+    if (a === b) return true;
+
+    const normalize = (s) => (
+      s
+        .replace(/\bcity\s+health\s+office\s+(3|iii)\b/g, 'cho3')
+        .replace(/\bcho\s*(3|iii)\b/g, 'cho3')
+        .replace(/\bdasma\s*(1|i)\b/g, 'dasma1')
+        .replace(/\bdasma\s*(3|iii)\b/g, 'dasma3')
+        .replace(/\bdasma\s*(4|iv)\b/g, 'dasma4')
+        .replace(/\bsalawag\s+proper\b/g, 'salawag')
+        .replace(/[\s\-_]/g, '')
+        .replace(/healthstation/g, '')
+        .replace(/station/g, '')
+    );
+
+    return normalize(a) === normalize(b);
+  };
+
+  // Station Distribution & station-based layout states
+  const [selectedStation, setSelectedStation] = useState(() => (
+    isStationStaff && assignedStation ? assignedStation : 'City Health Office 3'
+  ));
+  const [selectedStationTab, setSelectedStationTab] = useState('inventory'); // 'inventory' | 'history'
+  const [stationsDirectory, setStationsDirectory] = useState([]);
+  const [stationInvSearch, setStationInvSearch] = useState('');
+  const [stationInvTypeFilter, setStationInvTypeFilter] = useState('All');
+
   // History section filters state
   const [historySearch, setHistorySearch] = useState('');
   const [historyStationFilter, setHistoryStationFilter] = useState(() => (
-    isStationStaff && assignedStation ? assignedStation : 'All'
+    isStationStaff && assignedStation ? assignedStation : 'City Health Office 3'
   ));
   const userHasChangedHistoryStationRef = useRef(false);
 
-  useEffect(() => {
-    if (!userHasChangedHistoryStationRef.current && isStationStaff && assignedStation) {
-      setHistoryStationFilter(prev => (prev !== 'All' ? prev : assignedStation));
+  // Authorized stations dynamically gathered from system stations + snapshot/history stations,
+  // ordered strictly in the requested sequence:
+  // 1. City Health Office 3, 2. Dasma 1, 3. Dasma 3, 4. Dasma 4, 5. Salawag Proper, 6. Armstrong, 7. San Marino
+  const authorizedStations = useMemo(() => {
+    const baseList = (canViewOtherStations ? availableStations : visibleStations) || [];
+    const set = new Set(baseList.filter(Boolean));
+    if (canViewOtherStations) {
+      (stationCurrentInventory || []).forEach(r => { if (r.station) set.add(r.station); });
+      (distributionHistory || []).forEach(r => { if (r.destination_station) set.add(r.destination_station); });
     }
-  }, [isStationStaff, assignedStation]);
+    const list = Array.from(set);
+    return list.sort((a, b) => {
+      const rankA = getStationOrderRank(a);
+      const rankB = getStationOrderRank(b);
+      if (rankA !== rankB) return rankA - rankB;
+      return String(a || '').localeCompare(String(b || ''));
+    });
+  }, [canViewOtherStations, availableStations, visibleStations, stationCurrentInventory, distributionHistory]);
+
+  // Keep selectedStation in sync with authorized stations:
+  // Default to assignedStation for Station Staff, or City Health Office 3 for Admin and CHO Personnel
+  useEffect(() => {
+    if (authorizedStations.length > 0) {
+      const isStaffAssigned = isStationStaff && assignedStation && authorizedStations.some(s => isSameStationName(s, assignedStation) || matchStation(s, assignedStation));
+      const targetDefault = isStaffAssigned
+        ? (authorizedStations.find(s => isSameStationName(s, assignedStation) || matchStation(s, assignedStation)) || assignedStation)
+        : (authorizedStations.find(s => {
+            const norm = String(s || '').toLowerCase().trim();
+            return norm.includes('city health') || norm.includes('cho 3') || norm.includes('cho iii') || norm === 'cho';
+          }) || authorizedStations[0]);
+
+      if (!userHasChangedHistoryStationRef.current) {
+        if (selectedStation !== targetDefault) {
+          setSelectedStation(targetDefault);
+          setHistoryStationFilter(targetDefault);
+        }
+      } else if (!selectedStation || !authorizedStations.some(s => isSameStationName(s, selectedStation) || matchStation(s, selectedStation))) {
+        setSelectedStation(targetDefault);
+        setHistoryStationFilter(targetDefault);
+      }
+    }
+  }, [authorizedStations, isStationStaff, assignedStation, selectedStation, matchStation]);
+
+  const handleSelectStation = (station) => {
+    userHasChangedHistoryStationRef.current = true;
+    setSelectedStation(station);
+    setHistoryStationFilter(station);
+    setDistPage(1);
+  };
 
   const [historyTypeFilter, setHistoryTypeFilter] = useState('All');
   const [historyDateFilter, setHistoryDateFilter] = useState('all');
@@ -238,16 +333,33 @@ const Inventory = () => {
   // Expandable rows for station inventory
   const [expandedStationRows, setExpandedStationRows] = useState({});
 
-  // Station inventory now directly uses fetched current stock data, not distribution history
-  // Group by station + item_name + item_type, with batch/brand variants as children
-  const stationInventory = useMemo(() => {
-    if (!stationCurrentInventory || stationCurrentInventory.length === 0) return [];
+  // Resolve database station object by ID / name relationship
+  const selectedStationObj = useMemo(() => {
+    if (!selectedStation) return null;
+    return stationsDirectory.find(s => s.name === selectedStation || isSameStationName(s.name, selectedStation) || matchStation(s.name, selectedStation)) || null;
+  }, [stationsDirectory, selectedStation, matchStation]);
+  const selectedStationId = selectedStationObj?.id || null;
+
+  // Station inventory for the selected station
+  // Group by item_type + item_name, with batch/brand variants as children
+  const selectedStationInventory = useMemo(() => {
+    if (!selectedStation || !stationCurrentInventory || stationCurrentInventory.length === 0) return [];
 
     const grouped = {};
 
     stationCurrentInventory.forEach(row => {
-      if (historyStationFilter && historyStationFilter !== 'All' && !matchStation(row.station, historyStationFilter)) {
-        return;
+      const isStationMatch = (selectedStationId && row.station_id && row.station_id === selectedStationId) ||
+                             (selectedStationObj && row.station_name && (isSameStationName(row.station_name, selectedStationObj.name) || matchStation(row.station_name, selectedStationObj.name))) ||
+                             isSameStationName(row.station, selectedStation) ||
+                             matchStation(row.station, selectedStation);
+      if (!isStationMatch) return;
+      if (stationInvTypeFilter !== 'All' && row.item_type !== stationInvTypeFilter) return;
+      if (stationInvSearch) {
+        const s = stationInvSearch.toLowerCase();
+        const matches = (row.item_name || '').toLowerCase().includes(s) ||
+                        (row.brand || '').toLowerCase().includes(s) ||
+                        (row.batch || '').toLowerCase().includes(s);
+        if (!matches) return;
       }
 
       const groupKey = `${row.station || 'Unknown'}||${row.item_type || 'Unknown'}||${row.item_name || 'Unknown'}`;
@@ -255,7 +367,7 @@ const Inventory = () => {
       if (!grouped[groupKey]) {
         grouped[groupKey] = {
           groupKey,
-          station: row.station || 'Unknown',
+          station: row.station || selectedStation,
           item_name: row.item_name || 'Unknown',
           item_type: row.item_type || 'Unknown',
           unit: row.unit || (row.item_type === 'Vaccine' ? 'vials' : 'pcs'),
@@ -278,14 +390,13 @@ const Inventory = () => {
     });
 
     return Object.values(grouped).sort((a, b) => {
-      const stationCmp = (a.station || '').localeCompare(b.station || '');
-      if (stationCmp !== 0) return stationCmp;
       const typeCmp = (a.item_type || '').localeCompare(b.item_type || '');
       if (typeCmp !== 0) return typeCmp;
       return (a.item_name || '').localeCompare(b.item_name || '');
     });
-  }, [stationCurrentInventory, historyStationFilter, matchStation]);
+  }, [stationCurrentInventory, selectedStation, selectedStationId, selectedStationObj, stationInvTypeFilter, stationInvSearch, matchStation]);
 
+  const stationInventory = selectedStationInventory;
   // Handle auto-populating user info when context resolves
   useEffect(() => {
     if (user) {
@@ -400,20 +511,25 @@ const Inventory = () => {
         }
         setError(null);
         try {
-          const [vaxData, suppData, stationsData] = await Promise.all([
+          const [vaxData, suppData, stationsData, stationsRaw] = await Promise.all([
             inventoryService.getVaccineInventory({ includeMainInventory: canViewMainInventory }),
             inventoryService.getSupplementInventory({ includeMainInventory: canViewMainInventory }),
-            patientService.getAvailableStations()
+            patientService.getAvailableStations(),
+            inventoryService.supabase.from('stations').select('id, station_name').order('station_name')
           ]);
 
+          if (stationsRaw?.data) {
+            setStationsDirectory(stationsRaw.data.map(s => ({ id: s.id, name: s.station_name })));
+          }
+
           setAvailableStations(stationsData && stationsData.length > 0 ? stationsData : [
-            'Salawag',
-            'Dasma I',
-            'Dasma 2',
+            'City Health Office 3',
+            'Dasma 1',
             'Dasma 3',
             'Dasma 4',
+            'Salawag Proper',
             'Armstrong',
-            'City Health Office 3'
+            'San Marino'
           ]);
 
           await loadPendingVaccinations();
@@ -1479,46 +1595,61 @@ const Inventory = () => {
     }
   };
 
-  // Distribution history filtering + pagination
-  const filteredDistHistory = distributionHistory.filter(rec => {
-    const search = historySearch.toLowerCase();
-    const matchesSearch = !search || rec.item_name?.toLowerCase().includes(search) || rec.destination_station?.toLowerCase().includes(search) || rec.released_by?.toLowerCase().includes(search);
-    const matchesStation = historyStationFilter === 'All' || matchStation(rec.destination_station, historyStationFilter);
-    const matchesType = historyTypeFilter === 'All' || rec.item_type === historyTypeFilter;
-    
-    let matchesDate = true;
-    if (historyDateFilter !== 'all') {
-      const dDate = rec.distribution_date ? new Date(rec.distribution_date) : null;
-      if (!dDate || isNaN(dDate.getTime())) {
-        matchesDate = false;
-      } else {
+  // Distribution history filtering for selected station + pagination
+  const filteredDistHistory = useMemo(() => {
+    if (!selectedStation || !distributionHistory || distributionHistory.length === 0) return [];
+    return distributionHistory.filter(rec => {
+      const isStationMatch = (selectedStationId && rec.station_id && rec.station_id === selectedStationId) ||
+                             (selectedStationObj && rec.destination_station && (isSameStationName(rec.destination_station, selectedStationObj.name) || matchStation(rec.destination_station, selectedStationObj.name))) ||
+                             isSameStationName(rec.destination_station, selectedStation) ||
+                             matchStation(rec.destination_station, selectedStation);
+      if (!isStationMatch) return false;
+      if (historySearch) {
+        const s = historySearch.toLowerCase();
+        const matches = (rec.item_name || '').toLowerCase().includes(s) ||
+                        (rec.released_by || '').toLowerCase().includes(s) ||
+                        (rec.remarks || '').toLowerCase().includes(s) ||
+                        (rec.brand || '').toLowerCase().includes(s) ||
+                        (rec.batch || '').toLowerCase().includes(s);
+        if (!matches) return false;
+      }
+      if (historyTypeFilter !== 'All' && rec.item_type !== historyTypeFilter) return false;
+      if (historyDateFilter !== 'all') {
+        const dDate = rec.distribution_date ? new Date(rec.distribution_date) : null;
+        if (!dDate || isNaN(dDate.getTime())) return false;
         const now = new Date();
         if (historyDateFilter === 'this_month') {
-          matchesDate = dDate.getMonth() === now.getMonth() && dDate.getFullYear() === now.getFullYear();
+          if (dDate.getMonth() !== now.getMonth() || dDate.getFullYear() !== now.getFullYear()) return false;
         } else if (historyDateFilter === 'this_year') {
-          matchesDate = dDate.getFullYear() === now.getFullYear();
+          if (dDate.getFullYear() !== now.getFullYear()) return false;
         } else if (historyDateFilter === 'custom' && historyCustomDateFrom && historyCustomDateTo) {
           const from = new Date(`${historyCustomDateFrom}T00:00:00`);
           const to = new Date(`${historyCustomDateTo}T23:59:59.999`);
-          matchesDate = dDate >= from && dDate <= to;
+          if (dDate < from || dDate > to) return false;
         }
       }
-    }
-    
-    return matchesSearch && matchesStation && matchesType && matchesDate;
-  });
-  const distTotalPages = Math.ceil(filteredDistHistory.length / distItemsPerPage);
+      return true;
+    });
+  }, [distributionHistory, selectedStation, selectedStationId, selectedStationObj, historySearch, historyTypeFilter, historyDateFilter, historyCustomDateFrom, historyCustomDateTo, matchStation]);
+
+  const distTotalPages = Math.ceil(filteredDistHistory.length / distItemsPerPage) || 1;
   const distStartIndex = (distPage - 1) * distItemsPerPage;
   const paginatedDistHistory = filteredDistHistory.slice(distStartIndex, distStartIndex + distItemsPerPage);
 
-  // Distribution summary stats
+  // Distribution summary stats scoped to selected station
   const distSummary = useMemo(() => {
     const now = new Date();
     const thisMonth = now.getMonth();
     const thisYear = now.getFullYear();
 
-    const scopedHistory = (historyStationFilter && historyStationFilter !== 'All')
-      ? distributionHistory.filter(r => matchStation(r.destination_station, historyStationFilter))
+    const targetStation = selectedStation || historyStationFilter;
+    const scopedHistory = (targetStation && targetStation !== 'All')
+      ? distributionHistory.filter(r => (
+          (selectedStationId && r.station_id && r.station_id === selectedStationId) ||
+          (selectedStationObj && r.destination_station && (isSameStationName(r.destination_station, selectedStationObj.name) || matchStation(r.destination_station, selectedStationObj.name))) ||
+          isSameStationName(r.destination_station, targetStation) ||
+          matchStation(r.destination_station, targetStation)
+        ))
       : distributionHistory;
 
     const totalDistributed = scopedHistory.reduce((sum, rec) => sum + (Number(rec.quantity) || 0), 0);
@@ -1530,9 +1661,18 @@ const Inventory = () => {
     const stationsSupplied = [...new Set(scopedHistory.map(r => r.destination_station).filter(Boolean))].length;
     const itemsDistributed = [...new Set(scopedHistory.map(r => r.item_name).filter(Boolean))].length;
 
-    return { totalDistributed, distributionsThisMonth, stationsSupplied, itemsDistributed };
-  }, [distributionHistory, historyStationFilter, matchStation]);
+    const scopedInventory = (targetStation && targetStation !== 'All')
+      ? stationCurrentInventory.filter(r => (
+          (selectedStationId && r.station_id && r.station_id === selectedStationId) ||
+          (selectedStationObj && r.station_name && (isSameStationName(r.station_name, selectedStationObj.name) || matchStation(r.station_name, selectedStationObj.name))) ||
+          isSameStationName(r.station, targetStation) ||
+          matchStation(r.station, targetStation)
+        ))
+      : stationCurrentInventory;
+    const currentStockUnits = scopedInventory.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
 
+    return { totalDistributed, distributionsThisMonth, stationsSupplied, itemsDistributed, currentStockUnits };
+  }, [distributionHistory, stationCurrentInventory, selectedStation, selectedStationId, selectedStationObj, historyStationFilter, matchStation]);
   if (loading) {
     return (
       <StaffPageLoader 
@@ -2340,7 +2480,7 @@ const Inventory = () => {
                   item_type: 'vaccine',
                   item_id: '',
                   quantity: '',
-                  destination_station: '',
+                  destination_station: selectedStation || '',
                   distribution_date: new Date().toISOString().split('T')[0],
                   released_by: user?.fullName || user?.email?.split('@')[0] || '',
                   remarks: '',
@@ -2363,7 +2503,7 @@ const Inventory = () => {
             </div>
           </div>
           <div className="stat-value">{distSummary.totalDistributed}</div>
-          <div className="stat-label">Total Distributed</div>
+          <div className="stat-label">Total Distributed ({selectedStation || 'Station'})</div>
         </div>
         <div className="stat-card stat-card--sage">
           <div className="stat-top">
@@ -2377,328 +2517,465 @@ const Inventory = () => {
         <div className="stat-card stat-card--orange">
           <div className="stat-top">
             <div className="stat-icon stat-icon--orange">
-              <MapPin size={20} />
+              <Package size={20} />
             </div>
           </div>
-          <div className="stat-value">{distSummary.stationsSupplied}</div>
-          <div className="stat-label">Stations Supplied</div>
+          <div className="stat-value">{distSummary.currentStockUnits}</div>
+          <div className="stat-label">Current Stock in Station</div>
         </div>
         <div className="stat-card stat-card--yellow">
           <div className="stat-top">
             <div className="stat-icon stat-icon--yellow">
-              <Package size={20} />
+              <ClipboardList size={20} />
             </div>
           </div>
           <div className="stat-value">{distSummary.itemsDistributed}</div>
-          <div className="stat-label">Items Distributed</div>
+          <div className="stat-label">Distinct Items Distributed</div>
         </div>
       </div>
 
-      {/* ── DISTRIBUTION SEARCH & FILTERS ── */}
-      <div className="shared-controls-card">
-        <div className="shared-search-wrap">
-          <Search size={16} className="shared-search-icon" />
-          <input
-            type="text"
-            className="shared-search-input"
-            placeholder="Search item or station..."
-            value={historySearch}
-            onChange={e => setHistorySearch(e.target.value)}
-          />
-        </div>
-        <div className="shared-filters-row" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <span className="filters-label"><Filter size={13} /> Filters:</span>
-          <select
-            value={canViewOtherStations ? historyStationFilter : (visibleStations.includes(historyStationFilter) ? historyStationFilter : (visibleStations[0] || 'All'))}
-            onChange={e => {
-              userHasChangedHistoryStationRef.current = true;
-              setHistoryStationFilter(e.target.value);
-            }}
-            disabled={!canViewOtherStations && visibleStations.length <= 1}
-            className="filter-btn"
-            style={{ cursor: !canViewOtherStations && visibleStations.length <= 1 ? 'not-allowed' : 'pointer' }}
-          >
-            {canViewOtherStations ? <option value="All">All Stations</option> : null}
-            {(canViewOtherStations ? availableStations : visibleStations).map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <select
-            value={historyTypeFilter}
-            onChange={e => setHistoryTypeFilter(e.target.value)}
-            className="filter-btn"
-            style={{ cursor: 'pointer' }}
-          >
-            <option value="All">All Item Types</option>
-            <option value="Vaccine">Vaccines</option>
-            <option value="Supplement">Supplements</option>
-          </select>
-          
-          {/* Date Filter */}
-          <div className="filter-dropdown-container" style={{ position: 'relative' }}>
-            <button 
-                className={`filter-btn ${historyDateFilter !== 'all' ? 'active-filter' : ''}`}
-                onClick={() => setActivePopover(activePopover === 'distDate' ? null : 'distDate')}
-                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+      {/* ── STATION SELECTOR ── */}
+      <div className="station-selector-card">
+        <div className="station-selector-header">
+          <label htmlFor="station-distribution-select" className="station-selector-title">
+            <MapPin size={16} /> Select Health Station
+          </label>
+          <div className="station-selector-dropdown-wrap">
+            <select
+              id="station-distribution-select"
+              value={selectedStation}
+              onChange={e => handleSelectStation(e.target.value)}
+              className="station-selector-dropdown"
+              disabled={authorizedStations.length <= 1 && isStationStaff && !canViewOtherStations}
             >
-                <Calendar size={14} className="filter-btn-icon" /> 
-                <span>Date: {
-                    historyDateFilter === 'all' ? 'All Time' :
-                    historyDateFilter === 'this_month' ? 'This Month' :
-                    historyDateFilter === 'this_year' ? 'This Year' :
-                    'Custom'
-                }</span>
-                <ChevronDown size={14} className="filter-btn-icon" />
-            </button>
-            
-            {activePopover === 'distDate' && (
-                <div className="filter-popover" style={{ minWidth: '240px' }}>
-                    <div className="popover-title">Distribution Date</div>
-                    <div className="popover-options">
-                        <button className={`popover-opt-btn ${historyDateFilter === 'all' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('all'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); }}>All Time</button>
-                        <button className={`popover-opt-btn ${historyDateFilter === 'this_month' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('this_month'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); }}>This Month</button>
-                        <button className={`popover-opt-btn ${historyDateFilter === 'this_year' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('this_year'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); }}>This Year</button>
-                        <button className={`popover-opt-btn ${historyDateFilter === 'custom' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('custom'); setHistoryDateFilterError(''); }}>Custom Range</button>
-                    </div>
-                    {historyDateFilter === 'custom' && (
-                        <div className="date-custom-range-section">
-                            <div className="date-custom-range-fields">
-                                <div className="date-custom-field">
-                                    <label>From</label>
-                                    <input type="date" value={historyCustomDateFrom} onChange={e => { setHistoryCustomDateFrom(e.target.value); setHistoryDateFilterError(''); }} />
-                                </div>
-                                <div className="date-custom-field">
-                                    <label>To</label>
-                                    <input type="date" value={historyCustomDateTo} min={historyCustomDateFrom} onChange={e => { setHistoryCustomDateTo(e.target.value); setHistoryDateFilterError(''); }} />
-                                </div>
-                            </div>
-                            {historyDateFilterError && (
-                                <div className="date-filter-error">
-                                    <AlertTriangle size={12} /> {historyDateFilterError}
-                                </div>
-                            )}
-                            <div className="date-custom-actions">
-                                <button className="date-custom-cancel" onClick={() => { setHistoryDateFilter('all'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); }}>Cancel</button>
-                                <button className="date-custom-apply" onClick={() => {
-                                    if (!historyCustomDateFrom || !historyCustomDateTo) {
-                                        setHistoryDateFilterError('Both dates are required.');
-                                        return;
-                                    }
-                                    if (new Date(historyCustomDateFrom) > new Date(historyCustomDateTo)) {
-                                        setHistoryDateFilterError('From date cannot be later than To.');
-                                        return;
-                                    }
-                                    setHistoryDateFilterError('');
-                                    setActivePopover(null);
-                                }}>Apply</button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
+              {authorizedStations.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* ── SELECTED STATION WORKSPACE ── */}
+      <div className="station-workspace-card">
+        {/* Workspace Header */}
+        <div className="station-workspace-header">
+          <div className="station-workspace-info-row">
+            <div className="station-workspace-title-group">
+              <div className="station-workspace-icon-box">
+                <Building2 size={24} />
+              </div>
+              <div className="station-workspace-title-box">
+                <h2>
+                  {selectedStation || 'Health Station'}
+                  {isStationStaff && assignedStation && matchStation(selectedStation, assignedStation) ? (
+                    <span className="station-workspace-tag">Assigned Station</span>
+                  ) : null}
+                </h2>
+                <p>
+                  Inventory stock and distribution transaction logs for {selectedStation || 'the selected station'}.
+                </p>
+              </div>
+            </div>
+
+            <div className="station-header-metrics">
+              <div className="station-metric-pill">
+                <span>Inventory Items:</span>
+                <strong>{selectedStationInventory.length}</strong>
+              </div>
+              <div className="station-metric-pill">
+                <span>Total Distributions:</span>
+                <strong>{filteredDistHistory.length}</strong>
+              </div>
+            </div>
           </div>
 
-          {(historySearch || historyStationFilter !== (isStationStaff && !canViewOtherStations ? (assignedStation || 'All') : 'All') || historyTypeFilter !== 'All' || historyDateFilter !== 'all') && (
-            <button className="clear-filters-btn" onClick={() => {
-              setHistorySearch('');
-              setHistoryStationFilter(isStationStaff && !canViewOtherStations ? (assignedStation || 'All') : 'All');
-              setHistoryTypeFilter('All');
-              setHistoryDateFilter('all');
-              setHistoryCustomDateFrom('');
-              setHistoryCustomDateTo('');
-              setHistoryDateFilterError('');
-            }}>Clear All</button>
-          )}
+          {/* Sub-Tabs: Station Inventory | Distribution History */}
+          <div className="station-subtabs-nav" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selectedStationTab === 'inventory'}
+              className={`station-subtab-btn ${selectedStationTab === 'inventory' ? 'active' : ''}`}
+              onClick={() => setSelectedStationTab('inventory')}
+            >
+              <Package size={16} />
+              <span>Station Inventory</span>
+              <span className="station-subtab-badge">
+                {selectedStationInventory.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selectedStationTab === 'history'}
+              className={`station-subtab-btn ${selectedStationTab === 'history' ? 'active' : ''}`}
+              onClick={() => setSelectedStationTab('history')}
+            >
+              <ClipboardList size={16} />
+              <span>Distribution History</span>
+              <span className="station-subtab-badge">
+                {filteredDistHistory.length}
+              </span>
+            </button>
+          </div>
         </div>
-      </div>
 
-    {/* ── STATION INVENTORY ── */}
-    <div className="inv-card" style={{ borderRadius: '14px', overflow: 'hidden', border: '1px solid #e9ecef' }}>
-      <div className="inv-card-head" style={{ padding: '18px 24px', borderBottom: '1px solid #f0f2f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <h2 style={{ fontSize: '16px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Package size={17} /> Station Inventory
-          </h2>
-          <p style={{ fontSize: '13px', color: '#888', margin: '4px 0 0' }}>Current stock held by each registered health station.</p>
-        </div>
-        <span style={{ fontSize: '13px', color: '#555' }}>{stationInventory.length} entries</span>
-      </div>
-      <div style={{ overflowX: 'auto' }}>
-        <table className="inv-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Expand</th>
-              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Station</th>
-              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Item</th>
-              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Type</th>
-              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Total Qty</th>
-              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Unit</th>
-              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Brand</th>
-              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Expiration Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {stationInventory.length > 0 ? stationInventory.map((group, groupIndex) => {
-              const isExpanded = expandedStationRows[group.groupKey];
-              return (
-                <React.Fragment key={group.groupKey}>
-                  {/* Parent Row */}
-                  <tr style={{ borderBottom: '1px solid #f0f2f5', backgroundColor: '#fafbfc' }}>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', textAlign: 'center' }}>
-                      <button
-                        onClick={() => setExpandedStationRows(prev => ({
-                          ...prev,
-                          [group.groupKey]: !prev[group.groupKey]
-                        }))}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                          padding: '0',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                      >
-                        <ChevronDown
-                          size={16}
-                          style={{
-                            transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
-                            transition: 'transform 0.2s',
-                            color: '#666'
-                          }}
-                        />
-                      </button>
-                    </td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', fontWeight: '600' }}>{group.station}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', fontWeight: '600' }}>{group.item_name}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{group.item_type}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '600', textAlign: 'center', color: '#2c5282' }}>{group.totalQuantity}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{group.unit}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>{group.brand || 'N/A'}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>{group.expiration_date ? formatDate(group.expiration_date) : 'N/A'}</td>
+        {/* ── TAB 1: STATION INVENTORY ── */}
+        {selectedStationTab === 'inventory' && (
+          <div className="station-tab-pane">
+            {/* Filter Bar for Station Inventory */}
+            <div className="station-filter-bar">
+              <div className="station-filter-search">
+                <Search size={15} className="station-filter-search-icon" />
+                <input
+                  type="text"
+                  placeholder={`Search ${selectedStation || 'station'} inventory...`}
+                  value={stationInvSearch}
+                  onChange={e => setStationInvSearch(e.target.value)}
+                  className="station-filter-search-input"
+                />
+              </div>
+              <select
+                value={stationInvTypeFilter}
+                onChange={e => setStationInvTypeFilter(e.target.value)}
+                className="station-filter-select"
+              >
+                <option value="All">All Item Types</option>
+                <option value="Vaccine">Vaccines</option>
+                <option value="Supplement">Supplements</option>
+              </select>
+              {(stationInvSearch || stationInvTypeFilter !== 'All') && (
+                <button
+                  type="button"
+                  className="clear-filters-btn"
+                  onClick={() => {
+                    setStationInvSearch('');
+                    setStationInvTypeFilter('All');
+                  }}
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
+
+            {/* Station Inventory Table */}
+            <div style={{ overflowX: 'auto' }}>
+              <table className="inv-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: '56px', padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Expand</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Item</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Type</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Total Quantity</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Unit</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Brand</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Expiration Date</th>
                   </tr>
+                </thead>
+                <tbody>
+                  {selectedStationInventory.length > 0 ? selectedStationInventory.map((group) => {
+                    const isExpanded = expandedStationRows[group.groupKey];
+                    return (
+                      <React.Fragment key={group.groupKey}>
+                        {/* Parent Row */}
+                        <tr style={{ borderBottom: '1px solid #f0f2f5', backgroundColor: '#fafbfc' }}>
+                          <td style={{ padding: '12px 16px', fontSize: '13px', textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => setExpandedStationRows(prev => ({
+                                ...prev,
+                                [group.groupKey]: !prev[group.groupKey]
+                              }))}
+                              aria-label={isExpanded ? 'Collapse row' : 'Expand row'}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: '0',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              <ChevronDown
+                                size={16}
+                                style={{
+                                  transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+                                  transition: 'transform 0.2s',
+                                  color: '#666'
+                                }}
+                              />
+                            </button>
+                          </td>
+                          <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', fontWeight: '600' }}>
+                            {group.item_name}
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '3px 10px',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: '600',
+                              background: group.item_type === 'Vaccine' ? 'rgba(91,174,208,0.12)' : 'rgba(147,111,199,0.12)',
+                              color: group.item_type === 'Vaccine' ? '#3a8db5' : '#7a4fa8'
+                            }}>
+                              {group.item_type === 'Vaccine' ? <Syringe size={11} /> : <Pill size={11} />}
+                              {group.item_type}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '700', textAlign: 'center', color: '#2c5282' }}>
+                            {group.totalQuantity}
+                          </td>
+                          <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>
+                            {group.unit}
+                          </td>
+                          <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>
+                            {group.brand || 'N/A'}
+                          </td>
+                          <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>
+                            {group.expiration_date ? formatDate(group.expiration_date) : 'N/A'}
+                          </td>
+                        </tr>
 
-                  {/* Child Rows (Batch Variants) */}
-                  {isExpanded && group.variants.map((variant, variantIndex) => (
-                    <tr key={`${group.groupKey}-variant-${variantIndex}`} style={{ borderBottom: '1px solid #f0f2f5', backgroundColor: '#fff9f9' }}>
-                      <td style={{ padding: '8px 16px' }}></td>
-                      <td style={{ padding: '8px 16px', fontSize: '12px', color: '#666', fontStyle: 'italic' }}></td>
-                      <td style={{ padding: '8px 16px', fontSize: '12px', color: '#666' }}>
-                        Batch: <strong>{variant.batch}</strong>
-                      </td>
-                      <td style={{ padding: '8px 16px', fontSize: '12px', color: '#666' }}></td>
-                      <td style={{ padding: '8px 16px', fontSize: '12px', textAlign: 'center', color: '#555' }}>{variant.quantity}</td>
-                      <td style={{ padding: '8px 16px', fontSize: '11px', color: '#666' }}>{variant.unit || 'N/A'}</td>
-                      <td style={{ padding: '8px 16px', fontSize: '11px', color: '#666' }}>{variant.brand || 'N/A'}</td>
-                      <td style={{ padding: '8px 16px', fontSize: '11px', color: '#999' }}>
-                        Updated: {variant.last_updated ? formatDate(variant.last_updated) : 'N/A'}
+                        {/* Child Rows (Batch Variants) */}
+                        {isExpanded && group.variants.map((variant, variantIndex) => (
+                          <tr key={`${group.groupKey}-variant-${variantIndex}`} style={{ borderBottom: '1px solid #f0f2f5', backgroundColor: '#fff9f9' }}>
+                            <td style={{ padding: '8px 16px' }}></td>
+                            <td style={{ padding: '8px 16px', fontSize: '12px', color: '#666' }}>
+                              Batch: <strong>{variant.batch}</strong>
+                            </td>
+                            <td style={{ padding: '8px 16px' }}></td>
+                            <td style={{ padding: '8px 16px', fontSize: '12px', textAlign: 'center', color: '#555', fontWeight: '600' }}>
+                              {variant.quantity}
+                            </td>
+                            <td style={{ padding: '8px 16px', fontSize: '11px', color: '#666' }}>
+                              {variant.unit || 'N/A'}
+                            </td>
+                            <td style={{ padding: '8px 16px', fontSize: '11px', color: '#666' }}>
+                              {variant.brand || 'N/A'}
+                            </td>
+                            <td style={{ padding: '8px 16px', fontSize: '11px', color: '#999' }}>
+                              Updated: {variant.last_updated ? formatDate(variant.last_updated) : 'N/A'}
+                            </td>
+                          </tr>
+                        ))}
+                      </React.Fragment>
+                    );
+                  }) : (
+                    <tr>
+                      <td colSpan="7" style={{ padding: '40px', textAlign: 'center', color: '#888', fontSize: '13px' }}>
+                        No inventory records found for this station.
                       </td>
                     </tr>
-                  ))}
-                </React.Fragment>
-              );
-            }) : (
-              <tr>
-                <td colSpan="8" style={{ padding: '20px', textAlign: 'center', color: '#888', fontSize: '13px' }}>
-                  No station inventory records yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
-      {/* ── STATION DISTRIBUTION HISTORY ── */}
-      <div className="inv-card" style={{ borderRadius: '14px', overflow: 'hidden', border: '1px solid #e9ecef' }}>
-        <div className="inv-card-head" style={{ padding: '18px 24px', borderBottom: '1px solid #f0f2f5' }}>
-          <h2 style={{ fontSize: '16px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <ClipboardList size={17} /> Distribution History
-          </h2>
-          <p style={{ fontSize: '13px', color: '#888', margin: '4px 0 0' }}>Track supplies released from CHO inventory to health stations.</p>
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="inv-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>#</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Date</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Item</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Type</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Quantity</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Destination Station</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Released By</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Remarks</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedDistHistory.length > 0 ? (
-                paginatedDistHistory.map((rec, idx) => (
-                  <tr key={rec.id} style={{ borderBottom: '1px solid #f0f2f5', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'} onMouseLeave={e => e.currentTarget.style.background = ''}>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#888', textAlign: 'center', fontWeight: '600' }}>{distStartIndex + idx + 1}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap' }}>{formatReadableDate(rec.distribution_date)}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>
-                      <div style={{ fontWeight: '600' }}>{rec.item_name}</div>
-                      {rec.brand && <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>{rec.brand}{rec.batch && rec.batch !== 'N/A' ? ` · Batch ${rec.batch}` : ''}</div>}
-                    </td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '600', background: rec.item_type === 'Vaccine' ? 'rgba(91,174,208,0.12)' : 'rgba(147,111,199,0.12)', color: rec.item_type === 'Vaccine' ? '#3a8db5' : '#7a4fa8' }}>
-                        {rec.item_type === 'Vaccine' ? <Syringe size={11} /> : <Pill size={11} />}
-                        {rec.item_type}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '600', color: '#333', textAlign: 'center' }}>{rec.quantity} <span style={{ fontWeight: 400, color: '#888', fontSize: '11px' }}>{rec.unit}</span></td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{rec.destination_station}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>{rec.released_by}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '12px', color: '#777', maxWidth: '200px' }}>
-                      <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{rec.remarks || '—'}</span>
-                    </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                      <button
-                        className="btn btn-outline"
-                        style={{ padding: '5px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                        onClick={() => setSelectedDistRecord(rec)}
-                      >
-                        <Eye size={13} /> View
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="9" style={{ padding: '40px', textAlign: 'center', color: '#aaa', fontSize: '13px', fontStyle: 'italic' }}>
-                    No distribution records found.
-                  </td>
-                </tr>
+        {/* ── TAB 2: DISTRIBUTION HISTORY ── */}
+        {selectedStationTab === 'history' && (
+          <div className="station-tab-pane">
+            {/* Filter Bar for Distribution History */}
+            <div className="station-filter-bar">
+              <div className="station-filter-search">
+                <Search size={15} className="station-filter-search-icon" />
+                <input
+                  type="text"
+                  placeholder="Search distribution history..."
+                  value={historySearch}
+                  onChange={e => {
+                    setHistorySearch(e.target.value);
+                    setDistPage(1);
+                  }}
+                  className="station-filter-search-input"
+                />
+              </div>
+
+              <select
+                value={historyTypeFilter}
+                onChange={e => {
+                  setHistoryTypeFilter(e.target.value);
+                  setDistPage(1);
+                }}
+                className="station-filter-select"
+              >
+                <option value="All">All Item Types</option>
+                <option value="Vaccine">Vaccines</option>
+                <option value="Supplement">Supplements</option>
+              </select>
+
+              {/* Date Filter */}
+              <div className="filter-dropdown-container" style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  className={`filter-btn ${historyDateFilter !== 'all' ? 'active-filter' : ''}`}
+                  onClick={() => setActivePopover(activePopover === 'distDate' ? null : 'distDate')}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px', boxSizing: 'border-box' }}
+                >
+                  <Calendar size={14} className="filter-btn-icon" />
+                  <span>Date: {
+                    historyDateFilter === 'all' ? 'All Time' : 
+                    historyDateFilter === 'this_month' ? 'This Month' : 
+                    historyDateFilter === 'this_year' ? 'This Year' : 
+                    'Custom'
+                  }</span>
+                  <ChevronDown size={14} className="filter-btn-icon" />
+                </button>
+
+                {activePopover === 'distDate' && (
+                  <div className="filter-popover" style={{ minWidth: '240px' }}>
+                    <div className="popover-title">Distribution Date</div>
+                    <div className="popover-options">
+                      <button className={`popover-opt-btn ${historyDateFilter === 'all' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('all'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); setDistPage(1); }}>All Time</button>
+                      <button className={`popover-opt-btn ${historyDateFilter === 'this_month' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('this_month'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); setDistPage(1); }}>This Month</button>
+                      <button className={`popover-opt-btn ${historyDateFilter === 'this_year' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('this_year'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); setDistPage(1); }}>This Year</button>
+                      <button className={`popover-opt-btn ${historyDateFilter === 'custom' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('custom'); setHistoryDateFilterError(''); }}>Custom Range</button>
+                    </div>
+                    {historyDateFilter === 'custom' && (
+                      <div className="date-custom-range-section">
+                        <div className="date-custom-range-fields">
+                          <div className="date-custom-field">
+                            <label>From</label>
+                            <input type="date" value={historyCustomDateFrom} onChange={e => { setHistoryCustomDateFrom(e.target.value); setHistoryDateFilterError(''); }} />
+                          </div>
+                          <div className="date-custom-field">
+                            <label>To</label>
+                            <input type="date" value={historyCustomDateTo} min={historyCustomDateFrom} onChange={e => { setHistoryCustomDateTo(e.target.value); setHistoryDateFilterError(''); }} />
+                          </div>
+                        </div>
+                        {historyDateFilterError && (
+                          <div className="date-filter-error">
+                            <AlertTriangle size={12} /> {historyDateFilterError}
+                          </div>
+                        )}
+                        <div className="date-custom-actions">
+                          <button className="date-custom-cancel" onClick={() => { setHistoryDateFilter('all'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); }}>Cancel</button>
+                          <button className="date-custom-apply" onClick={() => {
+                            if (!historyCustomDateFrom || !historyCustomDateTo) {
+                              setHistoryDateFilterError('Both dates are required.');
+                              return;
+                            }
+                            if (new Date(historyCustomDateFrom) > new Date(historyCustomDateTo)) {
+                              setHistoryDateFilterError('From date cannot be later than To.');
+                              return;
+                            }
+                            setHistoryDateFilterError('');
+                            setActivePopover(null);
+                            setDistPage(1);
+                          }}>Apply</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {(historySearch || historyTypeFilter !== 'All' || historyDateFilter !== 'all') && (
+                <button
+                  type="button"
+                  className="clear-filters-btn"
+                  onClick={() => {
+                    setHistorySearch('');
+                    setHistoryTypeFilter('All');
+                    setHistoryDateFilter('all');
+                    setHistoryCustomDateFrom('');
+                    setHistoryCustomDateTo('');
+                    setHistoryDateFilterError('');
+                    setDistPage(1);
+                  }}
+                >
+                  Clear Filters
+                </button>
               )}
-            </tbody>
-          </table>
-        </div>
-        {/* Distribution History Pagination */}
-        {filteredDistHistory.length > distItemsPerPage && (
-          <div className="pagination-container">
-            <div className="pagination-info">
-              Showing {distStartIndex + 1}-{Math.min(distStartIndex + distItemsPerPage, filteredDistHistory.length)} of {filteredDistHistory.length}
             </div>
-            <div className="pagination-controls">
-              <button
-                className="pagination-btn"
-                onClick={() => setDistPage(prev => Math.max(1, prev - 1))}
-                disabled={distPage === 1}
-              >
-                Previous
-              </button>
-              <span className="pagination-page-info">
-                Page {distPage} of {distTotalPages}
-              </span>
-              <button
-                className="pagination-btn"
-                onClick={() => setDistPage(prev => Math.min(distTotalPages, prev + 1))}
-                disabled={distPage === distTotalPages}
-              >
-                Next
-              </button>
+
+            {/* Distribution History Table (Action column removed!) */}
+            <div style={{ overflowX: 'auto' }}>
+              <table className="inv-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>#</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Date</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Item</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Type</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Quantity</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Destination Station</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Released By</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Remarks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedDistHistory.length > 0 ? (
+                    paginatedDistHistory.map((rec, idx) => (
+                      <tr key={rec.id} style={{ borderBottom: '1px solid #f0f2f5', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'} onMouseLeave={e => e.currentTarget.style.background = ''}>
+                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#888', textAlign: 'center', fontWeight: '600' }}>{distStartIndex + idx + 1}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap' }}>{formatReadableDate(rec.distribution_date)}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>
+                          <div style={{ fontWeight: '600' }}>{rec.item_name}</div>
+                          {rec.brand && <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>{rec.brand}{rec.batch && rec.batch !== 'N/A' ? ` · Batch ${rec.batch}` : ''}</div>}
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '600', background: rec.item_type === 'Vaccine' ? 'rgba(91,174,208,0.12)' : 'rgba(147,111,199,0.12)', color: rec.item_type === 'Vaccine' ? '#3a8db5' : '#7a4fa8' }}>
+                            {rec.item_type === 'Vaccine' ? <Syringe size={11} /> : <Pill size={11} />}
+                            {rec.item_type}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '600', color: '#333', textAlign: 'center' }}>
+                          {rec.quantity} <span style={{ fontWeight: 400, color: '#888', fontSize: '11px' }}>{rec.unit}</span>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{rec.destination_station}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>{rec.released_by}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '12px', color: '#777', maxWidth: '240px' }}>
+                          <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{rec.remarks || '—'}</span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="8" style={{ padding: '40px', textAlign: 'center', color: '#aaa', fontSize: '13px', fontStyle: 'italic' }}>
+                        No distribution records found for this station.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
+
+            {/* Distribution History Pagination */}
+            {filteredDistHistory.length > distItemsPerPage && (
+              <div className="pagination-container">
+                <div className="pagination-info">
+                  Showing {distStartIndex + 1}-{Math.min(distStartIndex + distItemsPerPage, filteredDistHistory.length)} of {filteredDistHistory.length}
+                </div>
+                <div className="pagination-controls">
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    onClick={() => setDistPage(prev => Math.max(1, prev - 1))}
+                    disabled={distPage === 1}
+                  >
+                    Previous
+                  </button>
+                  <span className="pagination-page-info">
+                    Page {distPage} of {distTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    onClick={() => setDistPage(prev => Math.min(distTotalPages, prev + 1))}
+                    disabled={distPage === distTotalPages}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

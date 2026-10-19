@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Users, Activity, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown, Minus,
@@ -119,6 +119,8 @@ const Analytics = () => {
     // ── Live DB Data State ──
     const [loading, setLoading] = useState(true);
     const [fetchError, setFetchError] = useState(null);
+    const [reloadKey, setReloadKey] = useState(0);
+    const hasLoadedOnceRef = useRef(false);
     const [pregnancyAgeRows, setPregnancyAgeRows] = useState([]);
     const [dbData, setDbData] = useState({
         patients: [],
@@ -159,6 +161,7 @@ const Analytics = () => {
         let isMounted = true;
         let pollingTimer = null;
         let refreshTimer = null;
+        let hasLoadedOnce = hasLoadedOnceRef.current;
         const realtimeTables = ['patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'deliveries', 'vaccinations', 'newborns', 'stations'];
         const tableKeys = {
             patient_basic_info: 'patients',
@@ -194,7 +197,7 @@ const Analytics = () => {
                 case 'deliveries':
                     return supabase.from(table).select('id, mother_id, station_ass, stations:station_ass(station_name), delivery_date, delivery_type, complications, risk_level');
                 case 'vaccinations':
-                    return supabase.from(table).select('id, newborn_id, status, dose_number, scheduled_vaccination, vaccinated_date').not('newborn_id', 'is', null);
+                    return supabase.from(table).select('id, patient_id, newborn_id, status, dose_number, scheduled_vaccination, vaccinated_date, created_at');
                 case 'newborns':
                     return supabase.from(table).select('id, mother_id, delivery_id');
                 case 'stations':
@@ -215,7 +218,7 @@ const Analytics = () => {
             });
 
             try {
-                if (isInitialLoad && !hasLoadedOnce) setLoading(true);
+                if (isInitialLoad && !hasLoadedOnceRef.current) setLoading(true);
                 setFetchError(null);
                 const [results, ageReportRows] = await Promise.all([
                     Promise.all(requests),
@@ -239,6 +242,7 @@ const Analytics = () => {
                     setPregnancyAgeRows(ageReportRows || []);
                 }
                 hasLoadedOnce = true;
+                hasLoadedOnceRef.current = true;
             } catch (error) {
                 console.error('Error fetching Supabase data in Analytics:', error);
                 if (isMounted) {
@@ -286,7 +290,7 @@ const Analytics = () => {
             if (refreshTimer) clearTimeout(refreshTimer);
             supabase.removeChannel(channel);
         };
-    }, []);
+    }, [reloadKey]);
 
     // ── Dynamic Aggregator Logic ──
     // Processes Supabase DB data depending on active filters
@@ -308,6 +312,7 @@ const Analytics = () => {
             return true;
         };
 
+        const stationMap = new Map((dbData.stations || []).map(s => [s.id, s.station_name]));
         const riskService = new PatientService();
         const patientById = new Map(dbData.patients.map(patient => [patient.id, patient]));
         const visitsByPatient = new Map();
@@ -363,16 +368,18 @@ const Analytics = () => {
 
         // Loop patients
         dbData.patients.forEach(pat => {
-            const station = normalizeStation(pat.stations?.station_name);
+            const station = normalizeStation(pat.stations?.station_name || stationMap.get(pat.station_ass));
+            if (!liveAgg[station]) return;
             const detail = patientDetails[pat.id] || { trimester: '1', risk: 'Low', status: 'Pregnant' };
 
             // Apply Trimester and Risk filters explicitly here
             if (filters.trimester !== 'All' && filters.trimester !== detail.trimester) return;
             if (filters.risk !== 'All' && filters.risk !== detail.risk) return;
             
-            // Apply Date filter based on registration or lmd
+            // Apply Date filter: active pregnant patients remain valid for care metrics, while historical/non-active match dateRange
+            const isCurrentlyPregnant = String(detail.status || '').toLowerCase() === 'pregnant';
             const refDate = detail.created_at || pat.created_at;
-            if (!isWithinDateRange(refDate)) return;
+            if (!isCurrentlyPregnant && !isWithinDateRange(refDate)) return;
 
             let age = 25;
             if (pat.date_of_birth) {
@@ -380,7 +387,7 @@ const Analytics = () => {
                 age = new Date().getFullYear() - birth.getFullYear();
             }
 
-            if (detail.status?.toLowerCase() === 'pregnant') {
+            if (isCurrentlyPregnant) {
                 liveAgg[station].patients++;
                 if (detail.risk === 'High') liveAgg[station].highRisk++;
                 else if (detail.risk === 'Moderate') liveAgg[station].moderateRisk++;
@@ -405,7 +412,8 @@ const Analytics = () => {
         // Loop visits for missed appts
         dbData.visits.forEach(v => {
             const pat = patientById.get(v.patient_id);
-            const station = normalizeStation(pat?.stations?.station_name);
+            const station = normalizeStation(pat?.stations?.station_name || stationMap.get(pat?.station_ass));
+            if (!liveAgg[station]) return;
             if (!isWithinDateRange(v.visit_date)) return;
             const isMissed = v.status === 'Missed' || (v.visit_date && new Date(v.visit_date) < new Date() && v.status === 'Scheduled');
             if (isMissed) liveAgg[station].missedAppt++;
@@ -413,7 +421,8 @@ const Analytics = () => {
 
         // Loop deliveries
         dbData.deliveries.forEach(d => {
-            const station = normalizeStation(d.stations?.station_name);
+            const mother = patientById.get(d.mother_id);
+            const station = normalizeStation(d.stations?.station_name || stationMap.get(d.station_ass) || mother?.stations?.station_name || stationMap.get(mother?.station_ass));
             if (!isWithinDateRange(d.delivery_date)) return;
             if (!liveAgg[station]) return;
 
@@ -439,7 +448,8 @@ const Analytics = () => {
         dbData.deliveries.forEach(delivery => {
             const deliveryDate = new Date(delivery.delivery_date);
             if (Number.isNaN(deliveryDate.getTime()) || deliveryDate > now || !isWithinDateRange(delivery.delivery_date)) return;
-            const station = normalizeStation(delivery.stations?.station_name);
+            const mother = patientById.get(delivery.mother_id);
+            const station = normalizeStation(delivery.stations?.station_name || stationMap.get(delivery.station_ass) || mother?.stations?.station_name || stationMap.get(mother?.station_ass));
             if (!postpartumByStation[station]) postpartumByStation[station] = { eligible: 0, completed: 0 };
             postpartumByStation[station].eligible++;
             const endDate = new Date(deliveryDate);
@@ -460,11 +470,19 @@ const Analytics = () => {
 
         // Loop vaccinations
         dbData.vaccinations.forEach(v => {
-            if (!v.newborn_id) return;
-            const newborn = newbornById.get(v.newborn_id);
-            const mother = patientById.get(newborn?.mother_id);
-            const station = normalizeStation(mother?.stations?.station_name);
-            if (!isWithinDateRange(v.vaccinated_date)) return;
+            let mother = null;
+            if (v.newborn_id) {
+                const newborn = newbornById.get(v.newborn_id);
+                mother = patientById.get(newborn?.mother_id);
+            } else if (v.patient_id) {
+                mother = patientById.get(v.patient_id);
+            }
+            if (!mother) return;
+            const station = normalizeStation(mother.stations?.station_name || stationMap.get(mother.station_ass));
+            if (!liveAgg[station]) return;
+
+            const vaccDate = v.vaccinated_date || v.scheduled_vaccination || v.created_at;
+            if (!isWithinDateRange(vaccDate)) return;
 
             liveAgg[station].totalVacc++;
             if (v.status === 'Completed') liveAgg[station].completedVacc++;
@@ -550,8 +568,9 @@ const Analytics = () => {
         const ppRate = totals.ppEligible > 0 ? Math.round((totals.ppCompleted / totals.ppEligible) * 100) : 0;
         
         // Missed Appt Rate
+        const stationMap = new Map((dbData.stations || []).map(s => [s.id, s.station_name]));
         const selectedPatientIds = new Set(selectedStations.flatMap(station => dbData.patients
-            .filter(patient => normalizeStation(patient.stations?.station_name) === station.name)
+            .filter(patient => normalizeStation(patient.stations?.station_name || stationMap.get(patient.station_ass)) === station.name)
             .map(patient => patient.id)));
         const scopedVisits = dbData.visits.filter(visit => selectedPatientIds.has(visit.patient_id) && isDateWithinRange(visit.visit_date, filters.dateRange));
         const totalVisitsCount = scopedVisits.filter(visit => visit.status !== 'Cancelled').length;
@@ -584,7 +603,7 @@ const Analytics = () => {
             ,ppEligible: totals.ppEligible
             ,ppCompleted: totals.ppCompleted
         };
-    }, [filters, dashboardMetrics]);
+    }, [filters, dashboardMetrics, dbData]);
 
     // ── Time Series Trend Data Generative Engine ──
     const trendData = useMemo(() => {
@@ -597,8 +616,9 @@ const Analytics = () => {
             end.setDate(end.getDate() + 7);
             return { start, end, label: `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` };
         });
+        const stationMap = new Map((dbData.stations || []).map(s => [s.id, s.station_name]));
         const selectedPatientIds = new Set(dbData.patients
-            .filter(patient => filters.station === 'All Stations' || normalizeStation(patient.stations?.station_name) === filters.station)
+            .filter(patient => filters.station === 'All Stations' || normalizeStation(patient.stations?.station_name || stationMap.get(patient.station_ass)) === filters.station)
             .map(patient => patient.id));
         const visitsByPatient = new Map();
         dbData.visits.forEach(visit => {
@@ -650,7 +670,7 @@ const Analytics = () => {
             if (!vaccination.newborn_id) return;
             const newborn = newbornById.get(vaccination.newborn_id);
             if (!selectedPatientIds.has(newborn?.mother_id)) return;
-            const index = bucket(vaccination.vaccinated_date || vaccination.scheduled_vaccination);
+            const index = bucket(vaccination.vaccinated_date || vaccination.scheduled_vaccination || vaccination.created_at);
             if (index < 0) return;
             const series = vaccNewborn[index];
             series.total++;
@@ -747,19 +767,23 @@ const Analytics = () => {
         };
 
         // Filter relevant vaccinations for the selected category and station
+        const patientById = new Map(dbData.patients.map(patient => [patient.id, patient]));
+        const newbornById = new Map(dbData.newborns.map(newborn => [newborn.id, newborn]));
+        const stationMap = new Map((dbData.stations || []).map(s => [s.id, s.station_name]));
+
         const relevantVaccs = (dbData.vaccinations || []).filter(v => {
             if (vaccCategory === 'Newborns') {
                 if (!v.newborn_id) return false;
-                const newborn = (dbData.newborns || []).find(n => n.id === v.newborn_id);
-                const mother = (dbData.patients || []).find(p => p.id === newborn?.mother_id);
-                const station = normalizeStation(mother?.stations?.station_name);
+                const newborn = newbornById.get(v.newborn_id);
+                const mother = patientById.get(newborn?.mother_id);
+                const station = normalizeStation(mother?.stations?.station_name || stationMap.get(mother?.station_ass));
                 if (filters.station && filters.station !== 'All Stations' && station !== filters.station) return false;
                 return true;
             } else {
                 // Mothers
                 if (!v.patient_id || v.newborn_id) return false;
-                const patient = (dbData.patients || []).find(p => p.id === v.patient_id);
-                const station = normalizeStation(patient?.stations?.station_name);
+                const patient = patientById.get(v.patient_id);
+                const station = normalizeStation(patient?.stations?.station_name || stationMap.get(patient?.station_ass));
                 if (filters.station && filters.station !== 'All Stations' && station !== filters.station) return false;
                 return true;
             }
@@ -1011,13 +1035,19 @@ const Analytics = () => {
             }
         });
 
+        const stationMap = new Map((dbData.stations || []).map(s => [s.id, s.station_name]));
         dbData.vaccinations.forEach(v => {
-            if (!v.newborn_id) return;
-            const newborn = newbornById.get(v.newborn_id);
-            const mother = patientById.get(newborn?.mother_id);
-            const station = normalizeStation(mother?.stations?.station_name);
+            let mother = null;
+            if (v.newborn_id) {
+                const newborn = newbornById.get(v.newborn_id);
+                mother = patientById.get(newborn?.mother_id);
+            } else if (v.patient_id) {
+                mother = patientById.get(v.patient_id);
+            }
+            if (!mother) return;
+            const station = normalizeStation(mother.stations?.station_name || stationMap.get(mother.station_ass));
             if (!liveAgg[station]) return;
-            if (!isWithinExportDateRange(v.vaccinated_date)) return;
+            if (!isWithinExportDateRange(v.vaccinated_date || v.scheduled_vaccination || v.created_at)) return;
 
             liveAgg[station].totalVacc++;
             if (v.status === 'Completed') liveAgg[station].completedVacc++;
@@ -1412,7 +1442,16 @@ const Analytics = () => {
         return (
             <StaffPageLoader 
                 message="Aggregating Health Intelligence..." 
-                error={fetchError} 
+            />
+        );
+    }
+
+    if (fetchError && !hasLoadedOnceRef.current) {
+        return (
+            <StaffPageLoader 
+                error="Unable to retrieve analytics records. Please check your network connection and try again." 
+                errorTitle="Failed to Load Analytics"
+                onRetry={() => setReloadKey(k => k + 1)}
             />
         );
     }

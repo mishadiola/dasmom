@@ -3398,7 +3398,7 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
   async getStationPregnancyAgeReport() {
     try {
       const { role, stationId } = await this.getCurrentUserAccess();
-      const isStationRestricted = role === 'cho personnel' || role === 'staff';
+      const isStationRestricted = role === 'staff';
       if (isStationRestricted && !stationId) return [];
 
       let patientsQuery = this.supabase
@@ -3778,7 +3778,7 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
   async getStationReports() {
     try {
       const { role, stationId } = await this.getCurrentUserAccess();
-      const isStationRestricted = role === 'cho personnel' || role === 'staff';
+      const isStationRestricted = role === 'staff';
       if (isStationRestricted && !stationId) return [];
 
       let stationsQuery = this.supabase

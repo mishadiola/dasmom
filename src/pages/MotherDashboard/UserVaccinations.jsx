@@ -90,7 +90,7 @@ const UserVaccinations = () => {
                 });
             } catch (err) {
                 console.error('Failed to load vaccines:', err);
-                setError(err?.message || 'Unable to load vaccinations data.');
+                setError(err?.message || 'Unable to load vaccines and supplements.');
             } finally {
                 setLoading(false);
             }
@@ -132,9 +132,9 @@ const UserVaccinations = () => {
     if (loading) {
         return (
             <StaffPageLoader 
-                message={t('vac_loading') || 'Loading your vaccination records...'} 
+                message={t('vac_loading') || 'Loading vaccines and supplements...'} 
                 error={error} 
-                errorTitle="Unable to load vaccinations"
+                errorTitle="Unable to load vaccines and supplements"
                 onRetry={() => {
                     setLoading(true);
                     loadRef.current?.();
@@ -148,13 +148,13 @@ const UserVaccinations = () => {
             <div className="page-header hero-header-with-img">
                 <img 
                     src={vaccinationsSilhouette} 
-                    alt="Vaccinations Silhouette" 
+                    alt="Vaccines & Supplements Silhouette" 
                     className="hero-silhouette-bg" 
                 />
                 <div className="hero-content-wrapper">
                     <div className="hero-text-section">
                         <h1 className="page-title">
-                            <Syringe size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('vac_title', 'Vaccination Info')}
+                            <Syringe size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('vac_title', 'Vaccines & Supplements')}
                         </h1>
                         <p className="page-subtitle">{t('vac_subtitle')}</p>
                     </div>

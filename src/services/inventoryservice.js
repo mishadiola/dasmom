@@ -321,6 +321,7 @@ class InventoryService {
       item_type: 'Vaccine',
       quantity: row.quantity,
       unit: row.vaccine_inventory?.unit || 'vials',
+      station_id: row.station_id,
       destination_station: row.stations?.station_name || 'Unknown',
       released_by: releasersById.get(row.distributed_by) || 'Unknown',
       remarks: row.remarks || ''
@@ -336,9 +337,10 @@ class InventoryService {
       item_type: 'Supplement',
       quantity: row.quantity,
       unit: row.supplement_inventory?.unit || 'pcs',
+      station_id: row.station_id,
       destination_station: row.stations?.station_name || 'Unknown',
       released_by: releasersById.get(row.distributed_by) || 'Unknown',
-      remarks: ''
+      remarks: row.remarks || ''
     }));
 
     return [...vaccineRecords, ...supplementRecords].sort((a, b) => {

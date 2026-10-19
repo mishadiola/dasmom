@@ -32,6 +32,36 @@ const toLocalDateStr = (d) => {
     return new Date(d.getTime() - offset).toISOString().split('T')[0];
 };
 
+// Helper functions for Philippine Standard Time (Asia/Manila)
+const getManilaTodayStr = () => {
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(new Date());
+};
+
+const getManilaDateStr = (value) => {
+    if (!value) return '';
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+            return trimmed;
+        }
+    }
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) {
+        return String(value).split('T')[0] || '';
+    }
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(d);
+};
+
 const withPreservedManilaTime = (date, scheduledAt) => {
     if (!scheduledAt) {
         throw new Error('Could not determine the existing postpartum visit time.');
@@ -209,6 +239,7 @@ const PrenatalVisits = () => {
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [visitTypeTab, setVisitTypeTab] = useState('prenatal'); // 'prenatal' | 'postpartum'
     const [visitCategoryTab, setVisitCategoryTab] = useState('upcoming'); // 'upcoming' | 'missed' | 'completed'
+    const [dateFilter, setDateFilter] = useState('today'); // 'today' | 'all' (Today default)
     const [visitAccess, setVisitAccess] = useState(null);
     const [assignmentStaff, setAssignmentStaff] = useState([]);
     const [assignmentStations, setAssignmentStations] = useState([]);
@@ -517,7 +548,9 @@ const PrenatalVisits = () => {
                 const rows = (postpartumVisits || []).map(visit => {
                     const attendedDate = visit.attended_date || null;
                     const scheduledDate = visit.scheduled_at || '';
-                    const dateStr = attendedDate || visit.scheduled_date || scheduledDate;
+                    const scheduledDateOnly = visit.scheduled_date || getManilaDateStr(scheduledDate);
+                    const todayManila = getManilaTodayStr();
+                    const dateStr = attendedDate || scheduledDateOnly || scheduledDate;
                     const patient = patientById.get(visit.patient_id);
                     const patientName = patient
                         ? `${patient.first_name || ''} ${patient.last_name || ''}`.trim()
@@ -526,7 +559,7 @@ const PrenatalVisits = () => {
                         ? 'Attended'
                         : visit.status === 'Cancelled'
                             ? 'Cancelled'
-                            : scheduledDate && (visit.scheduled_date || toLocalDateStr(new Date(scheduledDate))) < toLocalDateStr(new Date())
+                            : scheduledDate && scheduledDateOnly < todayManila
                                 ? 'Missed'
                                 : 'Scheduled';
 
@@ -540,8 +573,8 @@ const PrenatalVisits = () => {
                         doseText: '',
                         assignedStaffId: visit.assigned_staff || null,
                         assignedStaff: staffById.get(visit.assigned_staff) || null,
-                        visitDate: dateStr,
-                        visitDateOnly: visit.scheduled_date || toLocalDateStr(new Date(scheduledDate)),
+                        visitDate: scheduledDateOnly || dateStr,
+                        visitDateOnly: scheduledDateOnly,
                         reschedule_reason: visit.reschedule_reason || null,
                         status,
                         attendedDate,
@@ -1156,7 +1189,7 @@ const PrenatalVisits = () => {
     const archivedVisitRows = visitsTable.filter(v => archivedPatientIds.has(v.patientId));
 
     const categorizeVisits = () => {
-        const today = new Date().toISOString().split('T')[0];
+        const manilaToday = getManilaTodayStr();
 
         let activeRows = [];
         if (visitTypeTab === 'postpartum') {
@@ -1177,6 +1210,7 @@ const PrenatalVisits = () => {
 
         const allEntries = activeRows.map(v => {
             const pat = allPatients.find(p => p.id === v.patientId);
+            const scheduledDateOnly = getManilaDateStr(v.visitDateOnly || v.visitDate || v.visit_date || v.scheduled_date || v.scheduledVaccination || v.raw?.scheduled_date || v.raw?.scheduled_at);
             return {
                 id: v.id,
                 patientId: v.patientId,
@@ -1185,37 +1219,51 @@ const PrenatalVisits = () => {
                 hasHealthConditions: pat?.hasHealthConditions,
                 risk: pat?.hasHealthConditions ? 'Documented Conditions' : 'None Reported',
                 assignedStaffId: v.assignedStaffId || null,
-            assignedStaff: v.assignedStaff || null,
-            assignedStationId: v.assignedStationId || null,
-            assignedStation: v.assignedStation || null,
-            visitStation: v.visitStation || null,
-            vaccineName: v.vaccineName,
-            doseText: v.doseText,
-            visitDate: v.visitDateOnly || v.visitDate,
-            status: v.status,
-            attendedDate: v.attendedDate || v.vaccinatedDate,
-            visitDateTime: new Date(v.visitDateOnly || v.visitDate || today),
-            raw: v.raw || v
-        };
+                assignedStaff: v.assignedStaff || null,
+                assignedStationId: v.assignedStationId || null,
+                assignedStation: v.assignedStation || null,
+                visitStation: v.visitStation || null,
+                vaccineName: v.vaccineName,
+                doseText: v.doseText,
+                visitDate: scheduledDateOnly || v.visitDateOnly || v.visitDate,
+                scheduledDateOnly,
+                status: v.status,
+                attendedDate: v.attendedDate || v.vaccinatedDate,
+                visitDateTime: new Date(scheduledDateOnly || v.visitDateOnly || v.visitDate || manilaToday),
+                raw: v.raw || v
+            };
         });
 
-        const upcoming = allEntries.filter(v => 
+        // 1. Classify visits using existing definitions
+        const upcomingAll = allEntries.filter(v => 
             (v.status === 'Scheduled' || v.status === 'Pending') && 
-            v.visitDate >= today
+            (v.scheduledDateOnly || v.visitDate) >= manilaToday
         ).sort((a, b) => a.visitDateTime - b.visitDateTime);
 
-        const missed = allEntries.filter(v => 
+        const missedAll = allEntries.filter(v => 
             v.status === 'Missed' || 
-            ((v.status === 'Scheduled' || v.status === 'Pending') && v.visitDate < today)
+            ((v.status === 'Scheduled' || v.status === 'Pending') && (v.scheduledDateOnly || v.visitDate) < manilaToday)
         ).sort((a, b) => b.visitDateTime - a.visitDateTime);
 
-        const completed = allEntries.filter(v => 
+        const completedAll = allEntries.filter(v => 
             v.status === 'Attended' || v.status === 'Completed' || v.status === 'Given' || v.status === 'Done' || v.attendedDate
         ).sort((a, b) => {
             const dateA = a.attendedDate ? new Date(a.attendedDate) : a.visitDateTime;
             const dateB = b.attendedDate ? new Date(b.attendedDate) : b.visitDateTime;
             return dateB - dateA;
         });
+
+        // 2. Apply Date Filter (Today vs All)
+        const filterByDate = (entries) => {
+            if (dateFilter === 'today') {
+                return entries.filter(v => (v.scheduledDateOnly || v.visitDate) === manilaToday);
+            }
+            return entries;
+        };
+
+        const upcoming = filterByDate(upcomingAll);
+        const missed = filterByDate(missedAll);
+        const completed = filterByDate(completedAll);
 
         const latestByPatient = (entries) => Array.from(
             entries.reduce((patients, entry) => {
@@ -1321,7 +1369,7 @@ const PrenatalVisits = () => {
         const monthYear = date.toLocaleString('default', { month: 'long', year: 'numeric' });
         const typeStr = visitTypeTab.charAt(0).toUpperCase() + visitTypeTab.slice(1);
         const catStr = visitCategoryTab.charAt(0).toUpperCase() + visitCategoryTab.slice(1);
-        let desc = `${monthYear} · ${typeStr} · ${catStr}`;
+        let desc = `${monthYear} · ${typeStr} · ${catStr} · Filter: ${dateFilter === 'today' ? 'Today' : 'All Dates'}`;
         if (filterStation !== 'All') {
             desc += ` · Station: ${filterStation}`;
         }
@@ -1654,51 +1702,74 @@ const PrenatalVisits = () => {
                     <h2 className="section-title">
                         <Clock size={18} /> Visit Records
                     </h2>
-                    <div className="table-filters" style={{ flexGrow: 1, display: 'flex', justifyContent: 'flex-end', gap: '10px', alignItems: 'center' }}>
-                        <div className="shared-search-wrap" style={{ maxWidth: '350px' }}>
+                    <div className="table-filters">
+                        {/* ── Search Patient Name ── */}
+                        <div className="shared-search-wrap pv-header-search">
                             <Search size={16} className="shared-search-icon" />
                             <input 
                                 type="text" 
                                 placeholder="Search Patient Name"
                                 value={searchTerm}
                                 onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                                className="shared-search-input"
+                                className="shared-search-input pv-header-search-input"
                             />
                         </div>
-                        <div className="filter-dropdown-container" style={{ position: 'relative' }}>
-                            <button 
-                                className={`filter-btn ${filterStation !== 'All' ? 'active-filter' : ''}`}
-                                onClick={() => setActivePopover(activePopover === 'station' ? null : 'station')}
-                                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-                            >
-                                <MapPin size={14} className="filter-btn-icon" />
-                                <span>{filterStation === 'All' ? 'All Stations' : filterStation}</span>
-                                <ChevronDown size={14} className="filter-btn-icon" />
-                            </button>
-                            {activePopover === 'station' && (
-                                <div className="filter-popover" style={{ right: 0, left: 'auto', minWidth: '180px' }}>
-                                    <div className="popover-title">Station</div>
-                                    <div className="popover-options">
-                                        {(!isStationStaff || canViewOtherStations) && (
-                                            <button 
-                                                className={`popover-opt-btn ${filterStation === 'All' ? 'selected' : ''}`} 
-                                                onClick={() => { userHasChangedStationRef.current = true; setFilterStation('All'); setActivePopover(null); setCurrentPage(1); }}
-                                            >
-                                                All Stations
-                                            </button>
-                                        )}
-                                        {permittedStations.map((station) => (
-                                            <button 
-                                                key={station} 
-                                                className={`popover-opt-btn ${filterStation === station ? 'selected' : ''}`} 
-                                                onClick={() => { userHasChangedStationRef.current = true; setFilterStation(station); setActivePopover(null); setCurrentPage(1); }}
-                                            >
-                                                {station}
-                                            </button>
-                                        ))}
+
+                        {/* ── Filter Group: Today/All Date Filter & Station Dropdown ── */}
+                        <div className="pv-header-filter-group">
+                            {/* ── Today / All Date Filter ── */}
+                            <div className="date-filter-toggle" role="group" aria-label="Filter records by date">
+                                <button
+                                    type="button"
+                                    className={`date-filter-btn ${dateFilter === 'today' ? 'active' : ''}`}
+                                    onClick={() => { setDateFilter('today'); setCurrentPage(1); }}
+                                >
+                                    Today
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`date-filter-btn ${dateFilter === 'all' ? 'active' : ''}`}
+                                    onClick={() => { setDateFilter('all'); setCurrentPage(1); }}
+                                >
+                                    All
+                                </button>
+                            </div>
+
+                            {/* ── Station Filter Dropdown ── */}
+                            <div className="filter-dropdown-container">
+                                <button 
+                                    className={`filter-btn pv-header-filter-btn ${filterStation !== 'All' ? 'active-filter' : ''}`}
+                                    onClick={() => setActivePopover(activePopover === 'station' ? null : 'station')}
+                                >
+                                    <MapPin size={14} className="filter-btn-icon" />
+                                    <span>{filterStation === 'All' ? 'All Stations' : filterStation}</span>
+                                    <ChevronDown size={14} className="filter-btn-icon" />
+                                </button>
+                                {activePopover === 'station' && (
+                                    <div className="filter-popover" style={{ right: 0, left: 'auto', minWidth: '180px' }}>
+                                        <div className="popover-title">Station</div>
+                                        <div className="popover-options">
+                                            {(!isStationStaff || canViewOtherStations) && (
+                                                <button 
+                                                    className={`popover-opt-btn ${filterStation === 'All' ? 'selected' : ''}`} 
+                                                    onClick={() => { userHasChangedStationRef.current = true; setFilterStation('All'); setActivePopover(null); setCurrentPage(1); }}
+                                                >
+                                                    All Stations
+                                                </button>
+                                            )}
+                                            {permittedStations.map((station) => (
+                                                <button 
+                                                    key={station} 
+                                                    className={`popover-opt-btn ${filterStation === station ? 'selected' : ''}`} 
+                                                    onClick={() => { userHasChangedStationRef.current = true; setFilterStation(station); setActivePopover(null); setCurrentPage(1); }}
+                                                >
+                                                    {station}
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1709,19 +1780,22 @@ const PrenatalVisits = () => {
                         className={`visit-category-tab ${visitCategoryTab === 'upcoming' ? 'active' : ''}`}
                         onClick={() => { setVisitCategoryTab('upcoming'); setCurrentPage(1); }}
                     >
-                        Upcoming
+                        <span>Upcoming</span>
+                        <span className="tab-count-badge">{categorizedVisits.upcoming.length}</span>
                     </button>
                     <button
                         className={`visit-category-tab ${visitCategoryTab === 'missed' ? 'active' : ''}`}
                         onClick={() => { setVisitCategoryTab('missed'); setCurrentPage(1); }}
                     >
-                        Missed
+                        <span>Missed</span>
+                        <span className="tab-count-badge">{categorizedVisits.missed.length}</span>
                     </button>
                     <button
                         className={`visit-category-tab ${visitCategoryTab === 'completed' ? 'active' : ''}`}
                         onClick={() => { setVisitCategoryTab('completed'); setCurrentPage(1); }}
                     >
-                        Completed
+                        <span>Completed</span>
+                        <span className="tab-count-badge">{categorizedVisits.completed.length}</span>
                     </button>
                 </div>
 
@@ -1800,24 +1874,12 @@ const PrenatalVisits = () => {
                                 ) : (
                                     <tr>
                                         <td colSpan="7" className="empty-tab-state">
-                                            {visitCategoryTab === 'upcoming' && (
-                                                <div className="empty-state-content">
-                                                    <CalendarCheck size={32} />
-                                                    <p>No upcoming visits.</p>
-                                                </div>
-                                            )}
-                                            {visitCategoryTab === 'missed' && (
-                                                <div className="empty-state-content">
-                                                    <AlertTriangle size={32} />
-                                                    <p>No missed visits.</p>
-                                                </div>
-                                            )}
-                                            {visitCategoryTab === 'completed' && (
-                                                <div className="empty-state-content">
-                                                    <CheckCircle2 size={32} />
-                                                    <p>No completed visits.</p>
-                                                </div>
-                                            )}
+                                            <div className="empty-state-content">
+                                                {visitCategoryTab === 'upcoming' && <CalendarCheck size={32} />}
+                                                {visitCategoryTab === 'missed' && <AlertTriangle size={32} />}
+                                                {visitCategoryTab === 'completed' && <CheckCircle2 size={32} />}
+                                                <p>{dateFilter === 'today' ? 'No visits found for today.' : 'No visit records found.'}</p>
+                                            </div>
                                         </td>
                                     </tr>
                                 )}
@@ -1890,24 +1952,12 @@ const PrenatalVisits = () => {
                                 ) : (
                                     <tr>
                                         <td colSpan="7" className="empty-tab-state">
-                                            {visitCategoryTab === 'upcoming' && (
-                                                <div className="empty-state-content">
-                                                    <CalendarCheck size={32} />
-                                                    <p>No upcoming postpartum follow-ups.</p>
-                                                </div>
-                                            )}
-                                            {visitCategoryTab === 'missed' && (
-                                                <div className="empty-state-content">
-                                                    <AlertTriangle size={32} />
-                                                    <p>No missed postpartum follow-ups.</p>
-                                                </div>
-                                            )}
-                                            {visitCategoryTab === 'completed' && (
-                                                <div className="empty-state-content">
-                                                    <CheckCircle2 size={32} />
-                                                    <p>No completed postpartum follow-ups.</p>
-                                                </div>
-                                            )}
+                                            <div className="empty-state-content">
+                                                {visitCategoryTab === 'upcoming' && <CalendarCheck size={32} />}
+                                                {visitCategoryTab === 'missed' && <AlertTriangle size={32} />}
+                                                {visitCategoryTab === 'completed' && <CheckCircle2 size={32} />}
+                                                <p>{dateFilter === 'today' ? 'No visits found for today.' : 'No visit records found.'}</p>
+                                            </div>
                                         </td>
                                     </tr>
                                 )}
