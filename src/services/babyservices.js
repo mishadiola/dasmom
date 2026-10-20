@@ -917,6 +917,8 @@ class BabyService {
                 id, 
                 mother_id, 
               station_ass,
+                attending_staff,
+                created_by,
                 delivery_date, 
                 delivery_type, 
                 complications, 
@@ -924,6 +926,7 @@ class BabyService {
                 stations:station_ass (station_name),
                 patient_basic_info!deliveries_mother_id_fkey (
                     id, first_name, last_name, station_ass,
+                    retained_staff,
                     stations:station_ass (station_name)
                 ),
                 newborns (
@@ -939,23 +942,25 @@ class BabyService {
         const { data: postpartumVisits, error: postpartumVisitsError } = deliveryIds.length
           ? await supabase
             .from('postpartum_visits')
-            .select('id, delivery_id, patient_id, visit_type, scheduled_at, status, attended_date, assigned_staff, personnel_present, performed_by, assessment, notes')
+            .select('id, delivery_id, patient_id, visit_type, scheduled_at, status, attended_date, assigned_staff, personnel_present, performed_by, created_by, assessment, notes')
             .in('delivery_id', deliveryIds)
             .order('scheduled_at', { ascending: true })
           : { data: [], error: null };
         if (postpartumVisitsError) throw postpartumVisitsError;
 
-        const performedByIds = [...new Set((postpartumVisits || [])
-          .flatMap(visit => [visit.performed_by, visit.personnel_present, visit.assigned_staff])
+        const staffIds = [...new Set([
+          ...(filtered || []).flatMap(delivery => [delivery.attending_staff, delivery.created_by, delivery.patient_basic_info?.retained_staff]),
+          ...(postpartumVisits || []).flatMap(visit => [visit.performed_by, visit.personnel_present, visit.assigned_staff, visit.created_by])
+        ]
           .filter(Boolean))];
-        const { data: performedByProfiles, error: performedByError } = performedByIds.length
+        const { data: staffProfiles, error: staffError } = staffIds.length
           ? await supabase
             .from('staff_profiles')
             .select('id, full_name')
-            .in('id', performedByIds)
+            .in('id', staffIds)
           : { data: [], error: null };
-        if (performedByError) throw performedByError;
-        const performedByNames = new Map((performedByProfiles || []).map(profile => [profile.id, profile.full_name]));
+        if (staffError) throw staffError;
+        const staffNames = new Map((staffProfiles || []).map(profile => [profile.id, profile.full_name]));
         const visitsByDelivery = new Map();
         (postpartumVisits || []).forEach(visit => {
           const visits = visitsByDelivery.get(visit.delivery_id) || [];
@@ -966,8 +971,10 @@ class BabyService {
               : visit.status === 'Scheduled' && new Date(visit.scheduled_at) < new Date()
                 ? 'Missed'
                 : visit.status,
-            performedByName: performedByNames.get(visit.personnel_present) || performedByNames.get(visit.performed_by) || null,
-            assigned_staff_name: performedByNames.get(visit.assigned_staff) || null
+            personnelPresentName: staffNames.get(visit.personnel_present) || null,
+            performedByName: staffNames.get(visit.performed_by) || null,
+            recordedByName: staffNames.get(visit.performed_by) || staffNames.get(visit.created_by) || null,
+            assigned_staff_name: staffNames.get(visit.assigned_staff) || null
           });
           visitsByDelivery.set(visit.delivery_id, visits);
         });
@@ -1044,7 +1051,13 @@ class BabyService {
             const postpartumRemarks = latestAssessmentVisit
               ? {
                 assessment: latestAssessmentVisit.assessment,
-                personnel_present: { name: latestAssessmentVisit.performedByName || 'Not recorded' }
+                personnel_present: { name: latestAssessmentVisit.personnelPresentName || 'Not recorded' },
+                recorded_by: { name: latestAssessmentVisit.recordedByName || 'Not recorded' },
+                assigned_staff: {
+                  name: latestAssessmentVisit.assigned_staff_name
+                    || staffNames.get(mother?.retained_staff)
+                    || 'Not assigned'
+                }
               }
               : null;
 
@@ -1053,7 +1066,12 @@ class BabyService {
                 patientId: mother?.id || '',
                 name: `${mother?.first_name || ''} ${mother?.last_name || ''}`.trim(),
                 stationId: d.station_ass || null,
-                station: d.stations?.station_name || 'Unassigned',
+                station: d.stations?.station_name || d.patient_basic_info?.stations?.station_name || 'Unassigned',
+                attendingStaff: staffNames.get(d.attending_staff) || null,
+                deliveryRecordedBy: staffNames.get(d.created_by) || null,
+                assignedStaff: nextVisit?.assigned_staff_name
+                  || staffNames.get(mother?.retained_staff)
+                  || null,
                 deliveryDate: d.delivery_date,
                 deliveryType: d.delivery_type || 'NSD',
                 daysPostpartum: daysPP,
@@ -1067,7 +1085,6 @@ class BabyService {
                 postpartumRemarks,
                 scheduledVisits,
                 followUpStatus,
-                assignedStaff: nextVisit?.assigned_staff_name || nextVisit?.performedByName || null,
                 risk: riskLevel || 'Normal',
                 complications: d.complications && d.complications.length > 0 ? d.complications.join(', ') : 'None'
             };

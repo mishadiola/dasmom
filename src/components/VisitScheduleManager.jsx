@@ -5,7 +5,16 @@ import PatientService from '../services/patientservice';
 import { useRolePermissions } from '../context/RolePermissionContext';
 import '../styles/components/VisitScheduleManager.css';
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).formatToParts(new Date());
+    const value = type => parts.find(part => part.type === type)?.value;
+    return `${value('year')}-${value('month')}-${value('day')}`;
+};
 
 const getStatusClass = (status) => {
     const s = String(status || '').toLowerCase().trim();
@@ -134,7 +143,7 @@ const VisitScheduleManager = ({ patientId, onClose, onChanged }) => {
     const updateDate = async visit => {
         const nextDate = window.prompt(`New date for ${visit.display} (YYYY-MM-DD):`, visit.scheduledDate);
         if (nextDate === null) return;
-        const parsedDate = new Date(`${nextDate}T00:00:00`);
+        const parsedDate = new Date(`${nextDate}T00:00:00Z`);
         if (!/^\d{4}-\d{2}-\d{2}$/.test(nextDate)
             || Number.isNaN(parsedDate.getTime())
             || parsedDate.toISOString().slice(0, 10) !== nextDate
