@@ -175,6 +175,7 @@ const Inventory = () => {
     setSupplements([]);
     setStationCurrentInventory([]);
     setDistributionHistory([]);
+    setStationInventoryError('');
   }, [user?.id]);
 
 
@@ -196,6 +197,8 @@ const Inventory = () => {
   const [selectedDistRecord, setSelectedDistRecord] = useState(null);
   const [distributionHistory, setDistributionHistory] = useState([]);
   const [stationCurrentInventory, setStationCurrentInventory] = useState([]);
+  const [stationInventoryError, setStationInventoryError] = useState('');
+  const [stationDataRefreshKey, setStationDataRefreshKey] = useState(0);
   const [distForm, setDistForm] = useState({
     item_type: 'vaccine',
     item_id: '',
@@ -607,17 +610,32 @@ const Inventory = () => {
       try {
         do {
           refreshQueued = false;
-          try {
-            const [stationInventoryData, history, stationsRaw] = await Promise.all([
-              canViewStationInventory
-                ? inventoryService.getStationInventorySnapshot()
-                : Promise.resolve([]),
-              canViewStationInventory || canDistributeToStations
-                ? inventoryService.getStationDistributionHistory()
-                : Promise.resolve([]),
-              inventoryService.supabase.from('stations').select('id, station_name').order('station_name')
-            ]);
-            if (isCurrent) {
+          const [inventoryResult, historyResult, stationsResult] = await Promise.allSettled([
+            canViewStationInventory
+              ? inventoryService.getStationInventorySnapshot()
+              : Promise.resolve([]),
+            canViewStationInventory || canDistributeToStations
+              ? inventoryService.getStationDistributionHistory()
+              : Promise.resolve([]),
+            inventoryService.supabase.from('stations').select('id, station_name').order('station_name')
+          ]);
+          if (isCurrent) {
+            if (inventoryResult.status === 'fulfilled') {
+              setStationCurrentInventory(inventoryResult.value || []);
+              setStationInventoryError('');
+            } else {
+              console.warn('Failed to fetch station inventory:', inventoryResult.reason);
+              setStationInventoryError('Station inventory could not be loaded. Please retry.');
+            }
+
+            if (historyResult.status === 'fulfilled') {
+              setDistributionHistory(historyResult.value || []);
+            } else {
+              console.warn('Failed to fetch station distribution history:', historyResult.reason);
+            }
+
+            if (stationsResult.status === 'fulfilled') {
+              const stationsRaw = stationsResult.value;
               const stations = stationsRaw.data || [];
               if (stationsRaw.error) {
                 console.warn('Failed to fetch inventory stations:', stationsRaw.error);
@@ -636,11 +654,9 @@ const Inventory = () => {
                   'San Marino'
                 ]);
               }
-              setStationCurrentInventory(stationInventoryData || []);
-              setDistributionHistory(history || []);
+            } else {
+              console.warn('Failed to fetch inventory stations:', stationsResult.reason);
             }
-          } catch (err) {
-            console.warn('Failed to fetch station inventory/distribution data:', err);
           }
         } while (refreshQueued && isCurrent);
       } finally {
@@ -684,7 +700,7 @@ const Inventory = () => {
       inventoryService.supabase.removeChannel(stationVaccineSub);
       inventoryService.supabase.removeChannel(stationSupplementSub);
     };
-  }, [user?.id, mainTab, isAdmin, canViewOtherStations, canDistributeToStations, canViewStationInventory]);
+  }, [user?.id, mainTab, isAdmin, canViewOtherStations, canDistributeToStations, canViewStationInventory, stationDataRefreshKey]);
 
   const getStatus = (qty, maxStock, hasExpiredStock) => {
     return getInventoryStatus(qty, maxStock, hasExpiredStock);
@@ -2666,7 +2682,16 @@ const Inventory = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedStationInventory.length > 0 ? selectedStationInventory.map((group) => {
+                  {stationInventoryError ? (
+                    <tr>
+                      <td colSpan={7} role="alert" style={{ padding: '20px', textAlign: 'center' }}>
+                        {stationInventoryError}{' '}
+                        <button type="button" onClick={() => setStationDataRefreshKey(key => key + 1)}>
+                          Retry
+                        </button>
+                      </td>
+                    </tr>
+                  ) : selectedStationInventory.length > 0 ? selectedStationInventory.map((group) => {
                     const isExpanded = expandedStationRows[group.groupKey];
                     return (
                       <React.Fragment key={group.groupKey}>
@@ -2760,7 +2785,24 @@ const Inventory = () => {
                   }) : (
                     <tr>
                       <td colSpan="7" style={{ padding: '40px', textAlign: 'center', color: '#888', fontSize: '13px' }}>
-                        No inventory records found for this station.
+                        {stationInvSearch || stationInvTypeFilter !== 'All' ? (
+                          <>
+                            No {stationInvTypeFilter === 'All' ? 'inventory items' : `${stationInvTypeFilter.toLowerCase()} items`} match the current filters.
+                            {' '}
+                            <button
+                              type="button"
+                              className="clear-filters-btn"
+                              onClick={() => {
+                                setStationInvSearch('');
+                                setStationInvTypeFilter('All');
+                              }}
+                            >
+                              Clear filters
+                            </button>
+                          </>
+                        ) : (
+                          'No inventory records found for this station.'
+                        )}
                       </td>
                     </tr>
                   )}

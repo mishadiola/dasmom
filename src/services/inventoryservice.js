@@ -110,7 +110,12 @@ class InventoryService {
 
     const role = normalizeInventoryRole(scope.role);
     if (isAdminRole(role)) {
-      return { role: 'admin', stationId: null, stationName: null, userId: scope.user_id };
+      return {
+        role: 'admin',
+        stationId: scope.station_id || null,
+        stationName: scope.station_name || null,
+        userId: scope.user_id
+      };
     }
 
     if (!['staff', 'cho personnel'].includes(role)) {
@@ -124,10 +129,10 @@ class InventoryService {
     };
   }
 
-  async getStationInventorySnapshot() {
-    const scope = await this._getCurrentUserScope();
+  async getStationInventorySnapshot({ scope: suppliedScope } = {}) {
+    const scope = suppliedScope || await this._getCurrentUserScope();
     const isAdmin = scope.role === 'admin';
-    let stationId = scope.stationId;
+    let stationId = isAdmin ? null : scope.stationId;
 
     if (!isAdmin) {
       if (!stationId) {
