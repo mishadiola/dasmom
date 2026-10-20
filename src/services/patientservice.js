@@ -3305,13 +3305,7 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
     if (existingVisit && existingVisit.status === 'Scheduled') {
       await this.completePrenatalVisit(existingVisit.id, visitData);
     } else {
-      const { data: patient, error: patientError } = await this.supabase
-        .from('patient_basic_info')
-        .select('station_ass')
-        .eq('id', patientId)
-        .single();
-      if (patientError) throw patientError;
-      const assignedStation = patient.station_ass;
+      const assignedStation = patientContext.stationId;
       const actualStation = serviceStation;
       const { count: visitCount } = await this.supabase
         .from('prenatal_visits')
@@ -3330,12 +3324,17 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
     }
 
     // Handle supplements
+    let supplementStockById = null;
     for (const sup of (supplements || [])) {
       const amount = parseInt(sup.amount);
       if (amount <= 0) continue;
 
-      // Check stock
-      const currentStock = await inventoryService.getSupplementInventory().then(data => data.find(i => i.id === sup.id)?.quantity || 0);
+      if (!supplementStockById) {
+        const inventory = await inventoryService.getSupplementInventory();
+        supplementStockById = new Map(inventory.map(item => [item.id, item.quantity]));
+      }
+
+      const currentStock = supplementStockById.get(sup.id) || 0;
       if (currentStock < amount) throw new Error(`Insufficient stock for supplement`);
 
       // Insert supplement record
@@ -3354,6 +3353,7 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
       if (supError) throw supError;
 
       await inventoryService.updateInventoryQuantity('supplement_inventory', sup.id, currentStock - amount);
+      supplementStockById.set(sup.id, currentStock - amount);
     }
   }
 
@@ -4041,27 +4041,34 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
 
   async getAnalyticsData() {
     try {
-      const { data: stationRows, error: stationError } = await this.supabase
+      const stationsQuery = this.supabase
         .from('stations')
         .select('station_name')
         .order('station_name', { ascending: true });
-
-      if (stationError) throw stationError;
-
-      const stations = [...new Set(stationRows?.map(s => s.station_name).filter(Boolean))];
-
-      const { data: patients, error: patientsError } = await this.supabase
+      const patientsQuery = this.supabase
         .from('patient_basic_info')
-        .select('id, first_name, last_name, station_ass, station_ass, date_of_birth, stations:station_ass (station_name)');
-
-      if (patientsError) throw patientsError;
-
-      const { data: pregnancies, error: pregError } = await this.supabase
+        .select('id, first_name, last_name, date_of_birth, municipality, stations:station_ass (station_name)');
+      const pregnanciesQuery = this.supabase
         .from('pregnancy_info')
         .select('patient_id, pregn_postp, lmd, edd, created_at')
         .order('created_at', { ascending: false });
+      const visitsQuery = this.supabase
+        .from('prenatal_visits')
+        .select('patient_id, visit_date, status, calculated_risk, risk_factors, trimester')
+        .eq('status', 'Attended')
+        .order('visit_date', { ascending: false });
 
+      const [
+        { data: stationRows, error: stationError },
+        { data: patients, error: patientsError },
+        { data: pregnancies, error: pregError },
+        { data: visits, error: visitsError }
+      ] = await Promise.all([stationsQuery, patientsQuery, pregnanciesQuery, visitsQuery]);
+      if (stationError) throw stationError;
+      const stations = [...new Set(stationRows?.map(s => s.station_name).filter(Boolean))];
+      if (patientsError) throw patientsError;
       if (pregError) throw pregError;
+      if (visitsError) throw visitsError;
 
       const latestPregMap = new Map();
       (pregnancies || []).forEach(p => {
@@ -4073,14 +4080,6 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
           latestPregMap.set(p.patient_id, p);
         }
       });
-
-      const { data: visits, error: visitsError } = await this.supabase
-        .from('prenatal_visits')
-        .select('patient_id, visit_date, status, calculated_risk, risk_factors, trimester')
-        .eq('status', 'Attended')
-        .order('visit_date', { ascending: false });
-
-      if (visitsError) throw visitsError;
 
       const latestAttendedVisitMap = new Map();
       (visits || []).forEach(v => {
@@ -4170,13 +4169,12 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
           id,
           baby_name,
           gender,
-          birth_weight,
           deliveries!inner (delivery_date),
           patient_basic_info!mother_id (
             first_name,
             last_name
           ),
-          vaccinations (
+          vaccinations!inner (
             dose_number,
             scheduled_vaccination,
             vaccinated_date,
@@ -4184,7 +4182,8 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
               vaccine_name
             )
           )
-        `);
+        `)
+        .is('vaccinations.vaccinated_date', null);
 
       if (error) throw error;
 
