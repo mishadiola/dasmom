@@ -9,8 +9,12 @@ import {
 import '../../styles/pages/MyAppointments.css';
 import appointmentSilhouette from '../../assets/images/appointments-silhouette.png';
 import { useLanguage } from '../../context/LanguageContext';
-import { isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
 import { isAndroidApp } from '../../services/secureStorage';
+import {
+    getMotherPostpartumVisits,
+    getMotherVaccinationAppointments,
+    toPostpartumAppointment
+} from '../../utils/motherRecordUtils';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 const toLocalDateStr = (d) => {
@@ -32,18 +36,6 @@ const formatCalendarDate = (dateString) => {
     return date.toLocaleDateString('en-US', options);
 };
 
-const getDateOnly = (value) => {
-    if (!value) return '';
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return String(value).split('T')[0];
-    return new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Manila',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-    }).format(parsed);
-};
-
 const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
 
 const sanitizeUUID = (str, fallback) => {
@@ -62,6 +54,11 @@ const MyAppointments = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const loadRef = useRef(null);
+    const getAppointmentTitle = appointment => {
+        if (appointment.type === 'Vaccination') return appointment.notes;
+        if (appointment.type === 'Postpartum') return appointment.visitName || t('appt_postpartum');
+        return `${appointment.type} ${t('appt_visit')}${appointment.pregnancyNumber ? ` · Pregnancy #${appointment.pregnancyNumber}` : ''}`;
+    };
     
     const [selectedMobileDate, setSelectedMobileDate] = useState(() => new Date().toISOString().split('T')[0]);
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -114,11 +111,11 @@ const MyAppointments = () => {
                 const isPostpartum = currentStatus === 'postpartum';
                 let prenatalVisits;
                 let postpartumVisits;
+                let vaccinationAppointments;
                 const staffNamesById = new Map();
                 if (isAndroidApp()) {
                     prenatalVisits = patient.visits || [];
-                    postpartumVisits = (patient.deliveries || [])
-                        .flatMap(delivery => delivery.postpartum_visits || []);
+                    postpartumVisits = getMotherPostpartumVisits(patient);
                     prenatalVisits.forEach(visit => {
                         if (visit.assigned_staff && visit.assigned_staff_name) {
                             staffNamesById.set(visit.assigned_staff, visit.assigned_staff_name);
@@ -148,7 +145,7 @@ const MyAppointments = () => {
                     if (prenatalResult.error) throw prenatalResult.error;
                     if (postpartumResult.error) throw postpartumResult.error;
                     prenatalVisits = prenatalResult.data || [];
-                    postpartumVisits = postpartumResult.data || [];
+                    postpartumVisits = getMotherPostpartumVisits(patient, postpartumResult.data || []);
                     const staffIds = [...new Set([
                         ...prenatalVisits.flatMap(visit => [visit.assigned_staff, visit.performed_by]),
                         ...postpartumVisits.map(visit => visit.assigned_staff)
@@ -175,6 +172,11 @@ const MyAppointments = () => {
                         });
                     }
                 }
+                vaccinationAppointments = getMotherVaccinationAppointments(patient, isPostpartum)
+                    .map(vaccination => ({
+                        ...vaccination,
+                        location: sanitizeUUID(patient.station, 'Health Station')
+                    }));
                 const pregnancyNumberByVisitId = new Map((patient.pregnancyHistory || [])
                     .flatMap(pregnancy => (pregnancy.visits || []).map(visit => [visit.id, pregnancy.pregnancyNumber])));
                 const visitAppts = prenatalVisits
@@ -196,58 +198,24 @@ const MyAppointments = () => {
                         pregnancyNumber: pregnancyNumberByVisitId.get(visit.id),
                         color: 'green'
                     }));
-                const newbornVaccines = (isPostpartum ? currentPregnancy?.newborns || [] : [])
-                    .filter(isNewbornVaccinationEligible)
-                    .flatMap(newborn => (newborn.vaccines || [])
-                        .filter(v => v.scheduled_vaccination || v.vaccinated_date)
-                        .map((v, idx) => ({
-                            id: v.id || `newborn-vac-${newborn.id}-${idx}`,
-                            date: v.scheduled_vaccination || v.vaccinated_date,
-                            time: '',
-                            type: `${newborn.baby_name || 'Newborn'} Vaccination`,
-                            status: v.status || 'Scheduled',
-                            location: sanitizeUUID(patient.station, 'Health Station'),
-                            staffName: v.assigned_staff_name,
-                            staffStation: v.assigned_staff_station,
-                            notes: sanitizeUUID(v.notes || v.vaccine_name, 'Vaccination'),
-                            color: 'yellow'
-                        })));
-
                 const postpartumAppts = postpartumVisits
                     .map(visit => {
-                        const scheduledDate = visit.scheduled_date || getDateOnly(visit.scheduled_at);
-                        const today = toLocalDateStr(new Date());
-                        const status = visit.status === 'Attended'
-                            ? 'Attended'
-                            : visit.status === 'Cancelled'
-                                ? 'Cancelled'
-                                : scheduledDate && scheduledDate < today
-                                    ? 'Missed'
-                                    : 'Scheduled';
-                        const date = visit.attended_date || scheduledDate;
+                        const appointment = toPostpartumAppointment(visit, toLocalDateStr(new Date()));
                         return {
-                            id: visit.id,
-                            date,
-                            scheduledDate,
-                            attendedDate: visit.attended_date,
-                            time: '',
-                            type: visit.visit_type,
-                            status,
+                            ...appointment,
                             location: sanitizeUUID(patient.station, 'Health Station'),
                             staffName: staffNamesById.get(visit.assigned_staff) || visit.assigned_staff_name || null,
-                            notes: status === 'Completed'
+                            notes: appointment.status === 'Attended'
                                 ? t('appt_postpartum_attended')
-                                : status === 'Missed'
+                                : appointment.status === 'Missed'
                                     ? t('appt_postpartum_missed')
                                     : t('appt_postpartum_scheduled'),
-                            assessment: visit.assessment,
-                            color: 'blue'
                         };
                     });
 
                 const combined = [
                     ...visitAppts,
-                    ...newbornVaccines,
+                    ...vaccinationAppointments,
                     ...postpartumAppts
                 ];
                 if (active) setAppointmentsData(combined);
@@ -401,7 +369,7 @@ const MyAppointments = () => {
             </div>
             <div className="appt-main-info">
                 <div className="appt-title-row">
-                    <h3>{a.type === 'Vaccination' ? a.notes : `${a.type} ${t('appt_visit')}${a.pregnancyNumber ? ` · Pregnancy #${a.pregnancyNumber}` : ''}`}</h3>
+                    <h3>{getAppointmentTitle(a)}</h3>
                     <span className={`status-badge ${a.status.toLowerCase()}`}>
                             {String(a.status || '').toLowerCase() === 'completed' || String(a.status || '').toLowerCase() === 'attended' ? <CheckCircle2 size={12} /> : <Clock size={12} />}
                             {a.status || 'Unknown'}
@@ -635,7 +603,7 @@ const MyAppointments = () => {
                                                             style={{cursor: 'pointer'}}
                                                         >
                                                             <div className="schedule-details">
-                                                                <span className="schedule-patient">{appt.type === 'Vaccination' ? appt.notes : `${appt.type} ${t('appt_visit')}`}</span>
+                                                                <span className="schedule-patient">{getAppointmentTitle(appt)}</span>
                                                                 <span className="schedule-id">{appt.location || ''}</span>
                                                             </div>
                                                             <span className={`schedule-status status-${(appt.status || 'scheduled').toLowerCase()}`}>
@@ -671,7 +639,7 @@ const MyAppointments = () => {
                                                                 title={`${appt.type} - ${appt.notes || ''}`}
                                                                 onClick={(e) => { e.stopPropagation(); setSelectedAppt(appt); }}
                                                             >
-                                                                <span className="visit-title">{appt.type === 'Vaccination' ? appt.notes : `${appt.type} ${t('appt_visit')}`}</span>
+                                                                <span className="visit-title">{getAppointmentTitle(appt)}</span>
                                                                 <span className="visit-status">{appt.time || t('appt_tbd')}</span>
                                                             </div>
                                                         ))}
@@ -711,7 +679,7 @@ const MyAppointments = () => {
                                                                         title={`${appt.type} - ${appt.notes || ''}`}
                                                                         onClick={(e) => { e.stopPropagation(); setSelectedAppt(appt); }}
                                                                     >
-                                                                        <span className="visit-title">{appt.type === 'Vaccination' ? appt.notes : `${appt.type} ${t('appt_visit')}`}</span>
+                                                                        <span className="visit-title">{getAppointmentTitle(appt)}</span>
                                                                         <span className="visit-status">{appt.time || t('appt_tbd')}</span>
                                                                     </div>
                                                                 ))}
@@ -831,6 +799,12 @@ const MyAppointments = () => {
                                     <div style={{display: 'flex', justifyContent: 'space-between'}}>
                                         <span style={{color: '#64748b', fontSize: '13px', fontWeight: 600}}>Pregnancy</span>
                                         <span style={{fontWeight: 600}}>#{selectedAppt.pregnancyNumber}</span>
+                                    </div>
+                                )}
+                                {selectedAppt.visitName && (
+                                    <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                                        <span style={{color: '#64748b', fontSize: '13px', fontWeight: 600}}>Visit</span>
+                                        <span style={{fontWeight: 600}}>{selectedAppt.visitName}</span>
                                     </div>
                                 )}
                                 <div style={{display: 'flex', justifyContent: 'space-between'}}>

@@ -11,6 +11,7 @@ import '../../styles/pages/MyVitals.css';
 import vitalsSilhouette from '../../assets/images/vitals-silhouette.png';
 import { useLanguage } from '../../context/LanguageContext';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import { getMotherVitalsData } from '../../utils/motherRecordUtils';
 
 const MyVitals = () => {
     const navigate = useNavigate();
@@ -33,29 +34,9 @@ const MyVitals = () => {
                 const authUser = await auth.getAuthUser();
                 if (!authUser?.id) return;
                 const patient = await patientService.getPatientById(authUser.id);
-                const latestRecordedHeight = [...(patient?.currentPregnancy?.visits || [])]
-                    .sort((a, b) => new Date(b.visit_date) - new Date(a.visit_date))
-                    .find(v => Number(v.height_cm) > 0)?.height_cm;
-                // Only include visits that have actual vital records (not pending/incomplete)
-                const visits = (patient?.currentPregnancy?.visits || [])
-                    .filter(v => v.visit_date && (v.weight_kg || (v.bp_systolic && v.bp_diastolic) || v.pulse_bpm || v.temp_c || v.resp_rate_cpm || v.fhr_bpm))
-                    .map(v => ({
-                        id: v.id,
-                        date: v.visit_date,
-                        weight: v.weight_kg,
-                        height: v.height_cm || latestRecordedHeight,
-                        bp: v.bp_systolic && v.bp_diastolic ? `${v.bp_systolic}/${v.bp_diastolic}` : null,
-                        bp_systolic: v.bp_systolic,
-                        bp_diastolic: v.bp_diastolic,
-                        pulse: v.pulse_bpm,
-                        temp: v.temp_c,
-                        notes: v.clinical_notes || '',
-                        risk_factors: v.risk_factors,
-                        trimester: v.trimester ? `Trimester ${v.trimester}` : patient?.trimester || 'N/A'
-                    }))
-                    .sort((a, b) => new Date(b.date) - new Date(a.date));
-                const latestVisit = visits[0];
-                const riskAssessment = latestVisit
+                const vitals = getMotherVitalsData(patient);
+                const latestVisit = vitals.current;
+                const riskAssessment = latestVisit.id && vitals.currentStage === 'Prenatal'
                     ? patientService.getPregnancyRisk(patient, patient?.currentPregnancy || {}, {
                         ...latestVisit,
                         weight_kg: latestVisit.weight,
@@ -75,8 +56,7 @@ const MyVitals = () => {
                     station: patient?.station || 'N/A'
                 });
 
-                const chronological = [...visits].reverse();
-                setVitalsData({ visits, chronological, riskAssessment });
+                setVitalsData({ ...vitals, riskAssessment });
             } catch (err) {
                 console.error('Failed to load vitals:', err);
                 setError(err?.message || 'Unable to load vitals data.');
@@ -90,7 +70,7 @@ const MyVitals = () => {
         return () => window.removeEventListener('online', loadVitals);
     }, []);
 
-    const CURRENT_VITALS = vitalsData.visits?.[0] || {};
+    const CURRENT_VITALS = vitalsData.current || {};
     const filteredVitals = filterTrimester === 'All' ? (vitalsData.visits || []) : (vitalsData.visits || []).filter(v => v.trimester === filterTrimester);
     const currentWeight = Number(CURRENT_VITALS.weight);
     const currentHeight = Number(CURRENT_VITALS.height);
@@ -341,7 +321,18 @@ const MyVitals = () => {
                                             <p>Identified from your latest recorded visit.</p>
                                         </div>
                                     </div>
-                                )) : (
+                                )) : vitalsData.currentStage === 'Postpartum' ? (
+                                    <div className={`v-alert-banner ${CURRENT_VITALS.id ? 'v-alert-banner--success' : 'v-alert-banner--warning'}`}>
+                                        {CURRENT_VITALS.id ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
+                                        <div className="v-alert-text">
+                                            <h4>{CURRENT_VITALS.id ? 'Postpartum vitals' : 'No postpartum vitals recorded'}</h4>
+                                            <p>{CURRENT_VITALS.id
+                                                ? 'Your latest postpartum measurements are shown above.'
+                                                : 'Postpartum vital readings will appear here when recorded.'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ) : (
                                     <div className="v-alert-banner v-alert-banner--success">
                                         <CheckCircle2 size={20} />
                                         <div className="v-alert-text">
@@ -371,6 +362,7 @@ const MyVitals = () => {
                                         <option value="1st">{t('vitals_1st_trimester')}</option>
                                         <option value="2nd">{t('vitals_2nd_trimester')}</option>
                                         <option value="3rd">{t('vitals_3rd_trimester')}</option>
+                                        <option value="Postpartum">{t('appt_postpartum')}</option>
                                     </select>
                                 </div>
                             </div>
@@ -422,7 +414,7 @@ const MyVitals = () => {
                                                     </div>
                                                     <span className="vital-val">{v.temp ? `${v.temp}°C` : '--'}</span>
                                                 </td>
-                                                <td>{v.trimester}</td>
+                                                <td>{v.stage === 'Postpartum' ? t('appt_postpartum') : v.trimester}</td>
                                                 <td>
                                                     <span className={`v-note-tag ${(v.notes || '').includes('high') || (v.notes || '').includes('alert') ? 'v-note-tag--warn' : ''}`}>
                                                         {v.notes || t('vitals_routine')}
