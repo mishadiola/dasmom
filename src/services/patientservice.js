@@ -2135,7 +2135,8 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
         .select(`
           *,
           supplement_inventory (
-            supplement_name
+            supplement_name,
+            brand
           )
         `)
         .eq('patient_id', patientId)
@@ -2570,9 +2571,11 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
       supplements: (supplementsData || []).map(s => ({
         id: s.id,
         supplement_name: s.supplement_inventory?.supplement_name || 'Unknown',
+        supplement_inventory: s.supplement_inventory || null,
         dosage: s.dosage,
         start_date: s.start_date,
         end_date: s.end_date,
+        created_at: s.created_at,
         status: s.status,
         notes: s.notes,
         administered_by: s.administered_by || s.created_by || null,
