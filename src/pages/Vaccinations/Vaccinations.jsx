@@ -691,7 +691,13 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
             if (!currentUser) throw new Error('No logged-in user');
             const access = await patientService.getCurrentUserAccess();
             const vaccinationService = new VaccinationService();
-            const performingStationId = access.stationId || await vaccinationService.getCurrentUserStationId();
+            const isAdmin = access.role === 'admin';
+            const patientStation = isAdmin && !patientStationId
+                ? await resolvePatientStation(patientId, form.patientType, confirmedPatient?.station)
+                : null;
+            const performingStationId = isAdmin
+                ? patientStationId || patientStation?.stationId || access.stationId || await vaccinationService.getCurrentUserStationId()
+                : access.stationId || await vaccinationService.getCurrentUserStationId();
             if (!performingStationId) throw new Error('Your account must have an assigned service station.');
             const assignedStaff = form.patientType === 'Mother'
                 ? await vaccinationService.getAssignedStaffForPatient(patientId)

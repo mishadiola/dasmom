@@ -926,7 +926,6 @@ class BabyService {
                 stations:station_ass (station_name),
                 patient_basic_info!deliveries_mother_id_fkey (
                     id, first_name, last_name, station_ass,
-                    retained_staff,
                     stations:station_ass (station_name)
                 ),
                 newborns (
@@ -949,7 +948,7 @@ class BabyService {
         if (postpartumVisitsError) throw postpartumVisitsError;
 
         const staffIds = [...new Set([
-          ...(filtered || []).flatMap(delivery => [delivery.attending_staff, delivery.created_by, delivery.patient_basic_info?.retained_staff]),
+          ...(filtered || []).flatMap(delivery => [delivery.attending_staff, delivery.created_by]),
           ...(postpartumVisits || []).flatMap(visit => [visit.performed_by, visit.personnel_present, visit.assigned_staff, visit.created_by])
         ]
           .filter(Boolean))];
@@ -1055,7 +1054,7 @@ class BabyService {
                 recorded_by: { name: latestAssessmentVisit.recordedByName || 'Not recorded' },
                 assigned_staff: {
                   name: latestAssessmentVisit.assigned_staff_name
-                    || staffNames.get(mother?.retained_staff)
+                    || staffNames.get(d.attending_staff)
                     || 'Not assigned'
                 }
               }
@@ -1070,7 +1069,7 @@ class BabyService {
                 attendingStaff: staffNames.get(d.attending_staff) || null,
                 deliveryRecordedBy: staffNames.get(d.created_by) || null,
                 assignedStaff: nextVisit?.assigned_staff_name
-                  || staffNames.get(mother?.retained_staff)
+                  || staffNames.get(d.attending_staff)
                   || null,
                 deliveryDate: d.delivery_date,
                 deliveryType: d.delivery_type || 'NSD',

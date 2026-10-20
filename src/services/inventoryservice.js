@@ -183,7 +183,70 @@ class InventoryService {
       if (result.error) throw result.error;
     }
 
-    const rows = results.flatMap(result => result.data || []).map(row => ({
+    const catalogRows = results.flatMap(result => result.data || []);
+    const missingStationIds = stationIds.filter((stationId, index) => !(results[index].data || []).length);
+    if (missingStationIds.length > 0) {
+      const [vaccineResult, supplementResult] = await Promise.all([
+        this.supabase
+          .from('station_vaccine_inventory')
+          .select(`
+            station_id,
+            vaccine_id,
+            quantity,
+            batch,
+            updated_at,
+            stations:station_id (station_name),
+            vaccine_inventory:vaccine_id (vaccine_name, unit, brand, expiration_date)
+          `)
+          .in('station_id', missingStationIds),
+        this.supabase
+          .from('station_supplement_inventory')
+          .select(`
+            station_id,
+            supplement_inventory_id,
+            quantity,
+            batch,
+            updated_at,
+            stations:station_id (station_name),
+            supplement_inventory:supplement_inventory_id (supplement_name, unit, brand, expiration_date, batch_number)
+          `)
+          .in('station_id', missingStationIds)
+      ]);
+      if (vaccineResult.error) throw vaccineResult.error;
+      if (supplementResult.error) throw supplementResult.error;
+
+      catalogRows.push(
+        ...(vaccineResult.data || []).map(row => ({
+          item_type: 'Vaccine',
+          item_id: row.vaccine_id,
+          item_name: row.vaccine_inventory?.vaccine_name,
+          unit: row.vaccine_inventory?.unit,
+          brand: row.vaccine_inventory?.brand,
+          expiration_date: row.vaccine_inventory?.expiration_date,
+          station_id: row.station_id,
+          station_name: row.stations?.station_name,
+          quantity: row.quantity,
+          batch: row.batch,
+          updated_at: row.updated_at
+        })),
+        ...(supplementResult.data || []).map(row => ({
+          item_type: 'Supplement',
+          item_id: row.supplement_inventory_id,
+          item_name: row.supplement_inventory?.supplement_name,
+          unit: row.supplement_inventory?.unit,
+          brand: row.supplement_inventory?.brand,
+          expiration_date: row.supplement_inventory?.expiration_date,
+          batch_number: row.supplement_inventory?.batch_number,
+          station_id: row.station_id,
+          station_name: row.stations?.station_name,
+          quantity: row.quantity,
+          batch: row.batch,
+          updated_at: row.updated_at
+        }))
+      );
+    }
+
+    const rows = catalogRows.map(row => ({
       id: row.item_id,
       station_id: row.station_id,
       station: row.station_name || 'Unknown station',
