@@ -1,12 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import { 
     Syringe, Search, Filter, Calendar, 
     CheckCircle2, Clock, AlertCircle, 
-    ChevronRight, Info, Download,
+    ChevronRight, Info,
     HeartPulse, Baby, ArrowLeft, UserRound, MapPin
 } from 'lucide-react';
 import '../../styles/pages/UserVaccinations.css';
@@ -15,6 +13,9 @@ import { useNavigate } from 'react-router-dom';
 import vaccinationsSilhouette from '../../assets/images/vaccinations-silhouette.png';
 import { useLanguage } from '../../context/LanguageContext';
 import { isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
+
+const isUUID = (val) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
 
 const UserVaccinations = () => {
     const navigate = useNavigate();
@@ -23,6 +24,9 @@ const UserVaccinations = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filter, setFilter] = useState('All');
     const [selectedVaccine, setSelectedVaccine] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const loadRef = useRef(null);
     const { t } = useLanguage();
 
     useEffect(() => {
@@ -37,6 +41,12 @@ const UserVaccinations = () => {
                 const fullName = patient ? [patient.first_name, patient.middle_name, patient.last_name, patient.suffix].filter(Boolean).join(' ') : 'N/A';
 
                 let allVaccines = [];
+                const eligibleNewborns = (patient?.newborns || []).filter(isNewbornVaccinationEligible);
+                const pregnancyByDeliveryId = new Map(
+                    (patient?.pregnancyHistory || []).flatMap(pregnancy =>
+                        (pregnancy.deliveries || []).map(delivery => [delivery.id, pregnancy.pregnancyNumber])
+                    )
+                );
                 
                 // Add mother's vaccines (from patient.vaccines where recipient_type === 'Mother' or not a newborn)
                 const motherVaccines = (patient?.vaccines || [])
@@ -51,13 +61,8 @@ const UserVaccinations = () => {
                 allVaccines = allVaccines.concat(motherVaccines);
 
                 // Add children's vaccines
-                if (patient?.newborns && patient.newborns.length > 0) {
-                    const pregnancyByDeliveryId = new Map(
-                        (patient.pregnancyHistory || []).flatMap(pregnancy =>
-                            (pregnancy.deliveries || []).map(delivery => [delivery.id, pregnancy.pregnancyNumber])
-                        )
-                    );
-                    patient.newborns.filter(isNewbornVaccinationEligible).forEach(newborn => {
+                if (eligibleNewborns.length > 0) {
+                    eligibleNewborns.forEach(newborn => {
                         if (newborn.vaccines && newborn.vaccines.length > 0) {
                             allVaccines = allVaccines.concat(newborn.vaccines.map(v => ({
                                 ...v,
@@ -71,9 +76,31 @@ const UserVaccinations = () => {
                     });
                 }
 
+                const supplements = (patient?.supplements || []).map(supplement => {
+                    const notes = String(supplement.notes || '');
+                    const newborn = eligibleNewborns.find(child => {
+                        if (!child.baby_name) return false;
+                        const childNotePrefix = `Administered to newborn: ${child.baby_name}`;
+                        return notes === childNotePrefix || notes.startsWith(`${childNotePrefix} -`);
+                    });
+
+                    return {
+                        ...supplement,
+                        itemType: 'supplement',
+                        personType: newborn ? 'child' : 'self',
+                        recipient_type: newborn ? 'Baby' : 'Mother',
+                        category: newborn ? 'Newborn' : 'Mother',
+                        personName: newborn?.baby_name || fullName || 'Mother',
+                        pregnancyNumber: newborn
+                            ? pregnancyByDeliveryId.get(newborn.delivery_id) || null
+                            : null
+                    };
+                });
+                allVaccines = allVaccines.concat(supplements);
+
                 allVaccines.sort((left, right) => {
-                    const leftDate = left.scheduled_vaccination || left.vaccinated_date || '';
-                    const rightDate = right.scheduled_vaccination || right.vaccinated_date || '';
+                    const leftDate = left.scheduled_vaccination || left.start_date || left.vaccinated_date || left.created_at || '';
+                    const rightDate = right.scheduled_vaccination || right.start_date || right.vaccinated_date || right.created_at || '';
                     return leftDate.localeCompare(rightDate);
                 });
                 
@@ -86,8 +113,12 @@ const UserVaccinations = () => {
                 });
             } catch (err) {
                 console.error('Failed to load vaccines:', err);
+                setError(err?.message || 'Unable to load vaccines and supplements.');
+            } finally {
+                setLoading(false);
             }
         };
+        loadRef.current = load;
         load();
         window.addEventListener('online', load);
         return () => window.removeEventListener('online', load);
@@ -98,7 +129,9 @@ const UserVaccinations = () => {
 
     const filteredVaccines = vaccines.filter(v => {
         // Use notes as vaccine guide display name - this is the primary vaccine identifier
-        const displayName = v.notes || v.vaccine_name || v.name || '';
+        const displayName = v.itemType === 'supplement'
+            ? v.supplement_name || v.name || ''
+            : v.notes || v.vaccine_name || v.name || '';
         const matchesSearch = displayName.toLowerCase().includes(searchTerm.toLowerCase());
         const isMother = isMotherVaccine(v);
         
@@ -112,10 +145,13 @@ const UserVaccinations = () => {
     });
 
     const getStatusIcon = (status) => {
-        switch (status) {
-            case 'Completed': return <CheckCircle2 size={16} />;
-            case 'Upcoming': return <Clock size={16} />;
-            case 'Missed': return <AlertCircle size={16} />;
+        switch (String(status || '').toLowerCase()) {
+            case 'completed': return <CheckCircle2 size={16} />;
+            case 'upcoming':
+            case 'pending':
+            case 'ongoing': return <Clock size={16} />;
+            case 'missed':
+            case 'overdue': return <AlertCircle size={16} />;
             default: return null;
         }
     };
@@ -123,171 +159,34 @@ const UserVaccinations = () => {
     const completedCount = vaccines.filter(v => (v.status || '').toString().toLowerCase() === 'completed').length;
     const totalCount = vaccines.length;
 
-    const handleDownloadPDF = () => {
-        const doc = new jsPDF('portrait');
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const margin = 14;
-        let y = 16;
-
-        // ── Header ──
-        doc.setFontSize(18);
-        doc.setTextColor(139, 90, 100);
-        doc.text('DASMOM+', margin, y);
-        doc.setFontSize(10);
-        doc.setTextColor(100);
-        doc.text('City Health Office — Dasmari\u00f1as, Cavite', margin, y + 7);
-        y += 16;
-
-        doc.setDrawColor(185, 129, 138);
-        doc.setLineWidth(0.5);
-        doc.line(margin, y, pageWidth - margin, y);
-        y += 10;
-
-        // ── Report Title ──
-        doc.setFontSize(16);
-        doc.setTextColor(40);
-        doc.text('Vaccination Record', margin, y);
-        y += 10;
-
-        // ── Patient Info ──
-        doc.setFontSize(10);
-        doc.setTextColor(80);
-        const patientId = String(patientInfo.id || 'N/A').substring(0, 8).toUpperCase();
-        doc.text(`Patient Name: ${patientInfo.name || 'N/A'}`, margin, y);
-        doc.text(`Patient ID: ${patientId}`, pageWidth / 2, y);
-        y += 6;
-        doc.text(`Health Station: ${patientInfo.station || 'N/A'}`, margin, y);
-        doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, y);
-        y += 6;
-        doc.text(`Progress: ${completedCount} of ${totalCount} vaccinations completed`, margin, y);
-        y += 10;
-
-        doc.setDrawColor(200);
-        doc.setLineWidth(0.3);
-        doc.line(margin, y, pageWidth - margin, y);
-        y += 8;
-
-        const isMotherRecord = (v) => isMotherVaccine(v);
-        const maternalVaccines = vaccines.filter(isMotherRecord);
-        const newbornVaccines = vaccines.filter(v => !isMotherRecord(v));
-
-        const buildVaccineRows = (list) => list.map(v => {
-            const displayName = v.notes || v.vaccine_name || v.name || 'Vaccine';
-            const scheduledDate = v.scheduled_vaccination
-                ? new Date(v.scheduled_vaccination).toLocaleDateString('en-PH')
-                : '--';
-            const administeredDate = v.vaccinated_date
-                ? new Date(v.vaccinated_date).toLocaleDateString('en-PH')
-                : '--';
-            return [
-                displayName,
-                v.dose_number ? `Dose ${v.dose_number}` : '--',
-                v.schedule || 'As advised',
-                scheduledDate,
-                administeredDate,
-                v.status || 'Pending'
-            ];
-        });
-
-        const tableHead = [['Vaccine', 'Dose', 'Recommended', 'Scheduled', 'Administered', 'Status']];
-        const tableStyles = {
-            theme: 'grid',
-            styles: { fontSize: 8, cellPadding: 3 },
-            headStyles: { fillColor: [185, 129, 138], textColor: 255, fontStyle: 'bold' },
-            alternateRowStyles: { fillColor: [252, 249, 250] },
-            margin: { left: margin, right: margin },
-            didDrawPage: (data) => {
-                const pageCount = doc.internal.getNumberOfPages();
-                doc.setFontSize(8);
-                doc.setTextColor(150);
-                doc.text(
-                    `Page ${data.pageNumber} of ${pageCount}`,
-                    pageWidth / 2,
-                    doc.internal.pageSize.getHeight() - 10,
-                    { align: 'center' }
-                );
-                doc.text(
-                    'DASMOM+ \u2014 Confidential Patient Record',
-                    margin,
-                    doc.internal.pageSize.getHeight() - 10
-                );
-            }
-        };
-
-        if (maternalVaccines.length > 0) {
-            doc.setFontSize(13);
-            doc.setTextColor(40);
-            doc.text('Maternal Vaccinations', margin, y);
-            y += 8;
-
-            doc.autoTable({
-                startY: y,
-                head: tableHead,
-                body: buildVaccineRows(maternalVaccines),
-                ...tableStyles,
-            });
-            y = doc.lastAutoTable.finalY + 12;
-        }
-
-        if (newbornVaccines.length > 0) {
-            // Group by baby name
-            const babyNames = [...new Set(newbornVaccines.map(v => v.personName))];
-
-            babyNames.forEach(babyName => {
-                const babyVaccines = newbornVaccines.filter(v => v.personName === babyName);
-
-                // Check if we need a new page
-                if (y > doc.internal.pageSize.getHeight() - 50) {
-                    doc.addPage();
-                    y = 20;
-                }
-
-                doc.setFontSize(13);
-                doc.setTextColor(40);
-                doc.text(`Newborn Vaccinations \u2014 ${babyName}`, margin, y);
-                y += 8;
-
-                doc.autoTable({
-                    startY: y,
-                    head: tableHead,
-                    body: buildVaccineRows(babyVaccines),
-                    ...tableStyles,
-                });
-                y = doc.lastAutoTable.finalY + 12;
-            });
-        }
-
-        if (maternalVaccines.length === 0 && newbornVaccines.length === 0) {
-            doc.setFontSize(10);
-            doc.setTextColor(120);
-            doc.text('No vaccination records available.', margin, y);
-        }
-
-        // ── Save ──
-        const dateStr = new Date().toISOString().split('T')[0];
-        const safeId = String(patientInfo.id || 'UNKNOWN').substring(0, 8).toUpperCase();
-        doc.save(`DASMOM_Vaccination_Record_${safeId}_${dateStr}.pdf`);
-    };
+    if (loading) {
+        return (
+            <StaffPageLoader 
+                message={t('vac_loading') || 'Loading vaccines and supplements...'} 
+                error={error} 
+                errorTitle="Unable to load vaccines and supplements"
+                onRetry={() => {
+                    setLoading(true);
+                    loadRef.current?.();
+                }} 
+            />
+        );
+    }
 
     return (
-        <div className="user-vaccinations-page">
+        <div className="user-vaccinations-page staff-page-ready">
             <div className="page-header hero-header-with-img">
                 <img 
                     src={vaccinationsSilhouette} 
-                    alt="Vaccinations Silhouette" 
+                    alt="Vaccines & Supplements Silhouette" 
                     className="hero-silhouette-bg" 
                 />
                 <div className="hero-content-wrapper">
                     <div className="hero-text-section">
                         <h1 className="page-title">
-                            <Syringe size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('vac_title')}
+                            <Syringe size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('vac_title', 'Vaccines & Supplements')}
                         </h1>
                         <p className="page-subtitle">{t('vac_subtitle')}</p>
-                        <div className="mother-download-pdf-btn-wrapper">
-                            <button className="mother-download-pdf-btn" onClick={handleDownloadPDF} title={t('vac_download')}>
-                                <Download size={14} /> Download PDF
-                            </button>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -296,7 +195,7 @@ const UserVaccinations = () => {
                 <div className="uv-progress-card">
                     <div className="uv-progress-info">
                         <span>{t('vac_progress')}</span>
-                        <strong>{t('vac_progress_count').replace('{completed}', completedCount).replace('{total}', totalCount)}</strong>
+                        <strong>{t('vac_progress_count', '{completed} of {total} items completed').replace('{completed}', completedCount).replace('{total}', totalCount)}</strong>
                     </div>
                     <div className="uv-progress-bar-wrap">
                         <div 
@@ -336,22 +235,33 @@ const UserVaccinations = () => {
                     filteredVaccines.map((vaccine, index) => {
                         const status = vaccine.status || 'Unknown';
                         const isMother = isMotherVaccine(vaccine);
+                        const isSupplement = vaccine.itemType === 'supplement';
                         const category = isMother ? 'Mother' : 'Newborn';
-                        // NOTES COLUMN IS THE VACCINE NAME - use it as primary display
-                        const displayName = vaccine.notes || vaccine.vaccine_name || vaccine.name || 'Vaccine';
+                        const displayName = isSupplement
+                            ? vaccine.supplement_name || vaccine.name || 'Supplement'
+                            : vaccine.notes || vaccine.vaccine_name || vaccine.name || 'Vaccine';
                         const desc = vaccine.description || '';
-                        const safeId = vaccine.id || `${displayName}-${index}`;
+                        const safeId = `${isSupplement ? 'supplement' : 'vaccine'}-${vaccine.id || `${displayName}-${index}`}`;
                         return (
                             <div 
                                 key={safeId} 
                                 className={`uv-vaccine-card status-${String(status).toLowerCase()}`}
-                                onClick={() => setSelectedVaccine({ ...vaccine, category })}
+                                onClick={() => setSelectedVaccine({
+                                    ...vaccine,
+                                    category: isSupplement
+                                        ? `${category} Supplement`
+                                        : category
+                                })}
                             >
                                 <div className="uv-card-header">
                                     <span className={`uv-category-tag ${isMother ? 'mother' : 'newborn'}`}>
-                                        {isMother 
-                                            ? t('vac_my_vaccine', 'Mother Vaccine') 
-                                            : t('vac_baby_vaccine', "{name}'s Vaccine").replace('{name}', vaccine.personName || 'Baby')}
+                                        {isMother
+                                            ? (isSupplement
+                                                ? t('vac_my_supplement', 'Mother Supplement')
+                                                : t('vac_my_vaccine', 'Mother Vaccine'))
+                                            : (isSupplement
+                                                ? t('vac_baby_supplement', "{name}'s Supplement").replace('{name}', vaccine.personName || 'Baby')
+                                                : t('vac_baby_vaccine', "{name}'s Vaccine").replace('{name}', vaccine.personName || 'Baby'))}
                                     </span>
                                     <span className={`uv-status-badge status-${String(status).toLowerCase()}`}>
                                         {getStatusIcon(status)} 
@@ -362,8 +272,10 @@ const UserVaccinations = () => {
                                         }[status] || status}
                                     </span>
                                 </div>
-                                <h3 className="uv-vaccine-name">Scheduled: {displayName}</h3>
-                                {vaccine.vaccine_inventory && (
+                                <h3 className="uv-vaccine-name">
+                                    {isSupplement ? displayName : `Scheduled: ${displayName}`}
+                                </h3>
+                                {!isSupplement && vaccine.vaccine_inventory && (
                                     <p className="uv-vaccine-desc">
                                         Actual Vaccine Given: {vaccine.vaccine_inventory.vaccine_name}
                                         {vaccine.vaccine_inventory.brand ? ` · Brand: ${vaccine.vaccine_inventory.brand}` : ''}
@@ -375,27 +287,58 @@ const UserVaccinations = () => {
                                 </p>
                                 <p className="uv-vaccine-desc">{desc}</p>
                                 <div className="uv-vaccine-schedule">
-                                    <div className="uv-schedule-item">
-                                        <span className="label">{t('vac_recommended')}</span>
-                                        <span className="value">{vaccine.schedule || t('vac_as_advised')}</span>
-                                    </div>
-                                    {vaccine.vaccinated_date && (
+                                    {isSupplement ? (
+                                        <>
+                                            {vaccine.dosage && (
+                                                <div className="uv-schedule-item">
+                                                    <span className="label">{t('vac_dosage', 'Dosage:')}</span>
+                                                    <span className="value">{vaccine.dosage}</span>
+                                                </div>
+                                            )}
+                                            {vaccine.start_date && (
+                                                <div className="uv-schedule-item">
+                                                    <span className="label">{t('vac_start_date', 'Start date:')}</span>
+                                                    <span className="value">{new Date(vaccine.start_date).toLocaleDateString('en-PH')}</span>
+                                                </div>
+                                            )}
+                                            {vaccine.end_date && (
+                                                <div className="uv-schedule-item">
+                                                    <span className="label">{t('vac_end_date', 'End date:')}</span>
+                                                    <span className="value">{new Date(vaccine.end_date).toLocaleDateString('en-PH')}</span>
+                                                </div>
+                                            )}
+                                            {!vaccine.start_date && !vaccine.end_date && vaccine.created_at && (
+                                                <div className="uv-schedule-item">
+                                                    <span className="label">{t('vac_recorded', 'Recorded:')}</span>
+                                                    <span className="value">{new Date(vaccine.created_at).toLocaleDateString('en-PH')}</span>
+                                                </div>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <div className="uv-schedule-item">
+                                            <span className="label">{t('vac_recommended')}</span>
+                                            <span className="value">{vaccine.schedule || t('vac_as_advised')}</span>
+                                        </div>
+                                    )}
+                                    {!isSupplement && vaccine.vaccinated_date && (
                                         <div className="uv-schedule-item">
                                             <span className="label">{t('vac_vaccinated')}</span>
                                             <span className="value">{new Date(vaccine.vaccinated_date).toLocaleDateString('en-PH')}</span>
                                         </div>
                                     )}
-                                    {vaccine.scheduled_vaccination && (
+                                    {!isSupplement && vaccine.scheduled_vaccination && (
                                         <div className="uv-schedule-item">
                                             <span className="label">{t('vac_scheduled')}</span>
                                             <span className="value">{new Date(vaccine.scheduled_vaccination).toLocaleDateString('en-PH')}</span>
                                         </div>
                                     )}
                                 </div>
-                                {(vaccine.assigned_staff_name || vaccine.assigned_staff_station) && (
+                                {(((vaccine.assigned_staff_name || vaccine.administered_by_name) && !isUUID(vaccine.assigned_staff_name || vaccine.administered_by_name)) || vaccine.assigned_staff_station || vaccine.service_station_name) && (
                                     <div className="uv-assigned-staff">
-                                        {vaccine.assigned_staff_name && <span><UserRound size={14} /> Health worker: <strong>{vaccine.assigned_staff_name}</strong></span>}
-                                        {vaccine.assigned_staff_station && <span><MapPin size={14} /> Assigned station: <strong>{vaccine.assigned_staff_station}</strong></span>}
+                                        {(vaccine.assigned_staff_name || vaccine.administered_by_name) && !isUUID(vaccine.assigned_staff_name || vaccine.administered_by_name) && (
+                                            <span><UserRound size={14} /> Health worker: <strong>{vaccine.assigned_staff_name || vaccine.administered_by_name}</strong></span>
+                                        )}
+                                        {(vaccine.assigned_staff_station || vaccine.service_station_name) && <span><MapPin size={14} /> Assigned station: <strong>{vaccine.assigned_staff_station || vaccine.service_station_name}</strong></span>}
                                     </div>
                                 )}
                                 <div className="uv-card-footer">

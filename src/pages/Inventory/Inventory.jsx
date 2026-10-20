@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import useClickOutside from '../../hooks/useClickOutside';
@@ -28,25 +29,27 @@ import {
   Calendar,
   Send,
   Hash,
-  Download
+  Download,
+  Building2
 } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
+import { useRolePermissions } from '../../context/RolePermissionContext';
 import InventoryService from '../../services/inventoryservice';
-import PatientService from '../../services/patientservice';
 import { useModal } from '../../context/ModalContext';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import ExportModal from '../../components/ExportModal';
-import { isBatchExpired, getInventoryStatus } from '../../utils/inventoryUtils';
+import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
+import { isBatchExpired, isBatchExpiringSoon, getInventoryStatus } from '../../utils/inventoryUtils';
 import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/Inventory.css';
 import { formatDate } from '../../utils/formatters';
 import ActionTooltip from '../../components/Common/ActionTooltip';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import FieldInfoTooltip from '../../components/Common/FieldInfoTooltip';
+import { useDefaultStation } from '../../hooks/useDefaultStation';
 
 
 const inventoryService = new InventoryService();
-const patientService = new PatientService();
 
 const normalizeRole = (role) => String(role || '').trim().toLowerCase();
 const isAdminRole = (role) => {
@@ -66,6 +69,7 @@ const Inventory = () => {
     const location = useLocation();
   const { alert: customAlert, confirm } = useModal();
   const { user } = useContext(AuthContext);
+  const { hasPermission } = useRolePermissions();
   const [userScope, setUserScope] = useState(() => ({
     role: normalizeRole(user?.role) || 'user',
     stationId: null,
@@ -73,17 +77,40 @@ const Inventory = () => {
     userId: user?.id || null
   }));
   const [availableStations, setAvailableStations] = useState([]);
+  const {
+    assignedStation,
+    isStationStaff,
+    matchStation
+  } = useDefaultStation({
+    permissionKey: ['inventory.station.view.other_station', 'inventory.main.distribute.to_stations'],
+    allStations: availableStations,
+    isArray: false
+  });
   const isAdmin = isAdminRole(userScope.role);
+  const canDistributeToStations = isAdmin || hasPermission('inventory.main.distribute.to_stations');
+  const canViewMainInventory = isAdmin
+    || hasPermission('inventory.main.view')
+    || hasPermission('inventory.main.stock.add')
+    || canDistributeToStations;
+  const canAddMainStock = isAdmin || hasPermission('inventory.main.stock.add');
+  const canViewStationInventory = isAdmin
+    || hasPermission('inventory.station.view.own_station')
+    || hasPermission('inventory.station.view.other_station');
+  const canViewOtherStations = isAdmin
+    || hasPermission('inventory.station.view.other_station')
+    || canDistributeToStations;
   const visibleStations = useMemo(() => {
-    if (isAdmin) return availableStations;
-    return userScope.stationName ? [userScope.stationName] : [];
-  }, [availableStations, isAdmin, userScope.stationName]);
+    if (canViewOtherStations) return availableStations;
+    const st = userScope.stationName || assignedStation;
+    return st ? [st] : [];
+  }, [availableStations, canViewOtherStations, userScope.stationName, assignedStation]);
   const [activeTab, setActiveTab] = useState('vaccines');
   const [mainTab, setMainTab] = useState('inventory');
   const [distPage, setDistPage] = useState(1);
   const distItemsPerPage = settings?.tables?.rowsPerPage || 10;
   const [showStationInventory, setShowStationInventory] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [vaccines, setVaccines] = useState([]);
   const [supplements, setSupplements] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -92,6 +119,8 @@ const Inventory = () => {
   const filterRowRef = useRef(null);
   const fetchDataInFlightRef = useRef(false);
   const fetchDataQueuedRef = useRef(false);
+  const mainDataRefreshTimerRef = useRef(null);
+  const lastMainFetchAtRef = useRef(0);
   useClickOutside(filterRowRef, () => setActivePopover(null));
   const [activeSummaryFilter, setActiveSummaryFilter] = useState(null);
   const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
@@ -100,19 +129,40 @@ const Inventory = () => {
   const [customDateTo, setCustomDateTo] = useState('');
   const [dateFilterError, setDateFilterError] = useState('');
 
-  const hasActiveFilters = statusFilter !== 'All' || archiveFilter !== 'active' || searchTerm !== '' || dateFilter !== 'all';
+  const hasActiveFilters = statusFilter !== 'All' || archiveFilter !== 'active' || searchTerm !== '' || dateFilter !== 'all' || activeSummaryFilter !== null;
 
   useEffect(() => {
+    if (!location.state) return;
 
-    if (location.state?.filterStatus) {
+    if (location.state.highlightItemId) {
+      const targetId = String(location.state.highlightItemId);
+      const allLoaded = [
+        ...(vaccines || []).map(v => ({ ...v, _tab: 'vaccines' })),
+        ...(supplements || []).map(s => ({ ...s, _tab: 'supplements' }))
+      ];
 
-        setStatusFilter(location.state.filterStatus);
+      if (allLoaded.length === 0) return;
 
+      const targetItem = allLoaded.find(i => String(i.id) === targetId);
+      if (targetItem) {
+        setActiveTab(targetItem._tab);
+        const isArchived = targetItem.status === 'archived';
+        if (isArchived) {
+          setArchiveFilter('archived');
+        } else {
+          setArchiveFilter('active');
+        }
+        setSearchTerm(targetItem.item_name || '');
+        setStatusFilter(location.state.filterStatus || 'All');
+        setActiveSummaryFilter(null);
+        setMainTab('inventory');
         window.history.replaceState({}, document.title);
-
+      }
+    } else if (location.state.filterStatus) {
+      setStatusFilter(location.state.filterStatus);
+      window.history.replaceState({}, document.title);
     }
-
-  }, [location.state]);
+  }, [location.state, vaccines, supplements]);
 
   useEffect(() => {
     setUserScope({
@@ -125,11 +175,13 @@ const Inventory = () => {
     setSupplements([]);
     setStationCurrentInventory([]);
     setDistributionHistory([]);
+    setStationInventoryError('');
   }, [user?.id]);
 
 
   const clearFilters = () => {
       setStatusFilter('All');
+      setActiveSummaryFilter(null);
       setArchiveFilter('active');
       setSearchTerm('');
       setDateFilter('all');
@@ -138,14 +190,6 @@ const Inventory = () => {
       setDateFilterError('');
       setActivePopover(null);
   };
-  const [archivedIds, setArchivedIds] = useState(() => {
-    try {
-      const stored = localStorage.getItem('inventory_archived_ids');
-      return stored ? JSON.parse(stored) : [];
-    } catch (e) {
-      return [];
-    }
-  });
   const [pendingVaccinations, setPendingVaccinations] = useState([]);
 
   // Station Distribution states
@@ -153,6 +197,8 @@ const Inventory = () => {
   const [selectedDistRecord, setSelectedDistRecord] = useState(null);
   const [distributionHistory, setDistributionHistory] = useState([]);
   const [stationCurrentInventory, setStationCurrentInventory] = useState([]);
+  const [stationInventoryError, setStationInventoryError] = useState('');
+  const [stationDataRefreshKey, setStationDataRefreshKey] = useState(0);
   const [distForm, setDistForm] = useState({
     item_type: 'vaccine',
     item_id: '',
@@ -163,9 +209,113 @@ const Inventory = () => {
     remarks: '',
   });
 
+  // Preferred station ordering: 1. City Health Office 3, 2. Dasma 1, 3. Dasma 3, 4. Dasma 4, 5. Salawag Proper, 6. Armstrong, 7. San Marino
+  const PREFERRED_STATION_RANKS = [
+    (s) => s.includes('city health') || s.includes('cho 3') || s.includes('cho iii') || s === 'cho3' || s === 'cho',
+    (s) => (/\bdasma\s*(1|i)\b/i.test(s) && !/\bdasma\s*(1[0-9]|iv|ix)\b/i.test(s)) || s === 'dasma-1' || s === 'dasma1',
+    (s) => /\bdasma\s*(3|iii)\b/i.test(s) || s === 'dasma-3' || s === 'dasma3',
+    (s) => /\bdasma\s*(4|iv)\b/i.test(s) || s === 'dasma-4' || s === 'dasma4',
+    (s) => s.includes('salawag'),
+    (s) => s.includes('armstrong'),
+    (s) => s.includes('san marino'),
+  ];
+
+  const getStationOrderRank = (station) => {
+    const norm = String(station || '').toLowerCase().trim();
+    for (let i = 0; i < PREFERRED_STATION_RANKS.length; i++) {
+      if (PREFERRED_STATION_RANKS[i](norm)) return i;
+    }
+    return 999;
+  };
+
+  const isSameStationName = (stA, stB) => {
+    if (!stA || !stB) return false;
+    const a = String(stA).trim().toLowerCase();
+    const b = String(stB).trim().toLowerCase();
+    if (a === b) return true;
+
+    const normalize = (s) => (
+      s
+        .replace(/\bcity\s+health\s+office\s+(3|iii)\b/g, 'cho3')
+        .replace(/\bcho\s*(3|iii)\b/g, 'cho3')
+        .replace(/\bdasma\s*(1|i)\b/g, 'dasma1')
+        .replace(/\bdasma\s*(3|iii)\b/g, 'dasma3')
+        .replace(/\bdasma\s*(4|iv)\b/g, 'dasma4')
+        .replace(/\bsalawag\s+proper\b/g, 'salawag')
+        .replace(/[\s\-_]/g, '')
+        .replace(/healthstation/g, '')
+        .replace(/station/g, '')
+    );
+
+    return normalize(a) === normalize(b);
+  };
+
+  // Station Distribution & station-based layout states
+  const [selectedStation, setSelectedStation] = useState(() => (
+    isStationStaff && assignedStation ? assignedStation : 'City Health Office 3'
+  ));
+  const [selectedStationTab, setSelectedStationTab] = useState('inventory'); // 'inventory' | 'history'
+  const [stationsDirectory, setStationsDirectory] = useState([]);
+  const [stationInvSearch, setStationInvSearch] = useState('');
+  const [stationInvTypeFilter, setStationInvTypeFilter] = useState('All');
+
   // History section filters state
   const [historySearch, setHistorySearch] = useState('');
-  const [historyStationFilter, setHistoryStationFilter] = useState('All');
+  const [historyStationFilter, setHistoryStationFilter] = useState(() => (
+    isStationStaff && assignedStation ? assignedStation : 'City Health Office 3'
+  ));
+  const userHasChangedHistoryStationRef = useRef(false);
+
+  // Authorized stations dynamically gathered from system stations + snapshot/history stations,
+  // ordered strictly in the requested sequence:
+  // 1. City Health Office 3, 2. Dasma 1, 3. Dasma 3, 4. Dasma 4, 5. Salawag Proper, 6. Armstrong, 7. San Marino
+  const authorizedStations = useMemo(() => {
+    const baseList = (canViewOtherStations ? availableStations : visibleStations) || [];
+    const set = new Set(baseList.filter(Boolean));
+    if (canViewOtherStations) {
+      (stationCurrentInventory || []).forEach(r => { if (r.station) set.add(r.station); });
+      (distributionHistory || []).forEach(r => { if (r.destination_station) set.add(r.destination_station); });
+    }
+    const list = Array.from(set);
+    return list.sort((a, b) => {
+      const rankA = getStationOrderRank(a);
+      const rankB = getStationOrderRank(b);
+      if (rankA !== rankB) return rankA - rankB;
+      return String(a || '').localeCompare(String(b || ''));
+    });
+  }, [canViewOtherStations, availableStations, visibleStations, stationCurrentInventory, distributionHistory]);
+
+  // Keep selectedStation in sync with authorized stations:
+  // Default to assignedStation for Station Staff, or City Health Office 3 for Admin and CHO Personnel
+  useEffect(() => {
+    if (authorizedStations.length > 0) {
+      const isStaffAssigned = isStationStaff && assignedStation && authorizedStations.some(s => isSameStationName(s, assignedStation) || matchStation(s, assignedStation));
+      const targetDefault = isStaffAssigned
+        ? (authorizedStations.find(s => isSameStationName(s, assignedStation) || matchStation(s, assignedStation)) || assignedStation)
+        : (authorizedStations.find(s => {
+            const norm = String(s || '').toLowerCase().trim();
+            return norm.includes('city health') || norm.includes('cho 3') || norm.includes('cho iii') || norm === 'cho';
+          }) || authorizedStations[0]);
+
+      if (!userHasChangedHistoryStationRef.current) {
+        if (selectedStation !== targetDefault) {
+          setSelectedStation(targetDefault);
+          setHistoryStationFilter(targetDefault);
+        }
+      } else if (!selectedStation || !authorizedStations.some(s => isSameStationName(s, selectedStation) || matchStation(s, selectedStation))) {
+        setSelectedStation(targetDefault);
+        setHistoryStationFilter(targetDefault);
+      }
+    }
+  }, [authorizedStations, isStationStaff, assignedStation, selectedStation, matchStation]);
+
+  const handleSelectStation = (station) => {
+    userHasChangedHistoryStationRef.current = true;
+    setSelectedStation(station);
+    setHistoryStationFilter(station);
+    setDistPage(1);
+  };
+
   const [historyTypeFilter, setHistoryTypeFilter] = useState('All');
   const [historyDateFilter, setHistoryDateFilter] = useState('all');
   const [historyCustomDateFrom, setHistoryCustomDateFrom] = useState('');
@@ -176,20 +326,41 @@ const Inventory = () => {
   // Expandable rows for station inventory
   const [expandedStationRows, setExpandedStationRows] = useState({});
 
-  // Station inventory now directly uses fetched current stock data, not distribution history
-  // Group by station + item_name + item_type, with batch/brand variants as children
-  const stationInventory = useMemo(() => {
-    if (!stationCurrentInventory || stationCurrentInventory.length === 0) return [];
+  // Resolve database station object by ID / name relationship
+  const selectedStationObj = useMemo(() => {
+    if (!selectedStation) return null;
+    return stationsDirectory.find(s => s.name === selectedStation || isSameStationName(s.name, selectedStation) || matchStation(s.name, selectedStation)) || null;
+  }, [stationsDirectory, selectedStation, matchStation]);
+  const selectedStationId = selectedStationObj?.id || null;
+
+  // Station inventory for the selected station
+  // Group by item_type + item_name, with batch/brand variants as children
+  const selectedStationInventory = useMemo(() => {
+    if (!selectedStation || !stationCurrentInventory || stationCurrentInventory.length === 0) return [];
 
     const grouped = {};
 
     stationCurrentInventory.forEach(row => {
+      const isStationMatch = (selectedStationId && row.station_id && row.station_id === selectedStationId) ||
+                             (selectedStationObj && row.station_name && (isSameStationName(row.station_name, selectedStationObj.name) || matchStation(row.station_name, selectedStationObj.name))) ||
+                             isSameStationName(row.station, selectedStation) ||
+                             matchStation(row.station, selectedStation);
+      if (!isStationMatch) return;
+      if (stationInvTypeFilter !== 'All' && row.item_type !== stationInvTypeFilter) return;
+      if (stationInvSearch) {
+        const s = stationInvSearch.toLowerCase();
+        const matches = (row.item_name || '').toLowerCase().includes(s) ||
+                        (row.brand || '').toLowerCase().includes(s) ||
+                        (row.batch || '').toLowerCase().includes(s);
+        if (!matches) return;
+      }
+
       const groupKey = `${row.station || 'Unknown'}||${row.item_type || 'Unknown'}||${row.item_name || 'Unknown'}`;
 
       if (!grouped[groupKey]) {
         grouped[groupKey] = {
           groupKey,
-          station: row.station || 'Unknown',
+          station: row.station || selectedStation,
           item_name: row.item_name || 'Unknown',
           item_type: row.item_type || 'Unknown',
           unit: row.unit || (row.item_type === 'Vaccine' ? 'vials' : 'pcs'),
@@ -212,14 +383,13 @@ const Inventory = () => {
     });
 
     return Object.values(grouped).sort((a, b) => {
-      const stationCmp = (a.station || '').localeCompare(b.station || '');
-      if (stationCmp !== 0) return stationCmp;
       const typeCmp = (a.item_type || '').localeCompare(b.item_type || '');
       if (typeCmp !== 0) return typeCmp;
       return (a.item_name || '').localeCompare(b.item_name || '');
     });
-  }, [stationCurrentInventory]);
+  }, [stationCurrentInventory, selectedStation, selectedStationId, selectedStationObj, stationInvTypeFilter, stationInvSearch, matchStation]);
 
+  const stationInventory = selectedStationInventory;
   // Handle auto-populating user info when context resolves
   useEffect(() => {
     if (user) {
@@ -312,37 +482,35 @@ const Inventory = () => {
     }
   };
 
-  const fetchData = async () => {
+  const fetchData = async (isSilent = false) => {
+    const now = Date.now();
     if (fetchDataInFlightRef.current) {
       fetchDataQueuedRef.current = true;
       return;
     }
 
+    if (now - lastMainFetchAtRef.current < 1000) {
+      fetchDataQueuedRef.current = true;
+      return;
+    }
+
+    lastMainFetchAtRef.current = now;
     fetchDataInFlightRef.current = true;
     try {
       do {
         fetchDataQueuedRef.current = false;
-        setLoading(true);
+        if (!isSilent && vaccines.length === 0 && supplements.length === 0) {
+          setLoading(true);
+        }
+        setError(null);
         try {
-          const [vaxData, suppData, stationsData] = await Promise.all([
-            inventoryService.getVaccineInventory(),
-            inventoryService.getSupplementInventory(),
-            patientService.getAvailableStations()
-          ]);
+        const pendingLoad = loadPendingVaccinations();
+        const [vaxData, suppData] = await Promise.all([
+          inventoryService.getVaccineInventory({ includeMainInventory: canViewMainInventory }),
+          inventoryService.getSupplementInventory({ includeMainInventory: canViewMainInventory })
+        ]);
 
-          setAvailableStations(stationsData && stationsData.length > 0 ? stationsData : [
-            'Salawag',
-            'Dasma I',
-            'Dasma 2',
-            'Dasma 3',
-            'Dasma 4',
-            'Armstrong',
-            'City Health Office 3'
-          ]);
-
-          console.log('Inventory data fetched - vaccines:', vaxData?.length || 0, 'supplements:', suppData?.length || 0);
-
-          await loadPendingVaccinations();
+        await pendingLoad;
 
           const mappedVaccines = (vaxData || []).map(row => ({
             id: row?.id || '',
@@ -350,7 +518,7 @@ const Inventory = () => {
             quantity: row?.quantity || 0,
             max_stock: row?.max_quantity || row?.max_stock || 500,
             unit: row?.unit || 'vials',
-            status: row?.status || 'active', // Note: This is a custom status field, not from DB
+            status: row?.status || 'active',
             brand: row?.brand || '',
             expiration_date: row?.expiration_date || null,
             doses: row?.doses || null,
@@ -364,7 +532,7 @@ const Inventory = () => {
             quantity: row?.quantity || 0,
             max_stock: row?.max_quant || row?.max_stock || 1000,
             unit: row?.unit || 'tablets',
-            status: row?.status || 'active', // Note: This is a custom status field, not from DB
+            status: row?.status || 'active',
             brand: row?.brand || '',
             expiration_date: row?.expiration_date || null,
             batch_number: row?.batch_number || null,
@@ -372,12 +540,11 @@ const Inventory = () => {
             created_at: row?.created_at || null
           }));
 
-          console.log('Mapped vaccines:', mappedVaccines.length, 'Mapped supplements:', mappedSupplements.length);
-
           setVaccines(mappedVaccines);
           setSupplements(mappedSupplements);
         } catch (error) {
           console.error('Error fetching inventory:', error);
+          setError(error);
         } finally {
           setLoading(false);
         }
@@ -385,6 +552,13 @@ const Inventory = () => {
     } finally {
       fetchDataInFlightRef.current = false;
     }
+  };
+
+  const scheduleMainDataRefresh = (isSilent = true) => {
+    clearTimeout(mainDataRefreshTimerRef.current);
+    mainDataRefreshTimerRef.current = setTimeout(() => {
+      fetchData(isSilent);
+    }, 200);
   };
 
   useEffect(() => {
@@ -400,24 +574,27 @@ const Inventory = () => {
     };
 
     loadScope();
-    fetchData();
+    fetchData(false);
 
-    const vaxSub = isAdmin
-      ? inventoryService.subscribeToInventory('vaccine_inventory', () => fetchData())
+    const vaxSub = canViewMainInventory
+      ? inventoryService.subscribeToInventory('vaccine_inventory', () => scheduleMainDataRefresh(true))
       : null;
-    const suppSub = isAdmin
-      ? inventoryService.subscribeToInventory('supplement_inventory', () => fetchData())
+    const suppSub = canViewMainInventory
+      ? inventoryService.subscribeToInventory('supplement_inventory', () => scheduleMainDataRefresh(true))
       : null;
 
     return () => {
       isCurrent = false;
+      clearTimeout(mainDataRefreshTimerRef.current);
       vaxSub?.unsubscribe();
       suppSub?.unsubscribe();
     };
-  }, [user?.id, isAdmin]);
+  }, [user?.id, isAdmin, canViewMainInventory]);
 
   // Separate effect for station inventory to prevent clearing on central inventory updates
   useEffect(() => {
+    if (mainTab !== 'distribution') return undefined;
+
     let isCurrent = true;
     let refreshTimer;
     let isFetching = false;
@@ -433,17 +610,53 @@ const Inventory = () => {
       try {
         do {
           refreshQueued = false;
-          try {
-            const [stationInventoryData, history] = await Promise.all([
-              inventoryService.getStationInventorySnapshot(),
-              inventoryService.getStationDistributionHistory()
-            ]);
-            if (isCurrent) {
-              setStationCurrentInventory(stationInventoryData || []);
-              setDistributionHistory(history || []);
+          const [inventoryResult, historyResult, stationsResult] = await Promise.allSettled([
+            canViewStationInventory
+              ? inventoryService.getStationInventorySnapshot()
+              : Promise.resolve([]),
+            canViewStationInventory || canDistributeToStations
+              ? inventoryService.getStationDistributionHistory()
+              : Promise.resolve([]),
+            inventoryService.supabase.from('stations').select('id, station_name').order('station_name')
+          ]);
+          if (isCurrent) {
+            if (inventoryResult.status === 'fulfilled') {
+              setStationCurrentInventory(inventoryResult.value || []);
+              setStationInventoryError('');
+            } else {
+              console.warn('Failed to fetch station inventory:', inventoryResult.reason);
+              setStationInventoryError('Station inventory could not be loaded. Please retry.');
             }
-          } catch (err) {
-            console.warn('Failed to fetch station inventory/distribution data:', err);
+
+            if (historyResult.status === 'fulfilled') {
+              setDistributionHistory(historyResult.value || []);
+            } else {
+              console.warn('Failed to fetch station distribution history:', historyResult.reason);
+            }
+
+            if (stationsResult.status === 'fulfilled') {
+              const stationsRaw = stationsResult.value;
+              const stations = stationsRaw.data || [];
+              if (stationsRaw.error) {
+                console.warn('Failed to fetch inventory stations:', stationsRaw.error);
+              }
+              setStationsDirectory(stations.map(station => ({ id: station.id, name: station.station_name })));
+              if (stations.length > 0) {
+                setAvailableStations(stations.map(station => station.station_name));
+              } else {
+                setAvailableStations([
+                  'City Health Office 3',
+                  'Dasma 1',
+                  'Dasma 3',
+                  'Dasma 4',
+                  'Salawag Proper',
+                  'Armstrong',
+                  'San Marino'
+                ]);
+              }
+            } else {
+              console.warn('Failed to fetch inventory stations:', stationsResult.reason);
+            }
           }
         } while (refreshQueued && isCurrent);
       } finally {
@@ -466,7 +679,7 @@ const Inventory = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'station_vaccine_inventory' }, () => {
         if (isCurrent) {
           scheduleStationDataRefresh();
-          if (!isAdmin) fetchData();
+          if (!isAdmin) scheduleMainDataRefresh(true);
         }
       })
       .subscribe();
@@ -476,7 +689,7 @@ const Inventory = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'station_supplement_inventory' }, () => {
         if (isCurrent) {
           scheduleStationDataRefresh();
-          if (!isAdmin) fetchData();
+          if (!isAdmin) scheduleMainDataRefresh(true);
         }
       })
       .subscribe();
@@ -487,7 +700,7 @@ const Inventory = () => {
       inventoryService.supabase.removeChannel(stationVaccineSub);
       inventoryService.supabase.removeChannel(stationSupplementSub);
     };
-  }, [user?.id, isAdmin]);
+  }, [user?.id, mainTab, isAdmin, canViewOtherStations, canDistributeToStations, canViewStationInventory, stationDataRefreshKey]);
 
   const getStatus = (qty, maxStock, hasExpiredStock) => {
     return getInventoryStatus(qty, maxStock, hasExpiredStock);
@@ -502,7 +715,6 @@ const Inventory = () => {
   // Group vaccines by name only (not brand), keep all batches
   const groupVaccinesByName = (vaccineList) => {
     if (!vaccineList || vaccineList.length === 0) {
-      console.log('Debug: No vaccines to group');
       return [];
     }
     
@@ -550,14 +762,12 @@ const Inventory = () => {
       return group;
     });
     
-    console.log('Debug: Grouped vaccines:', result.length, 'Sample:', result[0]?.item_name);
     return result;
   };
 
   // Group supplements by name only (not brand), keep all batches
   const groupSupplementsByName = (supplementList) => {
     if (!supplementList || supplementList.length === 0) {
-      console.log('Debug: No supplements to group');
       return [];
     }
     
@@ -603,90 +813,91 @@ const Inventory = () => {
       return group;
     });
     
-    console.log('Debug: Grouped supplements:', result.length, 'Sample:', result[0]?.item_name);
     return result;
   };
 
   const currentItems = activeTab === 'vaccines' ? groupVaccinesByName(vaccines) : groupSupplementsByName(supplements);
 
-  // Debug: Log data flow
-  console.log('Debug Inventory - vaccines:', vaccines.length, 'supplements:', supplements.length, 'currentItems:', currentItems.length);
+  // Grouped items scoped to archiveFilter and dateFilter
+  const scopedItems = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-  const filteredItems = currentItems
-    .filter(item => item && typeof item === 'object')
-    .map(item => {
-      // Filter the items within the group based on the archiveFilter
-      const filteredSubItems = item.items.filter(i => {
-        const isArchived = archivedIds.includes(i.id) || i.status === 'archived';
-        if (archiveFilter === 'active' && isArchived) return false;
-        if (archiveFilter === 'archived' && !isArchived) return false;
-        
-        if (dateFilter !== 'all') {
-          const dDate = i.created_at ? new Date(i.created_at) : null;
-          if (!dDate || isNaN(dDate.getTime())) return false;
+    return currentItems
+      .filter(item => item && typeof item === 'object')
+      .map(item => {
+        // Filter the items within the group based on the archiveFilter and dateFilter
+        const filteredSubItems = (item.items || []).filter(i => {
+          const isArchived = i.status === 'archived';
+          if (archiveFilter === 'active' && isArchived) return false;
+          if (archiveFilter === 'archived' && !isArchived) return false;
           
-          const now = new Date();
-          if (dateFilter === 'this_month') {
-              if (dDate.getMonth() !== now.getMonth() || dDate.getFullYear() !== now.getFullYear()) return false;
-          } else if (dateFilter === 'this_year') {
-              if (dDate.getFullYear() !== now.getFullYear()) return false;
-          } else if (dateFilter === 'custom' && customDateFrom && customDateTo) {
-              const from = new Date(`${customDateFrom}T00:00:00`);
-              const to = new Date(`${customDateTo}T23:59:59.999`);
-              if (dDate < from || dDate > to) return false;
+          if (dateFilter !== 'all') {
+            const dDate = i.created_at ? new Date(i.created_at) : null;
+            if (!dDate || isNaN(dDate.getTime())) return false;
+            
+            const now = new Date();
+            if (dateFilter === 'this_month') {
+                if (dDate.getMonth() !== now.getMonth() || dDate.getFullYear() !== now.getFullYear()) return false;
+            } else if (dateFilter === 'this_year') {
+                if (dDate.getFullYear() !== now.getFullYear()) return false;
+            } else if (dateFilter === 'custom' && customDateFrom && customDateTo) {
+                const from = new Date(`${customDateFrom}T00:00:00`);
+                const to = new Date(`${customDateTo}T23:59:59.999`);
+                if (dDate < from || dDate > to) return false;
+            }
           }
-        }
-        
-        return true;
-      }).map(i => {
-        // If it's in our local storage archived list, enforce the status so UI reflects it
-        if (archivedIds.includes(i.id)) {
-            return { ...i, status: 'archived' };
-        }
-        return i;
-      });
+          
+          return true;
+        });
 
-      const total_quantity = filteredSubItems.reduce((sum, i) => sum + (i.isExpired ? 0 : (i.quantity || 0)), 0);
-      const total_max_stock = filteredSubItems.reduce((sum, i) => sum + (i.max_stock || i.max_quantity || i.max_quant || 0), 0);
-      const hasExpiredStock = filteredSubItems.some(i => i.isExpired && (i.quantity || 0) > 0);
+        const total_quantity = filteredSubItems.reduce((sum, i) => sum + (i.isExpired ? 0 : (i.quantity || 0)), 0);
+        const total_max_stock = filteredSubItems.reduce((sum, i) => sum + (i.max_stock || i.max_quantity || i.max_quant || 0), 0);
+        const hasExpiredStock = filteredSubItems.some(i => i.isExpired && (i.quantity || 0) > 0);
+        const hasExpiringSoonStock = filteredSubItems.some(i => !i.isExpired && (i.quantity || 0) > 0 && isBatchExpiringSoon(i.expiration_date || i.expiry_date, 30));
 
-      return {
-        ...item,
-        items: filteredSubItems,
-        total_quantity,
-        total_max_stock,
-        hasExpiredStock
-      };
-    })
-    .filter(item => {
-      // Only show groups that have at least one item matching the archive filter
-      if (item.items.length === 0) return false;
+        return {
+          ...item,
+          items: filteredSubItems,
+          total_quantity,
+          total_max_stock,
+          hasExpiredStock,
+          hasExpiringSoonStock
+        };
+      })
+      .filter(item => item.items.length > 0);
+  }, [currentItems, archiveFilter, dateFilter, customDateFrom, customDateTo]);
 
+  const filteredItems = useMemo(() => {
+    return scopedItems.filter(item => {
       const matchesSearch = (item.item_name || '').toLowerCase().includes(searchTerm.toLowerCase());
       const status = getStatus(item.total_quantity || 0, item.total_max_stock, item.hasExpiredStock).label;
       const matchesStatus = statusFilter === 'All' || status === statusFilter || (statusFilter === 'Expired' && status === 'EXPIRED');
       
-      // Apply summary card filter
+      // Apply summary card / alert filter
       let matchesSummary = true;
       if (activeSummaryFilter === 'lowStock') {
         const percentage = item.total_max_stock ? Math.round((item.total_quantity || 0) / item.total_max_stock * 100) : 0;
-        matchesSummary = !item.hasExpiredStock && (item.total_quantity || 0) > 0 && percentage <= 20;
+        matchesSummary = (item.total_quantity || 0) > 0 && percentage <= 20;
       } else if (activeSummaryFilter === 'mediumStock') {
         const percentage = item.total_max_stock ? Math.round((item.total_quantity || 0) / item.total_max_stock * 100) : 0;
-        matchesSummary = !item.hasExpiredStock && percentage > 20 && percentage <= 50;
+        matchesSummary = percentage > 20 && percentage <= 50;
       } else if (activeSummaryFilter === 'normalStock') {
         const percentage = item.total_max_stock ? Math.round((item.total_quantity || 0) / item.total_max_stock * 100) : 0;
-        matchesSummary = !item.hasExpiredStock && percentage > 50;
+        matchesSummary = percentage > 50;
       } else if (activeSummaryFilter === 'outOfStock') {
-        matchesSummary = !item.hasExpiredStock && (item.total_quantity || 0) <= 0;
+        matchesSummary = (item.total_quantity || 0) <= 0;
       } else if (activeSummaryFilter === 'expiredStock') {
         matchesSummary = !!item.hasExpiredStock;
+      } else if (activeSummaryFilter === 'expiringSoon') {
+        matchesSummary = !!item.hasExpiringSoonStock;
       }
       
       return matchesSearch && matchesStatus && matchesSummary;
     });
+  }, [scopedItems, searchTerm, statusFilter, activeSummaryFilter]);
 
-  const totalItems = (currentItems || []).length;
+  const totalItems = (scopedItems || []).length;
   const getStockCount = (items) => {
     const lowStockCount = items.filter(i => {
       const percentage = i?.total_max_stock ? Math.round((i?.total_quantity || 0) / i?.total_max_stock * 100) : 0;
@@ -703,16 +914,23 @@ const Inventory = () => {
     const outOfStockCount = items.filter(i => (i?.total_quantity || 0) <= 0).length;
     return { lowStockCount, mediumStockCount, normalCount, outOfStockCount };
   };
-  const { lowStockCount, mediumStockCount, normalCount, outOfStockCount } = getStockCount(currentItems);
+  const { lowStockCount, mediumStockCount, outOfStockCount } = getStockCount(scopedItems);
 
   const inventoryAlerts = useMemo(() => {
     const alerts = [];
     const now = new Date();
     now.setHours(0, 0, 0, 0);
     
-    const allItems = [...(vaccines || []), ...(supplements || [])].filter(item => 
-      !archivedIds.includes(item.id) && item.status !== 'archived'
-    );
+    // Scope all items strictly according to the selected archiveFilter (active vs archived)
+    const allItems = [
+      ...(vaccines || []).map(v => ({ ...v, _type: 'vaccines' })),
+      ...(supplements || []).map(s => ({ ...s, _type: 'supplements' }))
+    ].filter(item => {
+      const isArchived = item.status === 'archived';
+      if (archiveFilter === 'active') return !isArchived;
+      if (archiveFilter === 'archived') return isArchived;
+      return true; // 'all'
+    });
 
     let outOfStockGroups = [];
     let lowStockGroups = [];
@@ -723,24 +941,39 @@ const Inventory = () => {
     const groupedByName = {};
     allItems.forEach(item => {
       const name = item.item_name;
-      if (!groupedByName[name]) {
-        groupedByName[name] = { name, totalQuantity: 0, totalMaxStock: 0, usableQuantity: 0, unit: item.unit || 'units' };
+      if (!name) return;
+      const groupKey = `${item._type}:${name}`;
+      if (!groupedByName[groupKey]) {
+        groupedByName[groupKey] = { 
+          key: groupKey,
+          name, 
+          itemType: item._type,
+          totalQuantity: 0, 
+          totalMaxStock: 0, 
+          usableQuantity: 0, 
+          unit: item.unit || 'units',
+          hasExpired: false,
+          hasExpiringSoon: false
+        };
       }
-      const group = groupedByName[name];
+      const group = groupedByName[groupKey];
       group.totalQuantity += item.quantity || 0;
-      group.totalMaxStock += item.max_stock || 0;
+      group.totalMaxStock += (item.max_stock || item.max_quantity || item.max_quant || 0);
       
       let isExpired = false;
-      
-      if (item.expiration_date) {
-        const expDate = new Date(item.expiration_date);
-        expDate.setHours(0, 0, 0, 0);
-        const daysUntil = Math.ceil((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-        if (daysUntil < 0) {
+      const expDateVal = item.expiration_date || item.expiry_date;
+      if (expDateVal) {
+        if (isBatchExpired(expDateVal)) {
           isExpired = true;
-          if (item.quantity > 0) expiredBatches.push(item);
-        } else if (daysUntil <= 30) {
-          if (item.quantity > 0) expiringSoonBatches.push(item);
+          if ((item.quantity || 0) > 0) {
+            expiredBatches.push(item);
+            group.hasExpired = true;
+          }
+        } else if (isBatchExpiringSoon(expDateVal, 30)) {
+          if ((item.quantity || 0) > 0) {
+            expiringSoonBatches.push(item);
+            group.hasExpiringSoon = true;
+          }
         }
       }
       
@@ -750,18 +983,20 @@ const Inventory = () => {
     });
 
     const demandByItemName = {};
-    (pendingVaccinations || []).forEach(row => {
-      if (row.vaccine_inventory_id) {
-        const matchedItem = allItems.find(i => i.id === row.vaccine_inventory_id);
-        if (matchedItem && matchedItem.item_name) {
-          demandByItemName[matchedItem.item_name] = (demandByItemName[matchedItem.item_name] || 0) + 1;
+    if (archiveFilter !== 'archived') {
+      (pendingVaccinations || []).forEach(row => {
+        if (row.vaccine_inventory_id) {
+          const matchedItem = allItems.find(i => i.id === row.vaccine_inventory_id);
+          if (matchedItem && matchedItem.item_name) {
+            demandByItemName[matchedItem.item_name] = (demandByItemName[matchedItem.item_name] || 0) + 1;
+          }
         }
-      }
-    });
+      });
+    }
 
     Object.values(groupedByName).forEach(group => {
       const demand = demandByItemName[group.name] || 0;
-      if (demand > group.usableQuantity) {
+      if (group.itemType === 'vaccines' && demand > group.usableQuantity) {
         insufficientStockAlerts.push({ group, shortage: demand - group.usableQuantity, demand });
       }
 
@@ -786,8 +1021,13 @@ const Inventory = () => {
           : `${outOfStockGroups.length} inventory items are currently out of stock.`,
         color: '#e05c73',
         onClick: () => {
-          setActiveSummaryFilter('outOfStock');
-          setSearchTerm(outOfStockGroups.length === 1 ? outOfStockGroups[0].name : '');
+          setActiveSummaryFilter(prev => prev === 'outOfStock' ? null : 'outOfStock');
+          setStatusFilter('All');
+          setSearchTerm('');
+          const hasInCurrent = outOfStockGroups.some(g => g.itemType === activeTab);
+          if (!hasInCurrent && outOfStockGroups.length > 0) {
+            setActiveTab(outOfStockGroups[0].itemType);
+          }
           setMainTab('inventory');
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }
@@ -805,10 +1045,15 @@ const Inventory = () => {
           : `${expiredBatches.length} inventory batches have expired and require attention.`,
         color: '#e05c73',
         onClick: () => {
-           setSearchTerm(expiredBatches.length === 1 ? expiredBatches[0].item_name : '');
-           setActiveSummaryFilter('expiredStock');
-           setMainTab('inventory');
-           window.scrollTo({ top: 0, behavior: 'smooth' });
+          setActiveSummaryFilter(prev => prev === 'expiredStock' ? null : 'expiredStock');
+          setStatusFilter('All');
+          setSearchTerm('');
+          const hasInCurrent = expiredBatches.some(b => b._type === activeTab);
+          if (!hasInCurrent && expiredBatches.length > 0) {
+            setActiveTab(expiredBatches[0]._type);
+          }
+          setMainTab('inventory');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }
       });
     }
@@ -824,10 +1069,12 @@ const Inventory = () => {
           : `${insufficientStockAlerts.length} items have insufficient stock for upcoming scheduled vaccinations.`,
         color: '#e05c73',
         onClick: () => {
-           setSearchTerm(insufficientStockAlerts.length === 1 ? insufficientStockAlerts[0].group.name : '');
-           setActiveSummaryFilter(null);
-           setMainTab('inventory');
-           window.scrollTo({ top: 0, behavior: 'smooth' });
+          setActiveSummaryFilter(null);
+          setStatusFilter('All');
+          setSearchTerm(insufficientStockAlerts.length === 1 ? insufficientStockAlerts[0].group.name : '');
+          setActiveTab('vaccines');
+          setMainTab('inventory');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }
       });
     }
@@ -843,8 +1090,13 @@ const Inventory = () => {
           : `${lowStockGroups.length} inventory items are running low on stock.`,
         color: '#e05c73',
         onClick: () => {
-          setActiveSummaryFilter('lowStock');
-          setSearchTerm(lowStockGroups.length === 1 ? lowStockGroups[0].name : '');
+          setActiveSummaryFilter(prev => prev === 'lowStock' ? null : 'lowStock');
+          setStatusFilter('All');
+          setSearchTerm('');
+          const hasInCurrent = lowStockGroups.some(g => g.itemType === activeTab);
+          if (!hasInCurrent && lowStockGroups.length > 0) {
+            setActiveTab(lowStockGroups[0].itemType);
+          }
           setMainTab('inventory');
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }
@@ -862,16 +1114,21 @@ const Inventory = () => {
           : `${expiringSoonBatches.length} inventory batches will expire soon.`,
         color: '#e8b84b',
         onClick: () => {
-           setSearchTerm(expiringSoonBatches.length === 1 ? expiringSoonBatches[0].item_name : '');
-           setActiveSummaryFilter(null);
-           setMainTab('inventory');
-           window.scrollTo({ top: 0, behavior: 'smooth' });
+          setActiveSummaryFilter(prev => prev === 'expiringSoon' ? null : 'expiringSoon');
+          setStatusFilter('All');
+          setSearchTerm('');
+          const hasInCurrent = expiringSoonBatches.some(b => b._type === activeTab);
+          if (!hasInCurrent && expiringSoonBatches.length > 0) {
+            setActiveTab(expiringSoonBatches[0]._type);
+          }
+          setMainTab('inventory');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }
       });
     }
 
     return alerts.sort((a, b) => a.priority - b.priority);
-  }, [vaccines, supplements, archivedIds, pendingVaccinations]);
+  }, [vaccines, supplements, pendingVaccinations, archiveFilter, activeTab]);
 
   // Pagination logic
   const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
@@ -889,7 +1146,17 @@ const Inventory = () => {
     const typeStr = activeTab.charAt(0).toUpperCase() + activeTab.slice(1);
     let desc = `Type: ${typeStr}`;
     if (statusFilter !== 'All') desc += ` · Status: ${statusFilter}`;
-    if (activeSummaryFilter) desc += ` · Summary: ${activeSummaryFilter}`;
+    if (activeSummaryFilter) {
+      const summaryLabels = {
+        lowStock: 'Low Stock',
+        mediumStock: 'Medium Stock',
+        normalStock: 'Normal Stock',
+        outOfStock: 'Out of Stock',
+        expiredStock: 'Expired Stock',
+        expiringSoon: 'Expiring Soon'
+      };
+      desc += ` · Alert/Summary: ${summaryLabels[activeSummaryFilter] || activeSummaryFilter}`;
+    }
     if (archiveFilter !== 'active') desc += ` · Archive: ${archiveFilter}`;
     if (searchTerm) desc += ` · Search: "${searchTerm}"`;
     return desc;
@@ -963,34 +1230,21 @@ const Inventory = () => {
       const dateStr = new Date().toISOString().split('T')[0];
       XLSX.writeFile(wb, `Inventory_Report_${dateStr}.xlsx`);
     } else if (format === 'pdf') {
-      const doc = new jsPDF('landscape');
-      
-      doc.setFontSize(16);
-      doc.text("DASMOM+ Inventory Management Report", 14, 20);
-      
-      doc.setFontSize(10);
-      doc.setTextColor(100);
-      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
-      doc.text(`Scope: ${fullDesc}`, 14, 34);
-      
-      if (data.length === 0) {
-        doc.text("No records found for the selected period and filters.", 14, 46);
-      } else {
-        const head = [Object.keys(data[0])];
-        const body = data.map(obj => Object.values(obj));
-        
-        doc.autoTable({
-          startY: 42,
-          head: head,
-          body: body,
-          theme: 'grid',
-          styles: { fontSize: 8 },
-          headStyles: { fillColor: [185, 129, 138] }
-        });
-      }
-      
       const dateStr = new Date().toISOString().split('T')[0];
-      doc.save(`Inventory_Report_${dateStr}.pdf`);
+      const head = data.length > 0 ? [Object.keys(data[0])] : [["Item Name", "Category / Type", "Current Stock", "Unit", "Stock Status", "Expiration Date", "Batch/Lot Number", "Last Updated"]];
+      const body = data.length > 0 ? data.map(obj => Object.values(obj)) : [];
+
+      exportStandardStaffPdf({
+        orientation: 'landscape',
+        title: 'Inventory Stock Management Report',
+        period: reportPeriodText || 'All Dates',
+        station: 'Main Storage / CHO III',
+        scope: filterDesc || '',
+        totalRecords: data.length,
+        head: head,
+        body: body,
+        filename: `Inventory_Report_${dateStr}.pdf`
+      });
     }
   };
 
@@ -998,8 +1252,11 @@ const Inventory = () => {
     const { format, dateRange, reportPeriodText } = exportConfig;
     
     let toExport = distributionHistory;
+    if (historyStationFilter && historyStationFilter !== 'All') {
+      toExport = toExport.filter(d => matchStation(d.destination_station, historyStationFilter));
+    }
     if (dateRange && (dateRange.from || dateRange.to)) {
-      toExport = distributionHistory.filter(d => {
+      toExport = toExport.filter(d => {
         const dDate = d.distribution_date ? new Date(d.distribution_date) : null;
         if (!dDate) return false;
         if (dateRange.from && dDate < dateRange.from) return false;
@@ -1044,29 +1301,20 @@ const Inventory = () => {
       const dateStr = new Date().toISOString().split('T')[0];
       XLSX.writeFile(wb, `Station_Distribution_${dateStr}.xlsx`);
     } else if (format === 'pdf') {
-      const doc = new jsPDF('landscape');
-      doc.setFontSize(16);
-      doc.text("DASMOM+ Station Distribution Report", 14, 20);
-      doc.setFontSize(10);
-      doc.setTextColor(100);
-      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
-      doc.text(`Period: ${reportPeriodText}`, 14, 34);
-      if (exportData.length === 0) {
-        doc.text("No distribution records found for the selected period.", 14, 46);
-      } else {
-        const head = [Object.keys(exportData[0])];
-        const body = exportData.map(obj => Object.values(obj));
-        doc.autoTable({
-          startY: 42,
-          head: head,
-          body: body,
-          theme: 'grid',
-          styles: { fontSize: 8 },
-          headStyles: { fillColor: [185, 129, 138] }
-        });
-      }
       const dateStr = new Date().toISOString().split('T')[0];
-      doc.save(`Station_Distribution_${dateStr}.pdf`);
+      const head = exportData.length > 0 ? [Object.keys(exportData[0])] : [["Date", "Item Name", "Item Type", "Quantity", "Destination Station", "Released By", "Brand", "Batch", "Remarks"]];
+      const body = exportData.length > 0 ? exportData.map(obj => Object.values(obj)) : [];
+
+      exportStandardStaffPdf({
+        orientation: 'landscape',
+        title: 'Station Distribution Report',
+        period: reportPeriodText || 'All Dates',
+        station: 'All Stations',
+        totalRecords: exportData.length,
+        head: head,
+        body: body,
+        filename: `Station_Distribution_${dateStr}.pdf`
+      });
     }
   };
 
@@ -1312,12 +1560,12 @@ const Inventory = () => {
     });
     if (!isConfirmed) return;
     try {
-      const newArchivedIds = [...new Set([...archivedIds, ...ids])];
-      setArchivedIds(newArchivedIds);
-      localStorage.setItem('inventory_archived_ids', JSON.stringify(newArchivedIds));
-      
-      // Update UI manually or just rely on state change causing re-render
-      // fetchData() is optional if we just rely on state
+      await inventoryService.setInventoryArchived(table, ids, true);
+      const setArchivedStatus = items => items.map(item => (
+        ids.includes(item.id) ? { ...item, status: 'archived' } : item
+      ));
+      if (table === 'vaccine_inventory') setVaccines(setArchivedStatus);
+      else setSupplements(setArchivedStatus);
     } catch (error) {
       await customAlert({ title: 'Error', text: 'Failed to archive item: ' + error.message, iconType: 'danger' });
     }
@@ -1333,10 +1581,12 @@ const Inventory = () => {
     });
     if (!isConfirmed) return;
     try {
-      const newArchivedIds = archivedIds.filter(id => !ids.includes(id));
-      setArchivedIds(newArchivedIds);
-      localStorage.setItem('inventory_archived_ids', JSON.stringify(newArchivedIds));
-      
+      await inventoryService.setInventoryArchived(table, ids, false);
+      const setActiveStatus = items => items.map(item => (
+        ids.includes(item.id) ? { ...item, status: 'active' } : item
+      ));
+      if (table === 'vaccine_inventory') setVaccines(setActiveStatus);
+      else setSupplements(setActiveStatus);
     } catch (error) {
       await customAlert({ title: 'Error', text: 'Failed to restore item: ' + error.message, iconType: 'danger' });
     }
@@ -1353,58 +1603,96 @@ const Inventory = () => {
     }
   };
 
-  // Distribution history filtering + pagination
-  const filteredDistHistory = distributionHistory.filter(rec => {
-    const search = historySearch.toLowerCase();
-    const matchesSearch = !search || rec.item_name?.toLowerCase().includes(search) || rec.destination_station?.toLowerCase().includes(search) || rec.released_by?.toLowerCase().includes(search);
-    const matchesStation = historyStationFilter === 'All' || rec.destination_station === historyStationFilter;
-    const matchesType = historyTypeFilter === 'All' || rec.item_type === historyTypeFilter;
-    
-    let matchesDate = true;
-    if (historyDateFilter !== 'all') {
-      const dDate = rec.distribution_date ? new Date(rec.distribution_date) : null;
-      if (!dDate || isNaN(dDate.getTime())) {
-        matchesDate = false;
-      } else {
+  // Distribution history filtering for selected station + pagination
+  const filteredDistHistory = useMemo(() => {
+    if (!selectedStation || !distributionHistory || distributionHistory.length === 0) return [];
+    return distributionHistory.filter(rec => {
+      const isStationMatch = (selectedStationId && rec.station_id && rec.station_id === selectedStationId) ||
+                             (selectedStationObj && rec.destination_station && (isSameStationName(rec.destination_station, selectedStationObj.name) || matchStation(rec.destination_station, selectedStationObj.name))) ||
+                             isSameStationName(rec.destination_station, selectedStation) ||
+                             matchStation(rec.destination_station, selectedStation);
+      if (!isStationMatch) return false;
+      if (historySearch) {
+        const s = historySearch.toLowerCase();
+        const matches = (rec.item_name || '').toLowerCase().includes(s) ||
+                        (rec.released_by || '').toLowerCase().includes(s) ||
+                        (rec.remarks || '').toLowerCase().includes(s) ||
+                        (rec.brand || '').toLowerCase().includes(s) ||
+                        (rec.batch || '').toLowerCase().includes(s);
+        if (!matches) return false;
+      }
+      if (historyTypeFilter !== 'All' && rec.item_type !== historyTypeFilter) return false;
+      if (historyDateFilter !== 'all') {
+        const dDate = rec.distribution_date ? new Date(rec.distribution_date) : null;
+        if (!dDate || isNaN(dDate.getTime())) return false;
         const now = new Date();
         if (historyDateFilter === 'this_month') {
-          matchesDate = dDate.getMonth() === now.getMonth() && dDate.getFullYear() === now.getFullYear();
+          if (dDate.getMonth() !== now.getMonth() || dDate.getFullYear() !== now.getFullYear()) return false;
         } else if (historyDateFilter === 'this_year') {
-          matchesDate = dDate.getFullYear() === now.getFullYear();
+          if (dDate.getFullYear() !== now.getFullYear()) return false;
         } else if (historyDateFilter === 'custom' && historyCustomDateFrom && historyCustomDateTo) {
           const from = new Date(`${historyCustomDateFrom}T00:00:00`);
           const to = new Date(`${historyCustomDateTo}T23:59:59.999`);
-          matchesDate = dDate >= from && dDate <= to;
+          if (dDate < from || dDate > to) return false;
         }
       }
-    }
-    
-    return matchesSearch && matchesStation && matchesType && matchesDate;
-  });
-  const distTotalPages = Math.ceil(filteredDistHistory.length / distItemsPerPage);
+      return true;
+    });
+  }, [distributionHistory, selectedStation, selectedStationId, selectedStationObj, historySearch, historyTypeFilter, historyDateFilter, historyCustomDateFrom, historyCustomDateTo, matchStation]);
+
+  const distTotalPages = Math.ceil(filteredDistHistory.length / distItemsPerPage) || 1;
   const distStartIndex = (distPage - 1) * distItemsPerPage;
   const paginatedDistHistory = filteredDistHistory.slice(distStartIndex, distStartIndex + distItemsPerPage);
 
-  // Distribution summary stats
+  // Distribution summary stats scoped to selected station
   const distSummary = useMemo(() => {
     const now = new Date();
     const thisMonth = now.getMonth();
     const thisYear = now.getFullYear();
 
-    const totalDistributed = distributionHistory.reduce((sum, rec) => sum + (Number(rec.quantity) || 0), 0);
-    const thisMonthDists = distributionHistory.filter(rec => {
+    const targetStation = selectedStation || historyStationFilter;
+    const scopedHistory = (targetStation && targetStation !== 'All')
+      ? distributionHistory.filter(r => (
+          (selectedStationId && r.station_id && r.station_id === selectedStationId) ||
+          (selectedStationObj && r.destination_station && (isSameStationName(r.destination_station, selectedStationObj.name) || matchStation(r.destination_station, selectedStationObj.name))) ||
+          isSameStationName(r.destination_station, targetStation) ||
+          matchStation(r.destination_station, targetStation)
+        ))
+      : distributionHistory;
+
+    const totalDistributed = scopedHistory.reduce((sum, rec) => sum + (Number(rec.quantity) || 0), 0);
+    const thisMonthDists = scopedHistory.filter(rec => {
       const d = new Date(rec.distribution_date);
       return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
     });
     const distributionsThisMonth = thisMonthDists.length;
-    const stationsSupplied = [...new Set(distributionHistory.map(r => r.destination_station).filter(Boolean))].length;
-    const itemsDistributed = [...new Set(distributionHistory.map(r => r.item_name).filter(Boolean))].length;
+    const stationsSupplied = [...new Set(scopedHistory.map(r => r.destination_station).filter(Boolean))].length;
+    const itemsDistributed = [...new Set(scopedHistory.map(r => r.item_name).filter(Boolean))].length;
 
-    return { totalDistributed, distributionsThisMonth, stationsSupplied, itemsDistributed };
-  }, [distributionHistory]);
+    const scopedInventory = (targetStation && targetStation !== 'All')
+      ? stationCurrentInventory.filter(r => (
+          (selectedStationId && r.station_id && r.station_id === selectedStationId) ||
+          (selectedStationObj && r.station_name && (isSameStationName(r.station_name, selectedStationObj.name) || matchStation(r.station_name, selectedStationObj.name))) ||
+          isSameStationName(r.station, targetStation) ||
+          matchStation(r.station, targetStation)
+        ))
+      : stationCurrentInventory;
+    const currentStockUnits = scopedInventory.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+
+    return { totalDistributed, distributionsThisMonth, stationsSupplied, itemsDistributed, currentStockUnits };
+  }, [distributionHistory, stationCurrentInventory, selectedStation, selectedStationId, selectedStationObj, historyStationFilter, matchStation]);
+  if (loading) {
+    return (
+      <StaffPageLoader 
+        message="Loading inventory management..." 
+        error={error} 
+        onRetry={fetchData} 
+      />
+    );
+  }
 
   return (
-    <div className="inventory-page">
+    <div className="inventory-page staff-page-ready">
 
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* ═══════════ VIEW 1: CHO INVENTORY MANAGEMENT ═══════════ */}
@@ -1415,10 +1703,10 @@ const Inventory = () => {
       <div className="page-header">
         <div>
           <h1 className="page-title">
-            <Package size={22} className="header-icon" /> {isAdmin ? 'Inventory Management' : 'Station Inventory'}
+            <Package size={22} className="header-icon" /> {canViewMainInventory ? 'Inventory Management' : 'Station Inventory'}
           </h1>
           <p className="page-subtitle">
-            {isAdmin
+            {canViewMainInventory
               ? 'Track and manage vaccine and supplement supplies across CHO stations to help maintain adequate stock levels.'
               : `Current vaccine and supplement stock distributed to ${userScope.stationName || 'your assigned station'}.`}
           </p>
@@ -1436,9 +1724,9 @@ const Inventory = () => {
             style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
             onClick={() => setMainTab('distribution')}
           >
-            <Truck size={16} /> {isAdmin ? 'Station Distribution' : 'Distribution History'}
+            <Truck size={16} /> {canDistributeToStations ? 'Station Distribution' : 'Distribution History'}
           </button>
-          {isAdmin && (
+          {canAddMainStock && (
             <button
               className="btn btn-primary"
               onClick={() => {
@@ -1471,7 +1759,7 @@ const Inventory = () => {
         </div>
         <div 
           className={`stat-card stat-card--rose ${activeSummaryFilter === 'lowStock' ? 'stat-card--active' : ''}`}
-          onClick={() => setActiveSummaryFilter('lowStock')}
+          onClick={() => setActiveSummaryFilter(prev => prev === 'lowStock' ? null : 'lowStock')}
           style={{ cursor: 'pointer', transition: 'all 0.2s ease', background: '#e29b9d' }}
         >
           <div className="stat-top">
@@ -1484,7 +1772,7 @@ const Inventory = () => {
         </div>
         <div 
           className={`stat-card stat-card--orange ${activeSummaryFilter === 'mediumStock' ? 'stat-card--active' : ''}`}
-          onClick={() => setActiveSummaryFilter('mediumStock')}
+          onClick={() => setActiveSummaryFilter(prev => prev === 'mediumStock' ? null : 'mediumStock')}
           style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
         >
           <div className="stat-top">
@@ -1497,7 +1785,7 @@ const Inventory = () => {
         </div>
         <div 
           className={`stat-card ${activeSummaryFilter === 'outOfStock' ? 'stat-card--active' : ''}`}
-          onClick={() => setActiveSummaryFilter('outOfStock')}
+          onClick={() => setActiveSummaryFilter(prev => prev === 'outOfStock' ? null : 'outOfStock')}
           style={{ cursor: 'pointer', transition: 'all 0.2s ease', background: '#d1d5db' }}
         >
           <div className="stat-top">
@@ -1645,6 +1933,47 @@ const Inventory = () => {
                 </div>
             )}
           </div>
+          {activeSummaryFilter && (
+            <span className="active-summary-chip" style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: '16px',
+              fontSize: '12px',
+              fontWeight: '500',
+              background: '#fef2f2',
+              color: '#991b1b',
+              border: '1px solid #fecaca'
+            }}>
+              <span>Alert: {
+                activeSummaryFilter === 'expiredStock' ? 'Expired Stock' :
+                activeSummaryFilter === 'lowStock' ? 'Low Stock' :
+                activeSummaryFilter === 'expiringSoon' ? 'Expiring Soon' :
+                activeSummaryFilter === 'outOfStock' ? 'Out of Stock' :
+                activeSummaryFilter === 'mediumStock' ? 'Medium Stock' :
+                activeSummaryFilter === 'normalStock' ? 'Normal Stock' : activeSummaryFilter
+              }</span>
+              <button 
+                onClick={() => setActiveSummaryFilter(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '0 2px',
+                  color: '#991b1b',
+                  fontSize: '14px',
+                  lineHeight: '1',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+                title="Clear alert filter"
+              >
+                ×
+              </button>
+            </span>
+          )}
           {hasActiveFilters && (
               <button className="clear-filters-btn" onClick={clearFilters}>Clear All</button>
           )}
@@ -1684,27 +2013,27 @@ const Inventory = () => {
               <tr>
                 <th className="row-number-header">#</th>
                 <th>Item Name</th>
-                <th>{isAdmin ? 'Total Stock' : 'Station Stock'}</th>
+                <th>{canViewMainInventory ? 'Total Stock' : 'Station Stock'}</th>
                 <th>Unit</th>
                 <th>Batch Info</th>
                 <th>Status</th>
-                {isAdmin && <th style={{ textAlign: 'right' }}>Actions</th>}
+                {canAddMainStock && <th style={{ textAlign: 'right' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={isAdmin ? 7 : 6} className="text-center py-8">
+                  <td colSpan={canAddMainStock ? 7 : 6} className="text-center py-8">
                     Loading inventory data...
                   </td>
                 </tr>
               ) : paginatedItems.length > 0 ? (
                 paginatedItems.map((item, index) => {
-                  const status = getStatus(item.total_quantity, item.total_max_stock);
+                  const status = getStatus(item.total_quantity, item.total_max_stock, item.hasExpiredStock);
                   const percentage = getStockPercentage(item.total_quantity || 0, item.total_max_stock || 500);
                   const rowNumber = startIndex + index + 1;
                   return (
-                    <>
+                    <React.Fragment key={`${item.items[0]?.id || item.item_name}-${index}`}>
                     <tr key={`${item.item_name}-${index}`} className="inv-row">
                       <td className="row-number-cell">
                         {item.items.length > 0 && (
@@ -1783,7 +2112,7 @@ const Inventory = () => {
                           {status.label}
                         </span>
                       </td>
-                      {isAdmin && <td style={{ textAlign: 'right' }}>
+                      {canAddMainStock && <td style={{ textAlign: 'right' }}>
                         <div className="action-btns">
                           <ActionTooltip text="Update Stock">
                             <button
@@ -1844,7 +2173,7 @@ const Inventory = () => {
                     </tr>
                     {expandedRow === rowNumber && item.items.length > 0 && (
                       <tr key={`detail-${item.item_name}-${index}`} className="inv-row-detail">
-                        <td colSpan={isAdmin ? 7 : 6} style={{ padding: '0' }}>
+                        <td colSpan={canAddMainStock ? 7 : 6} style={{ padding: '0' }}>
                           <div style={{
                             padding: '16px 20px',
                             background: '#f8f9fa',
@@ -1919,7 +2248,7 @@ const Inventory = () => {
                                       )}
                                       <div><strong>Manufactured:</strong> {subItem.manufactured_date ? formatDate(subItem.manufactured_date) : 'N/A'}</div>
                                     </div>
-                                    {isAdmin && <div style={{
+                                    {canAddMainStock && <div style={{
                                       display: 'flex',
                                       gap: '8px',
                                       borderTop: '1px solid #e9ecef',
@@ -1993,13 +2322,25 @@ const Inventory = () => {
                         </td>
                       </tr>
                     )}
-                    </>
+                    </React.Fragment>
                   );
                 })
               ) : (
                 <tr>
-                  <td colSpan={isAdmin ? 7 : 6} className="text-center py-8">
-                    No items found
+                  <td colSpan={canAddMainStock ? 7 : 6} className="text-center py-8" style={{ color: 'var(--color-text-muted)', fontSize: '13px', padding: '32px 16px' }}>
+                    {archiveFilter === 'archived' ? (
+                      activeSummaryFilter === 'expiredStock' ? 'No expired stock found in archived inventory.' :
+                      activeSummaryFilter === 'lowStock' ? 'No low stock items found in archived inventory.' :
+                      activeSummaryFilter === 'expiringSoon' ? 'No items expiring soon found in archived inventory.' :
+                      activeSummaryFilter === 'outOfStock' ? 'No out of stock items found in archived inventory.' :
+                      'No archived items found'
+                    ) : (
+                      activeSummaryFilter === 'expiredStock' ? 'No expired stock found.' :
+                      activeSummaryFilter === 'lowStock' ? 'No low stock items found.' :
+                      activeSummaryFilter === 'expiringSoon' ? 'No items expiring soon found.' :
+                      activeSummaryFilter === 'outOfStock' ? 'No out of stock items found.' :
+                      'No items found'
+                    )}
                   </td>
                 </tr>
               )}
@@ -2038,45 +2379,64 @@ const Inventory = () => {
 
       <div className="inv-side-col">
         <div className="inv-card">
-          <div className="inv-card-head" style={{ padding: '16px 20px', borderBottom: '1px solid #f0f2f5' }}>
+          <div className="inv-card-head" style={{ padding: '16px 20px', borderBottom: '1px solid #f0f2f5', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <h2 style={{ fontSize: '15px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <AlertTriangle size={16} /> Notifications & Alerts
             </h2>
+            {archiveFilter === 'archived' && (
+              <span style={{ fontSize: '11px', fontWeight: '600', color: '#b45309', background: '#fef3c7', padding: '2px 8px', borderRadius: '12px' }}>
+                Archived Scope
+              </span>
+            )}
           </div>
           <div className="alerts-list" style={{ padding: '8px 16px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {inventoryAlerts.length > 0 ? (
-              inventoryAlerts.map((alert, index) => (
-                <div 
-                  key={`${alert.id}-${index}`}
-                  className="alert-item clickable-alert" 
-                  style={{ 
-                    background: `${alert.color}12`, // 0.07 opacity using hex alpha approximation
-                    display: 'flex', 
-                    gap: '10px', 
-                    padding: '10px', 
-                    borderRadius: '10px', 
-                    alignItems: 'center' 
-                  }}
-                  onClick={alert.onClick}
-                  tabIndex="0"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      alert.onClick();
-                    }
-                  }}
-                >
-                  <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, background: alert.color }}></div>
-                  <div className="alert-body" style={{ flex: 1 }}>
-                    <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px', color: alert.color }}>{alert.title}</p>
-                    <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{alert.message}</span>
+              inventoryAlerts.map((alert, index) => {
+                const isSelected = 
+                  (alert.id === 'outOfStock' && activeSummaryFilter === 'outOfStock') ||
+                  (alert.id === 'expired' && activeSummaryFilter === 'expiredStock') ||
+                  (alert.id === 'lowStock' && activeSummaryFilter === 'lowStock') ||
+                  (alert.id === 'expiringSoon' && activeSummaryFilter === 'expiringSoon');
+
+                return (
+                  <div 
+                    key={`${alert.id}-${index}`}
+                    className={`alert-item clickable-alert ${isSelected ? 'alert-item--active' : ''}`}
+                    style={{ 
+                      background: isSelected ? `${alert.color}22` : `${alert.color}12`,
+                      border: isSelected ? `1.5px solid ${alert.color}` : '1.5px solid transparent',
+                      display: 'flex', 
+                      gap: '10px', 
+                      padding: '10px', 
+                      borderRadius: '10px', 
+                      alignItems: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onClick={alert.onClick}
+                    tabIndex="0"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        alert.onClick();
+                      }
+                    }}
+                  >
+                    <div className="alert-dot" style={{ width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0, background: alert.color }}></div>
+                    <div className="alert-body" style={{ flex: 1 }}>
+                      <p style={{ fontSize: '12px', fontWeight: '600', margin: '0 0 2px', color: alert.color, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span>{alert.title}</span>
+                        {isSelected && <span style={{ fontSize: '10px', fontWeight: '500', opacity: 0.8 }}>(Active)</span>}
+                      </p>
+                      <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{alert.message}</span>
+                    </div>
+                    <ChevronRight size={14} style={{ color: alert.color, opacity: isSelected ? 1 : 0.7 }} />
                   </div>
-                  <ChevronRight size={14} style={{ color: alert.color, opacity: 0.7 }} />
-                </div>
-              ))
+                );
+              })
             ) : (
               <div style={{ textAlign: 'center', padding: '20px', fontSize: '12px', fontStyle: 'italic', color: 'var(--color-text-muted)' }}>
-                No inventory alerts at this time.
+                {archiveFilter === 'archived' ? 'No archived inventory alerts at this time.' : 'No inventory alerts at this time.'}
               </div>
             )}
           </div>
@@ -2099,7 +2459,7 @@ const Inventory = () => {
             <Truck size={22} className="header-icon" /> Station Distribution
           </h1>
           <p className="page-subtitle">
-            {isAdmin
+            {canDistributeToStations
               ? 'Transfer vaccines and supplements from CHO inventory to registered health stations.'
               : `Distribution records for ${userScope.stationName || 'your assigned station'}.`}
           </p>
@@ -2119,7 +2479,7 @@ const Inventory = () => {
           >
             <ArrowLeft size={16} /> Back to Inventory
           </button>
-          {isAdmin && (
+          {canDistributeToStations && (
             <button
               className="btn btn-primary"
               style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
@@ -2128,7 +2488,7 @@ const Inventory = () => {
                   item_type: 'vaccine',
                   item_id: '',
                   quantity: '',
-                  destination_station: '',
+                  destination_station: selectedStation || '',
                   distribution_date: new Date().toISOString().split('T')[0],
                   released_by: user?.fullName || user?.email?.split('@')[0] || '',
                   remarks: '',
@@ -2151,7 +2511,7 @@ const Inventory = () => {
             </div>
           </div>
           <div className="stat-value">{distSummary.totalDistributed}</div>
-          <div className="stat-label">Total Distributed</div>
+          <div className="stat-label">Total Distributed ({selectedStation || 'Station'})</div>
         </div>
         <div className="stat-card stat-card--sage">
           <div className="stat-top">
@@ -2165,324 +2525,498 @@ const Inventory = () => {
         <div className="stat-card stat-card--orange">
           <div className="stat-top">
             <div className="stat-icon stat-icon--orange">
-              <MapPin size={20} />
+              <Package size={20} />
             </div>
           </div>
-          <div className="stat-value">{distSummary.stationsSupplied}</div>
-          <div className="stat-label">Stations Supplied</div>
+          <div className="stat-value">{distSummary.currentStockUnits}</div>
+          <div className="stat-label">Current Stock in Station</div>
         </div>
         <div className="stat-card stat-card--yellow">
           <div className="stat-top">
             <div className="stat-icon stat-icon--yellow">
-              <Package size={20} />
+              <ClipboardList size={20} />
             </div>
           </div>
           <div className="stat-value">{distSummary.itemsDistributed}</div>
-          <div className="stat-label">Items Distributed</div>
+          <div className="stat-label">Distinct Items Distributed</div>
         </div>
       </div>
 
-      {/* ── DISTRIBUTION SEARCH & FILTERS ── */}
-      <div className="shared-controls-card">
-        <div className="shared-search-wrap">
-          <Search size={16} className="shared-search-icon" />
-          <input
-            type="text"
-            className="shared-search-input"
-            placeholder="Search item or station..."
-            value={historySearch}
-            onChange={e => setHistorySearch(e.target.value)}
-          />
-        </div>
-        <div className="shared-filters-row" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <span className="filters-label"><Filter size={13} /> Filters:</span>
-          <select
-            value={isAdmin ? historyStationFilter : (visibleStations.includes(historyStationFilter) ? historyStationFilter : (visibleStations[0] || 'All'))}
-            onChange={e => setHistoryStationFilter(e.target.value)}
-            disabled={!isAdmin && visibleStations.length <= 1}
-            className="filter-btn"
-            style={{ cursor: !isAdmin && visibleStations.length <= 1 ? 'not-allowed' : 'pointer' }}
-          >
-            {isAdmin ? <option value="All">All Stations</option> : null}
-            {(isAdmin ? availableStations : visibleStations).map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <select
-            value={historyTypeFilter}
-            onChange={e => setHistoryTypeFilter(e.target.value)}
-            className="filter-btn"
-            style={{ cursor: 'pointer' }}
-          >
-            <option value="All">All Item Types</option>
-            <option value="Vaccine">Vaccines</option>
-            <option value="Supplement">Supplements</option>
-          </select>
-          
-          {/* Date Filter */}
-          <div className="filter-dropdown-container" style={{ position: 'relative' }}>
-            <button 
-                className={`filter-btn ${historyDateFilter !== 'all' ? 'active-filter' : ''}`}
-                onClick={() => setActivePopover(activePopover === 'distDate' ? null : 'distDate')}
-                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+      {/* ── STATION SELECTOR ── */}
+      <div className="station-selector-card">
+        <div className="station-selector-header">
+          <label htmlFor="station-distribution-select" className="station-selector-title">
+            <MapPin size={16} /> Select Health Station
+          </label>
+          <div className="station-selector-dropdown-wrap">
+            <select
+              id="station-distribution-select"
+              value={selectedStation}
+              onChange={e => handleSelectStation(e.target.value)}
+              className="station-selector-dropdown"
+              disabled={authorizedStations.length <= 1 && isStationStaff && !canViewOtherStations}
             >
-                <Calendar size={14} className="filter-btn-icon" /> 
-                <span>Date: {
-                    historyDateFilter === 'all' ? 'All Time' :
-                    historyDateFilter === 'this_month' ? 'This Month' :
-                    historyDateFilter === 'this_year' ? 'This Year' :
-                    'Custom'
-                }</span>
-                <ChevronDown size={14} className="filter-btn-icon" />
-            </button>
-            
-            {activePopover === 'distDate' && (
-                <div className="filter-popover" style={{ minWidth: '240px' }}>
-                    <div className="popover-title">Distribution Date</div>
-                    <div className="popover-options">
-                        <button className={`popover-opt-btn ${historyDateFilter === 'all' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('all'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); }}>All Time</button>
-                        <button className={`popover-opt-btn ${historyDateFilter === 'this_month' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('this_month'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); }}>This Month</button>
-                        <button className={`popover-opt-btn ${historyDateFilter === 'this_year' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('this_year'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); }}>This Year</button>
-                        <button className={`popover-opt-btn ${historyDateFilter === 'custom' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('custom'); setHistoryDateFilterError(''); }}>Custom Range</button>
-                    </div>
-                    {historyDateFilter === 'custom' && (
-                        <div className="date-custom-range-section">
-                            <div className="date-custom-range-fields">
-                                <div className="date-custom-field">
-                                    <label>From</label>
-                                    <input type="date" value={historyCustomDateFrom} onChange={e => { setHistoryCustomDateFrom(e.target.value); setHistoryDateFilterError(''); }} />
-                                </div>
-                                <div className="date-custom-field">
-                                    <label>To</label>
-                                    <input type="date" value={historyCustomDateTo} min={historyCustomDateFrom} onChange={e => { setHistoryCustomDateTo(e.target.value); setHistoryDateFilterError(''); }} />
-                                </div>
-                            </div>
-                            {historyDateFilterError && (
-                                <div className="date-filter-error">
-                                    <AlertTriangle size={12} /> {historyDateFilterError}
-                                </div>
-                            )}
-                            <div className="date-custom-actions">
-                                <button className="date-custom-cancel" onClick={() => { setHistoryDateFilter('all'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); }}>Cancel</button>
-                                <button className="date-custom-apply" onClick={() => {
-                                    if (!historyCustomDateFrom || !historyCustomDateTo) {
-                                        setHistoryDateFilterError('Both dates are required.');
-                                        return;
-                                    }
-                                    if (new Date(historyCustomDateFrom) > new Date(historyCustomDateTo)) {
-                                        setHistoryDateFilterError('From date cannot be later than To.');
-                                        return;
-                                    }
-                                    setHistoryDateFilterError('');
-                                    setActivePopover(null);
-                                }}>Apply</button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
+              {authorizedStations.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* ── SELECTED STATION WORKSPACE ── */}
+      <div className="station-workspace-card">
+        {/* Workspace Header */}
+        <div className="station-workspace-header">
+          <div className="station-workspace-info-row">
+            <div className="station-workspace-title-group">
+              <div className="station-workspace-icon-box">
+                <Building2 size={24} />
+              </div>
+              <div className="station-workspace-title-box">
+                <h2>
+                  {selectedStation || 'Health Station'}
+                  {isStationStaff && assignedStation && matchStation(selectedStation, assignedStation) ? (
+                    <span className="station-workspace-tag">Assigned Station</span>
+                  ) : null}
+                </h2>
+                <p>
+                  Inventory stock and distribution transaction logs for {selectedStation || 'the selected station'}.
+                </p>
+              </div>
+            </div>
+
+            <div className="station-header-metrics">
+              <div className="station-metric-pill">
+                <span>Inventory Items:</span>
+                <strong>{selectedStationInventory.length}</strong>
+              </div>
+              <div className="station-metric-pill">
+                <span>Total Distributions:</span>
+                <strong>{filteredDistHistory.length}</strong>
+              </div>
+            </div>
           </div>
 
-          {(historySearch || historyStationFilter !== 'All' || historyTypeFilter !== 'All' || historyDateFilter !== 'all') && (
-            <button className="clear-filters-btn" onClick={() => { setHistorySearch(''); setHistoryStationFilter('All'); setHistoryTypeFilter('All'); setHistoryDateFilter('all'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); }}>Clear All</button>
-          )}
+          {/* Sub-Tabs: Station Inventory | Distribution History */}
+          <div className="station-subtabs-nav" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selectedStationTab === 'inventory'}
+              className={`station-subtab-btn ${selectedStationTab === 'inventory' ? 'active' : ''}`}
+              onClick={() => setSelectedStationTab('inventory')}
+            >
+              <Package size={16} />
+              <span>Station Inventory</span>
+              <span className="station-subtab-badge">
+                {selectedStationInventory.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selectedStationTab === 'history'}
+              className={`station-subtab-btn ${selectedStationTab === 'history' ? 'active' : ''}`}
+              onClick={() => setSelectedStationTab('history')}
+            >
+              <ClipboardList size={16} />
+              <span>Distribution History</span>
+              <span className="station-subtab-badge">
+                {filteredDistHistory.length}
+              </span>
+            </button>
+          </div>
         </div>
-      </div>
 
-    {/* ── STATION INVENTORY ── */}
-    <div className="inv-card" style={{ borderRadius: '14px', overflow: 'hidden', border: '1px solid #e9ecef' }}>
-      <div className="inv-card-head" style={{ padding: '18px 24px', borderBottom: '1px solid #f0f2f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <h2 style={{ fontSize: '16px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Package size={17} /> Station Inventory
-          </h2>
-          <p style={{ fontSize: '13px', color: '#888', margin: '4px 0 0' }}>Current stock held by each registered health station.</p>
-        </div>
-        <span style={{ fontSize: '13px', color: '#555' }}>{stationInventory.length} entries</span>
-      </div>
-      <div style={{ overflowX: 'auto' }}>
-        <table className="inv-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Expand</th>
-              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Station</th>
-              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Item</th>
-              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Type</th>
-              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Total Qty</th>
-              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Unit</th>
-              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Brand</th>
-              <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Expiration Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {stationInventory.length > 0 ? stationInventory.map((group, groupIndex) => {
-              const isExpanded = expandedStationRows[group.groupKey];
-              return (
-                <React.Fragment key={group.groupKey}>
-                  {/* Parent Row */}
-                  <tr style={{ borderBottom: '1px solid #f0f2f5', backgroundColor: '#fafbfc' }}>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', textAlign: 'center' }}>
-                      <button
-                        onClick={() => setExpandedStationRows(prev => ({
-                          ...prev,
-                          [group.groupKey]: !prev[group.groupKey]
-                        }))}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                          padding: '0',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                      >
-                        <ChevronDown
-                          size={16}
-                          style={{
-                            transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
-                            transition: 'transform 0.2s',
-                            color: '#666'
-                          }}
-                        />
-                      </button>
-                    </td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', fontWeight: '600' }}>{group.station}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', fontWeight: '600' }}>{group.item_name}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{group.item_type}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '600', textAlign: 'center', color: '#2c5282' }}>{group.totalQuantity}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{group.unit}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>{group.brand || 'N/A'}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>{group.expiration_date ? formatDate(group.expiration_date) : 'N/A'}</td>
+        {/* ── TAB 1: STATION INVENTORY ── */}
+        {selectedStationTab === 'inventory' && (
+          <div className="station-tab-pane">
+            {/* Filter Bar for Station Inventory */}
+            <div className="station-filter-bar">
+              <div className="station-filter-search">
+                <Search size={15} className="station-filter-search-icon" />
+                <input
+                  type="text"
+                  placeholder={`Search ${selectedStation || 'station'} inventory...`}
+                  value={stationInvSearch}
+                  onChange={e => setStationInvSearch(e.target.value)}
+                  className="station-filter-search-input"
+                />
+              </div>
+              <select
+                value={stationInvTypeFilter}
+                onChange={e => setStationInvTypeFilter(e.target.value)}
+                className="station-filter-select"
+              >
+                <option value="All">All Item Types</option>
+                <option value="Vaccine">Vaccines</option>
+                <option value="Supplement">Supplements</option>
+              </select>
+              {(stationInvSearch || stationInvTypeFilter !== 'All') && (
+                <button
+                  type="button"
+                  className="clear-filters-btn"
+                  onClick={() => {
+                    setStationInvSearch('');
+                    setStationInvTypeFilter('All');
+                  }}
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
+
+            {/* Station Inventory Table */}
+            <div style={{ overflowX: 'auto' }}>
+              <table className="inv-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: '56px', padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Expand</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Item</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Type</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Total Quantity</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Unit</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Brand</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Expiration Date</th>
                   </tr>
-
-                  {/* Child Rows (Batch Variants) */}
-                  {isExpanded && group.variants.map((variant, variantIndex) => (
-                    <tr key={`${group.groupKey}-variant-${variantIndex}`} style={{ borderBottom: '1px solid #f0f2f5', backgroundColor: '#fff9f9' }}>
-                      <td style={{ padding: '8px 16px' }}></td>
-                      <td style={{ padding: '8px 16px', fontSize: '12px', color: '#666', fontStyle: 'italic' }}></td>
-                      <td style={{ padding: '8px 16px', fontSize: '12px', color: '#666' }}>
-                        Batch: <strong>{variant.batch}</strong>
-                      </td>
-                      <td style={{ padding: '8px 16px', fontSize: '12px', color: '#666' }}></td>
-                      <td style={{ padding: '8px 16px', fontSize: '12px', textAlign: 'center', color: '#555' }}>{variant.quantity}</td>
-                      <td style={{ padding: '8px 16px', fontSize: '11px', color: '#666' }}>{variant.unit || 'N/A'}</td>
-                      <td style={{ padding: '8px 16px', fontSize: '11px', color: '#666' }}>{variant.brand || 'N/A'}</td>
-                      <td style={{ padding: '8px 16px', fontSize: '11px', color: '#999' }}>
-                        Updated: {variant.last_updated ? formatDate(variant.last_updated) : 'N/A'}
+                </thead>
+                <tbody>
+                  {stationInventoryError ? (
+                    <tr>
+                      <td colSpan={7} role="alert" style={{ padding: '20px', textAlign: 'center' }}>
+                        {stationInventoryError}{' '}
+                        <button type="button" onClick={() => setStationDataRefreshKey(key => key + 1)}>
+                          Retry
+                        </button>
                       </td>
                     </tr>
-                  ))}
-                </React.Fragment>
-              );
-            }) : (
-              <tr>
-                <td colSpan="8" style={{ padding: '20px', textAlign: 'center', color: '#888', fontSize: '13px' }}>
-                  No station inventory records yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+                  ) : selectedStationInventory.length > 0 ? selectedStationInventory.map((group) => {
+                    const isExpanded = expandedStationRows[group.groupKey];
+                    return (
+                      <React.Fragment key={group.groupKey}>
+                        {/* Parent Row */}
+                        <tr style={{ borderBottom: '1px solid #f0f2f5', backgroundColor: '#fafbfc' }}>
+                          <td style={{ padding: '12px 16px', fontSize: '13px', textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => setExpandedStationRows(prev => ({
+                                ...prev,
+                                [group.groupKey]: !prev[group.groupKey]
+                              }))}
+                              aria-label={isExpanded ? 'Collapse row' : 'Expand row'}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: '0',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              <ChevronDown
+                                size={16}
+                                style={{
+                                  transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+                                  transition: 'transform 0.2s',
+                                  color: '#666'
+                                }}
+                              />
+                            </button>
+                          </td>
+                          <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', fontWeight: '600' }}>
+                            {group.item_name}
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '3px 10px',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: '600',
+                              background: group.item_type === 'Vaccine' ? 'rgba(91,174,208,0.12)' : 'rgba(147,111,199,0.12)',
+                              color: group.item_type === 'Vaccine' ? '#3a8db5' : '#7a4fa8'
+                            }}>
+                              {group.item_type === 'Vaccine' ? <Syringe size={11} /> : <Pill size={11} />}
+                              {group.item_type}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '700', textAlign: 'center', color: '#2c5282' }}>
+                            {group.totalQuantity}
+                          </td>
+                          <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>
+                            {group.unit}
+                          </td>
+                          <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>
+                            {group.brand || 'N/A'}
+                          </td>
+                          <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>
+                            {group.expiration_date ? formatDate(group.expiration_date) : 'N/A'}
+                          </td>
+                        </tr>
 
-      {/* ── STATION DISTRIBUTION HISTORY ── */}
-      <div className="inv-card" style={{ borderRadius: '14px', overflow: 'hidden', border: '1px solid #e9ecef' }}>
-        <div className="inv-card-head" style={{ padding: '18px 24px', borderBottom: '1px solid #f0f2f5' }}>
-          <h2 style={{ fontSize: '16px', fontWeight: '700', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <ClipboardList size={17} /> Distribution History
-          </h2>
-          <p style={{ fontSize: '13px', color: '#888', margin: '4px 0 0' }}>Track supplies released from CHO inventory to health stations.</p>
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="inv-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>#</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Date</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Item</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Type</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Quantity</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Destination Station</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Released By</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Remarks</th>
-                <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedDistHistory.length > 0 ? (
-                paginatedDistHistory.map((rec, idx) => (
-                  <tr key={rec.id} style={{ borderBottom: '1px solid #f0f2f5', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'} onMouseLeave={e => e.currentTarget.style.background = ''}>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#888', textAlign: 'center', fontWeight: '600' }}>{distStartIndex + idx + 1}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap' }}>{formatReadableDate(rec.distribution_date)}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>
-                      <div style={{ fontWeight: '600' }}>{rec.item_name}</div>
-                      {rec.brand && <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>{rec.brand}{rec.batch && rec.batch !== 'N/A' ? ` · Batch ${rec.batch}` : ''}</div>}
-                    </td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '600', background: rec.item_type === 'Vaccine' ? 'rgba(91,174,208,0.12)' : 'rgba(147,111,199,0.12)', color: rec.item_type === 'Vaccine' ? '#3a8db5' : '#7a4fa8' }}>
-                        {rec.item_type === 'Vaccine' ? <Syringe size={11} /> : <Pill size={11} />}
-                        {rec.item_type}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '600', color: '#333', textAlign: 'center' }}>{rec.quantity} <span style={{ fontWeight: 400, color: '#888', fontSize: '11px' }}>{rec.unit}</span></td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{rec.destination_station}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>{rec.released_by}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '12px', color: '#777', maxWidth: '200px' }}>
-                      <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{rec.remarks || '—'}</span>
-                    </td>
-                    <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                      <button
-                        className="btn btn-outline"
-                        style={{ padding: '5px 12px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                        onClick={() => setSelectedDistRecord(rec)}
-                      >
-                        <Eye size={13} /> View
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="9" style={{ padding: '40px', textAlign: 'center', color: '#aaa', fontSize: '13px', fontStyle: 'italic' }}>
-                    No distribution records found.
-                  </td>
-                </tr>
+                        {/* Child Rows (Batch Variants) */}
+                        {isExpanded && group.variants.map((variant, variantIndex) => (
+                          <tr key={`${group.groupKey}-variant-${variantIndex}`} style={{ borderBottom: '1px solid #f0f2f5', backgroundColor: '#fff9f9' }}>
+                            <td style={{ padding: '8px 16px' }}></td>
+                            <td style={{ padding: '8px 16px', fontSize: '12px', color: '#666' }}>
+                              Batch: <strong>{variant.batch}</strong>
+                            </td>
+                            <td style={{ padding: '8px 16px' }}></td>
+                            <td style={{ padding: '8px 16px', fontSize: '12px', textAlign: 'center', color: '#555', fontWeight: '600' }}>
+                              {variant.quantity}
+                            </td>
+                            <td style={{ padding: '8px 16px', fontSize: '11px', color: '#666' }}>
+                              {variant.unit || 'N/A'}
+                            </td>
+                            <td style={{ padding: '8px 16px', fontSize: '11px', color: '#666' }}>
+                              {variant.brand || 'N/A'}
+                            </td>
+                            <td style={{ padding: '8px 16px', fontSize: '11px', color: '#999' }}>
+                              Updated: {variant.last_updated ? formatDate(variant.last_updated) : 'N/A'}
+                            </td>
+                          </tr>
+                        ))}
+                      </React.Fragment>
+                    );
+                  }) : (
+                    <tr>
+                      <td colSpan="7" style={{ padding: '40px', textAlign: 'center', color: '#888', fontSize: '13px' }}>
+                        {stationInvSearch || stationInvTypeFilter !== 'All' ? (
+                          <>
+                            No {stationInvTypeFilter === 'All' ? 'inventory items' : `${stationInvTypeFilter.toLowerCase()} items`} match the current filters.
+                            {' '}
+                            <button
+                              type="button"
+                              className="clear-filters-btn"
+                              onClick={() => {
+                                setStationInvSearch('');
+                                setStationInvTypeFilter('All');
+                              }}
+                            >
+                              Clear filters
+                            </button>
+                          </>
+                        ) : (
+                          'No inventory records found for this station.'
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 2: DISTRIBUTION HISTORY ── */}
+        {selectedStationTab === 'history' && (
+          <div className="station-tab-pane">
+            {/* Filter Bar for Distribution History */}
+            <div className="station-filter-bar">
+              <div className="station-filter-search">
+                <Search size={15} className="station-filter-search-icon" />
+                <input
+                  type="text"
+                  placeholder="Search distribution history..."
+                  value={historySearch}
+                  onChange={e => {
+                    setHistorySearch(e.target.value);
+                    setDistPage(1);
+                  }}
+                  className="station-filter-search-input"
+                />
+              </div>
+
+              <select
+                value={historyTypeFilter}
+                onChange={e => {
+                  setHistoryTypeFilter(e.target.value);
+                  setDistPage(1);
+                }}
+                className="station-filter-select"
+              >
+                <option value="All">All Item Types</option>
+                <option value="Vaccine">Vaccines</option>
+                <option value="Supplement">Supplements</option>
+              </select>
+
+              {/* Date Filter */}
+              <div className="filter-dropdown-container" style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  className={`filter-btn ${historyDateFilter !== 'all' ? 'active-filter' : ''}`}
+                  onClick={() => setActivePopover(activePopover === 'distDate' ? null : 'distDate')}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px', boxSizing: 'border-box' }}
+                >
+                  <Calendar size={14} className="filter-btn-icon" />
+                  <span>Date: {
+                    historyDateFilter === 'all' ? 'All Time' : 
+                    historyDateFilter === 'this_month' ? 'This Month' : 
+                    historyDateFilter === 'this_year' ? 'This Year' : 
+                    'Custom'
+                  }</span>
+                  <ChevronDown size={14} className="filter-btn-icon" />
+                </button>
+
+                {activePopover === 'distDate' && (
+                  <div className="filter-popover" style={{ minWidth: '240px' }}>
+                    <div className="popover-title">Distribution Date</div>
+                    <div className="popover-options">
+                      <button className={`popover-opt-btn ${historyDateFilter === 'all' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('all'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); setDistPage(1); }}>All Time</button>
+                      <button className={`popover-opt-btn ${historyDateFilter === 'this_month' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('this_month'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); setDistPage(1); }}>This Month</button>
+                      <button className={`popover-opt-btn ${historyDateFilter === 'this_year' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('this_year'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); setDistPage(1); }}>This Year</button>
+                      <button className={`popover-opt-btn ${historyDateFilter === 'custom' ? 'selected' : ''}`} onClick={() => { setHistoryDateFilter('custom'); setHistoryDateFilterError(''); }}>Custom Range</button>
+                    </div>
+                    {historyDateFilter === 'custom' && (
+                      <div className="date-custom-range-section">
+                        <div className="date-custom-range-fields">
+                          <div className="date-custom-field">
+                            <label>From</label>
+                            <input type="date" value={historyCustomDateFrom} onChange={e => { setHistoryCustomDateFrom(e.target.value); setHistoryDateFilterError(''); }} />
+                          </div>
+                          <div className="date-custom-field">
+                            <label>To</label>
+                            <input type="date" value={historyCustomDateTo} min={historyCustomDateFrom} onChange={e => { setHistoryCustomDateTo(e.target.value); setHistoryDateFilterError(''); }} />
+                          </div>
+                        </div>
+                        {historyDateFilterError && (
+                          <div className="date-filter-error">
+                            <AlertTriangle size={12} /> {historyDateFilterError}
+                          </div>
+                        )}
+                        <div className="date-custom-actions">
+                          <button className="date-custom-cancel" onClick={() => { setHistoryDateFilter('all'); setHistoryCustomDateFrom(''); setHistoryCustomDateTo(''); setHistoryDateFilterError(''); setActivePopover(null); }}>Cancel</button>
+                          <button className="date-custom-apply" onClick={() => {
+                            if (!historyCustomDateFrom || !historyCustomDateTo) {
+                              setHistoryDateFilterError('Both dates are required.');
+                              return;
+                            }
+                            if (new Date(historyCustomDateFrom) > new Date(historyCustomDateTo)) {
+                              setHistoryDateFilterError('From date cannot be later than To.');
+                              return;
+                            }
+                            setHistoryDateFilterError('');
+                            setActivePopover(null);
+                            setDistPage(1);
+                          }}>Apply</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {(historySearch || historyTypeFilter !== 'All' || historyDateFilter !== 'all') && (
+                <button
+                  type="button"
+                  className="clear-filters-btn"
+                  onClick={() => {
+                    setHistorySearch('');
+                    setHistoryTypeFilter('All');
+                    setHistoryDateFilter('all');
+                    setHistoryCustomDateFrom('');
+                    setHistoryCustomDateTo('');
+                    setHistoryDateFilterError('');
+                    setDistPage(1);
+                  }}
+                >
+                  Clear Filters
+                </button>
               )}
-            </tbody>
-          </table>
-        </div>
-        {/* Distribution History Pagination */}
-        {filteredDistHistory.length > distItemsPerPage && (
-          <div className="pagination-container">
-            <div className="pagination-info">
-              Showing {distStartIndex + 1}-{Math.min(distStartIndex + distItemsPerPage, filteredDistHistory.length)} of {filteredDistHistory.length}
             </div>
-            <div className="pagination-controls">
-              <button
-                className="pagination-btn"
-                onClick={() => setDistPage(prev => Math.max(1, prev - 1))}
-                disabled={distPage === 1}
-              >
-                Previous
-              </button>
-              <span className="pagination-page-info">
-                Page {distPage} of {distTotalPages}
-              </span>
-              <button
-                className="pagination-btn"
-                onClick={() => setDistPage(prev => Math.min(distTotalPages, prev + 1))}
-                disabled={distPage === distTotalPages}
-              >
-                Next
-              </button>
+
+            {/* Distribution History Table (Action column removed!) */}
+            <div style={{ overflowX: 'auto' }}>
+              <table className="inv-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>#</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Date</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Item</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Type</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Quantity</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Destination Station</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Released By</th>
+                    <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Remarks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedDistHistory.length > 0 ? (
+                    paginatedDistHistory.map((rec, idx) => (
+                      <tr key={rec.id} style={{ borderBottom: '1px solid #f0f2f5', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'} onMouseLeave={e => e.currentTarget.style.background = ''}>
+                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#888', textAlign: 'center', fontWeight: '600' }}>{distStartIndex + idx + 1}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap' }}>{formatReadableDate(rec.distribution_date)}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>
+                          <div style={{ fontWeight: '600' }}>{rec.item_name}</div>
+                          {rec.brand && <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>{rec.brand}{rec.batch && rec.batch !== 'N/A' ? ` · Batch ${rec.batch}` : ''}</div>}
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '600', background: rec.item_type === 'Vaccine' ? 'rgba(91,174,208,0.12)' : 'rgba(147,111,199,0.12)', color: rec.item_type === 'Vaccine' ? '#3a8db5' : '#7a4fa8' }}>
+                            {rec.item_type === 'Vaccine' ? <Syringe size={11} /> : <Pill size={11} />}
+                            {rec.item_type}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '600', color: '#333', textAlign: 'center' }}>
+                          {rec.quantity} <span style={{ fontWeight: 400, color: '#888', fontSize: '11px' }}>{rec.unit}</span>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>{rec.destination_station}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>{rec.released_by}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '12px', color: '#777', maxWidth: '240px' }}>
+                          <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{rec.remarks || '—'}</span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="8" style={{ padding: '40px', textAlign: 'center', color: '#aaa', fontSize: '13px', fontStyle: 'italic' }}>
+                        No distribution records found for this station.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
+
+            {/* Distribution History Pagination */}
+            {filteredDistHistory.length > distItemsPerPage && (
+              <div className="pagination-container">
+                <div className="pagination-info">
+                  Showing {distStartIndex + 1}-{Math.min(distStartIndex + distItemsPerPage, filteredDistHistory.length)} of {filteredDistHistory.length}
+                </div>
+                <div className="pagination-controls">
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    onClick={() => setDistPage(prev => Math.max(1, prev - 1))}
+                    disabled={distPage === 1}
+                  >
+                    Previous
+                  </button>
+                  <span className="pagination-page-info">
+                    Page {distPage} of {distTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    onClick={() => setDistPage(prev => Math.min(distTotalPages, prev + 1))}
+                    disabled={distPage === distTotalPages}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
       </>
       )}
 
-      {showAddModal && (
+      {showAddModal && createPortal(
         <div
           className="modal-overlay"
           onClick={() => setShowAddModal(false)}
@@ -2664,7 +3198,13 @@ const Inventory = () => {
                     />
                   </div>
                   <div className="form-group">
-                    <label>Maximum Stock Capacity</label>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <span>Maximum Stock Capacity</span>
+                      <FieldInfoTooltip
+                        title="Maximum Stock Capacity"
+                        text="The maximum number of stock units configured for this inventory item or batch. It uses the selected Unit (e.g., doses, vials, tablets) and is used to calculate stock capacity and inventory indicators. It is not a medical dosage limit."
+                      />
+                    </label>
                     <input
                       type="number"
                       required
@@ -2716,10 +3256,11 @@ const Inventory = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {showUpdateModal && (
+      {showUpdateModal && createPortal(
         <div
           className="modal-overlay"
           onClick={() => setShowUpdateModal(null)}
@@ -2754,7 +3295,13 @@ const Inventory = () => {
                     />
                   </div>
                   <div className="form-group">
-                    <label>Max Capacity</label>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <span>Maximum Stock Capacity</span>
+                      <FieldInfoTooltip
+                        title="Maximum Stock Capacity"
+                        text="The maximum number of stock units configured for this inventory item or batch. It uses the selected Unit (e.g., doses, vials, tablets) and is used to calculate stock capacity and inventory indicators. It is not a medical dosage limit."
+                      />
+                    </label>
                     <input
                       type="number"
                       required
@@ -2785,11 +3332,12 @@ const Inventory = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── STATION DISTRIBUTION MODAL ── */}
-      {isAdmin && showDistributionModal && (
+      {canDistributeToStations && showDistributionModal && createPortal(
         <div className="modal-overlay" onClick={() => setShowDistributionModal(false)}>
           <div
             className="modal-content"
@@ -2961,11 +3509,12 @@ const Inventory = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── VIEW DISTRIBUTION DETAILS MODAL ── */}
-      {selectedDistRecord && (
+      {selectedDistRecord && createPortal(
         <div className="modal-overlay" onClick={() => setSelectedDistRecord(null)}>
           <div
             className="modal-content"
@@ -3006,7 +3555,8 @@ const Inventory = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <ExportModal 

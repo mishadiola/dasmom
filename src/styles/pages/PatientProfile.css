@@ -205,13 +205,15 @@
     gap: 4px;
 }
 
-/* Risk History Timeline */
+/* Health Condition Assessment History Timeline */
+.condition-history-timeline,
 .risk-history-timeline {
     display: flex;
     flex-direction: column;
     gap: 16px;
 }
 
+.condition-history-item,
 .risk-history-item {
     background: #fafbfc;
     border: 1px solid #eef0f4;
@@ -220,33 +222,92 @@
     transition: all 0.2s ease;
 }
 
+.condition-history-item:hover,
 .risk-history-item:hover {
     background: #fff;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
+.condition-history-header,
 .risk-history-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 12px;
+    gap: 12px;
 }
 
+.condition-visit-info,
 .risk-visit-info {
     display: flex;
     flex-direction: column;
     gap: 2px;
 }
 
+.condition-visit-date,
 .risk-visit-date {
     font-size: 14px;
     font-weight: 600;
     color: var(--color-text);
 }
 
+.condition-visit-number,
 .risk-visit-number {
     font-size: 12px;
     color: var(--color-text-muted);
+}
+
+.condition-badges-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.condition-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.3;
+    white-space: normal;
+    word-break: break-word;
+    transition: all 0.2s ease;
+}
+
+/* Soft sage-green badge labeled None Reported */
+.condition-badge.condition-none,
+.condition-badge--none,
+.risk-badge.condition-none,
+.risk-badge.risk-none {
+    background: rgba(109, 184, 160, 0.15);
+    color: #3d8870;
+    border: 1px solid rgba(109, 184, 160, 0.28);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+
+/* Documented condition badges (compact, readable, theme-consistent) */
+.condition-badge.condition-present,
+.condition-badge--present,
+.risk-badge.condition-present,
+.risk-badge.risk-with {
+    background: rgba(224, 92, 115, 0.12);
+    color: #b73a52;
+    border: 1px solid rgba(224, 92, 115, 0.22);
+}
+
+@media (max-width: 640px) {
+    .condition-history-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
 }
 
 .risk-badge {
@@ -1147,6 +1208,7 @@
 .mc-icon.purple-gradient-sm { width: 28px; height: 28px; background: linear-gradient(135deg, rgba(159, 122, 234, 0.15), rgba(107, 70, 193, 0.05)); color: #6b46c1; border-radius: 8px; }
 .mc-icon.rose-gradient { background: linear-gradient(135deg, rgba(220, 88, 115, 0.15), rgba(185, 129, 138, 0.05)); color: var(--color-rose); }
 .mc-icon.orange-gradient { background: linear-gradient(135deg, rgba(237, 137, 54, 0.15), rgba(221, 107, 32, 0.05)); color: #dd6b20; }
+.mc-icon.sage-gradient { background: linear-gradient(135deg, rgba(109, 184, 160, 0.2), rgba(61, 136, 112, 0.08)); color: #3d8870; }
 
 .mc-body {
     display: flex;
@@ -1392,4 +1454,61 @@
     color: var(--color-text);
     line-height: 1.6;
     background: #fdfdfe;
+}
+
+/* ── Profile Header Categorized Health Condition Badges ── */
+.profile-conditions-header-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 12px;
+    margin-top: 6px;
+}
+
+.profile-header-cat-group {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+}
+
+.category-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    line-height: 1.2;
+}
+
+/* Pre-existing Medical Conditions (Sage / Green) */
+.category-badge--pre-existing {
+    background: #edf7ed;
+    color: #1e4620;
+    border: 1px solid #c8e6c9;
+}
+
+/* Pregnancy-Related Conditions (Muted Brownish Orange) */
+.category-badge--pregnancy-related {
+    background: #fff8e1;
+    color: #855302;
+    border: 1px solid #ffe082;
+}
+
+/* Relevant Obstetric History (Lavender / Purple) */
+.category-badge--obstetric-history {
+    background: #f3e8ff;
+    color: #581c87;
+    border: 1px solid #e9d5ff;
+}
+
+.category-conditions-text {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: #475569;
+    line-height: 1.35;
+    word-break: break-word;
 }

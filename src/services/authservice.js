@@ -4,6 +4,7 @@ import { getRoleConfig } from '../config/roleConfig';
 import { DASMOM_APP_URL } from '../config/appConfig';
 import { isAndroidApp, secureStorage } from './secureStorage';
 import motherOfflineDataService from './motherOfflineDataService';
+import { getClientDeviceString } from '../utils/formatters';
 
 const DUPLICATE_EMAIL_MESSAGE = 'Email already exists. Please use a different email address.';
 const normalizeRoleName = role => String(role || '').trim().toLowerCase().replace(/_/g, ' ');
@@ -118,7 +119,7 @@ export default class AuthService {
     return insertedRole?.id;
   }
 
-  async ensurePublicUserRecord({ userId, email, role, password = null }) {
+  async ensurePublicUserRecord({ userId, email, role }) {
     const normalizedEmail = (email || '').trim().toLowerCase();
     const normalizedRole = normalizeRoleName(role);
 
@@ -152,7 +153,6 @@ export default class AuthService {
         p_user_id: userId,
         p_email: normalizedEmail,
         p_role: normalizedRole,
-        p_password: password,
       });
 
       if (rpcError) {
@@ -193,6 +193,7 @@ export default class AuthService {
             email: normalizedEmail,
             password,
             motherName: metadata?.full_name || normalizedEmail,
+            stationId,
           }
         }),
         15000
@@ -305,6 +306,8 @@ export default class AuthService {
     }
 
     const profile = await this.fetchProfileName(userData.id, role);
+    const loginTimestamp = authData?.user?.last_sign_in_at || new Date().toISOString();
+    this.recordLoginEvent(userData.id, loginTimestamp);
 
     this._currentUser = {
       id: userData.id,
@@ -314,6 +317,9 @@ export default class AuthService {
       isDeactivated: Boolean(userData.is_deactivated),
       displayName: profile.displayName,
       fullName: profile.fullName,
+      station: profile.assigned_station,
+      stationId: profile.stationId || null,
+      lastSignInAt: loginTimestamp,
       authMode: 'online',
     };
 
@@ -349,14 +355,16 @@ export default class AuthService {
     let fullName = null;
     let displayName = null;
     let assignedStation = null;
+    let assignedStationId = null;
 
     try {
-      if (role === 'admin' || role.includes('staff') || role === 'cho personnel' || role.includes('midwife') || role.includes('doctor')) {
+      if (!['mother', 'patient'].includes(role)) {
         const { data, error } = await this.supabase
           .from('staff_profiles')
-          .select('full_name, station_ass, stations:station_ass(station_name)')
+          .select('full_name, station_ass, stations:station_ass(id, station_name)')
           .eq('id', userId)
           .maybeSingle();
+        if (error) throw error;
         
         if (data?.full_name) {
           fullName = data.full_name;
@@ -365,12 +373,14 @@ export default class AuthService {
         if (data?.stations?.station_name) {
           assignedStation = data.stations.station_name;
         }
+        assignedStationId = data?.station_ass || data?.stations?.id || null;
       } else if (role === 'mother' || role === 'patient') {
         const { data, error } = await this.supabase
           .from('patient_basic_info')
           .select('first_name, last_name')
           .eq('id', userId)
           .maybeSingle();
+        if (error) throw error;
         
         if (data?.first_name) {
           fullName = `${data.first_name} ${data.last_name}`;
@@ -387,7 +397,7 @@ export default class AuthService {
       fullName = displayName;
     }
 
-    return { fullName, displayName, assigned_station: assignedStation };
+    return { fullName, displayName, assigned_station: assignedStation, stationId: assignedStationId };
   }
 
   async getAuthUser() {
@@ -519,6 +529,8 @@ export default class AuthService {
       displayName: profile.displayName,
       fullName: profile.fullName,
       station: profile.assigned_station,
+      stationId: profile.stationId || null,
+      lastSignInAt: authUser.last_sign_in_at || null,
       authMode: 'online',
     };
 
@@ -570,6 +582,139 @@ export default class AuthService {
     if (!role) return '/';
     const config = getRoleConfig(role);
     return config ? config.redirect : '/';
+  }
+
+  recordLoginEvent(userId, explicitTimestamp = null) {
+    if (!userId) return null;
+    const timestamp = explicitTimestamp || new Date().toISOString();
+    const device = getClientDeviceString();
+    const record = { timestamp, device };
+
+    if (!isAndroidApp()) {
+      try {
+        localStorage.setItem(`dasmom_last_login_${userId}`, JSON.stringify(record));
+        localStorage.setItem('dasmom_last_login', JSON.stringify({
+          time: timestamp,
+          timestamp,
+          device
+        }));
+      } catch (err) {
+        console.warn('Failed to save login event to localStorage:', err);
+      }
+    }
+
+    try {
+      this.supabase.auth.updateUser({
+        data: {
+          last_login_event: record
+        }
+      }).catch(err => {
+        console.warn('Background sync of last_login_event to Supabase failed:', err);
+      });
+    } catch (error) {
+      console.warn('Unable to sync last_login_event to Supabase:', error);
+    }
+
+    return record;
+  }
+
+  async getLoginHistory(userId) {
+    // 1. Check user-specific localStorage first (immediate local state)
+    if (!isAndroidApp()) {
+      try {
+        if (userId) {
+          const local = localStorage.getItem(`dasmom_last_login_${userId}`);
+          if (local) {
+            const parsed = JSON.parse(local);
+            if (parsed?.timestamp) {
+              return {
+                timestamp: parsed.timestamp,
+                device: parsed.device || getClientDeviceString()
+              };
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Error reading local login history:', err);
+      }
+    }
+
+    // 2. Check Supabase auth session or user
+    try {
+      let authUser = null;
+      const sessRes = await this._withTimeout(this.supabase.auth.getSession(), 4000);
+      authUser = sessRes?.data?.session?.user || null;
+      if (!authUser) {
+        const userRes = await this._withTimeout(this.supabase.auth.getUser(), 4000);
+        authUser = userRes?.data?.user || null;
+      }
+
+      if (authUser && (!userId || authUser.id === userId)) {
+        // A) User metadata event if synced
+        const metaEvent = authUser.user_metadata?.last_login_event;
+        if (metaEvent?.timestamp) {
+          const result = {
+            timestamp: metaEvent.timestamp,
+            device: metaEvent.device || getClientDeviceString()
+          };
+          if (userId && !isAndroidApp()) {
+            try {
+              localStorage.setItem(`dasmom_last_login_${userId}`, JSON.stringify(result));
+            } catch (error) {
+              console.warn('Unable to save local login history:', error);
+            }
+          }
+          return result;
+        }
+
+        // B) Native authUser.last_sign_in_at from Supabase Auth
+        if (authUser.last_sign_in_at) {
+          const result = {
+            timestamp: authUser.last_sign_in_at,
+            device: getClientDeviceString()
+          };
+          if (userId && !isAndroidApp()) {
+            try {
+              localStorage.setItem(`dasmom_last_login_${userId}`, JSON.stringify(result));
+            } catch (error) {
+              console.warn('Unable to save local login history:', error);
+            }
+          }
+          return result;
+        }
+
+        // C) authUser.created_at
+        if (authUser.created_at) {
+          return {
+            timestamp: authUser.created_at,
+            device: getClientDeviceString()
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('Error fetching Supabase auth login history:', err);
+    }
+
+    // 3. Fallback to generic local storage
+    if (!isAndroidApp()) {
+      try {
+        const generic = localStorage.getItem('dasmom_last_login');
+        if (generic) {
+          const parsed = JSON.parse(generic);
+          const ts = parsed?.timestamp || parsed?.time;
+          if (ts) {
+            return {
+              timestamp: ts,
+              device: parsed.device || getClientDeviceString()
+            };
+          }
+        }
+      } catch (error) {
+        console.warn('Unable to read local login history:', error);
+      }
+    }
+
+    return null;
   }
 
 

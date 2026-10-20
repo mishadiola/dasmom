@@ -134,6 +134,28 @@
     box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
+/* ── Section Titles & Organization ── */
+.appt-section-title-wrap {
+    margin: 4px 0 10px 0;
+}
+
+.appt-section-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-text, #2d2234);
+    margin: 0;
+    letter-spacing: -0.3px;
+    font-family: var(--font, 'Poppins', sans-serif);
+    line-height: 1.3;
+}
+
+.appt-section-divider {
+    height: 1px;
+    background: #eef0f4;
+    border: none;
+    margin: 32px 0 24px 0;
+}
+
 /* ── Visit Type Tabs (matching Staff Calendar) ── */
 .visit-type-tabs {
     display: flex;
@@ -1007,6 +1029,21 @@
         display: flex;
         flex-direction: column;
         gap: 6px;
+    }
+    .appt-section-title-wrap {
+        margin: 6px 0 2px 0 !important;
+        padding: 0 2px !important;
+    }
+    .appt-section-title {
+        font-size: 15px !important;
+        font-weight: 700 !important;
+        color: var(--color-text, #2d2234) !important;
+        line-height: 1.3 !important;
+    }
+    .appt-section-divider {
+        height: 1px !important;
+        background: #eef0f4 !important;
+        margin: 16px 0 10px 0 !important;
     }
     .visit-type-tabs {
         padding: 0 !important;

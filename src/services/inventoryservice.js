@@ -2,6 +2,7 @@ import supabase from '../config/supabaseclient';
 import AuthService from './authservice'; // ← now you have real AuthService
 
 let currentUserScopeRequest = null;
+const stationInventoryCatalogRequests = new Map();
 
 const normalizeInventoryRole = (value) => {
   const normalized = String(value ?? '').trim().toLowerCase().replace(/[_-]/g, ' ');
@@ -22,10 +23,24 @@ class InventoryService {
     };
   }
 
-  async _ensureAdmin() {
-    const scope = await this._getCurrentUserScope();
-    if (!isAdminRole(scope.role)) throw new Error('Only admins can modify inventory');
-    console.debug('Inventory._ensureAdmin resolved role=', scope.role, 'for user=', scope.userId);
+  async _ensurePermission(permissionKey) {
+    const { data, error } = await this.supabase.rpc('has_permission', {
+      p_permission_key: permissionKey
+    });
+    if (error) throw error;
+    if (data !== true) throw new Error(`Missing permission: ${permissionKey}`);
+  }
+
+  async _ensureAnyPermission(permissionKeys) {
+    const results = await Promise.all(permissionKeys.map(p_permission_key =>
+      this.supabase.rpc('has_permission', { p_permission_key })
+    ));
+    for (const result of results) {
+      if (result.error) throw result.error;
+    }
+    if (!results.some(result => result.data === true)) {
+      throw new Error(`Missing required permission: ${permissionKeys.join(' or ')}`);
+    }
   }
 
   async _resolveStationId(stationName) {
@@ -64,147 +79,98 @@ class InventoryService {
     return currentUserScopeRequest;
   }
 
+  async _getStationInventoryCatalog(scope) {
+    const requestKey = `${scope.userId}:${scope.stationId}`;
+    let request = stationInventoryCatalogRequests.get(requestKey);
+    if (!request) {
+      request = this.supabase.rpc('get_station_inventory_catalog', {
+        p_station_id: scope.stationId
+      });
+      stationInventoryCatalogRequests.set(requestKey, request);
+    }
+
+    try {
+      const { data, error } = await request;
+      if (error) throw error;
+      return data || [];
+    } finally {
+      if (stationInventoryCatalogRequests.get(requestKey) === request) {
+        stationInventoryCatalogRequests.delete(requestKey);
+      }
+    }
+  }
+
   async _loadCurrentUserScope() {
-    const { data: { user }, error: authError } = await this.supabase.auth.getUser();
-    if (authError) throw authError;
-    if (!user?.id) {
+    const { data, error } = await this.supabase.rpc('get_inventory_user_scope');
+    if (error) throw error;
+    const scope = Array.isArray(data) ? data[0] : data;
+    if (!scope?.user_id) {
       return { role: 'user', stationId: null, stationName: null, userId: null };
     }
 
-    const { data: userRow, error: userError } = await this.supabase
-      .from('users')
-      .select('usertype')
-      .eq('id', user.id)
-      .maybeSingle();
-    if (userError) throw userError;
-    if (!userRow?.usertype) {
-      throw new Error(`No user type is assigned to authenticated user ${user.id}`);
-    }
-
-    const { data: typeRow, error: typeError } = await this.supabase
-      .from('user_type')
-      .select('user_type')
-      .eq('id', userRow.usertype)
-      .maybeSingle();
-    if (typeError) throw typeError;
-    if (!typeRow?.user_type) {
-      throw new Error(`User type ${userRow.usertype} was not found`);
-    }
-
-    const role = normalizeInventoryRole(typeRow.user_type);
+    const role = normalizeInventoryRole(scope.role);
     if (isAdminRole(role)) {
-      return { role: 'admin', stationId: null, stationName: null, userId: user.id };
+      return {
+        role: 'admin',
+        stationId: scope.station_id || null,
+        stationName: scope.station_name || null,
+        userId: scope.user_id
+      };
     }
 
     if (!['staff', 'cho personnel'].includes(role)) {
-      return { role, stationId: null, stationName: null, userId: user.id };
+      return { role, stationId: null, stationName: null, userId: scope.user_id };
     }
-
-    const { data: staffRow, error: staffError } = await this.supabase
-      .from('staff_profiles')
-      .select('station_ass, stations:station_ass (station_name)')
-      .eq('id', user.id)
-      .maybeSingle();
-    if (staffError) throw staffError;
-
     return {
       role,
-      stationId: staffRow?.station_ass || null,
-      stationName: staffRow?.stations?.station_name || null,
-      userId: user.id
+      stationId: scope.station_id || null,
+      stationName: scope.station_name || null,
+      userId: scope.user_id
     };
   }
 
-  async getStationInventorySnapshot() {
-    const scope = await this._getCurrentUserScope();
+  async getStationInventorySnapshot({ scope: suppliedScope } = {}) {
+    const scope = suppliedScope || await this._getCurrentUserScope();
     const isAdmin = scope.role === 'admin';
+    let stationId = isAdmin ? null : scope.stationId;
 
-    if (!isAdmin && !scope.stationId) {
-      return [];
+    if (!isAdmin) {
+      if (!stationId) {
+        const { data: canViewOtherStations, error: permissionError } = await this.supabase.rpc('has_permission', {
+          p_permission_key: 'inventory.station.view.other_station'
+        });
+        if (permissionError) throw permissionError;
+        if (canViewOtherStations !== true) {
+          throw new Error('Your account has no assigned station');
+        }
+        stationId = null;
+      } else {
+        const { data: canViewOtherStations, error: permissionError } = await this.supabase.rpc('has_permission', {
+          p_permission_key: 'inventory.station.view.other_station'
+        });
+        if (permissionError) throw permissionError;
+        if (canViewOtherStations === true) stationId = null;
+      }
     }
 
-    // Fetch station vaccine inventory
-    let vaccineQuery = this.supabase
-      .from('station_vaccine_inventory')
-      .select('id, station_id, vaccine_id, quantity, batch, updated_at, stations:station_id (station_name)');
+    const { data: catalogRows, error } = await this.supabase.rpc('get_station_inventory_catalog', {
+      p_station_id: stationId
+    });
+    if (error) throw error;
 
-    if (!isAdmin && scope.stationId) {
-      vaccineQuery = vaccineQuery.eq('station_id', scope.stationId);
-    }
-
-    const { data: vaccineStationData, error: vaccineStationError } = await vaccineQuery;
-    if (vaccineStationError) throw vaccineStationError;
-
-    // Fetch station supplement inventory
-    let supplementQuery = this.supabase
-      .from('station_supplement_inventory')
-      .select('id, station_id, supplement_inventory_id, quantity, batch, updated_at, stations:station_id (station_name)');
-
-    if (!isAdmin && scope.stationId) {
-      supplementQuery = supplementQuery.eq('station_id', scope.stationId);
-    }
-
-    const { data: supplementStationData, error: supplementStationError } = await supplementQuery;
-    if (supplementStationError) throw supplementStationError;
-
-    // Get unique vaccine IDs and fetch their details from central inventory
-    const vaccineIds = [...new Set((vaccineStationData || []).map(row => row.vaccine_id).filter(Boolean))];
-    let vaccineDetails = {};
-    if (vaccineIds.length > 0) {
-      const { data: vaccineData, error: vaccineError } = await this.supabase
-        .from('vaccine_inventory')
-        .select('id, vaccine_name, unit, max_quantity, brand, expiration_date, doses, manufactured_date')
-        .in('id', vaccineIds);
-      if (vaccineError) throw vaccineError;
-      vaccineDetails = Object.fromEntries((vaccineData || []).map(row => [row.id, row]));
-    }
-
-    // Get unique supplement IDs and fetch their details from central inventory
-    const supplementIds = [...new Set((supplementStationData || []).map(row => row.supplement_inventory_id).filter(Boolean))];
-    let supplementDetails = {};
-    if (supplementIds.length > 0) {
-      const { data: supplementData, error: supplementError } = await this.supabase
-        .from('supplement_inventory')
-        .select('id, supplement_name, unit, max_quant, brand, expiration_date, batch_number, manufactured_date')
-        .in('id', supplementIds);
-      if (supplementError) throw supplementError;
-      supplementDetails = Object.fromEntries((supplementData || []).map(row => [row.id, row]));
-    }
-
-    // Combine station data with central inventory details
-    const rows = [
-      ...(vaccineStationData || []).map(row => {
-        const vaxDetail = vaccineDetails[row.vaccine_id] || {};
-        return {
-          id: row.id,
-          station_id: row.station_id,
-          station: row.stations?.station_name || 'Unknown station',
-          item_name: vaxDetail.vaccine_name || 'Unknown vaccine',
-          item_type: 'Vaccine',
-          quantity: Number(row.quantity) || 0,
-          unit: vaxDetail.unit || 'vials',
-          batch: row.batch || null,
-          last_updated: row.updated_at || null,
-          brand: vaxDetail.brand || '',
-          expiration_date: vaxDetail.expiration_date || null
-        };
-      }),
-      ...(supplementStationData || []).map(row => {
-        const suppDetail = supplementDetails[row.supplement_inventory_id] || {};
-        return {
-          id: row.id,
-          station: row.stations?.station_name || 'Unknown station',
-          item_name: suppDetail.supplement_name || 'Unknown supplement',
-          item_type: 'Supplement',
-          quantity: Number(row.quantity) || 0,
-          unit: suppDetail.unit || 'pcs',
-          batch: row.batch || null,
-          last_updated: row.updated_at || null,
-          brand: suppDetail.brand || '',
-          expiration_date: suppDetail.expiration_date || null
-        };
-      })
-    ];
+    const rows = (catalogRows || []).map(row => ({
+      id: row.item_id,
+      station_id: row.station_id,
+      station: row.station_name || 'Unknown station',
+      item_name: row.item_name || 'Unknown item',
+      item_type: row.item_type,
+      quantity: Number(row.quantity) || 0,
+      unit: row.unit || (row.item_type === 'Vaccine' ? 'vials' : 'pcs'),
+      batch: row.batch ?? row.batch_number ?? null,
+      last_updated: row.updated_at || null,
+      brand: row.brand || '',
+      expiration_date: row.expiration_date || null
+    }));
 
     return rows.sort((a, b) => {
       const stationCompare = (a.station || '').localeCompare(b.station || '');
@@ -245,11 +211,17 @@ class InventoryService {
       `);
 
     if (!isAdmin) {
-      if (!scope.stationId) {
-        return [];
+      const [{ data: canViewOtherStations, error: otherPermissionError }, { data: canDistribute, error: distributionPermissionError }] = await Promise.all([
+        this.supabase.rpc('has_permission', { p_permission_key: 'inventory.station.view.other_station' }),
+        this.supabase.rpc('has_permission', { p_permission_key: 'inventory.main.distribute.to_stations' })
+      ]);
+      if (otherPermissionError) throw otherPermissionError;
+      if (distributionPermissionError) throw distributionPermissionError;
+      if (!scope.stationId && canDistribute !== true) return [];
+      if (canViewOtherStations !== true && canDistribute !== true) {
+        vaccineQuery.eq('station_id', scope.stationId);
+        supplementQuery.eq('station_id', scope.stationId);
       }
-      vaccineQuery.eq('station_id', scope.stationId);
-      supplementQuery.eq('station_id', scope.stationId);
     }
 
     const [vaccineResult, supplementResult] = await Promise.all([vaccineQuery, supplementQuery]);
@@ -324,6 +296,7 @@ class InventoryService {
       item_type: 'Vaccine',
       quantity: row.quantity,
       unit: row.vaccine_inventory?.unit || 'vials',
+      station_id: row.station_id,
       destination_station: row.stations?.station_name || 'Unknown',
       released_by: releasersById.get(row.distributed_by) || 'Unknown',
       remarks: row.remarks || ''
@@ -339,9 +312,10 @@ class InventoryService {
       item_type: 'Supplement',
       quantity: row.quantity,
       unit: row.supplement_inventory?.unit || 'pcs',
+      station_id: row.station_id,
       destination_station: row.stations?.station_name || 'Unknown',
       released_by: releasersById.get(row.distributed_by) || 'Unknown',
-      remarks: ''
+      remarks: row.remarks || ''
     }));
 
     return [...vaccineRecords, ...supplementRecords].sort((a, b) => {
@@ -352,7 +326,7 @@ class InventoryService {
   }
 
   async distributeInventory({ itemType, itemId, quantity, destinationStation, distributedBy, distributedDate, remarks }) {
-    await this._ensureAdmin();
+    await this._ensurePermission('inventory.main.distribute.to_stations');
 
     if (!itemType || !['vaccine', 'supplement'].includes(itemType)) {
       throw new Error('Invalid item type for distribution');
@@ -366,6 +340,7 @@ class InventoryService {
   }
 
   async distributeVaccine(vaccineId, quantity, stationName, distributedBy, distributedDate = new Date().toISOString().split('T')[0], remarks = null) {
+    await this._ensurePermission('inventory.main.distribute.to_stations');
 
     const qty = Number(quantity);
     if (!vaccineId) throw new Error('Vaccine item is required');
@@ -442,6 +417,7 @@ class InventoryService {
   }
 
   async distributeSupplement(supplementId, quantity, stationName, distributedBy, distributedDate = new Date().toISOString().split('T')[0], remarks = null) {
+    await this._ensurePermission('inventory.main.distribute.to_stations');
 
     const qty = Number(quantity);
     if (!supplementId) throw new Error('Supplement item is required');
@@ -516,82 +492,62 @@ class InventoryService {
     return { distribution: distData, updatedMain, stationInventory };
   }
 
-  async getVaccineInventory() {
+  async getVaccineInventory({ includeMainInventory = false } = {}) {
     try {
       const scope = await this._getCurrentUserScope();
       const isAdmin = scope.role === 'admin';
+      const includeMain = isAdmin || includeMainInventory;
 
-      let query = supabase
+      if (!includeMain) {
+        if (!scope.stationId) throw new Error('Your account has no assigned station');
+        const catalog = await this._getStationInventoryCatalog(scope);
+        return catalog
+          .filter(row => row.item_type === 'Vaccine')
+          .map(row => ({
+            id: row.item_id,
+            item_name: row.item_name,
+            quantity: Number(row.quantity) || 0,
+            unit: row.unit || 'vials',
+            max_stock: Number(row.max_quantity) || 0,
+            status: Number(row.quantity) <= 0 ? 'critical' : 'ok',
+            brand: row.brand || '',
+            expiration_date: row.expiration_date || null,
+            doses: row.doses || null,
+            batch: row.batch ?? row.batch_number ?? null,
+            manufactured_date: row.manufactured_date || null,
+            created_at: row.updated_at || null
+          }));
+      }
+
+      if (!isAdmin) await this._ensureAnyPermission([
+        'inventory.main.view',
+        'inventory.main.stock.add',
+        'inventory.main.distribute.to_stations'
+      ]);
+      const query = this.supabase
         .from('vaccine_inventory')
-        .select('id, vaccine_name, quantity, unit, max_quantity, created_by, created_at, brand, expiration_date, doses, batch, manufactured_date')
+        .select('id, vaccine_name, quantity, unit, max_quantity, created_by, created_at, brand, expiration_date, doses, batch, manufactured_date, status')
         .order('created_at', { ascending: false })
         .limit(200);
 
-      if (!isAdmin) {
-        if (!scope.stationId) return [];
-
-        query = supabase
-          .from('station_vaccine_inventory')
-          .select(`
-            id,
-            station_id,
-            vaccine_id,
-            quantity,
-            batch,
-            updated_at,
-            vaccine_inventory:vaccine_id (
-              vaccine_name,
-              unit,
-              max_quantity,
-              brand,
-              expiration_date,
-              doses,
-              manufactured_date
-            )
-          `)
-          .eq('station_id', scope.stationId);
-      }
-
       const { data, error } = await query;
-
-      if (error) {
-        console.error('Error fetching vaccine inventory:', error);
-        return [];
-      }
+      if (error) throw error;
 
       const mapped = (data || []).map(row => {
-        const inventoryRow = row?.vaccine_inventory || {};
-        const name = row?.vaccine_name ?? row?.item_name ?? inventoryRow?.vaccine_name ?? inventoryRow?.item_name ?? 'Unknown vaccine';
+        const name = row?.vaccine_name ?? 'Unknown vaccine';
         const quantity = Number(row?.quantity ?? 0);
-        const maxStock = Number(row?.max_quantity ?? inventoryRow?.max_quantity ?? 0);
+        const maxStock = Number(row?.max_quantity ?? 0);
         const percentage = maxStock ? Math.round((quantity / maxStock) * 100) : 0;
         
         let status = 'ok';
         // Preserve archived status from database
-        const dbStatus = row?.status ?? inventoryRow?.status;
+        const dbStatus = row?.status;
         if (dbStatus === 'archived') {
             status = 'archived';
         } else {
             if (quantity <= 0) status = 'critical';
             else if (percentage <= 20) status = 'low';
             else if (percentage <= 50) status = 'medium';
-        }
-
-        if (!isAdmin) {
-          return {
-            id: row?.vaccine_id ?? row?.id ?? inventoryRow?.id ?? '',
-            item_name: name,
-            quantity,
-            unit: inventoryRow?.unit || row?.unit || 'vials',
-            max_stock: maxStock,
-            status,
-            brand: inventoryRow?.brand || row?.brand || '',
-            expiration_date: inventoryRow?.expiration_date || row?.expiration_date || null,
-            doses: inventoryRow?.doses || row?.doses || null,
-            batch: row?.batch ?? inventoryRow?.batch ?? null,
-            manufactured_date: inventoryRow?.manufactured_date || row?.manufactured_date || null,
-            created_at: row?.created_at || inventoryRow?.created_at || row?.updated_at || null
-          };
         }
 
         return {
@@ -613,84 +569,64 @@ class InventoryService {
       return mapped;
     } catch (err) {
       console.error('Vaccine inventory query failed:', err);
-      return [];
+      throw err;
     }
   }
 
-  async getSupplementInventory() {
+  async getSupplementInventory({ includeMainInventory = false } = {}) {
     try {
       const scope = await this._getCurrentUserScope();
       const isAdmin = scope.role === 'admin';
+      const includeMain = isAdmin || includeMainInventory;
 
-      let query = supabase
+      if (!includeMain) {
+        if (!scope.stationId) throw new Error('Your account has no assigned station');
+        const catalog = await this._getStationInventoryCatalog(scope);
+        return catalog
+          .filter(row => row.item_type === 'Supplement')
+          .map(row => ({
+            id: row.item_id,
+            item_name: row.item_name,
+            quantity: Number(row.quantity) || 0,
+            unit: row.unit || 'pcs',
+            max_stock: Number(row.max_quantity) || 0,
+            status: Number(row.quantity) <= 0 ? 'critical' : 'ok',
+            brand: row.brand || '',
+            expiration_date: row.expiration_date || null,
+            batch_number: row.batch ?? row.batch_number ?? null,
+            manufactured_date: row.manufactured_date || null,
+            created_at: row.updated_at || null
+          }));
+      }
+
+      if (!isAdmin) await this._ensureAnyPermission([
+        'inventory.main.view',
+        'inventory.main.stock.add',
+        'inventory.main.distribute.to_stations'
+      ]);
+      const query = this.supabase
         .from('supplement_inventory')
-        .select('id, supplement_name, quantity, unit, max_quant, created_by, created_at, brand, expiration_date, batch_number, manufactured_date')
+        .select('id, supplement_name, quantity, unit, max_quant, created_by, created_at, brand, expiration_date, batch_number, manufactured_date, status')
         .limit(200);
 
-      if (!isAdmin) {
-        if (!scope.stationId) return [];
-
-        query = supabase
-          .from('station_supplement_inventory')
-          .select(`
-            id,
-            station_id,
-            supplement_inventory_id,
-            quantity,
-            batch,
-            updated_at,
-            supplement_inventory:supplement_inventory_id (
-              supplement_name,
-              unit,
-              max_quant,
-              brand,
-              expiration_date,
-              batch_number,
-              manufactured_date
-            )
-          `)
-          .eq('station_id', scope.stationId);
-      }
-
       const { data, error } = await query;
-
-      if (error) {
-        console.error('Error fetching supplement inventory:', error);
-        return [];
-      }
+      if (error) throw error;
 
       return (data || []).map(row => {
-        const inventoryRow = row?.supplement_inventory || {};
-        const name = row?.supplement_name ?? row?.item_name ?? inventoryRow?.supplement_name ?? inventoryRow?.item_name ?? 'Unknown supplement';
+        const name = row?.supplement_name ?? 'Unknown supplement';
         const quantity = Number(row?.quantity ?? 0);
-        const maxStock = Number(row?.max_quant ?? inventoryRow?.max_quant ?? 0);
+        const maxStock = Number(row?.max_quant ?? 0);
         const percentage = maxStock ? Math.round((quantity / maxStock) * 100) : 0;
         
         let status = 'ok';
         // Preserve archived status from database
-        const dbStatus = row?.status ?? inventoryRow?.status;
+        const dbStatus = row?.status;
         if (dbStatus === 'archived') {
             status = 'archived';
         } else {
             if (quantity <= 0) status = 'critical';
             else if (percentage <= 20) status = 'low';
             else if (percentage <= 50) status = 'medium';
-        }
-
-        if (!isAdmin) {
-          return {
-            id: row?.supplement_inventory_id ?? row?.id ?? inventoryRow?.id ?? '',
-            item_name: name,
-            quantity,
-            unit: inventoryRow?.unit || row?.unit || 'pcs',
-            max_stock: maxStock,
-            status,
-            brand: inventoryRow?.brand || row?.brand || '',
-            expiration_date: inventoryRow?.expiration_date || row?.expiration_date || null,
-            batch_number: row?.batch ?? inventoryRow?.batch_number ?? null,
-            manufactured_date: inventoryRow?.manufactured_date || row?.manufactured_date || null,
-            created_at: row?.created_at || inventoryRow?.created_at || row?.updated_at || null
-          };
         }
 
         return {
@@ -709,12 +645,28 @@ class InventoryService {
       });
     } catch (err) {
       console.error('Supplement inventory query failed:', err);
-      return [];
+      throw err;
     }
   }
 
+  async setInventoryArchived(table, ids, archived) {
+    if (!['vaccine_inventory', 'supplement_inventory'].includes(table)) {
+      throw new Error(`Unsupported inventory table: ${table}`);
+    }
+    if (!Array.isArray(ids) || ids.length === 0) return [];
+
+    const { error } = await this.supabase
+      .from(table)
+      .update({ status: archived ? 'archived' : 'active' })
+      .in('id', ids);
+    if (error) throw error;
+  }
+
   async addInventoryItem(table, { item_name, quantity, max_stock, unit, brand, expiration_date, batch_number, manufactured_date }) {
-    await this._ensureAdmin(); // only admins
+    await this._ensurePermission('inventory.main.stock.add');
+    if (!['vaccine_inventory', 'supplement_inventory'].includes(table)) {
+      throw new Error(`Unsupported inventory table: ${table}`);
+    }
 
     const currentUser = await this.auth.getAuthUser();
     if (!currentUser) throw new Error('No logged‑in user');
@@ -825,7 +777,10 @@ class InventoryService {
   }
 
   async updateInventoryQuantity(table, id, newQuantity, newMaxStock) {
-    await this._ensureAdmin(); // only admins
+    await this._ensurePermission('inventory.main.stock.add');
+    if (!['vaccine_inventory', 'supplement_inventory'].includes(table)) {
+      throw new Error(`Unsupported inventory table: ${table}`);
+    }
 
     const payload = {
       quantity: Number(newQuantity),
@@ -851,7 +806,10 @@ class InventoryService {
   }
 
   async deleteInventoryItem(table, id) {
-    await this._ensureAdmin(); // only admins
+    await this._ensurePermission('inventory.main.stock.add');
+    if (!['vaccine_inventory', 'supplement_inventory'].includes(table)) {
+      throw new Error(`Unsupported inventory table: ${table}`);
+    }
 
     const { data, error } = await supabase
       .from(table)

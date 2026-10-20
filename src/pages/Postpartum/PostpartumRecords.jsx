@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import useClickOutside from '../../hooks/useClickOutside';
 import { useNavigate } from 'react-router-dom';
@@ -6,10 +7,12 @@ import {
     Search, Filter, Baby, Heart, AlertTriangle, Clock,
     CheckCircle2, XCircle, ChevronRight, ChevronLeft, Eye,
     AlertCircle, FileText, MapPin, Activity, Thermometer,
-    Brain, Milk, Calendar, TrendingUp, Download, X, ChevronDown, ClipboardList
+    Brain, Milk, Calendar, TrendingUp, Download, X, ChevronDown, ClipboardList,
+    Plus
 } from 'lucide-react';
 import BabyService from '../../services/babyservices';
 import PatientService from '../../services/patientservice';
+import supabase from '../../config/supabaseclient';
 import * as XLSX from 'xlsx';
 import ExportModal from '../../components/ExportModal';
 import Legend from '../../components/Legend/Legend';
@@ -19,6 +22,10 @@ import { formatMotherId } from '../../utils/displayIds';
 import PostpartumVisitModal from '../../components/PostpartumVisitModal';
 import ScheduledVisitModal from '../../components/Prenatal/ScheduledVisitModal';
 import ActionTooltip from '../../components/Common/ActionTooltip';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
+import { useRolePermissions } from '../../context/RolePermissionContext';
+import { useDefaultStation } from '../../hooks/useDefaultStation';
 
 const formatReadableDate = (dateString) => {
     if (!dateString || dateString === 'N/A' || dateString === 'Not scheduled' || dateString === 'None') return dateString;
@@ -30,11 +37,12 @@ const formatReadableDate = (dateString) => {
    POSTPARTUM DETAIL MODAL
    ════════════════════════════ */
 const DetailModal = ({ mother, onClose }) => {
-    const babyService = new BabyService();
     const [detail, setDetail] = useState({
         deliveryFacility: 'N/A',
         deliveryStation: 'N/A',
         attendingStaff: 'N/A',
+        deliveryRecordedBy: 'N/A',
+        assignedStaff: 'Unassigned',
         deliveryComplications: mother.complications || 'None',
         birthWeight: 'N/A',
         breastfeeding: 'N/A',
@@ -49,7 +57,7 @@ const DetailModal = ({ mother, onClose }) => {
             try {
                 setLoading(true);
                 // Fetch delivery record with staff info
-                const { data: deliveries, error: deliveryError } = await babyService.supabase
+                const { data: deliveries, error: deliveryError } = await supabase
                     .from('deliveries')
                     .select(`
                         id,
@@ -67,19 +75,20 @@ const DetailModal = ({ mother, onClose }) => {
                     .single();
                 if (deliveryError) throw deliveryError;
 
-                const updatedDetail = {
-                    ...detail,
+                setDetail(previous => ({
+                    ...previous,
                     deliveryFacility: deliveries?.pregnancy_info?.place_of_delivery || deliveries?.patient_basic_info?.municipality || 'N/A',
-                    deliveryStation: deliveries?.stations?.station_name || 'N/A',
-                    attendingStaff: deliveries?.staff_profiles?.full_name || 'N/A',
+                    deliveryStation: deliveries?.stations?.station_name || mother.station || 'N/A',
+                    attendingStaff: deliveries?.staff_profiles?.full_name || mother.attendingStaff || 'N/A',
+                    deliveryRecordedBy: mother.deliveryRecordedBy || 'N/A',
+                    assignedStaff: mother.assignedStaff || 'Unassigned',
                     birthWeight: deliveries?.newborns?.[0]?.birth_weight ? `${deliveries.newborns[0].birth_weight} kg` : 'N/A',
                     deliveryComplications: mother.complications || 'None',
                     woundCondition: mother.deliveryType === 'CS' ? 'Healing Well' : 'N/A (NSD)',
                     postpartumVisits: mother.scheduledVisits || [],
                     postpartumAttendedDate: mother.postpartumAttendedDate || null,
                     postpartumRemarks: mother.postpartumRemarks || null
-                };
-                setDetail(updatedDetail);
+                }));
             } catch (error) {
                 console.error('Error fetching detail data:', error);
             } finally {
@@ -90,7 +99,7 @@ const DetailModal = ({ mother, onClose }) => {
         if (mother?.id) {
             fetchDetailData();
         }
-    }, [mother?.id]);
+    }, [mother]);
 
     const followUpStatusClass = (s) => {
         if (s === 'Completed') return 'fu-completed';
@@ -104,7 +113,7 @@ const DetailModal = ({ mother, onClose }) => {
         return <Clock size={14} />;
     };
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="pp-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
@@ -125,6 +134,8 @@ const DetailModal = ({ mother, onClose }) => {
                             <div className="detail-item"><span>Delivery Station</span><strong>{detail.deliveryStation}</strong></div>
                             <div className="detail-item"><span>Delivery Type</span><strong>{mother.deliveryType}</strong></div>
                             <div className="detail-item"><span>Attending Staff</span><strong>{detail.attendingStaff}</strong></div>
+                            <div className="detail-item"><span>Delivery Recorded By</span><strong>{detail.deliveryRecordedBy}</strong></div>
+                            <div className="detail-item"><span>Assigned Staff</span><strong>{detail.assignedStaff}</strong></div>
                             <div className="detail-item"><span>Complications During Delivery</span><strong>{detail.deliveryComplications}</strong></div>
                             <div className="detail-item"><span>Baby Outcome</span><strong>{mother.babyOutcome}</strong></div>
                         </div>
@@ -136,6 +147,8 @@ const DetailModal = ({ mother, onClose }) => {
                             <div className="detail-grid">
                                 <div className="detail-item"><span>Visit Date</span><strong>{formatReadableDate(detail.postpartumAttendedDate)}</strong></div>
                                 <div className="detail-item"><span>Personnel Present</span><strong>{detail.postpartumRemarks.personnel_present?.name || 'N/A'}</strong></div>
+                                <div className="detail-item"><span>Recorded By</span><strong>{detail.postpartumRemarks.recorded_by?.name || 'Not recorded'}</strong></div>
+                                <div className="detail-item"><span>Assigned Staff</span><strong>{detail.postpartumRemarks.assigned_staff?.name || detail.assignedStaff}</strong></div>
                                 {Object.entries(detail.postpartumRemarks.assessment).filter(([, value]) => value).map(([key, value]) => (
                                     <div className="detail-item" key={key}><span>{key.replaceAll('_', ' ')}</span><strong>{value}</strong></div>
                                 ))}
@@ -184,7 +197,8 @@ const DetailModal = ({ mother, onClose }) => {
                     <button className="btn btn-outline" onClick={onClose}>Close</button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 
@@ -192,6 +206,11 @@ const DetailModal = ({ mother, onClose }) => {
    MAIN COMPONENT
    ════════════════════════════ */
 const PostpartumRecords = () => {
+    const { hasAnyPermission } = useRolePermissions();
+    const canRecordPostpartum = hasAnyPermission([
+        'postpartum.record.own_station',
+        'postpartum.record.other_station',
+    ]);
     const navigate = useNavigate();
     const babyService = new BabyService();
     const patientService = useMemo(() => new PatientService(), []);
@@ -200,15 +219,46 @@ const PostpartumRecords = () => {
     const [stationStats, setStationStats] = useState([]);
     const [mothers, setMothers] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filters, setFilters] = useState({
-        deliveryType: 'All', station: 'All', followUp: 'All', summaryCard: 'All'
+
+    const {
+        isStationStaff,
+        assignedStation,
+        canViewOtherStations,
+        availableStations: permittedStations,
+        matchStation: matchStationHook,
+    } = useDefaultStation({
+        permissionKey: [
+            'postpartum.schedule.view.other_station',
+            'postpartum.record.other_station',
+        ],
+        allStations: availableStations,
+        isArray: false
     });
+
+    const [filters, setFilters] = useState(() => ({
+        deliveryType: 'All',
+        station: isStationStaff && assignedStation ? assignedStation : 'All',
+        followUp: 'All',
+        summaryCard: 'All'
+    }));
+    const userHasChangedStationRef = useRef(false);
+
+    useEffect(() => {
+        if (!userHasChangedStationRef.current && isStationStaff && assignedStation) {
+            setFilters(prev => ({
+                ...prev,
+                station: prev.station !== 'All' ? prev.station : assignedStation
+            }));
+        }
+    }, [isStationStaff, assignedStation]);
 
     const hasActiveFilters = filters.deliveryType !== 'All' || filters.station !== 'All' || filters.followUp !== 'All' || filters.summaryCard !== 'All' || searchTerm !== '';
 
     const clearFilters = () => {
-        setFilters({ deliveryType: 'All', station: 'All', followUp: 'All', summaryCard: 'All' });
+        const defStation = (isStationStaff && !canViewOtherStations) ? (assignedStation || '__UNASSIGNED__') : 'All';
+        setFilters({ deliveryType: 'All', station: defStation, followUp: 'All', summaryCard: 'All' });
         setSearchTerm('');
         setActivePopover(null);
     };
@@ -235,23 +285,26 @@ const PostpartumRecords = () => {
         fetchStations();
     }, [patientService]);
 
+    const fetchData = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            const [statData, newRecords] = await Promise.all([
+                babyService.getPostpartumStats(),
+                babyService.getPostpartumRecords()
+            ]);
+            setStats(statData.summary || []);
+            setStationStats(statData.stationRecovery || []);
+            setMothers(newRecords || []);
+        } catch (error) {
+            console.error('Error fetching postpartum data:', error);
+            setError(error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                setLoading(true);
-                const [statData, newRecords] = await Promise.all([
-                    babyService.getPostpartumStats(),
-                    babyService.getPostpartumRecords()
-                ]);
-                setStats(statData.summary || []);
-                setStationStats(statData.stationRecovery || []);
-                setMothers(newRecords || []);
-            } catch (error) {
-                console.error('Error fetching postpartum data:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchData();
     }, []);
 
@@ -342,31 +395,24 @@ const PostpartumRecords = () => {
             XLSX.writeFile(wb, `Postpartum_Records_${dateStr}.xlsx`);
         } else if (format === 'pdf') {
             try {
-                const jsPDF = (await import('jspdf')).default;
-                const autoTable = (await import('jspdf-autotable')).default;
-                
-                const doc = new jsPDF('landscape');
-                
-                if (exportData.length === 0) {
-                    doc.text("No records found for the selected period.", 14, 20);
-                } else {
-                    const tableColumn = Object.keys(exportData[0]);
-                    const tableRows = exportData.map(obj => Object.values(obj));
-
-                    doc.text("Postpartum Records List", 14, 15);
-                    doc.setFontSize(10);
-                    doc.text(`Period: ${reportPeriodText}`, 14, 22);
-                    
-                    autoTable(doc, {
-                        head: [tableColumn],
-                        body: tableRows,
-                        startY: 28,
-                        styles: { fontSize: 7 },
-                        headStyles: { fillColor: [147, 111, 199] }
-                    });
-                }
                 const dateStr = new Date().toISOString().split('T')[0];
-                doc.save(`Postpartum_Records_${dateStr}.pdf`);
+                const stationText = (filters.station && filters.station !== 'All' && filters.station !== 'All Stations')
+                    ? filters.station
+                    : 'All Stations';
+
+                const head = exportData.length > 0 ? [Object.keys(exportData[0])] : [["Patient Name", "Patient ID", "Station", "Delivery Type", "Delivery Date", "Days Postpartum", "Baby Outcome", "Recovery Status", "Last Checkup", "Next Follow-up", "Follow-up Status", "Complications"]];
+                const body = exportData.length > 0 ? exportData.map(obj => Object.values(obj)) : [];
+
+                exportStandardStaffPdf({
+                    orientation: 'landscape',
+                    title: 'Postpartum Records Report',
+                    period: reportPeriodText || 'All Dates',
+                    station: stationText,
+                    totalRecords: exportData.length,
+                    head: head,
+                    body: body,
+                    filename: `Postpartum_Records_${dateStr}.pdf`
+                });
             } catch (error) {
                 console.error("Error generating PDF:", error);
             }
@@ -375,9 +421,12 @@ const PostpartumRecords = () => {
 
     const filtered = mothers.filter(m => {
         const s = searchTerm.toLowerCase();
-        const matchSearch = m.name.toLowerCase().includes(s) || m.patientId.toLowerCase().includes(s) || m.station.toLowerCase().includes(s);
+        const matchSearch = m.name.toLowerCase().includes(s) || 
+            m.patientId.toLowerCase().includes(s) || 
+            formatMotherId(m.patientId).toLowerCase().includes(s) || 
+            m.station.toLowerCase().includes(s);
         const matchDT = filters.deliveryType === 'All' || m.deliveryType === filters.deliveryType;
-        const matchStation = filters.station === 'All' || m.station === filters.station;
+        const matchStation = matchStationHook(m.station, filters.station);
         const matchFU = filters.followUp === 'All' || m.followUpStatus === filters.followUp;
                 let matchSummary = true;
         if (filters.summaryCard !== 'All') {
@@ -397,8 +446,18 @@ const PostpartumRecords = () => {
         return 'fu-badge-upcoming';
     };
 
+    if (loading) {
+        return (
+            <StaffPageLoader 
+                message="Loading postpartum records..." 
+                error={error} 
+                onRetry={fetchData} 
+            />
+        );
+    }
+
     return (
-        <div className="pp-page">
+        <div className="pp-page staff-page-ready">
 
             {/* ── Page Header ── */}
             <div className="page-header">
@@ -415,8 +474,7 @@ const PostpartumRecords = () => {
 
             {/* ── Summary Cards ── */}
             <div className="pp-stats-grid">
-                {(loading ? [1, 2, 3, 4, 5] : stats).map((s, idx) => {
-                    if (loading) return <div key={idx} className="stat-card skeleton-loading" style={{ height: '120px' }} />;
+                {stats.map((s, idx) => {
                     const Icon = iconMap[s.icon] || Baby;
                     return (
                         <div key={s.label} className={`stat-card stat-card--${s.color}`}>
@@ -514,9 +572,11 @@ const PostpartumRecords = () => {
                             <div className="filter-popover">
                                 <div className="popover-title">Station</div>
                                 <div className="popover-options">
-                                    <button className={`popover-opt-btn ${filters.station === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('station', 'All'); setActivePopover(null); }}>All Stations</button>
-                                    {availableStations.map(s => (
-                                        <button key={s} className={`popover-opt-btn ${filters.station === s ? 'selected' : ''}`} onClick={() => { handleFilter('station', s); setActivePopover(null); }}>{s}</button>
+                                    {(!isStationStaff || canViewOtherStations) && (
+                                        <button className={`popover-opt-btn ${filters.station === 'All' ? 'selected' : ''}`} onClick={() => { userHasChangedStationRef.current = true; handleFilter('station', 'All'); setActivePopover(null); }}>All Stations</button>
+                                    )}
+                                    {permittedStations.map(s => (
+                                        <button key={s} className={`popover-opt-btn ${filters.station === s ? 'selected' : ''}`} onClick={() => { userHasChangedStationRef.current = true; handleFilter('station', s); setActivePopover(null); }}>{s}</button>
                                     ))}
                                 </div>
                             </div>
@@ -593,7 +653,7 @@ const PostpartumRecords = () => {
                                                     <div className="pp-avatar">{m.name.split(' ').map(n => n[0]).slice(0, 2).join('')}</div>
                                                     <div>
                                                         <span className="pp-name patient-name-link">{m.name}</span>
-                                                        <span className="pp-meta">{formatMotherId(m.patientId)} · {m.station}</span>
+                                                        <span className="pp-meta">{formatMotherId(m.patientId)} · {m.station} · Assigned: {m.assignedStaff || 'Unassigned'}</span>
                                                     </div>
                                                 </div>
                                             </td>
@@ -622,7 +682,7 @@ const PostpartumRecords = () => {
                                             </td>
                                             <td>
                                                 <div className="pp-actions">
-                                                    {m.scheduledVisits?.some(visit => visit.status !== 'Completed' && visit.status !== 'Cancelled') && (
+                                                    {canRecordPostpartum && m.scheduledVisits?.some(visit => visit.status !== 'Completed' && visit.status !== 'Cancelled') && (
                                                         <ActionTooltip text="Record Postpartum Visit">
                                                             <button 
                                                                 className="action-btn record-btn" 
@@ -645,7 +705,7 @@ const PostpartumRecords = () => {
                                                                     });
                                                                 }}
                                                             >
-                                                                <ClipboardList size={15} />
+                                                                <Plus size={15} />
                                                             </button>
                                                         </ActionTooltip>
                                                     )}
@@ -694,66 +754,6 @@ const PostpartumRecords = () => {
                             )}
                         </div>
                     </div>
-                </div>
-
-                {/* ── RIGHT: Alerts + Station ── */}
-                <div className="pp-side-col">
-
-                    {/* Station Distribution */}
-                    <div className="pp-card">
-                        <div className="pp-card-head">
-                            <h2>
-                                <MapPin size={16} /> Station Distribution
-                            </h2>
-                        </div>
-                        <div className="station-dist-list">
-                            {(() => {
-                                const counts = {};
-                                filtered.forEach((p) => {
-                                    const st = p.station || 'Unassigned';
-                                    counts[st] = (counts[st] || 0) + 1;
-                                });
-                                const dist = Object.entries(counts)
-                                    .map(([name, count]) => ({ name, count }))
-                                    .sort((a, b) => b.count - a.count);
-                                
-                                return (
-                                    <>
-                                        {dist.map((b) => (
-                                            <div key={b.name} className="station-dist-item">
-                                                <span>{b.name}</span>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    <div className="station-bar-wrap">
-                                                        <div
-                                                            className="station-bar-fill"
-                                                            style={{
-                                                                width: `${(b.count / Math.max(filtered.length, 1)) * 100}%`,
-                                                            }}
-                                                        ></div>
-                                                    </div>
-                                                    <span
-                                                        style={{
-                                                            fontSize: '12px',
-                                                            fontWeight: 700,
-                                                            color: 'var(--color-rose)',
-                                                            minWidth: '20px',
-                                                            textAlign: 'right',
-                                                        }}
-                                                    >
-                                                        {b.count}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                        {dist.length === 0 && (
-                                            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', textAlign: 'center', margin: '20px 0' }}>No records found.</p>
-                                        )}
-                                    </>
-                                );
-                            })()}
-                        </div>
-                    </div>
-
                 </div>
             </div>
 

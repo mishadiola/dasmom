@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertCircle, CheckCircle2, Info, LogOut, Trash2, Archive, AlertTriangle } from 'lucide-react';
 import '../styles/components/SystemModal.css';
 
@@ -96,11 +97,13 @@ export const ModalProvider = ({ children }) => {
         }
     };
 
+    const contextValue = useMemo(() => ({ alert, confirm }), [alert, confirm]);
+
     return (
-        <ModalContext.Provider value={{ alert, confirm }}>
+        <ModalContext.Provider value={contextValue}>
             {children}
             
-            {modalState.isOpen && (
+            {modalState.isOpen && createPortal(
                 <div className="system-modal-overlay" onClick={handleBackdropClick}>
                     <div className="system-modal-card" onClick={e => e.stopPropagation()}>
                         <div className={`system-modal-icon ${getIconClass(modalState.iconType)}`}>
@@ -125,7 +128,8 @@ export const ModalProvider = ({ children }) => {
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </ModalContext.Provider>
     );

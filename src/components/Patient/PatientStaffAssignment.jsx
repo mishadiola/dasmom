@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { UserRoundPlus } from 'lucide-react';
 import PatientService from '../../services/patientservice';
 import ActionTooltip from '../Common/ActionTooltip';
+import { useRolePermissions } from '../../context/RolePermissionContext';
 import './PatientStaffAssignment.css';
 
 const PatientStaffAssignment = ({
@@ -9,9 +10,10 @@ const PatientStaffAssignment = ({
   patientStationId,
   assignedStaffId,
   assignedStaffName,
-  role,
+  viewerStationId,
   onAssigned
 }) => {
+  const { hasPermission, loading: permissionsLoading } = useRolePermissions();
   const [isOpen, setIsOpen] = useState(false);
   const [staffOptions, setStaffOptions] = useState([]);
   const [selectedStaffId, setSelectedStaffId] = useState('');
@@ -19,10 +21,12 @@ const PatientStaffAssignment = ({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const roleLabel = String(role || '').toLowerCase().replace(/_/g, ' ').trim();
-  const normalizedRole = roleLabel === 'station staff' ? 'staff' : roleLabel;
-  const canAssign = ['admin', 'staff', 'cho personnel'].includes(normalizedRole)
-    && patientStationId
+  const assignmentPermission = patientStationId === viewerStationId
+    ? 'patient.assign_staff.own_station'
+    : 'patient.assign_staff.other_station';
+  const canAssign = !permissionsLoading
+    && Boolean(patientStationId)
+    && hasPermission(assignmentPermission)
     && !assignedStaffId;
 
   const openAssignment = async (event) => {

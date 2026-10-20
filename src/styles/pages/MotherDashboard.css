@@ -1115,8 +1115,10 @@
     font-weight: 700;
     font-family: var(--font);
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
     border: none;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
 }
 
 .support-btn-primary {
@@ -1125,21 +1127,64 @@
     box-shadow: 0 4px 12px rgba(185, 129, 138, 0.3);
 }
 
-.support-btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(185, 129, 138, 0.4);
-}
-
 .support-btn-secondary {
     background: white;
     color: var(--color-rose);
     border: 2px solid var(--color-rose);
 }
 
-.support-btn-secondary:hover {
+/* Hover effects only on pointer devices that support real hover (prevents sticky mobile hover) */
+@media (hover: hover) and (pointer: fine) {
+    .support-btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(185, 129, 138, 0.4);
+    }
+
+    .support-btn-secondary:hover {
+        background: var(--color-rose);
+        color: white;
+        transform: translateY(-2px);
+    }
+}
+
+/* Active / pressed feedback while actively tapping/holding down */
+.support-btn:active {
+    transform: scale(0.97) translateY(0);
+    transition: transform 0.08s ease;
+}
+
+.support-btn-primary:active {
+    box-shadow: 0 2px 6px rgba(185, 129, 138, 0.3);
+}
+
+.support-btn-secondary:active {
     background: var(--color-rose);
     color: white;
-    transform: translateY(-2px);
+}
+
+/* Prevent persistent focus/selection state on click/tap, while preserving keyboard accessibility */
+.support-btn:focus:not(:focus-visible) {
+    outline: none;
+    transform: none;
+}
+
+.support-btn-primary:focus:not(:focus-visible) {
+    background: linear-gradient(135deg, #e05c73, #ff6b8a);
+    color: white;
+    box-shadow: 0 4px 12px rgba(185, 129, 138, 0.3);
+    transform: none;
+}
+
+.support-btn-secondary:focus:not(:focus-visible) {
+    background: white;
+    color: var(--color-rose);
+    border: 2px solid var(--color-rose);
+    transform: none;
+}
+
+.support-btn:focus-visible {
+    outline: 2px solid var(--color-rose);
+    outline-offset: 2px;
 }
 
 .mother-btn-contact {

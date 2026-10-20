@@ -9,11 +9,19 @@ import {
 import '../styles/layouts/DashboardLayout.css';
 import logo from '../assets/images/dasmom_logo.png';
 import { AuthContext } from '../context/AuthContext';
-import PatientService from '../services/patientservice';
 import supabase from '../config/supabaseclient';
 import { useModal } from '../context/ModalContext';
 import { useLanguage } from '../context/LanguageContext';
-import MotherAIChatAssistant from '../components/MotherDashboard/MotherAIChatAssistant';
+import { useRolePermissions } from '../context/RolePermissionContext';
+import StaffPageLoader from '../components/Common/StaffPageLoader';
+import { isAndroidApp } from '../services/secureStorage';
+
+const MotherAIChatAssistant = React.lazy(() => import('../components/MotherDashboard/MotherAIChatAssistant'));
+const DashboardOutlet = React.memo(() => (
+    <React.Suspense fallback={<StaffPageLoader />}>
+        <Outlet />
+    </React.Suspense>
+));
 
 const NAV_ITEMS = [
     {
@@ -73,7 +81,7 @@ const DashboardLayout = () => {
     const { user, logout: authLogout } = useContext(AuthContext);
     const { confirm, alert } = useModal();
     const { language, toggleLanguage, t } = useLanguage();
-    const patientService = new PatientService();
+    const { hasPermission } = useRolePermissions();
 
     // Determine if we are in User View based on path
     const isUserView = location.pathname.startsWith('/mother-home');
@@ -140,10 +148,17 @@ const DashboardLayout = () => {
 
     // Fetch real notifications from database
     useEffect(() => {
+        let active = true;
+        let latestRequest = 0;
+        let notificationRefreshTimer = null;
+
         const fetchNotifications = async () => {
+            const requestId = ++latestRequest;
             if (!user || isUserView) {
-                setNotifications([]);
-                setNotifCount(0);
+                if (active) {
+                    setNotifications([]);
+                    setNotifCount(0);
+                }
                 return;
             }
 
@@ -261,7 +276,9 @@ const DashboardLayout = () => {
                 }
 
                 // Process and resolve status
-                const resolvedIds = JSON.parse(window.localStorage.getItem('dasmom.resolvedNotifs') || '[]');
+                const resolvedIds = isAndroidApp()
+                    ? []
+                    : JSON.parse(window.localStorage.getItem('dasmom.resolvedNotifs') || '[]');
                 
                 notifList.forEach(n => {
                     const idString = `${n.category}_${n.text}_${n.targetPath}`;
@@ -270,29 +287,41 @@ const DashboardLayout = () => {
                     n.isResolved = resolvedIds.includes(n.id);
                 });
 
-                setNotifications(notifList);
-                setNotifCount(notifList.filter(n => !n.isResolved).length);
-
-                // Set up real-time subscription for notifications
-                const subscription = supabase
-                    .channel('notifications-channel')
-                    .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
-                        fetchNotifications(); // Refresh notifications on any database change
-                    })
-                    .subscribe();
-
-                return () => {
-                    supabase.removeChannel(subscription);
-                };
-
+                if (active && requestId === latestRequest) {
+                    setNotifications(notifList);
+                    setNotifCount(notifList.filter(n => !n.isResolved).length);
+                }
             } catch (error) {
                 console.error('Error fetching notifications:', error);
-                setNotifications([]);
-                setNotifCount(0);
+                if (active && requestId === latestRequest) {
+                    setNotifications([]);
+                    setNotifCount(0);
+                }
             }
         };
 
+        const scheduleNotificationRefresh = () => {
+            if (notificationRefreshTimer) clearTimeout(notificationRefreshTimer);
+            notificationRefreshTimer = setTimeout(fetchNotifications, 250);
+        };
+
         fetchNotifications();
+
+        if (!user || isUserView) {
+            return () => { active = false; };
+        }
+
+        const subscription = supabase
+            .channel('notifications-channel')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'prenatal_visits' }, scheduleNotificationRefresh)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'vaccine_inventory' }, scheduleNotificationRefresh)
+            .subscribe();
+
+        return () => {
+            active = false;
+            if (notificationRefreshTimer) clearTimeout(notificationRefreshTimer);
+            supabase.removeChannel(subscription);
+        };
     }, [user, isUserView]);
 
     const handleNotificationClick = (notif) => {
@@ -303,10 +332,14 @@ const DashboardLayout = () => {
     };
 
     const handleResolve = (id) => {
-        const resolvedIds = JSON.parse(window.localStorage.getItem('dasmom.resolvedNotifs') || '[]');
+        const resolvedIds = isAndroidApp()
+            ? []
+            : JSON.parse(window.localStorage.getItem('dasmom.resolvedNotifs') || '[]');
         if (!resolvedIds.includes(id)) {
-            resolvedIds.push(id);
-            window.localStorage.setItem('dasmom.resolvedNotifs', JSON.stringify(resolvedIds));
+            if (!isAndroidApp()) {
+                resolvedIds.push(id);
+                window.localStorage.setItem('dasmom.resolvedNotifs', JSON.stringify(resolvedIds));
+            }
             
             // Update local state
             setNotifications(prev => prev.map(n => n.id === id ? { ...n, isResolved: true } : n));
@@ -349,7 +382,6 @@ const DashboardLayout = () => {
         return roleStr.toUpperCase();
     };
 
-    const canViewReports = ['admin', 'cho personnel'].includes(String(user?.role || '').toLowerCase());
     const filteredNavItems = isUserView ? [
         {
             section: t('nav_section_dashboard'),
@@ -367,7 +399,17 @@ const DashboardLayout = () => {
                 { label: t('nav_delivery_info'), icon: ClipboardList, path: '/mother-home/user-delivery-info' },
             ]
         }
-    ] : NAV_ITEMS.filter(group => group.section !== 'Reports' || canViewReports);
+    ] : NAV_ITEMS.map(group => {
+        if (group.section === 'Reports') {
+            const items = group.items.filter(item => {
+                if (item.path === '/dashboard/analytics') return hasPermission('reports.analytics.view');
+                if (item.path === '/dashboard/stations') return hasPermission('reports.station.view');
+                return true;
+            });
+            return { ...group, items };
+        }
+        return group;
+    }).filter(group => group.items.length > 0);
 
     return (
         <div className={`app-shell ${sidebarOpen ? 'sidebar-expanded' : 'sidebar-collapsed'}`}>
@@ -418,33 +460,33 @@ const DashboardLayout = () => {
                             {(sidebarOpen || sidebarMobile) && (
                                 <span className="nav-group-label">{group.section}</span>
                             )}
-                            {group.items.map(({ label, icon: Icon, path }) => (
+                            {group.items.map((item) => (
                                 <NavLink
-                                    key={path}
-                                    to={path}
-                                    className={({ isActive }) => {
+                                    key={item.path}
+                                    to={item.path}
+                                    className={() => {
                                         // For Mother side routes, use exact matching (all are distinct)
                                         if (isUserView) {
-                                            const isExactMatch = location.pathname === path;
+                                            const isExactMatch = location.pathname === item.path;
                                             return `nav-item${isExactMatch ? ' nav-item--active' : ''}`;
                                         }
                                         // For Staff side, use prefix matching for nested routes
                                         // but ensure only one item is active at a time
-                                        if (path === '/dashboard') {
-                                            const isExactMatch = location.pathname === path;
+                                        if (item.path === '/dashboard') {
+                                            const isExactMatch = location.pathname === item.path;
                                             return `nav-item${isExactMatch ? ' nav-item--active' : ''}`;
                                         }
                                         // For other staff routes, check if current path starts with this path
                                         // and is not the root dashboard
-                                        const isPrefixMatch = location.pathname.startsWith(path) && location.pathname !== '/dashboard';
+                                        const isPrefixMatch = location.pathname.startsWith(item.path) && location.pathname !== '/dashboard';
                                         return `nav-item${isPrefixMatch ? ' nav-item--active' : ''}`;
                                     }}
-                                    title={!(sidebarOpen || sidebarMobile) ? label : undefined}
+                                    title={!(sidebarOpen || sidebarMobile) ? item.label : undefined}
                                     onClick={() => setSidebarMobile(false)}
                                 >
-                                    <Icon size={18} className="nav-icon" aria-hidden="true" />
+                                    <item.icon size={18} className="nav-icon" aria-hidden="true" />
                                     {(sidebarOpen || sidebarMobile) && (
-                                        <span className="nav-label">{label}</span>
+                                        <span className="nav-label">{item.label}</span>
                                     )}
                                 </NavLink>
                             ))}
@@ -634,7 +676,7 @@ const DashboardLayout = () => {
                             {offlineDataError}
                         </div>
                     )}
-                    <Outlet />
+                    <DashboardOutlet />
                 </main>
 
                 {/* ── Mobile Bottom Navigation (User View) ── */}
@@ -706,7 +748,11 @@ const DashboardLayout = () => {
 
             {/* ── Mother Portal AI Chat Assistant ── */}
             <div style={{ display: (isUserView && mobileMoreOpen) ? 'none' : 'block' }}>
-                {isUserView && <MotherAIChatAssistant />}
+                {isUserView && (
+                    <React.Suspense fallback={null}>
+                        <MotherAIChatAssistant />
+                    </React.Suspense>
+                )}
             </div>
         </div>
     );

@@ -256,7 +256,14 @@ const TipDetailPage = () => {
                             <p className="tdp-sources-intro">{t('tips_sources_desc')}</p>
                             <div className="tdp-sources-list">
                                 {tip.sources.map((source, i) => (
-                                    <a key={i} href={source.url} target="_blank" rel="noopener noreferrer" className="tdp-source-card">
+                                    <a 
+                                        key={i} 
+                                        href={source.url} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer" 
+                                        className="tdp-source-card"
+                                        onClick={(e) => e.currentTarget.blur()}
+                                    >
                                         <div className="tdp-source-info">
                                             <strong>{source.name}</strong>
                                             <span>{source.title}</span>

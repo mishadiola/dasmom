@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
     ArrowLeft, Printer, Download, Edit,
@@ -6,7 +6,7 @@ import {
     CalendarCheck, User, MapPin, Phone,
     AlertTriangle, CheckCircle2, Clock, History,
     Shield, Mail, Home, FileText, Pill, Scale,
-    Ruler, Thermometer, Heart, Wind
+    Ruler, Thermometer, Heart, Wind, ClipboardList
 } from 'lucide-react';
 import '../../styles/pages/PatientProfile.css';
 import PatientService from '../../services/patientservice';
@@ -17,6 +17,7 @@ import PostpartumVisitModal from '../../components/PostpartumVisitModal';
 import VisitScheduleManager from '../../components/VisitScheduleManager';
 import { formatDate } from '../../utils/formatters';
 import ActionTooltip from '../../components/Common/ActionTooltip';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 // Helper function for readable date formatting
 const formatReadableDate = (dateString) => {
@@ -139,6 +140,14 @@ const getOrdinalSuffix = (num) => {
     return num + 'th';
 };
 
+const getCategoryTheme = (category) => {
+    const lower = String(category || '').toLowerCase();
+    if (lower.includes('pre-existing') || lower.includes('preexisting')) return 'pre-existing';
+    if (lower.includes('pregnancy-related') || lower.includes('pregnancy related')) return 'pregnancy-related';
+    if (lower.includes('obstetric') || lower.includes('history')) return 'obstetric-history';
+    return 'pre-existing';
+};
+
 const TABS = [
     { id: 'info', label: 'Basic Info', icon: User },
     { id: 'history', label: 'Medical History', icon: History },
@@ -158,9 +167,11 @@ const PatientProfile = () => {
     const [activeTab, setActiveTab] = useState(() => {
         return searchParams.get('tab') || 'info';
     });
+    const patientService = useMemo(() => new PatientService(), []);
     const [p, setP] = useState(null);
     const [assignmentAccess, setAssignmentAccess] = useState({ role: '', stationId: null });
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [editModalOpen, setEditModalOpen] = useState(false);
 
     const [showPostpartumVisitModal, setShowPostpartumVisitModal] = useState(false);
@@ -174,20 +185,22 @@ const PatientProfile = () => {
         }
     };
 
-    useEffect(() => {
-        const fetchPatient = async () => {
-            try {
-                const patientService = new PatientService();  
-                const data = await patientService.getPatientById(id);  
-                setP(data);
-                setAssignmentAccess(await patientService.getCurrentUserAccess());
-            } catch (err) {
-                console.error(err);
-            } finally {
-                setLoading(false);
-            }
-        };
+    const fetchPatient = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const data = await patientService.getPatientById(id);  
+            setP(data);
+            setAssignmentAccess(await patientService.getCurrentUserAccess());
+        } catch (err) {
+            console.error(err);
+            setError(err);
+        } finally {
+            setLoading(false);
+        }
+    };
 
+    useEffect(() => {
         fetchPatient();
     }, [id]);
 
@@ -196,7 +209,7 @@ const PatientProfile = () => {
     };
 
     const handlePatientUpdate = (updatedPatient) => {
-        setP(updatedPatient);
+        setP(prev => ({ ...prev, ...updatedPatient }));
     };
 
     const handlePrintProfile = () => {
@@ -331,15 +344,15 @@ const PatientProfile = () => {
                         </div>
                         <div class="info-item">
                             <span class="info-label">Emergency Contact:</span>
-                            <span class="info-value">${p.emergencyContact?.name || 'N/A'}</span>
+                            <span class="info-value">${p.emergencyContact?.name || p.emergency_contact?.name || 'N/A'}</span>
                         </div>
                         <div class="info-item">
                             <span class="info-label">Relationship:</span>
-                            <span class="info-value">${p.emergencyContact?.relationship || 'N/A'}</span>
+                            <span class="info-value">${p.emergencyContact?.relationship || p.emergency_contact?.relationship || 'N/A'}</span>
                         </div>
                         <div class="info-item">
                             <span class="info-label">Emergency Phone:</span>
-                            <span class="info-value">${p.emergencyContact?.phone || 'N/A'}</span>
+                            <span class="info-value">${p.emergencyContact?.phone || p.emergency_contact?.phone || 'N/A'}</span>
                         </div>
                     </div>
                 </div>
@@ -365,7 +378,7 @@ const PatientProfile = () => {
                         </div>
                         <div class="info-item">
                             <span class="info-label">Health Conditions:</span>
-                            <span class="info-value">${p.hasHealthConditions ? ((p.documentedConditions && p.documentedConditions.length > 0) ? p.documentedConditions.join(', ') : 'Documented Conditions') : 'None Reported'}</span>
+                            <span class="info-value">${p.hasHealthConditions ? ((p.documentedConditions && p.documentedConditions.length > 0) ? p.documentedConditions.map(c => patientService.getConditionName(c)).join(', ') : 'Documented Conditions') : 'None Reported'}</span>
                         </div>
                     </div>
                 </div>
@@ -519,7 +532,7 @@ const PatientProfile = () => {
             <body>
                 <div class="header">
                     <h1 class="patient-name">${p.name}</h1>
-                    <p class="patient-info">Patient ID: ${getShortPatientId(p.id)} | Age: ${p.age} years | Station: ${p.station} | Risk: ${p.risk ? p.risk.toLowerCase().replace(/\b\w/g, l => l.toUpperCase()) : ''}</p>
+                    <p class="patient-info">Patient ID: ${getShortPatientId(p.id)} | Age: ${p.age} years | Station: ${p.station} | Health Conditions: ${p.hasHealthConditions ? 'With Health Conditions' : 'None Reported'}</p>
                     <p class="patient-info">Prenatal Visits Schedule</p>
                     <p class="patient-info">Generated on: ${formatDate(new Date())}</p>
                 </div>
@@ -570,12 +583,11 @@ const PatientProfile = () => {
     };
 
     if (loading) return (
-        <div className="profile-page">
-            <div className="loading-state">
-                <div className="spinner"></div>
-                <p>Loading patient records...</p>
-            </div>
-        </div>
+        <StaffPageLoader 
+            message="Loading patient records..." 
+            error={error} 
+            onRetry={fetchPatient} 
+        />
     );
 
     if (!p) return (
@@ -594,7 +606,7 @@ const PatientProfile = () => {
     const currentScheduledAssignment = p.visits?.find(visit => visit.status === 'Scheduled' && visit.assigned_staff);
 
     return (
-        <div className="profile-page animate-fade">
+        <div className="profile-page animate-fade staff-page-ready">
             <button className="back-btn" onClick={handleBack}>
                 <ArrowLeft size={16} /> Back
             </button>
@@ -607,13 +619,46 @@ const PatientProfile = () => {
                     <div className="profile-title-block">
                         <div className="profile-title-row">
                             <h1 className="profile-name">{p.name}</h1>
-                            <span className={`risk-badge risk-${p.risk?.toLowerCase().split(' ')[0]}`}>
-                                {p.risk ? p.risk.toUpperCase() : 'NORMAL'}
-                            </span>
                         </div>
                         <p className="profile-meta">
                             ID: {getShortPatientId(p.id)} · {p.age} years old · <MapPin size={12} /> {p.station}
                         </p>
+                        {(() => {
+                            const categories = (p.activeCategories && p.activeCategories.length > 0)
+                                ? p.activeCategories
+                                : (p.documentedConditions && p.documentedConditions.length > 0)
+                                    ? [{ category: 'Pre-existing Medical Conditions', conditions: p.documentedConditions }]
+                                    : [];
+
+                            if (categories.length === 0) {
+                                return (
+                                    <div className="profile-conditions-header-wrap">
+                                        <span className="risk-badge condition-none">NONE REPORTED</span>
+                                    </div>
+                                );
+                            }
+
+                            return (
+                                <div className="profile-conditions-header-wrap">
+                                    {categories.map((catGroup, idx) => {
+                                        const theme = getCategoryTheme(catGroup.category);
+                                        const conditions = catGroup.conditions || [];
+                                        return (
+                                            <div key={idx} className="profile-header-cat-group">
+                                                <span className={`category-badge category-badge--${theme}`}>
+                                                    {catGroup.category}
+                                                </span>
+                                                {conditions.length > 0 && (
+                                                    <span className="category-conditions-text">
+                                                        {conditions.join(', ')}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })()}
                     </div>
                 </div>
                 <div className="profile-header-right">
@@ -782,12 +827,12 @@ const PatientProfile = () => {
                                 </div>
                                 <div className="mc-body alert-bg-light">
                                     <div className="mc-field">
-                                        <label>{p.emergencyContact?.relationship || 'Contact Person'}</label>
-                                        <span className="highlight-text">{p.emergencyContact?.name || 'N/A'}</span>
+                                        <label>{p.emergencyContact?.relationship || p.emergency_contact?.relationship || 'Contact Person'}</label>
+                                        <span className="highlight-text">{p.emergencyContact?.name || p.emergency_contact?.name || 'N/A'}</span>
                                     </div>
                                     <div className="mc-field">
                                         <label>Phone Number</label>
-                                        <span>{p.emergencyContact?.phone || 'N/A'}</span>
+                                        <span>{p.emergencyContact?.phone || p.emergency_contact?.phone || 'N/A'}</span>
                                     </div>
                                 </div>
                             </div>
@@ -807,7 +852,7 @@ const PatientProfile = () => {
                                     <h3>Obstetric History (GPA)</h3>
                                 </div>
                                 <div className="mc-body">
-                                    <p className="section-instruction">Previous pregnancy outcomes and current clinical risk evaluation.</p>
+                                    <p className="section-instruction">Previous pregnancy outcomes and documented maternal health conditions.</p>
                                     
                                     <div className="gpa-score-grid mt-3">
                                         <div className="gpa-box">
@@ -822,54 +867,70 @@ const PatientProfile = () => {
                                         </div>
                                         <div className={`gpa-box box-risk-${p.hasHealthConditions ? 'high' : 'normal'}`}>
                                             <span className="gpa-label">Health Conditions</span>
-                                            <span className="gpa-value str">{p.hasHealthConditions ? 'Documented' : 'None'}</span>
+                                            <span className="gpa-value str">{p.hasHealthConditions ? 'Documented' : 'None Reported'}</span>
                                             <span className="gpa-sub">Medical Status</span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Card: Risk History Timeline */}
+                            {/* Card: Health Condition Assessment History */}
                             <div className="modern-card">
                                 <div className="modern-card-header">
-                                    <div className="mc-icon orange-gradient"><AlertTriangle size={18} /></div>
-                                    <h3>Risk Assessment History</h3>
+                                    <div className="mc-icon sage-gradient"><ClipboardList size={18} /></div>
+                                    <h3>Health Condition Assessment History</h3>
                                 </div>
                                 <div className="mc-body">
-                                    {p.visits && p.visits.length > 0 ? (
-                                        <div className="risk-history-timeline">
-                                            {p.visits
-                                                .filter(v => v.status === 'Attended')
-                                                .sort((a, b) => new Date(a.visit_date) - new Date(b.visit_date))
-                                                .map((visit, index) => (
-                                                    <div key={index} className="risk-history-item">
-                                                        <div className="risk-history-header">
-                                                            <div className="risk-visit-info">
-                                                                <span className="risk-visit-date">{formatReadableDate(visit.visit_date)}</span>
-                                                                <span className="risk-visit-number">Visit #{visit.visit_number}</span>
+                                    {(() => {
+                                        const attendedVisits = (p.visits || [])
+                                            .filter(v => v.status === 'Attended')
+                                            .sort((a, b) => new Date(a.visit_date) - new Date(b.visit_date) || (a.visit_number || 0) - (b.visit_number || 0));
+
+                                        if (attendedVisits.length === 0) {
+                                            return (
+                                                <div className="empty-box">
+                                                    <ClipboardList size={24} className="text-muted mb-2" />
+                                                    <p>No health condition assessment history available yet.</p>
+                                                </div>
+                                            );
+                                        }
+
+                                        return (
+                                            <div className="condition-history-timeline">
+                                                {attendedVisits.map((visit, index) => {
+                                                    const riskFactors = Array.from(new Set([
+                                                        ...patientService.getRiskFactors(visit.raw_risk_factors),
+                                                        ...patientService.getRiskFactors(visit.risk_factors),
+                                                    ]));
+
+                                                    return (
+                                                        <div key={visit.id || index} className="condition-history-item">
+                                                            <div className="condition-history-header">
+                                                                <div className="condition-visit-info">
+                                                                    <span className="condition-visit-date">{formatReadableDate(visit.visit_date)}</span>
+                                                                    {visit.visit_number ? (
+                                                                        <span className="condition-visit-number">Visit #{visit.visit_number}</span>
+                                                                    ) : null}
+                                                                </div>
+                                                                {riskFactors.length === 0 && (
+                                                                    <span className="condition-badge condition-none">None Reported</span>
+                                                                )}
                                                             </div>
-                                                            <div className={`risk-badge risk-${(visit.calculated_risk || 'normal').toLowerCase().split(' ')[0]}`}>
-                                                                {(visit.calculated_risk || 'Normal').toUpperCase()}
-                                                            </div>
+                                                            {riskFactors.length > 0 && (
+                                                                <div className="condition-badges-list">
+                                                                    {riskFactors.map((condition, i) => (
+                                                                        <span key={i} className="condition-badge condition-present">
+                                                                            {patientService.getConditionName(condition)}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                        {visit.risk_factors && visit.risk_factors.split(',').filter(f => f.trim() && f.trim().toLowerCase() !== 'none').length > 0 && (
-                                                            <div className="risk-factors-list">
-                                                                {visit.risk_factors.split(',').filter(f => f.trim() && f.trim().toLowerCase() !== 'none').map((factor, i) => (
-                                                                    <span key={i} className="risk-factor-tag">
-                                                                        {factor.trim()}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ))}
-                                        </div>
-                                    ) : (
-                                        <div className="empty-box">
-                                            <History size={24} className="text-muted mb-2" />
-                                            <p>No visit history available yet.</p>
-                                        </div>
-                                    )}
+                                                    );
+                                                })}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         </div>
@@ -1068,7 +1129,7 @@ const PatientProfile = () => {
                                 patientStationId={p.station_ass}
                                 assignedStaffId={currentScheduledAssignment?.assigned_staff || null}
                                 assignedStaffName={currentScheduledAssignment?.assigned_staff_name}
-                                role={assignmentAccess.role}
+                                viewerStationId={assignmentAccess.stationId}
                                 onAssigned={({ id: assignedStaffId, name }) => setP(previous => ({
                                     ...previous,
                                     visits: previous.visits.map(visit => visit.status === 'Scheduled'
@@ -1491,6 +1552,7 @@ const PatientProfile = () => {
 
             {editModalOpen && (
                 <EditPatientModal 
+                    key={p?.id || 'edit-patient-modal'}
                     patient={p}
                     onClose={() => setEditModalOpen(false)}
                     onSave={handlePatientUpdate}

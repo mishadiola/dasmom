@@ -291,3 +291,154 @@ export const getWeeklyMilestone = (weeks) => {
     if (weeks <= 40) return milestones['37-40'];
     return milestones['41-42'];
 };
+
+/**
+ * Calculates accurate gestational age at the actual delivery or event date
+ * using verified pregnancy dating information (LMP / EDD).
+ * 
+ * Clinical & Reporting Standards:
+ * - Live Birth: Documented signs of life (heartbeat, respiration, cord pulsation, voluntary movement)
+ *   irrespective of gestational age (WHO / DOH standard).
+ * - Stillbirth vs Miscarriage: Under CHO III / DOH reporting guidelines, fetal death prior to
+ *   20 completed weeks is reported as Miscarriage (spontaneous abortion), while fetal death at or after
+ *   20 completed weeks is reported as Fetal Death / Stillbirth.
+ */
+export const calculateGestationalAgeAtEvent = (lmpStr, eddStr, eventDateStr, fallbackGaStr = null) => {
+    if (!eventDateStr) {
+        return {
+            status: 'no_event_date',
+            weeks: null,
+            days: null,
+            totalDays: null,
+            formatted: 'Enter delivery date to calculate',
+            trimester: null,
+            datingSource: null,
+            isFirstTrimester: false,
+            isPreViable: false,
+            isInconsistent: false,
+            message: 'Delivery date is required to calculate gestational age at event.'
+        };
+    }
+
+    const eventDate = new Date(eventDateStr);
+    eventDate.setHours(12, 0, 0, 0);
+    if (isNaN(eventDate.getTime())) {
+        return {
+            status: 'no_event_date',
+            weeks: null,
+            days: null,
+            totalDays: null,
+            formatted: 'Invalid delivery date',
+            trimester: null,
+            datingSource: null,
+            isFirstTrimester: false,
+            isPreViable: false,
+            isInconsistent: true,
+            message: 'Provided delivery date is invalid.'
+        };
+    }
+
+    let lmpDate = lmpStr ? new Date(lmpStr) : null;
+    if (lmpDate && !isNaN(lmpDate.getTime())) {
+        lmpDate.setHours(12, 0, 0, 0);
+    } else {
+        lmpDate = null;
+    }
+
+    let eddDate = eddStr ? new Date(eddStr) : null;
+    if (eddDate && !isNaN(eddDate.getTime())) {
+        eddDate.setHours(12, 0, 0, 0);
+    } else {
+        eddDate = null;
+    }
+
+    // Both LMP and EDD missing
+    if (!lmpDate && !eddDate) {
+        const match = fallbackGaStr ? String(fallbackGaStr).match(/(\d+)\s*week/i) : null;
+        if (match) {
+            const parsedWeeks = parseInt(match[1], 10);
+            let trimester = 'First Trimester';
+            if (parsedWeeks >= 28) trimester = 'Third Trimester';
+            else if (parsedWeeks >= 14) trimester = 'Second Trimester';
+
+            return {
+                status: 'missing_dating',
+                weeks: parsedWeeks,
+                days: 0,
+                totalDays: parsedWeeks * 7,
+                formatted: `Estimated ${parsedWeeks} weeks (unverified dating)`,
+                trimester,
+                datingSource: 'Unverified profile estimate',
+                isFirstTrimester: parsedWeeks < 14,
+                isPreViable: parsedWeeks < 20,
+                isInconsistent: false,
+                message: 'Pregnancy dating (LMP/EDD) is not documented. Clinical verification required.'
+            };
+        }
+
+        return {
+            status: 'missing_dating',
+            weeks: null,
+            days: null,
+            totalDays: null,
+            formatted: 'Dating not documented / unverified',
+            trimester: null,
+            datingSource: 'None',
+            isFirstTrimester: false,
+            isPreViable: false,
+            isInconsistent: false,
+            message: 'Pregnancy dating (LMP/EDD) is missing. Clinical verification required.'
+        };
+    }
+
+    let effectiveLmp = lmpDate;
+    let datingSource = 'LMP';
+
+    if (!effectiveLmp && eddDate) {
+        // Naegele's rule convention: 280 days prior to EDD
+        effectiveLmp = new Date(eddDate.getTime() - 280 * 24 * 60 * 60 * 1000);
+        datingSource = 'EDD (est. 40w)';
+    }
+
+    const diffMs = eventDate.getTime() - effectiveLmp.getTime();
+    const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (totalDays < 0) {
+        return {
+            status: 'inconsistent',
+            weeks: null,
+            days: null,
+            totalDays,
+            formatted: 'Inconsistent delivery date (prior to LMP)',
+            trimester: null,
+            datingSource,
+            isFirstTrimester: false,
+            isPreViable: false,
+            isInconsistent: true,
+            message: 'Delivery date cannot be earlier than the documented Last Menstrual Period.'
+        };
+    }
+
+    const weeks = Math.floor(totalDays / 7);
+    const days = totalDays % 7;
+
+    const formatted = `${weeks} week${weeks === 1 ? '' : 's'}${days > 0 ? `, ${days} day${days === 1 ? '' : 's'}` : ''}`;
+
+    let trimester = 'First Trimester';
+    if (weeks >= 28) trimester = 'Third Trimester';
+    else if (weeks >= 14) trimester = 'Second Trimester';
+
+    return {
+        status: 'calculated',
+        weeks,
+        days,
+        totalDays,
+        formatted,
+        trimester,
+        datingSource,
+        isFirstTrimester: weeks < 14,
+        isPreViable: weeks < 20, // CHO III / DOH reporting threshold (< 20 weeks)
+        isInconsistent: false
+    };
+};
+

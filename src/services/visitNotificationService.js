@@ -2,16 +2,38 @@ import { Capacitor } from '@capacitor/core';
 import { SQLiteConnection, CapacitorSQLite } from '@capacitor-community/sqlite';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import supabase from '../config/supabaseclient';
+import motherOfflineDataService from './motherOfflineDataService';
 import {
     buildVisitReminderSchedules,
     createVisitNotificationCopy,
+    createVisitChangeNotificationCopy,
+    formatVisitDate,
+    getVisitChangeType,
     isEligibleVisitStatus
 } from '../utils/visitNotificationSchedule';
 
 const DATABASE_NAME = 'dasmom_visit_notifications';
 const TABLE_NAME = 'visit_notification_schedules';
+const CHANGE_TABLE_NAME = 'visit_change_notifications';
 const CHANNEL_ID = 'visit-reminders';
 const sqlite = new SQLiteConnection(CapacitorSQLite);
+const createScheduleTableSql = tableName => `
+    CREATE TABLE IF NOT EXISTS ${tableName} (
+        record_id TEXT PRIMARY KEY NOT NULL,
+        mother_id TEXT NOT NULL,
+        visit_id TEXT NOT NULL,
+        visit_type TEXT NOT NULL CHECK (visit_type IN ('prenatal', 'postpartum', 'maternal_vaccination', 'newborn_vaccination')),
+        scheduled_visit_at TEXT NOT NULL,
+        reminder_days INTEGER NOT NULL CHECK (reminder_days IN (7, 3, 1)),
+        reminder_at TEXT NOT NULL,
+        native_notification_id INTEGER NOT NULL UNIQUE,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'scheduled', 'failed', 'permission_denied')),
+        last_reconciled_at TEXT NOT NULL,
+        UNIQUE (mother_id, visit_type, visit_id, reminder_days)
+    )
+`;
 
 const makeRecordId = ({ motherId, visitType, visitId, reminderDays }) =>
     `${motherId}:${visitType}:${visitId}:${reminderDays}`;
@@ -29,6 +51,7 @@ class VisitNotificationService {
         this.vaccinationChannel = null;
         this.subscribedNewbornIds = [];
         this.subscribedMotherId = null;
+        this.changeNotificationKeys = new Set();
     }
 
     isSupported() {
@@ -46,24 +69,51 @@ class VisitNotificationService {
             const database = await sqlite.createConnection(DATABASE_NAME, false, 'no-encryption', 1, false);
             this.database = database;
             await database.open();
+            await database.execute(createScheduleTableSql(TABLE_NAME));
+            const schema = await database.query(
+                `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`,
+                [TABLE_NAME]
+            );
+            if (!String(schema.values?.[0]?.sql || '').includes('maternal_vaccination')) {
+                try {
+                    await database.execute(`
+                        BEGIN IMMEDIATE;
+                        ALTER TABLE ${TABLE_NAME} RENAME TO ${TABLE_NAME}_legacy;
+                        ${createScheduleTableSql(TABLE_NAME)};
+                        INSERT INTO ${TABLE_NAME} (
+                            record_id, mother_id, visit_id, visit_type, scheduled_visit_at, reminder_days,
+                            reminder_at, native_notification_id, title, body, status, last_reconciled_at
+                        )
+                        SELECT
+                            record_id, mother_id, visit_id, visit_type, scheduled_visit_at, reminder_days,
+                            reminder_at, native_notification_id, title, body, status, last_reconciled_at
+                        FROM ${TABLE_NAME}_legacy;
+                        DROP TABLE ${TABLE_NAME}_legacy;
+                        CREATE INDEX IF NOT EXISTS visit_notification_mother_idx
+                            ON ${TABLE_NAME} (mother_id);
+                        COMMIT;
+                    `);
+                } catch (error) {
+                    try {
+                        await database.execute('ROLLBACK;');
+                    } catch (rollbackError) {
+                        console.error('Failed to roll back visit reminder database migration:', rollbackError);
+                    }
+                    throw error;
+                }
+            }
             await database.execute(`
-                CREATE TABLE IF NOT EXISTS ${TABLE_NAME} (
-                    record_id TEXT PRIMARY KEY NOT NULL,
-                    mother_id TEXT NOT NULL,
-                    visit_id TEXT NOT NULL,
-                    visit_type TEXT NOT NULL CHECK (visit_type IN ('prenatal', 'postpartum', 'newborn_vaccination')),
-                    scheduled_visit_at TEXT NOT NULL,
-                    reminder_days INTEGER NOT NULL CHECK (reminder_days IN (7, 3, 1)),
-                    reminder_at TEXT NOT NULL,
-                    native_notification_id INTEGER NOT NULL UNIQUE,
-                    title TEXT NOT NULL,
-                    body TEXT NOT NULL,
-                    status TEXT NOT NULL CHECK (status IN ('pending', 'scheduled', 'failed', 'permission_denied')),
-                    last_reconciled_at TEXT NOT NULL,
-                    UNIQUE (mother_id, visit_type, visit_id, reminder_days)
-                );
                 CREATE INDEX IF NOT EXISTS visit_notification_mother_idx
                     ON ${TABLE_NAME} (mother_id);
+                CREATE TABLE IF NOT EXISTS ${CHANGE_TABLE_NAME} (
+                    event_key TEXT PRIMARY KEY NOT NULL,
+                    mother_id TEXT NOT NULL,
+                    visit_id TEXT NOT NULL,
+                    native_notification_id INTEGER NOT NULL UNIQUE,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS visit_change_mother_idx
+                    ON ${CHANGE_TABLE_NAME} (mother_id);
             `);
             return database;
         })();
@@ -104,7 +154,11 @@ class VisitNotificationService {
     }
 
     async allocateNativeId() {
-        const rows = await this.queryRows(`SELECT native_notification_id FROM ${TABLE_NAME}`);
+        const rows = await this.queryRows(`
+            SELECT native_notification_id FROM ${TABLE_NAME}
+            UNION
+            SELECT native_notification_id FROM ${CHANGE_TABLE_NAME}
+        `);
         const used = new Set(rows.map(row => Number(row.native_notification_id)));
         for (let attempt = 0; attempt < 100; attempt += 1) {
             const random = globalThis.crypto?.getRandomValues
@@ -118,14 +172,20 @@ class VisitNotificationService {
 
     async ensureOtherAccountIsolation(motherId, pending) {
         const otherAccounts = await this.queryRows(
-            `SELECT DISTINCT mother_id FROM ${TABLE_NAME} WHERE mother_id != ?`,
+            `SELECT DISTINCT mother_id FROM (
+                SELECT mother_id FROM ${TABLE_NAME}
+                UNION
+                SELECT mother_id FROM ${CHANGE_TABLE_NAME}
+            ) WHERE mother_id != ?`,
             [motherId]
         );
         const oldAccountIds = new Set(otherAccounts.map(row => row.mother_id));
         const oldRows = oldAccountIds.size
             ? await this.queryRows(
-                `SELECT native_notification_id FROM ${TABLE_NAME} WHERE mother_id != ?`,
-                [motherId]
+                `SELECT native_notification_id FROM ${TABLE_NAME} WHERE mother_id != ?
+                 UNION
+                 SELECT native_notification_id FROM ${CHANGE_TABLE_NAME} WHERE mother_id != ?`,
+                [motherId, motherId]
             )
             : [];
         const orphanedNative = pending.filter(notification =>
@@ -144,6 +204,90 @@ class VisitNotificationService {
         await this.removeDeliveredNotificationIds(deliveredIds);
         if (oldAccountIds.size) {
             await this.run(`DELETE FROM ${TABLE_NAME} WHERE mother_id != ?`, [motherId]);
+            await this.run(`DELETE FROM ${CHANGE_TABLE_NAME} WHERE mother_id != ?`, [motherId]);
+        }
+    }
+
+    async notifyVisitChange(motherId, visitType, event) {
+        let changeType = getVisitChangeType(event);
+        const visit = event?.new;
+        if (!visit?.id) return;
+
+        if (visitType === 'vaccination') {
+            visitType = visit.newborn_id ? 'newborn_vaccination' : 'maternal_vaccination';
+        }
+        const scheduledAt = visit.visit_date || visit.scheduled_at
+            || visit.scheduled_date || visit.scheduled_vaccination;
+        if (!changeType && event?.eventType === 'UPDATE' && scheduledAt) {
+            const previousSchedule = await this.queryRows(
+                `SELECT scheduled_visit_at FROM ${TABLE_NAME}
+                 WHERE mother_id = ? AND visit_type = ? AND visit_id = ?
+                 ORDER BY reminder_days DESC LIMIT 1`,
+                [motherId, visitType, String(visit.id)]
+            );
+            const patient = await motherOfflineDataService.getPatient(motherId);
+            const savedVisit = visitType === 'prenatal'
+                ? patient?.visits?.find(item => String(item.id) === String(visit.id))
+                : visitType === 'postpartum'
+                    ? (patient?.deliveries || []).flatMap(item => item.postpartum_visits || [])
+                        .find(item => String(item.id) === String(visit.id))
+                    : visitType === 'maternal_vaccination'
+                        ? patient?.vaccines?.find(item => String(item.id) === String(visit.id))
+                        : (patient?.newborns || []).flatMap(item => item.vaccines || [])
+                            .find(item => String(item.id) === String(visit.id));
+            const previousDate = previousSchedule[0]?.scheduled_visit_at
+                || savedVisit?.visit_date || savedVisit?.scheduled_at
+                || savedVisit?.scheduled_date || savedVisit?.scheduled_vaccination;
+            if (previousDate && formatVisitDate(previousDate) !== formatVisitDate(scheduledAt)) {
+                changeType = 'rescheduled';
+            }
+        }
+        if (!changeType) return;
+        if (!isEligibleVisitStatus(visit.status, visitType.includes('vaccination') ? 'pending' : 'scheduled')) return;
+        if (visit.vaccinated_date || visit.attended_date) return;
+
+        const eventTime = event.commit_timestamp || visit.rescheduled_at || visit.updated_at || scheduledAt || '';
+        const eventKey = `${motherId}:${visitType}:${visit.id}:${changeType}:${eventTime}`;
+        if (this.changeNotificationKeys.has(eventKey)) return;
+        this.changeNotificationKeys.add(eventKey);
+
+        try {
+            if ((await this.queryRows(
+                `SELECT event_key FROM ${CHANGE_TABLE_NAME} WHERE event_key = ?`,
+                [eventKey]
+            )).length) return;
+
+            const nativeId = await this.allocateNativeId();
+            const vaccineName = visit.notes || visit.vaccine_inventory?.vaccine_name;
+            const visitName = visitType.includes('vaccination')
+                ? vaccineName
+                : visit.next_appt_type || visit.visit_type;
+            const copy = createVisitChangeNotificationCopy(visitType, changeType, scheduledAt, visitName);
+            await this.run(
+                `INSERT INTO ${CHANGE_TABLE_NAME}
+                    (event_key, mother_id, visit_id, native_notification_id, created_at)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [eventKey, motherId, String(visit.id), nativeId, new Date().toISOString()]
+            );
+            try {
+                await LocalNotifications.schedule({
+                    notifications: [{
+                        id: nativeId,
+                        title: copy.title,
+                        body: copy.body,
+                        channelId: CHANNEL_ID,
+                        schedule: { at: new Date(Date.now() + 2000), allowWhileIdle: true },
+                        extra: { motherId, visitId: String(visit.id), visitType, changeType, eventKey }
+                    }]
+                });
+            } catch (error) {
+                await this.run(`DELETE FROM ${CHANGE_TABLE_NAME} WHERE event_key = ?`, [eventKey]);
+                throw error;
+            }
+        } catch (error) {
+            console.error('Failed to notify mother about a visit change:', error);
+        } finally {
+            this.changeNotificationKeys.delete(eventKey);
         }
     }
 
@@ -164,7 +308,7 @@ class VisitNotificationService {
     }
 
     async fetchMotherVisits(motherId) {
-        const [prenatalResult, postpartumResult, newbornResult] = await Promise.all([
+        const [prenatalResult, postpartumResult, newbornResult, maternalVaccinationResult] = await Promise.all([
             supabase
                 .from('prenatal_visits')
                 .select('id, visit_date, visit_number, next_appt_type, status')
@@ -176,11 +320,17 @@ class VisitNotificationService {
             supabase
                 .from('newborns')
                 .select('id, mother_id, baby_name, condition_at_birth')
-                .eq('mother_id', motherId)
+                .eq('mother_id', motherId),
+            supabase
+                .from('vaccinations')
+                .select('id, scheduled_vaccination, vaccinated_date, status, notes, dose_number, vaccine_inventory (vaccine_name)')
+                .eq('patient_id', motherId)
+                .is('newborn_id', null)
         ]);
         if (prenatalResult.error) throw Object.assign(new Error(prenatalResult.error.message), { ...prenatalResult.error, source: 'prenatal visits' });
         if (postpartumResult.error) throw Object.assign(new Error(postpartumResult.error.message), { ...postpartumResult.error, source: 'postpartum visits' });
         if (newbornResult.error) throw Object.assign(new Error(newbornResult.error.message), { ...newbornResult.error, source: 'newborn records' });
+        if (maternalVaccinationResult.error) throw Object.assign(new Error(maternalVaccinationResult.error.message), { ...maternalVaccinationResult.error, source: 'maternal vaccinations' });
 
         const newborns = newbornResult.data || [];
         const newbornIds = newborns.map(newborn => newborn.id).filter(Boolean);
@@ -221,6 +371,20 @@ class VisitNotificationService {
                 visitName: visit.visit_type,
                 title: 'Upcoming Postpartum Visit',
                 body: visit.visit_type || 'Postpartum follow-up'
+            });
+        });
+        (maternalVaccinationResult.data || []).forEach(vaccination => {
+            if (!vaccination.id || !vaccination.scheduled_vaccination || vaccination.vaccinated_date
+                || !isEligibleVisitStatus(vaccination.status, 'pending')) return;
+            visits.push({
+                motherId,
+                visitId: String(vaccination.id),
+                visitType: 'maternal_vaccination',
+                scheduledAt: vaccination.scheduled_vaccination,
+                vaccineName: vaccination.notes || vaccination.vaccine_inventory?.vaccine_name,
+                doseNumber: vaccination.dose_number,
+                title: 'Upcoming Vaccination',
+                body: vaccination.notes || vaccination.vaccine_inventory?.vaccine_name || 'Maternal vaccination'
             });
         });
         vaccinations.forEach(vaccination => {
@@ -568,17 +732,24 @@ class VisitNotificationService {
 
     async subscribeToMotherVisits(motherId) {
         const channel = supabase.channel(`mother-visit-reminders-${motherId}`);
-        const refresh = () => {
+        const refresh = (visitType = null) => event => {
+            if (visitType) this.notifyVisitChange(motherId, visitType, event);
             if (this.motherId === motherId) this.requestSync();
         };
         channel.on('postgres_changes', {
             event: '*', schema: 'public', table: 'prenatal_visits', filter: `patient_id=eq.${motherId}`
-        }, refresh);
+        }, refresh('prenatal'));
         channel.on('postgres_changes', {
             event: '*', schema: 'public', table: 'postpartum_visits', filter: `patient_id=eq.${motherId}`
-        }, refresh);
+        }, refresh('postpartum'));
         channel.on('postgres_changes', {
             event: '*', schema: 'public', table: 'newborns', filter: `mother_id=eq.${motherId}`
+        }, refresh());
+        channel.on('postgres_changes', {
+            event: '*', schema: 'public', table: 'vaccinations', filter: `patient_id=eq.${motherId}`
+        }, refresh('vaccination'));
+        channel.on('postgres_changes', {
+            event: '*', schema: 'public', table: 'vaccinations', filter: `patient_id=eq.${motherId}`
         }, refresh);
         channel.subscribe();
         this.visitChannel = channel;
@@ -606,7 +777,8 @@ class VisitNotificationService {
                 schema: 'public',
                 table: 'vaccinations',
                 filter: `newborn_id=eq.${newbornId}`
-            }, () => {
+            }, event => {
+                this.notifyVisitChange(motherId, 'newborn_vaccination', event);
                 if (this.motherId === motherId) this.requestSync();
             });
         });
@@ -711,21 +883,30 @@ class VisitNotificationService {
             `SELECT native_notification_id FROM ${TABLE_NAME} WHERE mother_id = ?`,
             [motherId]
         );
+        const changeRows = await this.queryRows(
+            `SELECT native_notification_id FROM ${CHANGE_TABLE_NAME} WHERE mother_id = ?`,
+            [motherId]
+        );
         const pending = await this.getPendingNotifications();
         const ownPendingIds = pending.filter(notification => notification.extra?.motherId === motherId)
             .map(notification => notification.id);
         await this.cancelNativeIds([
             ...rows.map(row => Number(row.native_notification_id)),
+            ...changeRows.map(row => Number(row.native_notification_id)),
             ...ownPendingIds
         ]);
         const delivered = await LocalNotifications.getAll({ state: 'TRIGGERED' });
-        const trackedIds = new Set(rows.map(row => Number(row.native_notification_id)));
+        const trackedIds = new Set([
+            ...rows.map(row => Number(row.native_notification_id)),
+            ...changeRows.map(row => Number(row.native_notification_id))
+        ]);
         const ownDeliveredIds = (delivered.notifications || [])
             .filter(notification => trackedIds.has(notification.id)
                 || notification.extra?.motherId === motherId)
             .map(notification => notification.id);
         await this.removeDeliveredNotificationIds(ownDeliveredIds);
         await this.run(`DELETE FROM ${TABLE_NAME} WHERE mother_id = ?`, [motherId]);
+        await this.run(`DELETE FROM ${CHANGE_TABLE_NAME} WHERE mother_id = ?`, [motherId]);
     }
 }
 

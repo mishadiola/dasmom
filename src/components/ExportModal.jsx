@@ -9,6 +9,7 @@ const ExportModal = ({ isOpen, onClose, onExport, hideDateRange = false }) => {
     const [customTo, setCustomTo] = useState('');
     const [format, setFormat] = useState('excel');
     const [error, setError] = useState('');
+    const [exporting, setExporting] = useState(false);
     const systemSettings = useSystemSettings() || {};
     const settings = systemSettings.settings;
 
@@ -24,7 +25,8 @@ const ExportModal = ({ isOpen, onClose, onExport, hideDateRange = false }) => {
 
     if (!isOpen) return null;
 
-    const handleExportClick = () => {
+    const handleExportClick = async () => {
+        if (exporting) return;
         let fromDate = null;
         let toDate = null;
         const now = new Date();
@@ -59,16 +61,24 @@ const ExportModal = ({ isOpen, onClose, onExport, hideDateRange = false }) => {
             reportPeriodText = `${fromDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} - ${toDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
         }
 
-        onExport({
-            format,
-            reportSettings: {},
-            dateRange: {
-                from: fromDate,
-                to: toDate
-            },
-            reportPeriodText
-        });
-        onClose();
+        setExporting(true);
+        try {
+            await onExport({
+                format,
+                reportSettings: {},
+                dateRange: {
+                    from: fromDate,
+                    to: toDate
+                },
+                reportPeriodText
+            });
+            onClose();
+        } catch (exportError) {
+            console.error('Could not export report:', exportError);
+            setError(exportError instanceof Error ? exportError.message : 'Could not export report. Please try again.');
+        } finally {
+            setExporting(false);
+        }
     };
 
     return ReactDOM.createPortal(
@@ -133,11 +143,11 @@ const ExportModal = ({ isOpen, onClose, onExport, hideDateRange = false }) => {
                                 </div>
                             </div>
                         )}
-                            {error && (
-                                <div className="export-error-msg">
-                                    <AlertCircle size={14} /> {error}
-                                </div>
-                            )}
+                        </div>
+                    )}
+                    {error && (
+                        <div className="export-error-msg" role="alert">
+                            <AlertCircle size={14} /> {error}
                         </div>
                     )}
 
@@ -169,11 +179,11 @@ const ExportModal = ({ isOpen, onClose, onExport, hideDateRange = false }) => {
                 </div>
 
                 <div className="export-modal-footer">
-                    <button className="export-cancel-btn" onClick={onClose}>
+                    <button className="export-cancel-btn" onClick={onClose} disabled={exporting}>
                         Cancel
                     </button>
-                    <button className="export-submit-btn" onClick={handleExportClick}>
-                        Export
+                    <button className="export-submit-btn" onClick={handleExportClick} disabled={exporting}>
+                        {exporting ? 'Exporting...' : 'Export'}
                     </button>
                 </div>
             </div>

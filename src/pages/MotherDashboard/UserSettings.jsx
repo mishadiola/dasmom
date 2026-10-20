@@ -1,16 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { 
-    Lock, HelpCircle, LogOut, 
-    Shield, ChevronRight, Clock, Mail, Phone, ExternalLink, ArrowLeft,
+    Lock, Settings, HelpCircle, LogOut, 
+    Shield, ChevronRight, Clock, Facebook, Phone, ExternalLink, ArrowLeft,
     X, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useModal } from '../../context/ModalContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { AuthContext } from '../../context/AuthContext';
-import { useContext } from 'react';
 import '../../styles/pages/UserSettings.css';
 import ResetPasswordModal from '../../components/ResetPasswordModal';
+import AuthService from '../../services/authservice';
+import { CHO3_FACEBOOK_URL } from '../../config/appConfig';
+import { formatLoginDateTime } from '../../utils/formatters';
 
 const UserSettings = () => {
     const navigate = useNavigate();
@@ -54,14 +56,37 @@ const UserSettings = () => {
         confirm: ''
     });
 
-    const userData = {
-        name: "Mish Diola",
-        dob: "June 12, 1997",
-        age: 28,
-        station: "Poblacion Uno",
-        address: "123 Mabini St., Poblacion Uno, Dasmariñas City",
-        lastLogin: "March 07, 2026 at 2:45 PM"
-    };
+    const [loginHistory, setLoginHistory] = useState({
+        timestamp: null,
+        device: null,
+        loading: true
+    });
+
+    useEffect(() => {
+        let isMounted = true;
+        const loadLoginInfo = async () => {
+            try {
+                const as = new AuthService();
+                const currentUserId = user?.id || (await as.getAuthUser())?.id;
+                const history = await as.getLoginHistory(currentUserId);
+                if (isMounted) {
+                    setLoginHistory({
+                        timestamp: history?.timestamp || null,
+                        device: history?.device || null,
+                        loading: false
+                    });
+                }
+            } catch (err) {
+                console.error('Failed to load login history:', err);
+                if (isMounted) {
+                    setLoginHistory(prev => ({ ...prev, loading: false }));
+                }
+            }
+        };
+
+        loadLoginInfo();
+        return () => { isMounted = false; };
+    }, [user?.id]);
 
     const handleLogout = async () => {
         try {
@@ -77,15 +102,17 @@ const UserSettings = () => {
 
     return (
         <div className="user-settings-container">
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">
-                        <Lock size={22} className="header-icon" /> {t('settings_title', 'Account Settings')}
-                    </h1>
-                    <p className="page-subtitle">{t('settings_subtitle', 'Manage your account security and preferences')}</p>
+            <div className="page-header hero-header-with-img user-settings-hero-header">
+                <div className="hero-decorative-icon-bg user-settings-decorative-bg" aria-hidden="true">
+                    <Settings size={160} strokeWidth={1.2} className="hero-decorative-icon" />
                 </div>
-                <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
-
+                <div className="hero-content-wrapper">
+                    <div className="hero-text-section">
+                        <h1 className="page-title">
+                            <Settings size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('settings_title', 'Account Settings')}
+                        </h1>
+                        <p className="page-subtitle">{t('settings_subtitle', 'Manage your account security and preferences')}</p>
+                    </div>
                 </div>
             </div>
 
@@ -121,9 +148,17 @@ const UserSettings = () => {
                             <div className="history-details">
                                 <p className="history-text">
                                     <span className="history-label">{t('settings_last_login', 'Last login:')}</span>{' '}
-                                    <span className="history-value">{userData.lastLogin}</span>
+                                    <span className="history-value">
+                                        {loginHistory.loading 
+                                            ? '...' 
+                                            : (loginHistory.timestamp 
+                                                ? formatLoginDateTime(loginHistory.timestamp) 
+                                                : 'Not available')}
+                                    </span>
                                 </p>
-                                <span className="history-meta">{t('settings_browser', 'Browser / Web Browser')}</span>
+                                <span className="history-meta">
+                                    {loginHistory.device || t('settings_browser', 'Browser / Web Browser')}
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -137,18 +172,24 @@ const UserSettings = () => {
                         <h2>{t('settings_support', 'Support & Contact')}</h2>
                     </div>
                     <div className="support-links">
-                        <a href="mailto:cho3.salawag@gmail.com" className="support-item">
-                            <div className="support-icon-wrap"><Mail size={16} /></div>
+                        <a 
+                            href={CHO3_FACEBOOK_URL} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="support-item" 
+                            onClick={(e) => e.currentTarget.blur()}
+                        >
+                            <div className="support-icon-wrap"><Facebook size={16} /></div>
                             <div className="support-text">
-                                <h3>{t('settings_contact_cho_email', 'Contact CHO III')}</h3>
+                                <h3>{t('settings_contact_cho_fb', 'Contact CHO III')}</h3>
                                 <p className="support-info-line">
-                                    <span className="support-info-label">Email:</span>{' '}
-                                    <span className="support-info-val">cho3.salawag@gmail.com</span>
+                                    <span className="support-info-label">Facebook:</span>{' '}
+                                    <span className="support-info-val">CHO III</span>
                                 </p>
                             </div>
                             <ExternalLink size={15} className="support-arrow-icon" />
                         </a>
-                        <a href="tel:09452694260" className="support-item">
+                        <a href="tel:09452694260" className="support-item" onClick={(e) => e.currentTarget.blur()}>
                             <div className="support-icon-wrap"><Phone size={16} /></div>
                             <div className="support-text">
                                 <h3>{t('settings_contact_cho_phone', 'Contact CHO III')}</h3>
@@ -217,7 +258,7 @@ const UserSettings = () => {
             <ResetPasswordModal 
                 isOpen={resetModalOpen} 
                 onClose={() => setResetModalOpen(false)}
-                initialEmail={user?.email || userData.email || ''}
+                initialEmail={user?.email || ''}
             />
         </div>
     );

@@ -1,19 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
 import { 
     Calendar as CalendarIcon, ChevronLeft, ChevronRight, 
-    Clock, ArrowLeft, Download, X, Printer,
+    Clock, ArrowLeft, X,
     CheckCircle2, AlertCircle, CalendarDays, MapPin
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/MyAppointments.css';
 import appointmentSilhouette from '../../assets/images/appointments-silhouette.png';
 import { useLanguage } from '../../context/LanguageContext';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import { isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
 import { isAndroidApp } from '../../services/secureStorage';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 const toLocalDateStr = (d) => {
     const offset = d.getTimezoneOffset() * 60000;
@@ -46,25 +44,24 @@ const getDateOnly = (value) => {
     }).format(parsed);
 };
 
+const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
+
 const sanitizeUUID = (str, fallback) => {
-    if (!str) return fallback;
-    if (typeof str === 'string' && str.length === 36 && str.includes('-')) {
-        return fallback;
-    }
+    if (!str || isUUID(str)) return fallback;
     return str;
 };
 
 const MyAppointments = () => {
-    const navigate = useNavigate();
     const [currentDate, setCurrentDate] = useState(new Date());
-    const [calendarView, setCalendarView] = useState('day'); // 'day', 'week', 'month'
+    const [calendarView, setCalendarView] = useState('month'); // 'day', 'week', 'month'
     const [typeFilter, setTypeFilter] = useState('All'); // 'All', 'Prenatal', 'Vaccination', 'Postpartum'
     const [statusFilter, setStatusFilter] = useState('Upcoming'); // 'All', 'Upcoming', 'Attended', 'Missed'
     const [selectedAppt, setSelectedAppt] = useState(null);
     const { t } = useLanguage();
-    const [patientInfo, setPatientInfo] = useState({});
-
     const [appointmentsData, setAppointmentsData] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const loadRef = useRef(null);
     
     const [selectedMobileDate, setSelectedMobileDate] = useState(() => new Date().toISOString().split('T')[0]);
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -83,7 +80,10 @@ const MyAppointments = () => {
             const patientService = new PatientService();
             try {
                 const authUser = await auth.getAuthUser();
-                if (!authUser?.id) return;
+                if (!authUser?.id) {
+                    throw new Error('User session not found.');
+                }
+                setError(null);
                 if (!appointmentChannel) {
                     appointmentChannel = patientService.supabase
                         .channel(`mother-appointments-${authUser.id}`)
@@ -108,34 +108,40 @@ const MyAppointments = () => {
                     return;
                 }
 
-                const fullName = patient ? [patient.first_name, patient.middle_name, patient.last_name, patient.suffix].filter(Boolean).join(' ') : 'N/A';
                 if (!active) return;
-                setPatientInfo({
-                    name: fullName || 'N/A',
-                    id: patient?.patient_id || patient?.id || 'N/A',
-                    station: patient?.station || 'N/A'
-                });
-
                 const currentPregnancy = patient.currentPregnancy;
                 const currentStatus = String(patient.pregnancyRecord?.pregn_postp || patient.pregnancyRecord?.status || currentPregnancy?.status || patient.pregnancyStatus || '').toLowerCase();
                 const isPostpartum = currentStatus === 'postpartum';
                 let prenatalVisits;
                 let postpartumVisits;
-                let postpartumStaffNames = new Map();
+                const staffNamesById = new Map();
                 if (isAndroidApp()) {
                     prenatalVisits = patient.visits || [];
                     postpartumVisits = (patient.deliveries || [])
                         .flatMap(delivery => delivery.postpartum_visits || []);
+                    prenatalVisits.forEach(visit => {
+                        if (visit.assigned_staff && visit.assigned_staff_name) {
+                            staffNamesById.set(visit.assigned_staff, visit.assigned_staff_name);
+                        }
+                        if (visit.performed_by && visit.performed_by_name) {
+                            staffNamesById.set(visit.performed_by, visit.performed_by_name);
+                        }
+                    });
+                    postpartumVisits.forEach(visit => {
+                        if (visit.assigned_staff && visit.assigned_staff_name) {
+                            staffNamesById.set(visit.assigned_staff, visit.assigned_staff_name);
+                        }
+                    });
                 } else {
                     const [prenatalResult, postpartumResult] = await Promise.all([
                         patientService.supabase
                             .from('prenatal_visits')
-                            .select('id, visit_date, visit_number, next_appt_type, status, assigned_staff, clinical_notes, missed_reason')
+                            .select('id, visit_date, visit_number, next_appt_type, status, assigned_staff, performed_by, clinical_notes, advice_given, missed_reason, staff_profiles:assigned_staff (id, full_name), performed_staff:performed_by (id, full_name)')
                             .eq('patient_id', authUser.id)
                             .order('visit_date', { ascending: true }),
                         patientService.supabase
                             .from('postpartum_visits')
-                            .select('id, delivery_id, visit_type, scheduled_date, scheduled_at, attended_date, status, assigned_staff, assessment, notes')
+                            .select('id, delivery_id, visit_type, scheduled_date, scheduled_at, attended_date, status, assigned_staff, assessment, notes, staff_profiles:assigned_staff (id, full_name)')
                             .eq('patient_id', authUser.id)
                             .order('scheduled_date', { ascending: true })
                     ]);
@@ -144,17 +150,30 @@ const MyAppointments = () => {
                     prenatalVisits = prenatalResult.data || [];
                     postpartumVisits = postpartumResult.data || [];
                     const staffIds = [...new Set([
-                        ...prenatalVisits.map(visit => visit.assigned_staff),
+                        ...prenatalVisits.flatMap(visit => [visit.assigned_staff, visit.performed_by]),
                         ...postpartumVisits.map(visit => visit.assigned_staff)
                     ].filter(Boolean))];
-                    const { data: staffProfiles, error: staffError } = staffIds.length
-                        ? await patientService.supabase
+                    prenatalVisits.forEach(visit => {
+                        const profile = Array.isArray(visit.staff_profiles) ? visit.staff_profiles[0] : visit.staff_profiles;
+                        const performer = Array.isArray(visit.performed_staff) ? visit.performed_staff[0] : visit.performed_staff;
+                        if (profile?.id && profile.full_name) staffNamesById.set(profile.id, profile.full_name);
+                        if (performer?.id && performer.full_name) staffNamesById.set(performer.id, performer.full_name);
+                    });
+                    postpartumVisits.forEach(visit => {
+                        const profile = Array.isArray(visit.staff_profiles) ? visit.staff_profiles[0] : visit.staff_profiles;
+                        if (profile?.id && profile.full_name) staffNamesById.set(profile.id, profile.full_name);
+                    });
+                    const remainingStaffIds = staffIds.filter(id => !staffNamesById.has(id));
+                    if (remainingStaffIds.length) {
+                        const { data: staffProfiles, error: staffError } = await patientService.supabase
                             .from('staff_profiles')
                             .select('id, full_name')
-                            .in('id', staffIds)
-                        : { data: [], error: null };
-                    if (staffError) throw staffError;
-                    postpartumStaffNames = new Map((staffProfiles || []).map(staff => [staff.id, staff.full_name]));
+                            .in('id', remainingStaffIds);
+                        if (staffError) throw staffError;
+                        (staffProfiles || []).forEach(staff => {
+                            if (staff.id && staff.full_name) staffNamesById.set(staff.id, staff.full_name);
+                        });
+                    }
                 }
                 const pregnancyNumberByVisitId = new Map((patient.pregnancyHistory || [])
                     .flatMap(pregnancy => (pregnancy.visits || []).map(visit => [visit.id, pregnancy.pregnancyNumber])));
@@ -168,8 +187,12 @@ const MyAppointments = () => {
                             ? 'Missed'
                             : visit.status || 'Scheduled',
                         location: sanitizeUUID(patient.station, 'Health Station'),
-                        staffName: visit.assigned_staff_name || postpartumStaffNames.get(visit.assigned_staff) || null,
+                        staffName: staffNamesById.get(visit.assigned_staff)
+                            || staffNamesById.get(visit.performed_by)
+                            || visit.assigned_staff_name
+                            || null,
                         notes: visit.missed_reason || visit.clinical_notes || visit.next_appt_type || '',
+                        adviceGiven: visit.advice_given || '',
                         pregnancyNumber: pregnancyNumberByVisitId.get(visit.id),
                         color: 'green'
                     }));
@@ -211,7 +234,7 @@ const MyAppointments = () => {
                             type: visit.visit_type,
                             status,
                             location: sanitizeUUID(patient.station, 'Health Station'),
-                            staffName: visit.assigned_staff_name || postpartumStaffNames.get(visit.assigned_staff) || null,
+                            staffName: staffNamesById.get(visit.assigned_staff) || visit.assigned_staff_name || null,
                             notes: status === 'Completed'
                                 ? t('appt_postpartum_attended')
                                 : status === 'Missed'
@@ -230,9 +253,15 @@ const MyAppointments = () => {
                 if (active) setAppointmentsData(combined);
             } catch (err) {
                 console.error('Failed to load appointments:', err);
-                if (active) setAppointmentsData([]);
+                if (active) {
+                    setAppointmentsData([]);
+                    setError(err?.message || 'Unable to load appointments. Please try again.');
+                }
+            } finally {
+                if (active) setLoading(false);
             }
         };
+        loadRef.current = loadAppointments;
         loadAppointments();
         window.addEventListener('online', loadAppointments);
         return () => {
@@ -319,88 +348,6 @@ const MyAppointments = () => {
         });
     };
 
-    const handleDownloadPDF = () => {
-        const doc = new jsPDF('portrait');
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const margin = 14;
-        let y = 16;
-
-        // ── Header ──
-        doc.setFontSize(18);
-        doc.setTextColor(139, 90, 100);
-        doc.text('DASMOM+', margin, y);
-        doc.setFontSize(10);
-        doc.setTextColor(100);
-        doc.text('City Health Office — Dasmariñas, Cavite', margin, y + 7);
-        y += 16;
-
-        doc.setDrawColor(185, 129, 138);
-        doc.setLineWidth(0.5);
-        doc.line(margin, y, pageWidth - margin, y);
-        y += 10;
-
-        // ── Report Title ──
-        doc.setFontSize(16);
-        doc.setTextColor(40);
-        doc.text('Appointment Schedule', margin, y);
-        y += 10;
-
-        // ── Patient Info ──
-        doc.setFontSize(10);
-        doc.setTextColor(80);
-        const patientId = String(patientInfo.id || 'N/A').substring(0, 8).toUpperCase();
-        doc.text(`Patient Name: ${patientInfo.name || 'N/A'}`, margin, y);
-        doc.text(`Patient ID: ${patientId}`, pageWidth / 2, y);
-        y += 6;
-        doc.text(`Health Station: ${patientInfo.station || 'N/A'}`, margin, y);
-        doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, y);
-        y += 10;
-
-        doc.setDrawColor(200);
-        doc.setLineWidth(0.3);
-        doc.line(margin, y, pageWidth - margin, y);
-        y += 8;
-
-        const allAppointments = [...appointmentsData].sort((a, b) => new Date(b.date) - new Date(a.date));
-
-        const tableHead = [['Date', 'Time', 'Type', 'Location / Station', 'Health Worker', 'Status']];
-        const tableBody = allAppointments.map(a => [
-            new Date(a.date).toLocaleDateString('en-PH'),
-            a.time || '--',
-            a.type,
-            a.location || '--',
-            a.staffName || '--',
-            a.status || 'Scheduled'
-        ]);
-
-        if (allAppointments.length > 0) {
-            doc.autoTable({
-                startY: y,
-                head: tableHead,
-                body: tableBody,
-                theme: 'grid',
-                styles: { fontSize: 8, cellPadding: 3 },
-                headStyles: { fillColor: [185, 129, 138], textColor: 255, fontStyle: 'bold' },
-                alternateRowStyles: { fillColor: [252, 249, 250] },
-                margin: { left: margin, right: margin },
-                didDrawPage: (data) => {
-                    const pageCount = doc.internal.getNumberOfPages();
-                    doc.setFontSize(8);
-                    doc.setTextColor(150);
-                    doc.text(`Page ${data.pageNumber} of ${pageCount}`, pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
-                    doc.text('DASMOM+ — Confidential Patient Record', margin, doc.internal.pageSize.getHeight() - 10);
-                }
-            });
-        } else {
-            doc.setFontSize(10);
-            doc.setTextColor(120);
-            doc.text('No appointments available.', margin, y);
-        }
-
-        const dateStr = new Date().toISOString().split('T')[0];
-        doc.save(`DASMOM_Appointments_${patientId}_${dateStr}.pdf`);
-    };
-
     const getAppointmentsForDay = (dateStr) => {
         let appointments = (appointmentsData || []).filter(a => {
             if (!a.date) return false;
@@ -469,9 +416,6 @@ const MyAppointments = () => {
                         {a.staffStation && <span>Assigned station: <strong>{a.staffStation}</strong></span>}
                     </div>
                 )}
-            </div>
-            <div className="appt-actions">
-                <button className="btn-icon-outline desktop-only" title={t('appt_print')} onClick={(e) => e.stopPropagation()}><Printer size={16} /></button>
             </div>
         </div>
     );
@@ -565,8 +509,22 @@ const MyAppointments = () => {
         );
     };
 
+    if (loading) {
+        return (
+            <StaffPageLoader
+                message={t('appt_loading') || 'Loading your appointments...'}
+                error={error}
+                errorTitle="Unable to load appointments"
+                onRetry={() => {
+                    setLoading(true);
+                    loadRef.current?.();
+                }}
+            />
+        );
+    }
+
     return (
-        <div className="my-appointments-page">
+        <div className="my-appointments-page staff-page-ready">
             <div className="appt-hero-header">
                 <img 
                     src={appointmentSilhouette} 
@@ -579,16 +537,16 @@ const MyAppointments = () => {
                             <CalendarIcon size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('appt_title')}
                         </h1>
                         <p className="page-subtitle">{t('appt_subtitle')}</p>
-                        <div className="mother-download-pdf-btn-wrapper">
-                            <button className="mother-download-pdf-btn" onClick={handleDownloadPDF}>
-                                <Download size={14} /> Download PDF
-                            </button>
-                        </div>
                     </div>
                 </div>
             </div>
 
             <div className="appt-content">
+                {/* ── Calendar Section ── */}
+                <div className="appt-section-title-wrap">
+                    <h2 className="appt-section-title">{t('appt_calendar_section', 'Calendar')}</h2>
+                </div>
+
                 {/* Event Category Tabs */}
                 <div className="visit-type-tabs">
                     <button
@@ -617,7 +575,7 @@ const MyAppointments = () => {
                     </button>
                 </div>
 
-                <div className="pv-calendar-section" style={{marginBottom: '32px'}}>
+                <div className="pv-calendar-section">
                     <div className="section-head-bar">
                         <div className="date-nav">
                             <button className="icon-btn-sm" onClick={handlePrev} title="Previous">
@@ -770,8 +728,15 @@ const MyAppointments = () => {
                         </div>
                     </div>
 
+                {/* ── Section Divider ── */}
+                <div className="appt-section-divider" />
 
                 <div className="list-container">
+                    {/* ── Visit List Section ── */}
+                    <div className="appt-section-title-wrap">
+                        <h2 className="appt-section-title">{t('appt_visit_list_section', 'Visit List')}</h2>
+                    </div>
+
                     <div className="list-filters">
                         <button
                             className={`filter-btn ${statusFilter === 'All' ? 'active' : ''}`}
@@ -894,6 +859,12 @@ const MyAppointments = () => {
                                     <div style={{marginTop: '8px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0'}}>
                                         <span style={{display: 'block', color: '#64748b', fontSize: '12px', fontWeight: 600, marginBottom: '4px'}}>{t('appt_notes')}</span>
                                         <p style={{margin: 0, fontSize: '13px', color: '#334155', lineHeight: '1.5'}}>{selectedAppt.notes}</p>
+                                    </div>
+                                )}
+                                {selectedAppt.type === 'Prenatal' && (
+                                    <div style={{marginTop: '8px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0'}}>
+                                        <span style={{display: 'block', color: '#64748b', fontSize: '12px', fontWeight: 600, marginBottom: '4px'}}>Advice given</span>
+                                        <p style={{margin: 0, fontSize: '13px', color: '#334155', lineHeight: '1.5'}}>{selectedAppt.adviceGiven || 'No advice recorded'}</p>
                                     </div>
                                 )}
                             </div>

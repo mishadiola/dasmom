@@ -1,4 +1,5 @@
-import { createContext, useState, useEffect, useRef } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import React, { createContext, useState, useEffect, useRef, useMemo } from 'react';
 import AuthService from '../services/authservice';
 import supabase from '../config/supabaseclient';
 import visitNotificationService from '../services/visitNotificationService';
@@ -17,7 +18,8 @@ export const AuthProvider = ({ children }) => {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [visitNotificationStatus, setVisitNotificationStatus] = useState(null);
   const userRef = useRef(null);
-  const authService = new AuthService();
+  userRef.current = user;
+  const authService = useMemo(() => new AuthService(), []);
 
   useEffect(() => {
     userRef.current = user;
@@ -58,18 +60,18 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     let isMounted = true;
     let initRequest = 0;
+    let signInInitTimer = null;
 
-    const initAuth = async () => {
+    const initAuth = async (isTokenRefresh = false) => {
       const requestId = ++initRequest;
       try {
-        // Clear any stale cached user
-        authService.clearUser();
+        if (!isTokenRefresh) {
+          authService.clearUser();
+        }
         
-        // Only try to load user if there's an active Supabase session
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError || !session?.user) {
-          // No valid session - don't auto-restore user
           if (isMounted && requestId === initRequest) {
             setUser(null);
             console.log('AuthContext: No active session, user not loaded');
@@ -78,7 +80,12 @@ export const AuthProvider = ({ children }) => {
           const expectedGoogleEmail = isAndroidApp()
             ? await secureStorage.get('dasmom.google_email')
             : localStorage.getItem('dasmom_google_email');
+          // If token refreshed and user is already loaded with matching ID, no reload needed
+          if (isTokenRefresh && userRef.current?.id === session.user.id) {
+            return;
+          }
           const sessionEmail = session.user.email?.trim().toLowerCase();
+
           if (expectedGoogleEmail && sessionEmail !== expectedGoogleEmail) {
             if (isAndroidApp()) await secureStorage.remove('dasmom.google_email');
             else localStorage.removeItem('dasmom_google_email');
@@ -89,7 +96,6 @@ export const AuthProvider = ({ children }) => {
             throw new Error('Use Google with the same email registered for your DasMom account.');
           }
 
-          // Valid session exists - load full user data
           const current = await authService.getAuthUser();
           if (isAndroidApp()) await secureStorage.remove('dasmom.google_email');
           else localStorage.removeItem('dasmom_google_email');
@@ -100,6 +106,7 @@ export const AuthProvider = ({ children }) => {
             return;
           }
           if (isMounted && requestId === initRequest) {
+
             if (!current) {
               await visitNotificationService.cancelAndClearMother(session.user.id);
               await supabase.functions.invoke('google-account-check', { body: { action: 'cleanup' } });
@@ -108,7 +115,8 @@ export const AuthProvider = ({ children }) => {
             setUser(current);
           }
         }
-      } catch (err) {
+      }
+      catch (err) {
         console.error('AuthContext: Error during auth init', err);
         supabase.auth.getSession().then(({ data: { session } }) => {
           if (session?.user?.id) {
@@ -121,14 +129,15 @@ export const AuthProvider = ({ children }) => {
         if (isMounted && requestId === initRequest) {
           setUser(null);
         }
-      } finally {
+      }
+      finally {
         if (isMounted && requestId === initRequest) {
           setIsAuthLoading(false);
         }
       }
     };
 
-    initAuth();
+    initAuth(false);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
@@ -142,19 +151,36 @@ export const AuthProvider = ({ children }) => {
           });
         }
         initRequest += 1;
+        authService.clearUser();
         setUser(null);
         setIsAuthLoading(false);
         return;
       }
 
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      if (event === 'TOKEN_REFRESHED') {
         if (session?.user) {
-          initAuth();
+          // Silent token refresh: if user is already loaded and matches, do not teardown state
+          if (userRef.current?.id === session.user.id) {
+            return;
+          }
+          initAuth(true);
         } else {
           initRequest += 1;
           setUser(null);
           setIsAuthLoading(false);
         }
+        return;
+      }
+
+      if (event === 'SIGNED_IN' && session?.user) {
+        if (userRef.current?.id === session.user.id) {
+          return;
+        }
+        if (signInInitTimer !== null) window.clearTimeout(signInInitTimer);
+        signInInitTimer = window.setTimeout(() => {
+          signInInitTimer = null;
+          initAuth(false);
+        }, 0);
       }
     });
 
@@ -167,9 +193,10 @@ export const AuthProvider = ({ children }) => {
     return () => {
       isMounted = false;
       if (isAndroidApp()) window.removeEventListener('online', handleReconnect);
+      if (signInInitTimer !== null) window.clearTimeout(signInInitTimer);
       subscription.unsubscribe();
     };
-  }, []);
+  }, [authService]);
 
   const logout = async () => {
     const currentUser = userRef.current;

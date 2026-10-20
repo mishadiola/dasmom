@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Mail, X } from 'lucide-react';
 import supabase from '../config/supabaseclient';
 import { PASSWORD_RESET_URL } from '../config/appConfig';
 
-const ResetPasswordModal = ({ isOpen, onClose, initialEmail = '' }) => {
+const ResetPasswordModal = ({ isOpen, onClose, initialEmail = '', targetUserId = null }) => {
     const [email, setEmail] = useState('');
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
@@ -40,6 +41,7 @@ const ResetPasswordModal = ({ isOpen, onClose, initialEmail = '' }) => {
                 body: {
                     email: trimmedEmail,
                     redirectTo: PASSWORD_RESET_URL,
+                    ...(targetUserId ? { targetUserId } : {}),
                 }
             });
             
@@ -54,7 +56,7 @@ const ResetPasswordModal = ({ isOpen, onClose, initialEmail = '' }) => {
         }
     };
 
-    return (
+    return createPortal(
         <div className="system-modal-overlay" onClick={() => !isLoading && onClose()}>
             <div className="system-modal-card" onClick={e => e.stopPropagation()} style={{ textAlign: 'left', padding: '32px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -134,7 +136,8 @@ const ResetPasswordModal = ({ isOpen, onClose, initialEmail = '' }) => {
                     </>
                 )}
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

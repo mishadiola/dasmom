@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { 
     X, Calendar, Clock, MapPin, User, FileText, 
     CheckCircle2, AlertCircle, ExternalLink, Plus, 
@@ -69,13 +70,11 @@ const ScheduledVisitModal = ({ visit, onClose, onScheduleChanged }) => {
             try {
                 const { data, error } = await supabase
                     .from('patient_basic_info')
-                    .select('station')
+                    .select('station_ass, stations:station_ass (station_name)')
                     .eq('id', visit.patientId)
-                    .single();
-                
-                if (data?.station) {
-                    setPatientStation(data.station);
-                }
+                    .maybeSingle();
+                if (error) throw error;
+                setPatientStation(data?.stations?.station_name || '');
             } catch (error) {
                 console.error('Error fetching patient station:', error);
             }
@@ -154,7 +153,7 @@ const ScheduledVisitModal = ({ visit, onClose, onScheduleChanged }) => {
     const upcomingVisits = sortedVisits.filter(v => isUpcoming(v.visit_date));
     const pastVisits = sortedVisits.filter(v => !isUpcoming(v.visit_date));
 
-    return (
+    return createPortal(
         <div className="sv-modal-overlay" onClick={onClose}>
             <div className="sv-modal" onClick={e => e.stopPropagation()}>
                 {/* ── Sticky Header ── */}
@@ -366,7 +365,8 @@ const ScheduledVisitModal = ({ visit, onClose, onScheduleChanged }) => {
                     />
                 )}
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

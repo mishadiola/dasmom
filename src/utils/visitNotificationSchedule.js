@@ -107,6 +107,41 @@ export const isEligibleVisitStatus = (status, defaultStatus = 'scheduled') => {
     return !['cancelled', 'canceled', 'missed', 'attended', 'completed', 'overdue', 'vaccinated'].includes(normalized);
 };
 
+export const getVisitChangeType = (event) => {
+    if (event?.eventType === 'INSERT') return 'added';
+    if (event?.eventType !== 'UPDATE') return null;
+
+    const oldVisit = event.old || {};
+    const newVisit = event.new || {};
+    if (oldVisit.rescheduled_at && newVisit.rescheduled_at
+        && newVisit.rescheduled_at !== oldVisit.rescheduled_at) {
+        return 'rescheduled';
+    }
+    const scheduledFields = ['visit_date', 'scheduled_at', 'scheduled_date', 'scheduled_vaccination'];
+    const previousDate = scheduledFields.map(field => oldVisit[field]).find(Boolean);
+    const nextDate = scheduledFields.map(field => newVisit[field]).find(Boolean);
+    return previousDate && nextDate && previousDate !== nextDate ? 'rescheduled' : null;
+};
+
+export const createVisitChangeNotificationCopy = (visitType, changeType, scheduledAt, visitName = '') => {
+    const date = formatVisitDate(scheduledAt);
+    const action = changeType === 'rescheduled' ? 'rescheduled' : 'added';
+    const detail = visitName ? `: ${visitName}` : '';
+    const typeName = {
+        prenatal: 'prenatal visit',
+        postpartum: 'postpartum visit',
+        maternal_vaccination: 'vaccination',
+        newborn_vaccination: 'newborn vaccination'
+    }[visitType] || 'visit';
+
+    return {
+        title: changeType === 'rescheduled' ? 'Visit Rescheduled' : 'New Visit Added',
+        body: date
+            ? `Your ${typeName}${detail} has been ${action} for ${date}.`
+            : `A ${typeName}${detail} has been ${action} to your schedule.`
+    };
+};
+
 export const createVisitNotificationCopy = (visit, appointmentDate, reminderDays) => {
     const reminder = `${reminderDays}-day reminder`;
     if (visit.visitType === 'prenatal') {
@@ -122,6 +157,15 @@ export const createVisitNotificationCopy = (visit, appointmentDate, reminderDays
             body: `Your postpartum follow-up${visit.visitName ? ` (${visit.visitName})` : ''} is scheduled for ${appointmentDate}. This is your ${reminder}. Please prepare for your visit.`
         };
     }
+    if (visit.visitType === 'maternal_vaccination') {
+        const vaccine = visit.vaccineName ? ` for ${visit.vaccineName}` : '';
+        const dose = visit.doseNumber ? ` (dose ${visit.doseNumber})` : '';
+        return {
+            title: 'Upcoming Vaccination',
+            body: `Your vaccination${vaccine}${dose} is scheduled for ${appointmentDate}. This is your ${reminder}. Please prepare for the visit.`
+        };
+    }
+
     const baby = visit.babyName || 'your newborn';
     const vaccine = visit.vaccineName ? ` for ${visit.vaccineName}` : '';
     const dose = visit.doseNumber ? ` (dose ${visit.doseNumber})` : '';

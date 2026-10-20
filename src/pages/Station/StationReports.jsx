@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, useContext } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
     Search, Filter, Plus, X, MapPin, Users, AlertTriangle,
     Baby, Syringe, Pill, TrendingUp, TrendingDown, Download,
-    Eye, ChevronDown, ChevronUp, CheckCircle2, AlertCircle,
+    ChevronDown, ChevronUp, CheckCircle2, AlertCircle,
     FileText, Activity, Heart, HeartPulse, BarChart3, Clock, Building2, Stethoscope
 } from 'lucide-react';
 import '../../styles/pages/StationReports.css';
@@ -12,22 +13,97 @@ import Legend from '../../components/Legend/Legend';
 import supabase from '../../config/supabaseclient';
 import ExportModal from '../../components/ExportModal';
 import ActionTooltip from '../../components/Common/ActionTooltip';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
+import { AuthContext } from '../../context/AuthContext';
+import { useDefaultStation } from '../../hooks/useDefaultStation';
+
+/* ════════════════════════════
+   HELPERS & LEGEND DEFINITIONS
+════════════════════════════ */
+const formatStationName = (name) => {
+    if (!name) return '';
+    return name
+        .split(' ')
+        .map(word => {
+            const lower = word.toLowerCase();
+            if (lower === 'cho' || lower === 'iii' || lower === 'ii' || lower === 'iv') {
+                return word.toUpperCase();
+            }
+            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+        })
+        .join(' ');
+};
+
+const STATION_LEGEND_CATEGORIES = [
+    {
+        title: "Coverage Benchmarks",
+        items: [
+            { label: "≥90% Target Met", style: { background: "rgba(123, 174, 94, 0.15)", color: "#4a7a30", fontWeight: 700 } },
+            { label: "80–89% Moderate", style: { background: "rgba(212, 160, 60, 0.15)", color: "#8a6a20", fontWeight: 700 } },
+            { label: "<80% Needs Improvement", style: { background: "rgba(199, 88, 106, 0.15)", color: "#943848", fontWeight: 700 } },
+            { label: "N/A — No Eligible Patients", style: { background: "rgba(100, 116, 139, 0.12)", color: "#475569", fontWeight: 700 } }
+        ]
+    },
+    {
+        title: "Indicator Definitions",
+        items: [
+            {
+                label: "Vaccination Coverage: Newborns with completed birth doses (Hepa B, BCG) out of recorded newborns in the station.",
+                style: { background: "#f8fafc", color: "#334155", textAlign: "left", fontSize: "11px", fontWeight: 500, lineHeight: "1.4" }
+            },
+            {
+                label: "Supplement Coverage: Active pregnant patients with completed micronutrient supplementation (Iron, Folic Acid, Calcium).",
+                style: { background: "#f8fafc", color: "#334155", textAlign: "left", fontSize: "11px", fontWeight: 500, lineHeight: "1.4" }
+            },
+            {
+                label: "Trimester Mix: Distribution of active pregnant patients across 1st (≤12w), 2nd (13–26w), and 3rd (≥27w) trimesters.",
+                style: { background: "#f8fafc", color: "#334155", textAlign: "left", fontSize: "11px", fontWeight: 500, lineHeight: "1.4" }
+            }
+        ]
+    }
+];
 
 /* ════════════════════════════
    MAIN COMPONENT
 ════════════════════════════ */
 const StationReports = () => {
     const navigate = useNavigate();
+    const { user } = useContext(AuthContext);
+    const [stations, setStations] = useState([]);
+    const stationNames = useMemo(() => stations.map(s => s.name), [stations]);
+    const {
+        assignedStation,
+        isStationStaff,
+        canViewOtherStations,
+        availableStations: permittedStations,
+        matchStation
+    } = useDefaultStation({
+        permissionKey: 'patient.view.other_station',
+        allStations: stationNames,
+        isArray: false
+    });
+    const userStation = assignedStation || user?.station || null;
+
     const [searchTerm, setSearchTerm] = useState('');
+    const [stationFilter, setStationFilter] = useState(() => (
+        isStationStaff && userStation ? userStation : 'All'
+    ));
+    const userHasChangedStationRef = useRef(false);
+
+    useEffect(() => {
+        if (!userHasChangedStationRef.current && isStationStaff && userStation) {
+            setStationFilter(prev => prev !== 'All' ? prev : userStation);
+        }
+    }, [isStationStaff, userStation]);
+
     const [selectedStation, setSelectedStation] = useState(null);
     const [expandedRow, setExpandedRow] = useState(null);
     const [showCharts, setShowCharts] = useState(true);
-    const [stations, setStations] = useState([]);
-    const [pregnancyAgeRows, setPregnancyAgeRows] = useState([]);
+    const mounted = useRef(false);
+    const reportRequestId = useRef(0);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [summaryStats, setSummaryStats] = useState([
         { label: 'Total Pregnant Patients', value: 0, color: 'sage', icon: Users, path: '/dashboard/patients', filter: null },
         { label: 'Pregnancies with Health Conditions', value: 0, color: 'rose', icon: HeartPulse, path: '/dashboard/high-risk', filter: null },
@@ -36,62 +112,49 @@ const StationReports = () => {
         { label: 'Supplements Distributed', value: 0, color: 'pink', icon: Pill, path: '/dashboard/inventory', filter: 'supplements' },
     ]);
 
-    const patientService = new PatientService();
+    const patientService = useMemo(() => new PatientService(), []);
 
-    useEffect(() => {
-        let pollingTimer = null;
+    // Determine authorized stations based on role and permissions:
+    // If Station Staff cannot view other stations, they see ONLY their assigned station.
+    // If they have cross-station viewing permissions, or are Admin/CHO, they can view stations.
+    const authorizedStations = useMemo(() => {
+        if (!isStationStaff || canViewOtherStations) return stations;
+        if (!userStation) return stations.length > 0 ? [stations[0]] : [];
+        const matched = stations.filter(s => 
+            s.name?.toLowerCase() === userStation.toLowerCase() ||
+            formatStationName(s.name).toLowerCase() === formatStationName(userStation).toLowerCase()
+        );
+        return matched.length > 0 ? matched : (stations.length > 0 ? [stations[0]] : []);
+    }, [stations, isStationStaff, canViewOtherStations, userStation]);
 
-        const startPollingFallback = () => {
-            if (pollingTimer) return;
-            pollingTimer = setInterval(fetchStationData, 30000);
-        };
+    const activeStationFilter = (isStationStaff && !canViewOtherStations)
+        ? (authorizedStations[0]?.name || userStation || '')
+        : stationFilter;
 
-        const stopPollingFallback = () => {
-            if (!pollingTimer) return;
-            clearInterval(pollingTimer);
-            pollingTimer = null;
-        };
-
-        fetchStationData();
-
-        const channel = supabase
-            .channel('station-reports-live-data')
-            .on('postgres_changes', { event: '*', schema: 'public' }, payload => {
-                const tables = ['stations', 'patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'deliveries', 'newborns', 'vaccinations', 'supplements'];
-                if (tables.includes(payload.table)) fetchStationData();
-            })
-            .subscribe(status => {
-                if (status === 'SUBSCRIBED') {
-                    stopPollingFallback();
-                } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
-                    startPollingFallback();
-                }
-            });
-
-        return () => {
-            stopPollingFallback();
-            supabase.removeChannel(channel);
-        };
-    }, []);
-
-    const fetchStationData = async () => {
+    const fetchStationData = useCallback(async (isSilent = false) => {
+        const requestId = ++reportRequestId.current;
         try {
-            setLoading(true);
-            const [data, ageRows] = await Promise.all([
-                patientService.getStationReports(),
-                patientService.getStationPregnancyAgeReport()
-            ]);
+            if (!isSilent && stations.length === 0) {
+                setLoading(true);
+            }
+            setError(null);
+            const data = await patientService.getStationReports();
+            if (!mounted.current || requestId !== reportRequestId.current) return;
             setStations(data);
-            setPregnancyAgeRows(ageRows);
 
-            // Calculate summary stats from station data
-            const totalPregnant = data.reduce((sum, s) => sum + s.totalPatients, 0);
-            const totalWithHealthConditions = data.reduce((sum, s) => sum + (s.withHealthConditions || 0), 0);
-            const totalDeliveries = data.reduce((sum, s) => sum + s.recentDeliveries, 0);
-            const avgVaccCoverage = data.length > 0
-                ? Math.round(data.reduce((sum, s) => sum + s.vaccCoverage, 0) / data.length)
+            // Calculate summary stats from station data (scoped to authorized stations if Station Staff without cross-station permission)
+            const targetData = (isStationStaff && !canViewOtherStations) && userStation
+                ? data.filter(s => s.name?.toLowerCase() === userStation.toLowerCase() || formatStationName(s.name).toLowerCase() === formatStationName(userStation).toLowerCase())
+                : (stationFilter !== 'All' ? data.filter(s => s.name === stationFilter || formatStationName(s.name) === formatStationName(stationFilter)) : data);
+            const effectiveData = targetData.length > 0 ? targetData : data;
+
+            const totalPregnant = effectiveData.reduce((sum, s) => sum + s.totalPatients, 0);
+            const totalWithHealthConditions = effectiveData.reduce((sum, s) => sum + (s.withHealthConditions || 0), 0);
+            const totalDeliveries = effectiveData.reduce((sum, s) => sum + s.recentDeliveries, 0);
+            const avgVaccCoverage = effectiveData.length > 0
+                ? Math.round(effectiveData.reduce((sum, s) => sum + s.vaccCoverage, 0) / effectiveData.length)
                 : 0;
-            const totalSupplements = data.reduce((sum, s) => sum + s.totalSupplementsGiven, 0);
+            const totalSupplements = effectiveData.reduce((sum, s) => sum + s.totalSupplementsGiven, 0);
 
             setSummaryStats([
                 { label: 'Total Pregnant Patients', value: totalPregnant, color: 'sage', icon: Users, path: '/dashboard/patients', filter: null },
@@ -102,23 +165,78 @@ const StationReports = () => {
             ]);
         } catch (error) {
             console.error('Error fetching station data:', error);
-            setPregnancyAgeRows([]);
+            if (mounted.current && requestId === reportRequestId.current) setError(error);
         } finally {
-            setLoading(false);
+            if (mounted.current && requestId === reportRequestId.current) setLoading(false);
         }
-    };
+    }, [patientService, stations.length, isStationStaff, canViewOtherStations, userStation, stationFilter]);
 
-    const filtered = searchTerm
-        ? stations.filter(b => b.name.toLowerCase().includes(searchTerm.toLowerCase()))
-        : stations;
+    useEffect(() => {
+        let pollingTimer = null;
+        let refreshTimer = null;
+        mounted.current = true;
+
+        const startPollingFallback = () => {
+            if (!pollingTimer) {
+                pollingTimer = setInterval(() => {
+                    fetchStationData();
+                    }, 30000);
+            }
+        };
+        const stopPollingFallback = () => {
+            if (!pollingTimer) return;
+            clearInterval(pollingTimer);
+            pollingTimer = null;
+        };
+
+        fetchStationData();
+        const channel = supabase
+            .channel('station-reports-live-data');
+        const scheduleRefresh = () => {
+            if (refreshTimer) clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(() => {
+                fetchStationData();
+                }, 250);
+        };
+        const realtimeTables = ['stations', 'patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'deliveries', 'newborns', 'vaccinations', 'supplements'];
+        realtimeTables.forEach(table => {
+            channel.on('postgres_changes', { event: '*', schema: 'public', table }, scheduleRefresh);
+        });
+        channel.subscribe(status => {
+                if (status === 'SUBSCRIBED') {
+                    stopPollingFallback();
+                } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
+                    startPollingFallback();
+                }
+            });
+
+        return () => {
+            mounted.current = false;
+            reportRequestId.current += 1;
+            stopPollingFallback();
+            if (refreshTimer) clearTimeout(refreshTimer);
+            supabase.removeChannel(channel);
+        };
+    }, [fetchStationData]);
+
+    const filtered = useMemo(() => {
+        return authorizedStations.filter(b => {
+            const matchesStation = (isStationStaff && !canViewOtherStations) || activeStationFilter === 'All' || b.name === activeStationFilter || formatStationName(b.name).toLowerCase() === formatStationName(activeStationFilter).toLowerCase();
+            const matchesSearch = !searchTerm || b.name.toLowerCase().includes(searchTerm.toLowerCase());
+            return matchesStation && matchesSearch;
+        });
+    }, [authorizedStations, isStationStaff, canViewOtherStations, activeStationFilter, searchTerm]);
 
     const getCoverageClass = (v) => v >= 90 ? 'green' : v >= 80 ? 'amber' : 'red';
 
     const [showExportModal, setShowExportModal] = useState(false);
 
-    const handleExport = (exportConfig) => {
+    const handleExport = async (exportConfig) => {
         const { format, reportPeriodText } = exportConfig;
-        const exportData = stations.map(s => ({
+        const exportStations = (isStationStaff && !canViewOtherStations)
+            ? authorizedStations
+            : (activeStationFilter === 'All' ? stations : stations.filter(s => s.name === activeStationFilter || formatStationName(s.name) === formatStationName(activeStationFilter)));
+        const exportData = exportStations.map(s => ({
             'Station': s.name,
             'Total Patients': s.totalPatients,
             'With Health Conditions': s.withHealthConditions,
@@ -126,6 +244,8 @@ const StationReports = () => {
             'Newborns': s.newborns,
             'Vaccination Coverage (%)': s.vaccCoverage,
             'Supplement Coverage (%)': s.suppCoverage,
+            'Missed Appointments': s.missedAppointments || 0,
+            'Appointments Due': s.appointmentsDue || 0,
             '1st Trimester': s.trimester?.first || 0,
             '2nd Trimester': s.trimester?.second || 0,
             '3rd Trimester': s.trimester?.third || 0,
@@ -133,6 +253,7 @@ const StationReports = () => {
         }));
 
         if (format === 'excel') {
+            const XLSX = await import('xlsx');
             let worksheetData = [
                 ['Report: DASMOM+ Station Reports'],
                 [`Generated: ${new Date().toLocaleString()}`],
@@ -155,104 +276,136 @@ const StationReports = () => {
             XLSX.utils.book_append_sheet(wb, ws, 'Station Reports');
             XLSX.writeFile(wb, `Station_Reports_${new Date().toISOString().split('T')[0]}.xlsx`);
         } else if (format === 'pdf') {
-            const doc = new jsPDF('landscape');
-            doc.setFontSize(16);
-            doc.text('DASMOM+ Station Reports', 14, 20);
-            doc.setFontSize(10);
-            doc.setTextColor(100);
-            doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
-            doc.text(`Period: ${reportPeriodText}`, 14, 34);
-            if (exportData.length === 0) {
-                doc.text('No station data found.', 14, 46);
-            } else {
-                const head = [Object.keys(exportData[0])];
-                const body = exportData.map(obj => Object.values(obj));
-                doc.autoTable({
-                    startY: 42,
-                    head,
-                    body,
-                    theme: 'grid',
-                    styles: { fontSize: 8 },
-                    headStyles: { fillColor: [185, 129, 138] }
-                });
-            }
-            doc.save(`Station_Reports_${new Date().toISOString().split('T')[0]}.pdf`);
+            const dateStr = new Date().toISOString().split('T')[0];
+            const head = exportData.length > 0 ? [Object.keys(exportData[0])] : [["Station", "Total Patients", "With Health Conditions", "Deliveries", "Newborns", "Vaccination Coverage (%)", "Supplement Coverage (%)"]];
+            const body = exportData.length > 0 ? exportData.map(obj => Object.values(obj)) : [];
+
+            exportStandardStaffPdf({
+                orientation: 'landscape',
+                title: (isStationStaff && !canViewOtherStations) ? `${formatStationName(authorizedStations[0]?.name || userStation)} Station Report` : (activeStationFilter === 'All' ? 'Station Reports Summary' : `${formatStationName(activeStationFilter)} Station Report`),
+                period: reportPeriodText || 'All Dates',
+                station: (isStationStaff && !canViewOtherStations) ? formatStationName(authorizedStations[0]?.name || userStation) : (activeStationFilter === 'All' ? 'All Stations' : formatStationName(activeStationFilter)),
+                totalRecords: exportData.length,
+                head: head,
+                body: body,
+                filename: `Station_Reports_${dateStr}.pdf`
+            });
         }
     };
 
-    // Calculate derived summary values
-    const totalStations = stations.length;
-    const totalPatients = stations.reduce((sum, s) => sum + s.totalPatients, 0);
-    const totalWithConditions = stations.reduce((sum, s) => sum + (s.withHealthConditions || 0), 0);
-    const totalDeliveries = stations.reduce((sum, s) => sum + s.recentDeliveries, 0);
-    const totalNewborns = stations.reduce((sum, s) => sum + s.newborns, 0);
+    // Calculate derived summary values (scoped to authorized stations)
+    const totalStations = authorizedStations.length;
+    const totalPatients = authorizedStations.reduce((sum, s) => sum + s.totalPatients, 0);
+    const totalWithConditions = authorizedStations.reduce((sum, s) => sum + (s.withHealthConditions || 0), 0);
+    const totalDeliveries = authorizedStations.reduce((sum, s) => sum + s.recentDeliveries, 0);
+    const totalNewborns = authorizedStations.reduce((sum, s) => sum + s.newborns, 0);
+
+    if (loading || error) {
+        return (
+            <StaffPageLoader 
+                message="Loading station reports..." 
+                error={error} 
+                onRetry={fetchStationData} 
+            />
+        );
+    }
 
     return (
-        <div className="st-page">
+        <div className="st-page staff-page-ready">
 
             {/* ── Page Header ── */}
             <div className="page-header">
                 <div>
                     <h1 className="page-title"><BarChart3 size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose-dark)' }} /> Station Reports</h1>
-                    <p className="page-subtitle">View health data and performance for each station under CHO III, including patient coverage, risk distribution, and vaccination rates.</p>
+                    <p className="page-subtitle">Compare patient records, documented health conditions, and maternal-newborn care services across CHO III stations.</p>
                 </div>
                 <div className="header-actions">
-                    <button className="btn btn-outline" onClick={() => setShowCharts(v => !v)}>
-                        <Activity size={16} /> {showCharts ? 'Hide Charts' : 'Show Charts'}
+                    <button className="btn btn-primary" onClick={() => setShowExportModal(true)}>
+                        <Download size={16} /> Export Report
                     </button>
-                    <button className="btn btn-outline" onClick={() => setShowExportModal(true)}>
-                        <Download size={16} /> Export
-                    </button>
-                    <button className="btn btn-primary"><FileText size={16} /> Generate Report</button>
                 </div>
             </div>
 
-            {/* ── Summary Statistics ── */}
+            {/* ── Summary Statistics (5 Compact White Cards with Subtle Colored Accents) ── */}
             {!loading && (
-                <div className="st-summary-card">
-                    <div className="st-summary-item" onClick={() => navigate('/dashboard/stations')} role="button" tabIndex={0}>
-                        <div className="st-summary-icon st-summary-icon--lilac">
-                            <Building2 size={20} />
+                <div className="st-summary-grid">
+                    <div 
+                        className="st-stat-card st-stat-card--lavender st-stat-card--clickable" 
+                        onClick={() => navigate('/dashboard/stations')} 
+                        role="button" 
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/dashboard/stations'); }}
+                    >
+                        <div className="st-stat-icon st-stat-icon--lavender">
+                            <Building2 size={18} />
                         </div>
-                        <div className="st-summary-text">
-                            <span className="st-summary-value">{totalStations}</span>
-                            <span className="st-summary-label">Stations</span>
-                        </div>
-                    </div>
-                    <div className="st-summary-item" onClick={() => navigate('/dashboard/patients')} role="button" tabIndex={0}>
-                        <div className="st-summary-icon st-summary-icon--sage">
-                            <Users size={20} />
-                        </div>
-                        <div className="st-summary-text">
-                            <span className="st-summary-value">{totalPatients.toLocaleString()}</span>
-                            <span className="st-summary-label">Registered Patients</span>
+                        <div className="st-stat-info">
+                            <span className="st-stat-value">{totalStations}</span>
+                            <span className="st-stat-label">Stations</span>
                         </div>
                     </div>
-                    <div className="st-summary-item" onClick={() => navigate('/dashboard/high-risk')} role="button" tabIndex={0}>
-                        <div className="st-summary-icon st-summary-icon--rose">
-                            <HeartPulse size={20} />
+
+                    <div 
+                        className="st-stat-card st-stat-card--sage st-stat-card--clickable" 
+                        onClick={() => navigate('/dashboard/patients')} 
+                        role="button" 
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/dashboard/patients'); }}
+                    >
+                        <div className="st-stat-icon st-stat-icon--sage">
+                            <Users size={18} />
                         </div>
-                        <div className="st-summary-text">
-                            <span className="st-summary-value">{totalWithConditions}</span>
-                            <span className="st-summary-label">Pregnancies with Health Conditions</span>
-                        </div>
-                    </div>
-                    <div className="st-summary-item" onClick={() => navigate('/dashboard/deliveries')} role="button" tabIndex={0}>
-                        <div className="st-summary-icon st-summary-icon--amber">
-                            <Heart size={20} />
-                        </div>
-                        <div className="st-summary-text">
-                            <span className="st-summary-value">{totalDeliveries}</span>
-                            <span className="st-summary-label">Deliveries</span>
+                        <div className="st-stat-info">
+                            <span className="st-stat-value">{totalPatients.toLocaleString()}</span>
+                            <span className="st-stat-label">Registered Patients</span>
                         </div>
                     </div>
-                    <div className="st-summary-item" onClick={() => navigate('/dashboard/newborns')} role="button" tabIndex={0}>
-                        <div className="st-summary-icon st-summary-icon--pink">
-                            <Baby size={20} />
+
+                    <div 
+                        className="st-stat-card st-stat-card--rose st-stat-card--clickable" 
+                        onClick={() => navigate('/dashboard/high-risk')} 
+                        role="button" 
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/dashboard/high-risk'); }}
+                    >
+                        <div className="st-stat-icon st-stat-icon--rose">
+                            <HeartPulse size={18} />
                         </div>
-                        <div className="st-summary-text">
-                            <span className="st-summary-value">{totalNewborns}</span>
-                            <span className="st-summary-label">Newborns</span>
+                        <div className="st-stat-info">
+                            <span className="st-stat-value">{totalWithConditions}</span>
+                            <span className="st-stat-label">Pregnancies with Health Conditions</span>
+                        </div>
+                    </div>
+
+                    <div 
+                        className="st-stat-card st-stat-card--peach st-stat-card--clickable" 
+                        onClick={() => navigate('/dashboard/deliveries')} 
+                        role="button" 
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/dashboard/deliveries'); }}
+                    >
+                        <div className="st-stat-icon st-stat-icon--peach">
+                            <Heart size={18} />
+                        </div>
+                        <div className="st-stat-info">
+                            <span className="st-stat-value">{totalDeliveries}</span>
+                            <span className="st-stat-label">Deliveries</span>
+                        </div>
+                    </div>
+
+                    <div 
+                        className="st-stat-card st-stat-card--pink st-stat-card--clickable" 
+                        onClick={() => navigate('/dashboard/newborns')} 
+                        role="button" 
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/dashboard/newborns'); }}
+                    >
+                        <div className="st-stat-icon st-stat-icon--pink">
+                            <Baby size={18} />
+                        </div>
+                        <div className="st-stat-info">
+                            <span className="st-stat-value">{totalNewborns}</span>
+                            <span className="st-stat-label">Newborns</span>
                         </div>
                     </div>
                 </div>
@@ -271,21 +424,53 @@ const StationReports = () => {
                             <h2 className="st-overview-title">
                                 <MapPin size={18} /> Station Overview
                             </h2>
-                            <p className="st-overview-subtitle">Performance summary across {totalStations} CHO III stations</p>
+                            <p className="st-overview-subtitle">
+                                {(isStationStaff && !canViewOtherStations) 
+                                    ? `Showing authorized station report for ${formatStationName(authorizedStations[0]?.name || userStation)}`
+                                    : (activeStationFilter === 'All' 
+                                        ? `Performance summary across ${totalStations} CHO III stations`
+                                        : `Showing performance for ${formatStationName(activeStationFilter)}`)}
+                            </p>
                         </div>
                         <div className="st-overview-meta">
-                            <Legend
-                                categories={[
-                                    {
-                                        title: "Coverage Level",
-                                        items: [
-                                            { label: "≥90% Target Met", style: { background: "rgba(123, 174, 94, 0.15)", color: "#4a7a30", fontWeight: 700 } },
-                                            { label: "80–89% Low", style: { background: "rgba(212, 160, 60, 0.15)", color: "#8a6a20", fontWeight: 700 } },
-                                            { label: "<80% Critical", style: { background: "rgba(199, 88, 106, 0.15)", color: "#943848", fontWeight: 700 } }
-                                        ]
-                                    }
-                                ]}
-                            />
+                            <div className="st-station-filter-wrapper">
+                                <Filter size={14} className="st-station-filter-icon" />
+                                {isStationStaff && !canViewOtherStations ? (
+                                    <select 
+                                        id="station-table-filter" 
+                                        className="st-station-filter-select"
+                                        value={authorizedStations[0]?.name || userStation || ''}
+                                        disabled
+                                        aria-label="Assigned station"
+                                    >
+                                        <option value={authorizedStations[0]?.name || userStation || ''}>
+                                            {formatStationName(authorizedStations[0]?.name || userStation)} (Assigned Station)
+                                        </option>
+                                    </select>
+                                ) : (
+                                    <select 
+                                        id="station-table-filter" 
+                                        className="st-station-filter-select"
+                                        value={stationFilter}
+                                        onChange={(e) => {
+                                            userHasChangedStationRef.current = true;
+                                            setStationFilter(e.target.value);
+                                        }}
+                                        aria-label="Filter by station"
+                                    >
+                                        <option value="All">All Stations ({stations.length})</option>
+                                        {stations.map(b => (
+                                            <option key={b.id || b.name} value={b.name}>
+                                                {formatStationName(b.name)}
+                                            </option>
+                                        ))}
+                                    </select>
+                                )}
+                                <ChevronDown size={14} className="st-station-filter-chevron" />
+                            </div>
+
+                            <Legend categories={STATION_LEGEND_CATEGORIES} />
+
                             <span className="st-station-count">{filtered.length} station{filtered.length !== 1 ? 's' : ''}</span>
                         </div>
                     </div>
@@ -302,7 +487,6 @@ const StationReports = () => {
                                     <th>Newborns</th>
                                     <th>Supplement Coverage</th>
                                     <th>Trimester Mix</th>
-                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -318,48 +502,60 @@ const StationReports = () => {
                                                 <td>
                                                     <div className="st-name-cell">
                                                         <div className="st-station-icon"><MapPin size={14} /></div>
-                                                        <span className="st-station-name">{b.name}</span>
+                                                        <span className="st-station-name">{formatStationName(b.name)}</span>
                                                     </div>
                                                 </td>
                                                 <td><span className="st-num">{b.totalPatients.toLocaleString()}</span></td>
                                                 <td><span className="st-num">{b.withHealthConditions}</span></td>
                                                 <td><span className="st-num">{b.recentDeliveries}</span></td>
                                                 <td>
-                                                    <div className="st-coverage-cell">
-                                                        <span className="st-coverage-val">{b.vaccCoverage}%</span>
-                                                        <span className={`st-coverage-dot st-coverage-dot--${getCoverageClass(b.vaccCoverage)}`}></span>
-                                                    </div>
+                                                    {(!b.newborns || b.newborns <= 0) ? (
+                                                        <span className="st-na-badge" title="No eligible newborns recorded for this station">N/A</span>
+                                                    ) : (
+                                                        <div className="st-coverage-cell">
+                                                            <span className="st-coverage-val">{b.vaccCoverage}%</span>
+                                                            <div className="st-mini-progress" title={`Vaccination Coverage: ${b.vaccCoverage}%`}>
+                                                                <div 
+                                                                    className={`st-mini-progress-fill st-mini-progress-fill--${getCoverageClass(b.vaccCoverage)}`} 
+                                                                    style={{ width: `${Math.min(100, Math.max(0, b.vaccCoverage))}%` }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td><span className="st-num">{b.newborns}</span></td>
                                                 <td>
-                                                    <div className="st-coverage-cell">
-                                                        <span className="st-coverage-val">{b.suppCoverage}%</span>
-                                                        <span className={`st-coverage-dot st-coverage-dot--${getCoverageClass(b.suppCoverage)}`}></span>
-                                                    </div>
+                                                    {(!b.totalPatients || b.totalPatients <= 0) ? (
+                                                        <span className="st-na-badge" title="No active pregnant patients recorded for this station">N/A</span>
+                                                    ) : (
+                                                        <div className="st-coverage-cell">
+                                                            <span className="st-coverage-val">{b.suppCoverage}%</span>
+                                                            <div className="st-mini-progress" title={`Supplement Coverage: ${b.suppCoverage}%`}>
+                                                                <div 
+                                                                    className={`st-mini-progress-fill st-mini-progress-fill--${getCoverageClass(b.suppCoverage)}`} 
+                                                                    style={{ width: `${Math.min(100, Math.max(0, b.suppCoverage))}%` }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td>
-                                                    <div className="st-trimester-pills">
-                                                        <span className="st-tri-pill st-tri-pill--1st">1st {p1}%</span>
-                                                        <span className="st-tri-pill st-tri-pill--2nd">2nd {p2}%</span>
-                                                        <span className="st-tri-pill st-tri-pill--3rd">3rd {p3}%</span>
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    <ActionTooltip text="View Details">
-                                                        <button
-                                                            className="st-action-btn"
-                                                            onClick={() => setSelectedStation(b)}
-                                                        >
-                                                            <Eye size={15} />
-                                                        </button>
-                                                    </ActionTooltip>
+                                                    {total === 0 ? (
+                                                        <span className="st-na-badge" title="No active pregnant patients tracked">N/A</span>
+                                                    ) : (
+                                                        <div className="st-trimester-pills">
+                                                            <span className="st-tri-pill st-tri-pill--1st" title={`1st Trimester: ${b.trimester.first}`}>1st {p1}%</span>
+                                                            <span className="st-tri-pill st-tri-pill--2nd" title={`2nd Trimester: ${b.trimester.second}`}>2nd {p2}%</span>
+                                                            <span className="st-tri-pill st-tri-pill--3rd" title={`3rd Trimester: ${b.trimester.third}`}>3rd {p3}%</span>
+                                                        </div>
+                                                    )}
                                                 </td>
                                             </tr>
 
                                             {/* Expanded inline view */}
                                             {expandedRow === b.id && (
                                                 <tr className="st-expanded-row">
-                                                    <td colSpan="9">
+                                                    <td colSpan="8">
                                                         <div className="expand-detail">
                                                             <div className="expand-col">
                                                                 <h4>📅 Trimesters</h4>
@@ -396,7 +592,7 @@ const StationReports = () => {
 
                                 {filtered.length === 0 && (
                                     <tr>
-                                        <td colSpan="9" className="st-empty">
+                                        <td colSpan="8" className="st-empty">
                                             <MapPin size={30} />
                                             <p>No stations found.</p>
                                         </td>
@@ -408,10 +604,28 @@ const StationReports = () => {
                 </div>
             )}
 
-            {/* ── Charts Section ── */}
-            {showCharts && <ChartsSection stations={stations} />}
-
-            <PregnancyAgeReport rows={pregnancyAgeRows} />
+            {/* ── Station Performance Charts Section ── */}
+            <div className="st-charts-wrapper">
+                <div className="st-charts-bar">
+                    <div className="st-charts-bar-left">
+                        <h3 className="st-charts-heading">
+                            <BarChart3 size={18} /> Station Performance Charts
+                        </h3>
+                        <span className="st-charts-subheading">
+                            Compare patient distribution, health conditions, service coverage, and appointment monitoring across stations.
+                        </span>
+                    </div>
+                    <button 
+                        type="button" 
+                        className="btn btn-outline st-charts-toggle-btn" 
+                        onClick={() => setShowCharts(v => !v)}
+                        aria-expanded={showCharts}
+                    >
+                        <Activity size={16} /> {showCharts ? 'Hide Charts' : 'Show Charts'}
+                    </button>
+                </div>
+                {showCharts && <ChartsSection stations={authorizedStations} isStationStaff={isStationStaff} />}
+            </div>
 
             {/* ── Footer Timestamp ── */}
             <div className="st-footer-timestamp">
@@ -434,297 +648,342 @@ const StationReports = () => {
 export default StationReports;
 
 /* ════════════════════════════
-   PREGNANCY AGE REPORT
-════════════════════════════ */
-const PregnancyAgeReport = ({ rows }) => {
-    const [filters, setFilters] = useState({ period: 'All', station: 'All', outcome: 'All', deliveryType: 'All' });
-
-    const stationOptions = [...new Set(rows.map(row => row.station).filter(Boolean))].sort();
-    const deliveryTypeOptions = [...new Set(rows.map(row => row.deliveryType).filter(type => type && type !== 'N/A'))].sort();
-
-    const filteredRows = useMemo(() => rows.filter(row => {
-        const date = new Date(row.eventDate);
-        const now = new Date();
-        const isSameMonth = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
-        const startOfWeek = new Date(now);
-        startOfWeek.setHours(0, 0, 0, 0);
-        startOfWeek.setDate(now.getDate() - now.getDay());
-        const matchPeriod = filters.period === 'All'
-            || (filters.period === 'Month' && isSameMonth && date.getFullYear() === now.getFullYear())
-            || (filters.period === 'Year' && date.getFullYear() === now.getFullYear())
-            || (filters.period === 'Week' && date >= startOfWeek && date <= now);
-        return matchPeriod
-            && (filters.station === 'All' || row.station === filters.station)
-            && (filters.outcome === 'All' || row.outcome === filters.outcome)
-            && (filters.deliveryType === 'All' || row.deliveryType === filters.deliveryType);
-    }), [rows, filters]);
-
-    const ageCounts = filteredRows.reduce((counts, row) => {
-        if (row.age === null) return counts;
-        counts[row.age] = (counts[row.age] || 0) + 1;
-        return counts;
-    }, {});
-    const ageData = Object.entries(ageCounts).map(([age, count]) => ({ age: Number(age), count }))
-        .sort((a, b) => a.age - b.age);
-    const maxAgeCount = Math.max(...ageData.map(item => item.count), 1);
-
-    const updateFilter = (key, value) => setFilters(current => ({ ...current, [key]: value }));
-    const formatDate = date => new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-
-    return (
-        <section className="st-age-report">
-            <div className="st-age-report-header">
-                <div>
-                    <h2 className="st-overview-title"><Users size={18} /> Pregnancy Age &amp; Outcome Report</h2>
-                    <p className="st-overview-subtitle">Maternal age at the recorded pregnancy event, grouped by station and outcome</p>
-                </div>
-                <span className="st-station-count">{filteredRows.length} record{filteredRows.length !== 1 ? 's' : ''}</span>
-            </div>
-
-            <div className="st-age-filters">
-                <div className="st-filter-group">
-                    <label>Period</label>
-                    <div className="st-select-wrapper">
-                        <select value={filters.period} onChange={event => updateFilter('period', event.target.value)}>
-                            <option value="All">All Time</option>
-                            <option value="Month">This Month</option>
-                            <option value="Week">This Week</option>
-                            <option value="Year">This Year</option>
-                        </select>
-                        <ChevronDown size={14} className="st-select-arrow" />
-                    </div>
-                </div>
-                <div className="st-filter-group">
-                    <label>Station</label>
-                    <div className="st-select-wrapper">
-                        <select value={filters.station} onChange={event => updateFilter('station', event.target.value)}>
-                            <option value="All">All Stations</option>
-                            {stationOptions.map(station => <option key={station} value={station}>{station}</option>)}
-                        </select>
-                        <ChevronDown size={14} className="st-select-arrow" />
-                    </div>
-                </div>
-                <div className="st-filter-group">
-                    <label>Outcome</label>
-                    <div className="st-select-wrapper">
-                        <select value={filters.outcome} onChange={event => updateFilter('outcome', event.target.value)}>
-                            <option value="All">All Outcomes</option>
-                            <option value="Successful">Successful</option>
-                            <option value="Unsuccessful">Unsuccessful</option>
-                            <option value="Pending">Pending</option>
-                        </select>
-                        <ChevronDown size={14} className="st-select-arrow" />
-                    </div>
-                </div>
-                <div className="st-filter-group">
-                    <label>Delivery Type</label>
-                    <div className="st-select-wrapper">
-                        <select value={filters.deliveryType} onChange={event => updateFilter('deliveryType', event.target.value)}>
-                            <option value="All">All Delivery Types</option>
-                            {deliveryTypeOptions.map(type => <option key={type} value={type}>{type}</option>)}
-                        </select>
-                        <ChevronDown size={14} className="st-select-arrow" />
-                    </div>
-                </div>
-            </div>
-
-            <div className="st-age-content">
-                <div className="st-age-chart-panel">
-                    <div className="st-chart-header">
-                        <div className="st-chart-icon st-chart-icon--patients"><BarChart3 size={18} /></div>
-                        <div className="st-chart-title-group">
-                            <h3 className="st-chart-title">Age by Pregnancy Record</h3>
-                            <p className="st-chart-subtitle">Number of records at each maternal age</p>
-                        </div>
-                    </div>
-                    {ageData.length > 0 ? (
-                        <div className="st-age-bars">
-                            {ageData.map(item => (
-                                <div className="st-age-bar-row" key={item.age}>
-                                    <span className="st-age-label">{item.age} yrs</span>
-                                    <div className="st-age-bar-track"><div className="st-age-bar-fill" style={{ width: `${(item.count / maxAgeCount) * 100}%` }} /></div>
-                                    <strong>{item.count}</strong>
-                                </div>
-                            ))}
-                        </div>
-                    ) : <div className="st-age-empty">No age records match these filters.</div>}
-                </div>
-
-                <div className="st-age-table-panel">
-                    <div className="st-age-table-wrap">
-                        <table className="st-age-table">
-                            <thead><tr><th>Patient</th><th>Age</th><th>Station</th><th>Date</th><th>Outcome</th><th>Delivery Type</th></tr></thead>
-                            <tbody>
-                                {filteredRows.map(row => (
-                                    <tr key={row.id}>
-                                        <td>{row.patientName}</td>
-                                        <td>{row.age === null ? 'N/A' : `${row.age} yrs`}</td>
-                                        <td>{row.station}</td>
-                                        <td>{formatDate(row.eventDate)}</td>
-                                        <td><span className={`st-age-outcome st-age-outcome--${row.outcome.toLowerCase()}`}>{row.outcome}</span></td>
-                                        <td>{row.deliveryType}</td>
-                                    </tr>
-                                ))}
-                                {filteredRows.length === 0 && <tr><td colSpan="6" className="st-age-empty">No pregnancy records match these filters.</td></tr>}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </section>
-    );
-};
-
-/* ════════════════════════════
    CHARTS SECTION
 ════════════════════════════ */
-const ChartsSection = ({ stations }) => {
+const ChartsSection = ({ stations, isStationStaff = false }) => {
+    const [activeTooltipId, setActiveTooltipId] = useState(null);
+
     const coverageClass = (v) => v >= 90 ? 'green' : v >= 80 ? 'amber' : 'red';
-    const maxPatients = stations.length > 0 ? Math.max(...stations.map(b => b.totalPatients)) : 1;
+    const maxPatients = stations.length > 0 ? Math.max(...stations.map(b => b.totalPatients || 0), 1) : 1;
     const totalWithConditions = stations.reduce((sum, s) => sum + (s.withHealthConditions || 0), 0);
     const maxWithConditions = stations.length > 0 ? Math.max(...stations.map(b => b.withHealthConditions || 0), 1) : 1;
+    const maxMissed = stations.length > 0 ? Math.max(...stations.map(b => b.missedAppointments || 0), 1) : 1;
+    const totalMissed = stations.reduce((sum, s) => sum + (s.missedAppointments || 0), 0);
 
-    // Sort stations by vaccination coverage descending for coverage charts
+    // Sort stations by coverage for coverage charts
     const sortedByVacc = [...stations].sort((a, b) => b.vaccCoverage - a.vaccCoverage);
     const sortedBySupp = [...stations].sort((a, b) => b.suppCoverage - a.suppCoverage);
 
+    const handleToggleTooltip = (key) => {
+        setActiveTooltipId(prev => prev === key ? null : key);
+    };
+
     return (
-        <div className="st-charts-grid">
-            {/* Chart 1: Vaccination Coverage by Station */}
-            <div className="st-chart-card">
-                <div className="st-chart-header">
-                    <div className="st-chart-icon st-chart-icon--vacc">
-                        <Syringe size={18} />
-                    </div>
-                    <div className="st-chart-title-group">
-                        <h3 className="st-chart-title">Vaccination Coverage by Station</h3>
-                        <p className="st-chart-subtitle">Percentage of mothers with complete vaccination</p>
-                    </div>
-                </div>
-                <div className="st-chart-body">
-                    <div className="st-hbar-chart">
-                        {sortedByVacc.map(b => (
-                            <div key={b.id} className="st-hbar-row">
-                                <span className="st-hbar-label">{b.name.split('–')[0].trim()}</span>
-                                <div className="st-hbar-track">
-                                    <div
-                                        className={`st-hbar-fill st-hbar-fill--${coverageClass(b.vaccCoverage)}`}
-                                        style={{ width: `${b.vaccCoverage}%` }}
-                                    />
-                                </div>
-                                <span className="st-hbar-val">{b.vaccCoverage}%</span>
+        <div className="st-charts-container">
+            {/* ── GROUP 1: PATIENT DISTRIBUTION ── */}
+            <div className="st-chart-group">
+                <div className="st-chart-group-label">PATIENT DISTRIBUTION</div>
+                <div className="st-charts-grid">
+                    {/* Left: Registered Patients by Station */}
+                    <div className="st-chart-card">
+                        <div className="st-chart-header">
+                            <div className="st-chart-icon st-chart-icon--patients">
+                                <Users size={18} />
                             </div>
-                        ))}
+                            <div className="st-chart-title-group">
+                                <h3 className="st-chart-title">Registered Patients by Station</h3>
+                                <p className="st-chart-subtitle">Total number of registered patients</p>
+                            </div>
+                        </div>
+                        <div className="st-chart-body">
+                            <div className="st-vbar-chart">
+                                {stations.map(b => {
+                                    const count = b.totalPatients || 0;
+                                    const heightPercent = maxPatients > 0 ? Math.round((count / maxPatients) * 100) : 0;
+                                    const tKey = `pat-${b.id || b.name}`;
+                                    const isTooltipOpen = activeTooltipId === tKey;
+
+                                    return (
+                                        <div 
+                                            key={b.id || b.name} 
+                                            className={`st-vbar-col ${isTooltipOpen ? 'is-tooltip-active' : ''}`}
+                                            onMouseEnter={() => setActiveTooltipId(tKey)}
+                                            onMouseLeave={() => setActiveTooltipId(null)}
+                                            onClick={() => handleToggleTooltip(tKey)}
+                                            tabIndex={0}
+                                        >
+                                            <div className="st-vbar-bar-wrap">
+                                                <div
+                                                    className="st-vbar-bar st-vbar-bar--purple"
+                                                    style={{ height: `${heightPercent}%` }}
+                                                />
+                                                {/* Tooltip */}
+                                                <div className="st-chart-tooltip st-chart-tooltip--top">
+                                                    <div className="st-tooltip-title">{formatStationName(b.name)}</div>
+                                                    <div className="st-tooltip-divider" />
+                                                    <div className="st-tooltip-row">
+                                                        <span>Total Registered:</span>
+                                                        <strong>{count.toLocaleString()}</strong>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <span className="st-vbar-val">{count.toLocaleString()}</span>
+                                            <span className="st-vbar-label">{formatStationName(b.name.split('–')[0].trim())}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
                     </div>
-                    <div className="st-hbar-indicator">90% Target</div>
+
+                    {/* Right: Pregnancies with Health Conditions */}
+                    <div className="st-chart-card st-chart-card--risk">
+                        <div className="st-chart-header">
+                            <div className="st-chart-icon st-chart-icon--risk">
+                                <HeartPulse size={18} />
+                            </div>
+                            <div className="st-chart-title-group">
+                                <h3 className="st-chart-title">Pregnancies with Health Conditions</h3>
+                                <p className="st-chart-subtitle">{isStationStaff ? 'Documented conditions for assigned station' : 'Documented conditions across all stations'}</p>
+                            </div>
+                        </div>
+                        <div className="st-chart-body">
+                            <div className="st-risk-dist-title">Distribution by Station</div>
+                            <div className="st-vbar-chart st-vbar-chart--health">
+                                {stations.map(b => {
+                                    const count = b.withHealthConditions || 0;
+                                    const heightPercent = maxWithConditions > 0 ? Math.round((count / maxWithConditions) * 100) : 0;
+                                    const tKey = `risk-${b.id || b.name}`;
+                                    const isTooltipOpen = activeTooltipId === tKey;
+
+                                    return (
+                                        <div 
+                                            key={b.id || b.name} 
+                                            className={`st-vbar-col ${isTooltipOpen ? 'is-tooltip-active' : ''}`}
+                                            onMouseEnter={() => setActiveTooltipId(tKey)}
+                                            onMouseLeave={() => setActiveTooltipId(null)}
+                                            onClick={() => handleToggleTooltip(tKey)}
+                                            tabIndex={0}
+                                        >
+                                            <div className="st-vbar-bar-wrap st-vbar-bar-wrap--health">
+                                                <div
+                                                    className="st-vbar-bar st-vbar-bar--rose"
+                                                    style={{ height: `${heightPercent}%` }}
+                                                />
+                                                {/* Tooltip */}
+                                                <div className="st-chart-tooltip st-chart-tooltip--top">
+                                                    <div className="st-tooltip-title">{formatStationName(b.name)}</div>
+                                                    <div className="st-tooltip-divider" />
+                                                    <div className="st-tooltip-row">
+                                                        <span>With Conditions:</span>
+                                                        <strong>{count}</strong>
+                                                    </div>
+                                                    <div className="st-tooltip-row">
+                                                        <span>Total Patients:</span>
+                                                        <span>{b.totalPatients || 0}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <span className="st-vbar-val">{count}</span>
+                                            <span className="st-vbar-label">{formatStationName(b.name.split('–')[0].trim())}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            <div className="st-risk-warning">
+                                <span className="st-risk-total">Total: {totalWithConditions}</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            {/* Chart 2: Pregnancies with Health Conditions */}
-            <div className="st-chart-card st-chart-card--risk">
-                <div className="st-chart-header st-chart-header--split">
-                    <div className="st-chart-header-left">
-                        <div className="st-chart-icon st-chart-icon--risk">
-                            <HeartPulse size={18} />
+            {/* ── GROUP 2: HEALTH SERVICE COVERAGE ── */}
+            <div className="st-chart-group">
+                <div className="st-chart-group-label">HEALTH SERVICE COVERAGE</div>
+                <div className="st-charts-grid">
+                    {/* Left: Vaccination Coverage by Station */}
+                    <div className="st-chart-card">
+                        <div className="st-chart-header">
+                            <div className="st-chart-icon st-chart-icon--vacc">
+                                <Syringe size={18} />
+                            </div>
+                            <div className="st-chart-title-group">
+                                <h3 className="st-chart-title">Vaccination Coverage by Station</h3>
+                                <p className="st-chart-subtitle">Percentage of eligible patients with complete vaccination</p>
+                            </div>
                         </div>
-                        <div className="st-chart-title-group">
-                            <h3 className="st-chart-title">Pregnancies with Health Conditions</h3>
-                            <p className="st-chart-subtitle">Total pregnant patients with documented health conditions across all stations</p>
+                        <div className="st-chart-body">
+                            <div className="st-hbar-chart">
+                                {sortedByVacc.map(b => {
+                                    const hasEligible = (b.newborns || 0) > 0;
+                                    const tKey = `vacc-${b.id || b.name}`;
+                                    const isTooltipOpen = activeTooltipId === tKey;
+
+                                    return (
+                                        <div 
+                                            key={b.id || b.name} 
+                                            className={`st-hbar-row ${isTooltipOpen ? 'is-tooltip-active' : ''}`}
+                                            onMouseEnter={() => setActiveTooltipId(tKey)}
+                                            onMouseLeave={() => setActiveTooltipId(null)}
+                                            onClick={() => handleToggleTooltip(tKey)}
+                                            tabIndex={0}
+                                        >
+                                            <span className="st-hbar-label">{formatStationName(b.name.split('–')[0].trim())}</span>
+                                            <div className="st-hbar-bar-wrap">
+                                                <div className="st-hbar-track">
+                                                    <div
+                                                        className={`st-hbar-fill st-hbar-fill--${hasEligible ? coverageClass(b.vaccCoverage) : 'empty'}`}
+                                                        style={{ width: `${hasEligible ? b.vaccCoverage : 0}%` }}
+                                                    />
+                                                </div>
+                                                {/* Tooltip */}
+                                                <div className="st-chart-tooltip st-chart-tooltip--hbar">
+                                                    <div className="st-tooltip-title">{formatStationName(b.name)}</div>
+                                                    <div className="st-tooltip-divider" />
+                                                    <div className="st-tooltip-row">
+                                                        <span>Fully Vaccinated:</span>
+                                                        <strong>{b.totalNewbornVaccinated || 0}</strong>
+                                                    </div>
+                                                    <div className="st-tooltip-row">
+                                                        <span>Total Eligible:</span>
+                                                        <strong>{b.newborns || 0}</strong>
+                                                    </div>
+                                                    <div className="st-tooltip-row">
+                                                        <span>Coverage:</span>
+                                                        <strong>{hasEligible ? `${b.vaccCoverage}%` : 'N/A'}</strong>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <span className="st-hbar-val">{hasEligible ? `${b.vaccCoverage}%` : 'N/A'}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
                     </div>
-                    <div className="st-risk-header-summary">
-                        <span className="st-risk-summary-count">{totalWithConditions}</span>
-                        <div className="st-risk-summary-meta">
-                            <span className="st-risk-summary-label">Pregnancies with Health Conditions</span>
-                            <span className="st-risk-summary-sub">Across {stations.length} stations</span>
+
+                    {/* Right: Supplement Coverage by Station */}
+                    <div className="st-chart-card">
+                        <div className="st-chart-header">
+                            <div className="st-chart-icon st-chart-icon--supp">
+                                <Pill size={18} />
+                            </div>
+                            <div className="st-chart-title-group">
+                                <h3 className="st-chart-title">Supplement Coverage by Station</h3>
+                                <p className="st-chart-subtitle">Percentage of mothers who received complete supplements</p>
+                            </div>
                         </div>
-                    </div>
-                </div>
-                <div className="st-chart-body">
-                    <div className="st-risk-dist-title">Distribution by Station</div>
-                    <div className="st-vbar-chart st-vbar-chart--health">
-                        {stations.map(b => {
-                            const count = b.withHealthConditions || 0;
-                            const heightPercent = maxWithConditions > 0 ? Math.round((count / maxWithConditions) * 100) : 0;
-                            return (
-                                <div key={b.id} className="st-vbar-col">
-                                    <div className="st-vbar-bar-wrap st-vbar-bar-wrap--health">
-                                        <div
-                                            className="st-vbar-bar st-vbar-bar--rose"
-                                            style={{ height: `${heightPercent}%` }}
-                                            title={`${b.name}: ${count}`}
-                                        />
-                                    </div>
-                                    <span className="st-vbar-val">{count}</span>
-                                    <span className="st-vbar-label">{b.name.split('–')[0].trim()}</span>
-                                </div>
-                            );
-                        })}
-                    </div>
-                    <div className="st-risk-warning">
-                        <HeartPulse size={13} />
-                        <span>Pregnant patients with documented health conditions across CHO III stations.</span>
+                        <div className="st-chart-body">
+                            <div className="st-hbar-chart">
+                                {sortedBySupp.map(b => {
+                                    const hasEligible = (b.totalPatients || 0) > 0;
+                                    const tKey = `supp-${b.id || b.name}`;
+                                    const isTooltipOpen = activeTooltipId === tKey;
+
+                                    return (
+                                        <div 
+                                            key={b.id || b.name} 
+                                            className={`st-hbar-row ${isTooltipOpen ? 'is-tooltip-active' : ''}`}
+                                            onMouseEnter={() => setActiveTooltipId(tKey)}
+                                            onMouseLeave={() => setActiveTooltipId(null)}
+                                            onClick={() => handleToggleTooltip(tKey)}
+                                            tabIndex={0}
+                                        >
+                                            <span className="st-hbar-label">{formatStationName(b.name.split('–')[0].trim())}</span>
+                                            <div className="st-hbar-bar-wrap">
+                                                <div className="st-hbar-track">
+                                                    <div
+                                                        className={`st-hbar-fill st-hbar-fill--${hasEligible ? coverageClass(b.suppCoverage) : 'empty'}`}
+                                                        style={{ width: `${hasEligible ? b.suppCoverage : 0}%` }}
+                                                    />
+                                                </div>
+                                                {/* Tooltip */}
+                                                <div className="st-chart-tooltip st-chart-tooltip--hbar">
+                                                    <div className="st-tooltip-title">{formatStationName(b.name)}</div>
+                                                    <div className="st-tooltip-divider" />
+                                                    <div className="st-tooltip-row">
+                                                        <span>Unique Mothers Received:</span>
+                                                        <strong>{b.totalSupplementsGiven || 0}</strong>
+                                                    </div>
+                                                    <div className="st-tooltip-row">
+                                                        <span>Total Eligible Mothers:</span>
+                                                        <strong>{b.totalPatients || 0}</strong>
+                                                    </div>
+                                                    <div className="st-tooltip-row">
+                                                        <span>Coverage:</span>
+                                                        <strong>{hasEligible ? `${b.suppCoverage}%` : 'N/A'}</strong>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <span className="st-hbar-val">{hasEligible ? `${b.suppCoverage}%` : 'N/A'}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* Chart 3: Registered Patients by Station */}
-            <div className="st-chart-card">
-                <div className="st-chart-header">
-                    <div className="st-chart-icon st-chart-icon--patients">
-                        <Users size={18} />
-                    </div>
-                    <div className="st-chart-title-group">
-                        <h3 className="st-chart-title">Registered Patients by Station</h3>
-                        <p className="st-chart-subtitle">Total number of registered patients</p>
-                    </div>
-                </div>
-                <div className="st-chart-body">
-                    <div className="st-vbar-chart">
-                        {stations.map(b => (
-                            <div key={b.id} className="st-vbar-col">
-                                <div className="st-vbar-bar-wrap">
-                                    <div
-                                        className="st-vbar-bar st-vbar-bar--purple"
-                                        style={{ height: `${maxPatients > 0 ? Math.round((b.totalPatients / maxPatients) * 100) : 0}%` }}
-                                        title={`${b.name}: ${b.totalPatients}`}
-                                    />
-                                </div>
-                                <span className="st-vbar-val">{b.totalPatients.toLocaleString()}</span>
-                                <span className="st-vbar-label">{b.name.split('–')[0].trim()}</span>
+            {/* ── GROUP 3: APPOINTMENT MONITORING (Full Width) ── */}
+            <div className="st-chart-group">
+                <div className="st-chart-group-label">APPOINTMENT MONITORING</div>
+                <div className="st-charts-grid st-charts-grid--full">
+                    <div className="st-chart-card st-chart-card--missed">
+                        <div className="st-chart-header">
+                            <div className="st-chart-icon st-chart-icon--missed">
+                                <Clock size={18} />
                             </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
+                            <div className="st-chart-title-group">
+                                <h3 className="st-chart-title">Missed Appointments by Station</h3>
+                                <p className="st-chart-subtitle">Missed scheduled visits across CHO III stations.</p>
+                            </div>
+                        </div>
+                        <div className="st-chart-body">
+                            <div className="st-vbar-chart st-vbar-chart--missed">
+                                {stations.map(b => {
+                                    const missed = b.missedAppointments || 0;
+                                    const due = b.appointmentsDue || 0;
+                                    const hasDue = due > 0;
+                                    const rateText = hasDue ? `${b.missedRate ?? Math.round((missed / due) * 100)}%` : 'N/A';
+                                    const heightPercent = maxMissed > 0 ? Math.round((missed / maxMissed) * 100) : 0;
+                                    const tKey = `missed-${b.id || b.name}`;
+                                    const isTooltipOpen = activeTooltipId === tKey;
 
-            {/* Chart 4: Supplement Coverage by Station */}
-            <div className="st-chart-card">
-                <div className="st-chart-header">
-                    <div className="st-chart-icon st-chart-icon--supp">
-                        <Pill size={18} />
-                    </div>
-                    <div className="st-chart-title-group">
-                        <h3 className="st-chart-title">Supplement Coverage by Station</h3>
-                        <p className="st-chart-subtitle">Percentage of mothers who received complete supplements</p>
-                    </div>
-                </div>
-                <div className="st-chart-body">
-                    <div className="st-hbar-chart">
-                        {sortedBySupp.map(b => (
-                            <div key={b.id} className="st-hbar-row">
-                                <span className="st-hbar-label">{b.name.split('–')[0].trim()}</span>
-                                <div className="st-hbar-track">
-                                    <div
-                                        className={`st-hbar-fill st-hbar-fill--${coverageClass(b.suppCoverage)}`}
-                                        style={{ width: `${b.suppCoverage}%` }}
-                                    />
-                                </div>
-                                <span className="st-hbar-val">{b.suppCoverage}%</span>
+                                    return (
+                                        <div 
+                                            key={b.id || b.name} 
+                                            className={`st-vbar-col ${isTooltipOpen ? 'is-tooltip-active' : ''}`}
+                                            onMouseEnter={() => setActiveTooltipId(tKey)}
+                                            onMouseLeave={() => setActiveTooltipId(null)}
+                                            onClick={() => handleToggleTooltip(tKey)}
+                                            tabIndex={0}
+                                        >
+                                            <div className="st-vbar-bar-wrap st-vbar-bar-wrap--missed">
+                                                <div
+                                                    className="st-vbar-bar st-vbar-bar--peach"
+                                                    style={{ height: `${heightPercent}%` }}
+                                                />
+                                                {/* Tooltip */}
+                                                <div className="st-chart-tooltip st-chart-tooltip--top">
+                                                    <div className="st-tooltip-title">{formatStationName(b.name)}</div>
+                                                    <div className="st-tooltip-divider" />
+                                                    <div className="st-tooltip-row">
+                                                        <span>Missed Appointments:</span>
+                                                        <strong>{missed}</strong>
+                                                    </div>
+                                                    <div className="st-tooltip-row">
+                                                        <span>Appointments Due:</span>
+                                                        <strong>{due}</strong>
+                                                    </div>
+                                                    <div className="st-tooltip-row">
+                                                        <span>Missed Rate:</span>
+                                                        <strong>{rateText}</strong>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <span className="st-vbar-val st-vbar-val--missed">{missed}</span>
+                                            <span className="st-vbar-label">{formatStationName(b.name.split('–')[0].trim())}</span>
+                                        </div>
+                                    );
+                                })}
                             </div>
-                        ))}
+                            <div className="st-risk-warning st-risk-warning--missed">
+                                <span className="st-risk-total">Total Missed: {totalMissed}</span>
+                            </div>
+                        </div>
                     </div>
-                    <div className="st-hbar-indicator">90% Target</div>
                 </div>
             </div>
         </div>
@@ -738,7 +997,7 @@ const DetailModal = ({ station, onClose, navigate }) => {
     const [tab, setTab] = useState('overview');
     const [showDetailExportModal, setShowDetailExportModal] = useState(false);
 
-    const handleDetailExport = (exportConfig) => {
+    const handleDetailExport = async (exportConfig) => {
         const { format, reportPeriodText } = exportConfig;
         const exportData = [{
             'Station': station.name,
@@ -759,6 +1018,7 @@ const DetailModal = ({ station, onClose, navigate }) => {
         }];
 
         if (format === 'excel') {
+            const XLSX = await import('xlsx');
             let worksheetData = [
                 [`Report: ${station.name} — Station Detail Report`],
                 [`Generated: ${new Date().toLocaleString()}`],
@@ -775,24 +1035,20 @@ const DetailModal = ({ station, onClose, navigate }) => {
             XLSX.utils.book_append_sheet(wb, ws, 'Station Detail');
             XLSX.writeFile(wb, `Station_${station.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`);
         } else if (format === 'pdf') {
-            const doc = new jsPDF('landscape');
-            doc.setFontSize(16);
-            doc.text(`${station.name} — Station Detail Report`, 14, 20);
-            doc.setFontSize(10);
-            doc.setTextColor(100);
-            doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
-            doc.text(`Period: ${reportPeriodText}`, 14, 34);
+            const dateStr = new Date().toISOString().split('T')[0];
             const head = [Object.keys(exportData[0])];
             const body = exportData.map(obj => Object.values(obj));
-            doc.autoTable({
-                startY: 42,
-                head,
-                body,
-                theme: 'grid',
-                styles: { fontSize: 8 },
-                headStyles: { fillColor: [185, 129, 138] }
+
+            exportStandardStaffPdf({
+                orientation: 'landscape',
+                title: `${station.name} — Station Detail Report`,
+                period: reportPeriodText || 'All Dates',
+                station: station.name,
+                totalRecords: exportData.length,
+                head: head,
+                body: body,
+                filename: `Station_${station.name.replace(/\s+/g, '_')}_${dateStr}.pdf`
             });
-            doc.save(`Station_${station.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
         }
     };
 
@@ -806,7 +1062,7 @@ const DetailModal = ({ station, onClose, navigate }) => {
 
     const coverageColor = (v) => v >= 90 ? '#7bae5e' : v >= 80 ? '#d4a03c' : '#c7586a';
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="st-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">

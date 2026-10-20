@@ -1,17 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AuthService from '../../services/authservice';
 import PatientService from '../../services/patientservice';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import { 
     Activity, Heart, Thermometer, Weight, TrendingUp, 
-    Download, ArrowLeft, Filter, AlertCircle, 
+    ArrowLeft, Filter, AlertCircle, 
     CheckCircle2, ChevronRight, Calendar
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import '../../styles/pages/MyVitals.css';
 import vitalsSilhouette from '../../assets/images/vitals-silhouette.png';
 import { useLanguage } from '../../context/LanguageContext';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 const MyVitals = () => {
     const navigate = useNavigate();
@@ -19,6 +18,8 @@ const MyVitals = () => {
     const [vitalsData, setVitalsData] = useState([]);
     const [patientInfo, setPatientInfo] = useState({});
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const loadRef = useRef(null);
     const [activeTab, setActiveTab] = useState('Current Health');
     const { t } = useLanguage();
 
@@ -78,10 +79,12 @@ const MyVitals = () => {
                 setVitalsData({ visits, chronological, riskAssessment });
             } catch (err) {
                 console.error('Failed to load vitals:', err);
+                setError(err?.message || 'Unable to load vitals data.');
             } finally {
                 setLoading(false);
             }
         };
+        loadRef.current = loadVitals;
         loadVitals();
         window.addEventListener('online', loadVitals);
         return () => window.removeEventListener('online', loadVitals);
@@ -118,140 +121,6 @@ const MyVitals = () => {
         : ['Under observation', 'No record'].includes(status)
             ? 'v-summary-card--yellow'
             : 'v-summary-card--red';
-
-    const handleDownloadPDF = () => {
-        const doc = new jsPDF('portrait');
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const margin = 14;
-        let y = 16;
-
-        // ── Header ──
-        doc.setFontSize(18);
-        doc.setTextColor(139, 90, 100); // DASMOM mauve
-        doc.text('DASMOM+', margin, y);
-        doc.setFontSize(10);
-        doc.setTextColor(100);
-        doc.text('City Health Office — Dasmariñas, Cavite', margin, y + 7);
-        y += 16;
-
-        // Divider
-        doc.setDrawColor(185, 129, 138);
-        doc.setLineWidth(0.5);
-        doc.line(margin, y, pageWidth - margin, y);
-        y += 10;
-
-        // ── Report Title ──
-        doc.setFontSize(16);
-        doc.setTextColor(40);
-        doc.text('Vital Records Report', margin, y);
-        y += 10;
-
-        // ── Patient Info ──
-        doc.setFontSize(10);
-        doc.setTextColor(80);
-        const patientId = String(patientInfo.id || 'N/A').substring(0, 8).toUpperCase();
-        doc.text(`Patient Name: ${patientInfo.name || 'N/A'}`, margin, y);
-        doc.text(`Patient ID: ${patientId}`, pageWidth / 2, y);
-        y += 6;
-        doc.text(`Health Station: ${patientInfo.station || 'N/A'}`, margin, y);
-        doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, y);
-        y += 10;
-
-        // Divider
-        doc.setDrawColor(200);
-        doc.setLineWidth(0.3);
-        doc.line(margin, y, pageWidth - margin, y);
-        y += 8;
-
-        // ── Current/Latest Vitals Summary ──
-        const latest = vitalsData.visits?.[0];
-        doc.setFontSize(13);
-        doc.setTextColor(40);
-        doc.text('Current / Latest Vital Signs', margin, y);
-        y += 8;
-
-        if (latest) {
-            doc.setFontSize(10);
-            doc.setTextColor(80);
-            const recordedDate = new Date(latest.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-            doc.text(`Recorded on: ${recordedDate}`, margin, y);
-            y += 8;
-
-            doc.autoTable({
-                startY: y,
-                head: [['Vital Sign', 'Value', 'Unit']],
-                body: [
-                    ['Weight', latest.weight || '--', 'kg'],
-                    ['Blood Pressure', latest.bp || '--', 'mmHg'],
-                    ['Heart Rate / Pulse', latest.pulse || '--', 'BPM'],
-                    ['Temperature', latest.temp || '--', '°C'],
-                ],
-                theme: 'grid',
-                styles: { fontSize: 10, cellPadding: 4 },
-                headStyles: { fillColor: [185, 129, 138], textColor: 255, fontStyle: 'bold' },
-                alternateRowStyles: { fillColor: [252, 249, 250] },
-                margin: { left: margin, right: margin },
-            });
-            y = doc.lastAutoTable.finalY + 12;
-        } else {
-            doc.setFontSize(10);
-            doc.setTextColor(120);
-            doc.text('No vital sign records available.', margin, y);
-            y += 12;
-        }
-
-        // ── Vitals History Table ──
-        const allVisits = vitalsData.visits || [];
-        if (allVisits.length > 0) {
-            doc.setFontSize(13);
-            doc.setTextColor(40);
-            doc.text('Vital Signs History', margin, y);
-            y += 8;
-
-            const historyBody = allVisits.map(v => [
-                new Date(v.date).toLocaleDateString('en-PH'),
-                v.weight ? `${v.weight} kg` : '--',
-                v.bp || '--',
-                v.pulse ? `${v.pulse} bpm` : '--',
-                v.temp ? `${v.temp}°C` : '--',
-                v.trimester || 'N/A',
-                v.notes || 'Routine checkup'
-            ]);
-
-            doc.autoTable({
-                startY: y,
-                head: [['Date', 'Weight', 'Blood Pressure', 'Pulse', 'Temperature', 'Trimester', 'Notes']],
-                body: historyBody,
-                theme: 'grid',
-                styles: { fontSize: 8, cellPadding: 3 },
-                headStyles: { fillColor: [185, 129, 138], textColor: 255, fontStyle: 'bold' },
-                alternateRowStyles: { fillColor: [252, 249, 250] },
-                margin: { left: margin, right: margin },
-                didDrawPage: (data) => {
-                    // Footer on each page
-                    const pageCount = doc.internal.getNumberOfPages();
-                    doc.setFontSize(8);
-                    doc.setTextColor(150);
-                    doc.text(
-                        `Page ${data.pageNumber} of ${pageCount}`,
-                        pageWidth / 2,
-                        doc.internal.pageSize.getHeight() - 10,
-                        { align: 'center' }
-                    );
-                    doc.text(
-                        'DASMOM+ — Confidential Patient Record',
-                        margin,
-                        doc.internal.pageSize.getHeight() - 10
-                    );
-                }
-            });
-        }
-
-        // ── Save ──
-        const dateStr = new Date().toISOString().split('T')[0];
-        const safeId = String(patientInfo.id || 'UNKNOWN').substring(0, 8).toUpperCase();
-        doc.save(`DASMOM_Vital_Records_${safeId}_${dateStr}.pdf`);
-    };
 
     // Simple SVG Line Chart Component
     const VitalsChart = ({ data, dataKey, dataKey2, color, color2, label, unit, icon: Icon }) => {
@@ -348,26 +217,34 @@ const MyVitals = () => {
         );
     };
 
+    if (loading) {
+        return (
+            <StaffPageLoader 
+                message={t('vitals_loading') || 'Loading your health records...'} 
+                error={error} 
+                errorTitle="Unable to load vitals"
+                onRetry={() => {
+                    setLoading(true);
+                    loadRef.current?.();
+                }} 
+            />
+        );
+    }
+
     return (
-        <div className="my-vitals-page">
-            <div className="page-header vitals-hero-header-with-img">
+        <div className="my-vitals-page staff-page-ready">
+            <div className="page-header hero-header-with-img vitals-hero-header-with-img">
                 <img 
                     src={vitalsSilhouette} 
                     alt="Vitals Silhouette" 
-                    className="vitals-silhouette-bg" 
+                    className="vitals-silhouette-bg hero-silhouette-bg" 
                 />
-                <div className="vitals-hero-content-wrapper">
-                    <div className="vitals-hero-text-section">
+                <div className="vitals-hero-content-wrapper hero-content-wrapper">
+                    <div className="vitals-hero-text-section hero-text-section">
                         <h1 className="page-title">
-                            <Activity size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('vitals_title')}
+                            <Activity size={22} className="header-icon" style={{ display: 'inline', marginRight: '6px' }} /> {t('vitals_title', 'My Vitals')}
                         </h1>
                         <p className="page-subtitle">{t('vitals_subtitle')}</p>
-                        
-                        <div className="mother-download-pdf-btn-wrapper">
-                            <button className="mother-download-pdf-btn" onClick={handleDownloadPDF}>
-                                <Download size={14} /> Download PDF
-                            </button>
-                        </div>
                     </div>
                 </div>
             </div>

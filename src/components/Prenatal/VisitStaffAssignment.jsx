@@ -1,22 +1,24 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { UserRoundPlus, Edit2, X, Check } from 'lucide-react';
 import PatientService from '../../services/patientservice';
 import ActionTooltip from '../Common/ActionTooltip';
+import { useRolePermissions } from '../../context/RolePermissionContext';
 import '../Patient/PatientStaffAssignment.css';
 import './VisitStaffAssignment.css';
 
 const VisitStaffAssignment = ({
   visitId,
-  visitStationId,
+  patientStationId,
   assignedStaffId,
   assignedStaffName,
   assignedStationName,
   visitStationName,
   visitStatus,
-  userRole,
   userStationId,
   onAssigned
 }) => {
+  const { hasPermission, loading: permissionsLoading } = useRolePermissions();
   const [isOpen, setIsOpen] = useState(false);
   const [staffOptions, setStaffOptions] = useState([]);
   const [selectedStaffId, setSelectedStaffId] = useState('');
@@ -24,23 +26,13 @@ const VisitStaffAssignment = ({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const roleLabel = String(userRole || '').toLowerCase().replace(/_/g, ' ').trim();
-  const normalizedRole = roleLabel === 'station staff' ? 'staff' : roleLabel;
-
-  // Permissions matching DASMOM+ station access rules:
-  // - Admin can assign/reassign any scheduled visit
-  // - CHO Personnel can assign/reassign scheduled visits for any station (or their station)
-  // - Staff can assign/reassign if the visit station or assignment matches their station
-  const isScheduled = visitStatus === 'Scheduled';
-  const canAssign = isScheduled && (
-    normalizedRole === 'admin' ||
-    normalizedRole === 'cho personnel' ||
-    (normalizedRole === 'staff' && (
-      (!visitStationId && !userStationId) ||
-      visitStationId === userStationId ||
-      !assignedStaffId
-    ))
-  );
+  const assignmentPermission = patientStationId === userStationId
+    ? 'patient.assign_staff.own_station'
+    : 'patient.assign_staff.other_station';
+  const canAssign = visitStatus === 'Scheduled'
+    && !permissionsLoading
+    && Boolean(patientStationId)
+    && hasPermission(assignmentPermission);
 
   const canEdit = canAssign && Boolean(assignedStaffId);
 
@@ -53,31 +45,7 @@ const VisitStaffAssignment = ({
     setLoadingOptions(true);
     try {
       const service = new PatientService();
-      // Load staff assignable to the visit's station (or user's station / all if admin)
-      const targetStationId = visitStationId || (normalizedRole === 'staff' ? userStationId : null);
-      
-      let options = [];
-      if (normalizedRole === 'admin' || !targetStationId) {
-        const { data, error: staffError } = await service.supabase
-          .from('staff_profiles')
-          .select('id, full_name, station_ass')
-          .order('full_name');
-        if (staffError) throw staffError;
-        options = data || [];
-      } else {
-        options = await service.getAssignableStaffByStationId(targetStationId);
-        // If assigned staff is from another station, ensure they appear in the options
-        if (assignedStaffId && !options.some(s => s.id === assignedStaffId)) {
-          const { data: currentStaff } = await service.supabase
-            .from('staff_profiles')
-            .select('id, full_name, station_ass')
-            .eq('id', assignedStaffId)
-            .single();
-          if (currentStaff) {
-            options = [currentStaff, ...options];
-          }
-        }
-      }
+      const options = await service.getAssignableStaffByStationId(patientStationId);
 
       setStaffOptions(options);
       if (options.length === 0) {
@@ -170,7 +138,7 @@ const VisitStaffAssignment = ({
       )}
 
       {/* Assignment Modal / Popover */}
-      {isOpen && (
+      {isOpen && createPortal(
         <div className="vsa-modal-overlay" onClick={closeAssignment}>
           <div className="vsa-modal-card" onClick={e => e.stopPropagation()}>
             <div className="vsa-modal-header">
@@ -236,7 +204,8 @@ const VisitStaffAssignment = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

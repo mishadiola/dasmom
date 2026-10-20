@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useContext, useRef } from 'react';
+import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import AuthService from '../../services/authservice';
@@ -9,7 +10,7 @@ import {
     CheckCircle2, XCircle, AlertCircle, Bell,
     Monitor, ChevronDown, ToggleLeft, ToggleRight,
     Key, Save, Mail, MapPin, Clock, LogOut, Lock, FileText, Trash2,
-    Table, Globe, Download
+    Table, Globe, Download, ShieldCheck
 } from 'lucide-react';
 import '../../styles/pages/Settings.css';
 import { useModal } from '../../context/ModalContext';
@@ -21,6 +22,9 @@ import {
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import ResetPasswordModal from '../../components/ResetPasswordModal';
 import ActionTooltip from '../../components/Common/ActionTooltip';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import RolePermissionManagement from '../../components/RolePermissionManagement';
+import { useRolePermissions } from '../../context/RolePermissionContext';
 
 /* ════════════════════════════
    MOCK DATA
@@ -108,7 +112,7 @@ const AddStationModal = ({ onClose, onSuccess }) => {
         }
     };
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="set-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
                 <div className="modal-header">
@@ -142,7 +146,8 @@ const AddStationModal = ({ onClose, onSuccess }) => {
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 
@@ -275,7 +280,7 @@ const AddUserModal = ({ onClose, onSuccess }) => {
         }
     };
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="set-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
@@ -398,7 +403,8 @@ const AddUserModal = ({ onClose, onSuccess }) => {
                     }}
                 />
             )}
-        </div>
+        </div>,
+        document.body
     );
 };
 
@@ -480,7 +486,7 @@ const ManageStationsModal = ({ onClose, onSuccess, initialStations }) => {
         }
     };
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="set-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
                 <div className="modal-header" style={{ flexShrink: 0 }}>
@@ -554,7 +560,8 @@ const ManageStationsModal = ({ onClose, onSuccess, initialStations }) => {
                     <button className="btn btn-outline" onClick={onClose} disabled={submitting}>Close</button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 
@@ -639,7 +646,7 @@ const EditUserModal = ({ staff, onClose, onSuccess }) => {
         }
     };
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="set-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
@@ -738,11 +745,13 @@ const EditUserModal = ({ staff, onClose, onSuccess }) => {
                     }}
                 />
             )}
-        </div>
+        </div>,
+        document.body
     );
 };
 const UserAccountsTab = () => {
     const { user } = useContext(AuthContext);
+    const { hasPermission } = useRolePermissions();
     const { confirm, alert: customAlert } = useModal();
     const staffService = new StaffService();
     const [search, setSearch] = useState('');
@@ -758,6 +767,7 @@ const UserAccountsTab = () => {
     const [stationOptions, setStationOptions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [currentPage, setCurrentPage] = useState(1);
+    const [resetPasswordTarget, setResetPasswordTarget] = useState(null);
 
     useEffect(() => {
         setCurrentPage(1);
@@ -860,6 +870,11 @@ const UserAccountsTab = () => {
 
     const hasActiveFilters = search !== '' || roleFilter !== 'All' || statusFilter !== 'Active' || stationFilter !== 'All';
     const isAdmin = ['admin', 'super admin'].includes(normalizeRoleValue(user?.role));
+    const canManageStaffAction = (staffUser, action) => {
+        const sameStation = formatStationName(staffUser.station) === formatStationName(user?.station);
+        const stationScope = sameStation ? 'own_station' : 'other_station';
+        return hasPermission(`staff.${action}.${stationScope}`);
+    };
 
     const handleModalSuccess = () => {
         fetchStaff();
@@ -958,12 +973,11 @@ const UserAccountsTab = () => {
 
     if (loading) {
         return (
-            <div className="tab-content">
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px' }}>
-                    <div className="set-spinner"></div>
-                    <p style={{ marginLeft: '16px' }}>Loading staff...</p>
-                </div>
-            </div>
+            <StaffPageLoader 
+                message="Loading staff accounts..." 
+                minHeight="300px" 
+                onRetry={fetchStaff} 
+            />
         );
     }
 
@@ -1114,15 +1128,25 @@ const UserAccountsTab = () => {
                                             <ActionTooltip text="Edit Staff">
                                                 <button className="action-btn edit-btn" onClick={() => { setSelectedStaff(u); setShowEditModal(true); }}><Edit2 size={13} /></button>
                                             </ActionTooltip>
-                                            <ActionTooltip text="Reset Password">
-                                                <button className="action-btn key-btn"><Key size={13} /></button>
-                                            </ActionTooltip>
-                                            <ActionTooltip text={u.status === 'Active' ? 'Deactivate' : 'Activate'}>
-                                                <button className={`action-btn ${u.status === 'Active' ? 'deact-btn' : 'act-btn'}`} onClick={() => handleToggleDeactivation(u)}>
-                                                    {u.status === 'Active' ? <ToggleRight size={13} /> : <ToggleLeft size={13} />}
-                                                </button>
-                                            </ActionTooltip>
-                                            {u.role !== 'Super Admin' && (
+                                            {canManageStaffAction(u, 'password.reset') && u.email !== 'N/A' && (
+                                                <ActionTooltip text="Reset Password">
+                                                    <button
+                                                        className="action-btn key-btn"
+                                                        onClick={() => setResetPasswordTarget(u)}
+                                                        aria-label={`Send password reset link to ${u.name}`}
+                                                    >
+                                                        <Key size={13} />
+                                                    </button>
+                                                </ActionTooltip>
+                                            )}
+                                            {canManageStaffAction(u, 'deactivate') && (
+                                                <ActionTooltip text={u.status === 'Active' ? 'Deactivate' : 'Activate'}>
+                                                    <button className={`action-btn ${u.status === 'Active' ? 'deact-btn' : 'act-btn'}`} onClick={() => handleToggleDeactivation(u)}>
+                                                        {u.status === 'Active' ? <ToggleRight size={13} /> : <ToggleLeft size={13} />}
+                                                    </button>
+                                                </ActionTooltip>
+                                            )}
+                                            {u.role !== 'Super Admin' && canManageStaffAction(u, 'archive') && (
                                                 (u.archiveStatus || 'active') === 'archived' ? (
                                                     <ActionTooltip text="Restore Staff">
                                                         <button className="action-btn restore-btn" onClick={() => handleRestore(u.id)}>
@@ -1195,6 +1219,12 @@ const UserAccountsTab = () => {
 
             {showModal && <AddUserModal onClose={() => setShowModal(false)} onSuccess={handleModalSuccess} />}
             {showEditModal && <EditUserModal staff={selectedStaff} onClose={() => setShowEditModal(false)} onSuccess={handleModalSuccess} />}
+            <ResetPasswordModal
+                isOpen={Boolean(resetPasswordTarget)}
+                onClose={() => setResetPasswordTarget(null)}
+                initialEmail={resetPasswordTarget?.email || ''}
+                targetUserId={resetPasswordTarget?.id || null}
+            />
         </div>
     );
 };
@@ -1335,6 +1365,7 @@ const SystemSettingsTab = () => {
 ════════════════════════════ */
 const ProfileTab = () => {
     const { user, logout: handleLogout } = useContext(AuthContext);
+    const { hasPermission } = useRolePermissions();
     const authService = new AuthService();
 
     const [fullProfile, setFullProfile] = useState(null);
@@ -1347,6 +1378,8 @@ const ProfileTab = () => {
     
     // Password Reset
     const [resetModalOpen, setResetModalOpen] = useState(false);
+    const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
+    const [changingPassword, setChangingPassword] = useState(false);
     
 
     useEffect(() => {
@@ -1391,6 +1424,30 @@ const ProfileTab = () => {
             showToast('Failed to update profile.', 'error');
         } finally {
             setUpdating(false);
+        }
+    };
+
+    const handleChangePassword = async (e) => {
+        e.preventDefault();
+        if (passwordForm.newPassword.length < 8) {
+            showToast('Password must be at least 8 characters.', 'error');
+            return;
+        }
+        if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+            showToast('The passwords do not match.', 'error');
+            return;
+        }
+
+        setChangingPassword(true);
+        try {
+            await authService.updatePassword(passwordForm.newPassword);
+            setPasswordForm({ newPassword: '', confirmPassword: '' });
+            showToast('Password changed successfully.');
+        } catch (err) {
+            console.error('Failed to change password:', err);
+            showToast(err?.message || 'Failed to change password.', 'error');
+        } finally {
+            setChangingPassword(false);
         }
     };
 
@@ -1483,6 +1540,43 @@ const ProfileTab = () => {
                     <div className="settings-section">
                         <div className="section-header"><Lock size={16} /><h3>Security</h3></div>
                         <div style={{ padding: '8px 4px 16px' }}>
+                            {hasPermission('staff.password.change.own_station') && (
+                            <form onSubmit={handleChangePassword} style={{ marginBottom: '24px' }}>
+                                <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: 'var(--color-text)' }}>Change Password</h4>
+                                <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+                                    Choose a new password for your signed-in account.
+                                </p>
+                                <div className="form-grid-2">
+                                    <div className="form-group">
+                                        <label htmlFor="settings-new-password">New Password</label>
+                                        <input
+                                            id="settings-new-password"
+                                            type="password"
+                                            autoComplete="new-password"
+                                            minLength={8}
+                                            value={passwordForm.newPassword}
+                                            onChange={event => setPasswordForm(previous => ({ ...previous, newPassword: event.target.value }))}
+                                            required
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label htmlFor="settings-confirm-password">Confirm New Password</label>
+                                        <input
+                                            id="settings-confirm-password"
+                                            type="password"
+                                            autoComplete="new-password"
+                                            minLength={8}
+                                            value={passwordForm.confirmPassword}
+                                            onChange={event => setPasswordForm(previous => ({ ...previous, confirmPassword: event.target.value }))}
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <button type="submit" className="btn btn-outline" disabled={changingPassword}>
+                                    <Lock size={14} /> {changingPassword ? 'Changing...' : 'Change Password'}
+                                </button>
+                            </form>
+                            )}
                             <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: 'var(--color-text)' }}>Reset Password</h4>
                             <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
                                 Reset your password securely through your registered email address.
@@ -1521,35 +1615,42 @@ const ProfileTab = () => {
    MAIN COMPONENT
 ════════════════════════════ */
 const Settings = () => {
+    const { user } = useContext(AuthContext);
     const [searchParams, setSearchParams] = useSearchParams();
     const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'accounts');
+    const isAdmin = ['admin', 'super admin'].includes(normalizeRoleValue(user?.role));
+    const TABS = useMemo(() => [
+        { id: 'accounts',  label: 'User Accounts',      icon: Users },
+        ...(isAdmin ? [{ id: 'permissions', label: 'Role Permissions', icon: ShieldCheck }] : []),
+        { id: 'system',    label: 'System Settings',    icon: SettingsIcon },
+        { id: 'profile',   label: 'Profile', icon: User },
+    ], [isAdmin]);
 
     // Sync state with URL search params
     useEffect(() => {
         const tab = searchParams.get('tab');
+        if (tab === 'permissions' && !isAdmin) {
+            setActiveTab('accounts');
+            setSearchParams({ tab: 'accounts' }, { replace: true });
+            return;
+        }
         if (tab && TABS.some(t => t.id === tab)) {
             setActiveTab(tab);
         }
-    }, [searchParams]);
+    }, [searchParams, isAdmin, setSearchParams, TABS]);
 
     const handleTabChange = (tabId) => {
         setActiveTab(tabId);
         setSearchParams({ tab: tabId });
     };
 
-    const TABS = [
-        { id: 'accounts',  label: 'User Accounts',      icon: Users },
-        { id: 'system',    label: 'System Settings',    icon: SettingsIcon },
-        { id: 'profile',   label: 'Profile', icon: User },
-    ];
-
     return (
-        <div className="set-page">
+        <div className="set-page staff-page-ready">
             {/* ── Page Header ── */}
             <div className="page-header">
                 <div>
                     <h1 className="page-title"><SettingsIcon size={22} style={{ verticalAlign: 'middle', marginRight: '8px', color: 'var(--color-rose)' }} /> Settings</h1>
-                    <p className="page-subtitle">Manage user accounts, system settings, and your profile.</p>
+                    <p className="page-subtitle">Manage user accounts, role permissions, system settings, and your profile.</p>
                 </div>
             </div>
 
@@ -1572,6 +1673,7 @@ const Settings = () => {
             {/* ── Tab Content ── */}
             <div className="set-tab-content-wrap">
                 {activeTab === 'accounts' && <UserAccountsTab />}
+                {activeTab === 'permissions' && isAdmin && <RolePermissionManagement />}
                 {activeTab === 'system'   && <SystemSettingsTab />}
                 {activeTab === 'profile'  && <ProfileTab />}
             </div>

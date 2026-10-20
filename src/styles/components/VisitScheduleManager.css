@@ -1,0 +1,562 @@
+/* ══════════════════════════════════════════════════════════
+   VISIT SCHEDULE MANAGER MODAL STYLES (DASMOM+)
+   Scoped styles to prevent conflicts with global modal CSS
+   ══════════════════════════════════════════════════════════ */
+
+.vsm-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(30, 20, 30, 0.48);
+    backdrop-filter: blur(5px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 9999;
+    animation: vsmFadeIn 0.2s ease-out;
+}
+
+@keyframes vsmFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes vsmScaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.96) translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.vsm-modal-container {
+    background: #ffffff;
+    width: 100%;
+    max-width: 760px;
+    max-height: 85vh;
+    border-radius: 20px;
+    box-shadow: 0 25px 60px rgba(59, 48, 68, 0.22);
+    border: 1px solid rgba(185, 129, 138, 0.25);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: vsmScaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    font-family: var(--font, 'Poppins', system-ui, -apple-system, sans-serif);
+}
+
+/* ── Modal Header ── */
+.vsm-modal-header {
+    padding: 20px 24px;
+    background: #ffffff;
+    border-bottom: 1px solid #f0f2f5;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-shrink: 0;
+}
+
+.vsm-header-text h2 {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 800;
+    color: #3b3044;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.vsm-header-icon-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: rgba(185, 129, 138, 0.12);
+    color: var(--color-rose, #b9818a);
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+.vsm-header-text p {
+    margin: 4px 0 0 0;
+    font-size: 13px;
+    color: #7d6e80;
+    font-weight: 400;
+}
+
+.vsm-close-btn {
+    background: #ffffff;
+    border: 1px solid #eef0f4;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #7d6e80;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.vsm-close-btn:hover {
+    background: #fdf6f7;
+    border-color: var(--color-rose, #b9818a);
+    color: var(--color-rose, #b9818a);
+    transform: rotate(90deg);
+}
+
+/* ── Modal Body ── */
+.vsm-modal-body {
+    padding: 22px 24px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.vsm-modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.vsm-modal-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.vsm-modal-body::-webkit-scrollbar-thumb {
+    background: rgba(185, 129, 138, 0.25);
+    border-radius: 6px;
+}
+
+/* ── Alerts ── */
+.vsm-alert {
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.vsm-alert--error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #b91c1c;
+}
+
+.vsm-alert--warning {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #92400e;
+}
+
+/* ── Add Visit Section ── */
+.vsm-add-section {
+    background: #fcf9fa;
+    border: 1px solid rgba(185, 129, 138, 0.2);
+    border-radius: 14px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.vsm-section-header {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.vsm-section-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.vsm-section-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #3b3044;
+    letter-spacing: 0.2px;
+}
+
+.vsm-section-subtitle {
+    font-size: 12px;
+    color: #8c7f91;
+}
+
+.vsm-count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(185, 129, 138, 0.15);
+    color: var(--color-rose, #b9818a);
+    border-radius: 10px;
+}
+
+/* ── Add Visit Form Grid ── */
+.vsm-form-grid {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+.vsm-field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1 1 140px;
+}
+
+.vsm-field-group--details {
+    flex: 1.5 1 180px;
+}
+
+.vsm-field-group--btn {
+    flex: 0 0 auto;
+    align-self: flex-end;
+}
+
+.vsm-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #4a3e52;
+    margin: 0;
+    display: flex;
+    align-items: center;
+}
+
+.vsm-req {
+    color: #e05c73;
+    margin-left: 2px;
+}
+
+.vsm-input,
+.vsm-select {
+    width: 100%;
+    height: 40px;
+    padding: 8px 12px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    font-size: 13.5px;
+    font-family: inherit;
+    color: #2d2030;
+    background: #ffffff;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+    outline: none;
+}
+
+.vsm-input:focus,
+.vsm-select:focus {
+    border-color: var(--color-rose, #b9818a);
+    box-shadow: 0 0 0 3px rgba(185, 129, 138, 0.15);
+}
+
+.vsm-input::placeholder {
+    color: #9ca3af;
+    font-size: 13px;
+}
+
+/* Specific styling for HTML5 date picker */
+.vsm-input[type="date"] {
+    color: #2d2030;
+    cursor: pointer;
+}
+
+/* Add Visit Button - Compact and non-stretching */
+.vsm-add-btn {
+    height: 40px;
+    padding: 0 18px;
+    background: var(--color-rose, #b9818a);
+    color: #ffffff;
+    border: none;
+    border-radius: 10px;
+    font-size: 13.5px;
+    font-weight: 700;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 2px 8px rgba(185, 129, 138, 0.28);
+    flex-shrink: 0;
+    align-self: flex-end;
+}
+
+.vsm-add-btn:hover:not(:disabled) {
+    background: #a56f78;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(185, 129, 138, 0.38);
+}
+
+.vsm-add-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* ── Scheduled Visits Section ── */
+.vsm-visits-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.vsm-visits-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.vsm-visit-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    background: #ffffff;
+    border: 1px solid #eef0f4;
+    border-radius: 12px;
+    transition: all 0.2s ease;
+}
+
+.vsm-visit-card--future {
+    border-color: rgba(185, 129, 138, 0.25);
+    background: #ffffff;
+}
+
+.vsm-visit-card--future:hover {
+    border-color: var(--color-rose, #b9818a);
+    box-shadow: 0 3px 10px rgba(185, 129, 138, 0.08);
+}
+
+.vsm-visit-card--past {
+    background: #fafafb;
+    border-color: #eef0f4;
+    opacity: 0.88;
+}
+
+.vsm-visit-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.vsm-visit-primary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.vsm-visit-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: #2d2030;
+}
+
+.vsm-status-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    text-transform: capitalize;
+}
+
+.vsm-status--attended,
+.vsm-status--completed {
+    background: rgba(109, 184, 160, 0.16);
+    color: #2d7a60;
+    border: 1px solid rgba(109, 184, 160, 0.3);
+}
+
+.vsm-status--scheduled,
+.vsm-status--pending {
+    background: rgba(122, 162, 219, 0.16);
+    color: #2c5282;
+    border: 1px solid rgba(122, 162, 219, 0.3);
+}
+
+.vsm-status--missed,
+.vsm-status--overdue {
+    background: rgba(224, 122, 138, 0.16);
+    color: #a04070;
+    border: 1px solid rgba(224, 122, 138, 0.3);
+}
+
+.vsm-status--cancelled {
+    background: #f1f5f9;
+    color: #64748b;
+    border: 1px solid #cbd5e1;
+}
+
+.vsm-visit-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    color: #7d6e80;
+}
+
+.vsm-meta-icon {
+    color: #9ca3af;
+    flex-shrink: 0;
+}
+
+.vsm-meta-note {
+    font-size: 11.5px;
+    color: #94a3b8;
+    font-style: italic;
+}
+
+/* ── Visit Action Buttons ── */
+.vsm-visit-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.vsm-btn-action {
+    height: 32px;
+    padding: 0 12px;
+    font-size: 12.5px;
+    font-weight: 600;
+    font-family: inherit;
+    border-radius: 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    transition: all 0.18s ease;
+    white-space: nowrap;
+}
+
+.vsm-btn-edit {
+    background: #ffffff;
+    border: 1.5px solid #d2d6dc;
+    color: #374151;
+}
+
+.vsm-btn-edit:hover:not(:disabled) {
+    border-color: var(--color-rose, #b9818a);
+    color: var(--color-rose, #b9818a);
+    background: #fdf6f7;
+    transform: translateY(-1px);
+}
+
+.vsm-btn-cancel {
+    background: #ffffff;
+    border: 1.5px solid #fecdd3;
+    color: #e11d48;
+}
+
+.vsm-btn-cancel:hover:not(:disabled) {
+    background: #fff1f2;
+    border-color: #f43f5e;
+    color: #be123c;
+    transform: translateY(-1px);
+}
+
+.vsm-btn-action:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.vsm-readonly-tag {
+    font-size: 12px;
+    color: #94a3b8;
+    font-style: italic;
+    padding: 4px 8px;
+    flex-shrink: 0;
+}
+
+/* ── Empty State ── */
+.vsm-empty-state {
+    padding: 36px 20px;
+    text-align: center;
+    background: #fcfcfd;
+    border: 1.5px dashed #e2e8f0;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    color: #8c7f91;
+}
+
+.vsm-empty-icon {
+    color: #d1d5db;
+}
+
+.vsm-empty-state p {
+    margin: 0;
+    font-size: 13.5px;
+}
+
+/* ── Responsive adjustments ── */
+@media (max-width: 680px) {
+    .vsm-modal-container {
+        max-height: 90vh;
+        border-radius: 16px;
+    }
+
+    .vsm-modal-header {
+        padding: 16px 18px;
+    }
+
+    .vsm-modal-body {
+        padding: 16px 18px;
+        gap: 16px;
+    }
+
+    .vsm-form-grid {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .vsm-field-group {
+        width: 100%;
+        flex: 1 1 100%;
+    }
+
+    .vsm-field-group--btn {
+        width: 100%;
+        align-self: stretch;
+    }
+
+    .vsm-add-btn {
+        width: 100%;
+    }
+
+    .vsm-visit-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .vsm-visit-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+}

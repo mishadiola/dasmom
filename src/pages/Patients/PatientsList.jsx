@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useContext } from 'react';
+import { createPortal } from 'react-dom';
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import * as XLSX from 'xlsx';
@@ -14,10 +15,15 @@ import PatientService from '../../services/patientservice';
 import EditPatientModal from '../../components/Patient/EditPatientModal';
 import PatientStaffAssignment from '../../components/Patient/PatientStaffAssignment';
 import { useModal } from '../../context/ModalContext';
+import { AuthContext } from '../../context/AuthContext';
+import { useRolePermissions } from '../../context/RolePermissionContext';
+import { useDefaultStation } from '../../hooks/useDefaultStation';
 import Legend from '../../components/Legend/Legend';
 import { formatMotherId } from '../../utils/displayIds';
 import ExportModal from '../../components/ExportModal';
 import ActionTooltip from '../../components/Common/ActionTooltip';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
 
 // Helper function to extract first 4 numeric digits from patient ID
 const getShortPatientId = (id) => {
@@ -41,7 +47,23 @@ const getConditionClass = (patient) => {
     return patient.hasHealthConditions ? 'condition-present' : 'condition-none';
 };
 
-const EMPTY_VITALS = {
+const getCategoryTheme = (category) => {
+    const lower = String(category || '').toLowerCase();
+    if (lower.includes('pre-existing') || lower.includes('preexisting')) return 'pre-existing';
+    if (lower.includes('pregnancy-related') || lower.includes('pregnancy related')) return 'pregnancy-related';
+    if (lower.includes('obstetric') || lower.includes('history')) return 'obstetric-history';
+    return 'pre-existing';
+};
+
+const getPhilippineDate = () => {
+    try {
+        return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+    } catch {
+        return new Date().toISOString().split('T')[0];
+    }
+};
+
+const getEmptyVitals = () => ({
     bpSystolic: '',
     bpDiastolic: '',
     weight: '',
@@ -53,53 +75,20 @@ const EMPTY_VITALS = {
     fetalMovement: '',
     presentation: '',
     notes: '',
-    date: new Date().toISOString().split('T')[0],
-};
+    date: getPhilippineDate(),
+});
 
-const RecordVitalsModal = ({ patient, onSave, onClose, supplements }) => {
-    const [form, setForm] = useState({ ...EMPTY_VITALS });
+const RecordVitalsModal = ({ patient, onSave, onClose }) => {
+    const [form, setForm] = useState(getEmptyVitals);
     const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
-    const [selectedSupplements, setSelectedSupplements] = useState({});
-    const [supplementAmounts, setSupplementAmounts] = useState({});
-
-    useEffect(() => {
-        if (!patient) return;
-
-        const latestVisit = Array.isArray(patient.visits) && patient.visits.length > 0
-            ? [...patient.visits].sort((a, b) => new Date(b.visit_date) - new Date(a.visit_date))[0]
-            : null;
-
-        const initialForm = {
-            ...EMPTY_VITALS,
-            date: latestVisit?.visit_date ? latestVisit.visit_date.split('T')[0] : new Date().toISOString().split('T')[0],
-            bpSystolic: latestVisit?.bp_systolic || '',
-            bpDiastolic: latestVisit?.bp_diastolic || '',
-            weight: latestVisit?.weight_kg || '',
-            temp: latestVisit?.temp_c || '',
-            pulse: latestVisit?.pulse_bpm || '',
-            respRate: latestVisit?.resp_rate_cpm || '',
-            fundalHeight: latestVisit?.fundal_height_cm || '',
-            fhr: latestVisit?.fhr_bpm || '',
-            fetalMovement: latestVisit?.fetal_movement || '',
-            presentation: latestVisit?.presentation || '',
-            notes: latestVisit?.clinical_notes || '',
-        };
-
-        setForm(initialForm);
-    }, [patient]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
         if (!form.bpSystolic || !form.bpDiastolic || !form.weight || !form.date) return;
-        const supplementsData = Object.keys(selectedSupplements).filter(id => selectedSupplements[id]).map(id => {
-            const sup = supplements.find(s => s.id === id);
-            return { id, amount: supplementAmounts[id] || 0, unit: sup?.unit || 'units' };
-        });
-        onSave(patient.id, { ...form, patientName: patient.name }, supplementsData);
+        onSave(patient.id, { ...form, patientName: patient.name });
     };
 
-    return (
+    return createPortal(
         <div className="pv-modal-overlay" onClick={onClose}>
             <div className="pv-modal" onClick={e => e.stopPropagation()}>
                 <div className="pv-modal-header">
@@ -163,62 +152,7 @@ const RecordVitalsModal = ({ patient, onSave, onClose, supplements }) => {
                         <textarea className="vm-textarea" value={form.notes} onChange={e => set('notes', e.target.value)} />
                     </div>
 
-                    <div className="vm-supplements">
-                        <h3>Administer Supplements</h3>
-                        <p className="vm-supplements-desc">Select supplements to administer during this visit.</p>
-                        <div className="vm-supplements-list">
-                            {supplements.map(sup => {
-                                const isOutOfStock = sup.stock <= 0;
-                                const isSelected = selectedSupplements[sup.id] || false;
-                                return (
-                                    <div 
-                                        key={sup.id} 
-                                        className={`vm-sup-card ${isSelected ? 'selected' : ''} ${isOutOfStock ? 'out-of-stock' : ''}`}
-                                        onClick={() => {
-                                            if (!isOutOfStock) {
-                                                setSelectedSupplements(prev => ({ ...prev, [sup.id]: !prev[sup.id] }));
-                                            }
-                                        }}
-                                        style={{ flexDirection: 'column', alignItems: 'stretch', padding: '12px 16px' }}
-                                    >
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                            <div className="vm-sup-card-left">
-                                                <input
-                                                    type="checkbox"
-                                                    className="vm-sup-checkbox"
-                                                    checked={isSelected}
-                                                    disabled={isOutOfStock}
-                                                    readOnly
-                                                />
-                                                <div className="vm-sup-info">
-                                                    <span className="vm-sup-name">{sup.name}</span>
-                                                    <span className="vm-sup-type">Supplement</span>
-                                                </div>
-                                            </div>
-                                            
-                                            <div className={`vm-sup-stock ${isOutOfStock ? 'out' : ''}`}>
-                                                {isOutOfStock ? 'Out of Stock' : `In Stock · ${sup.stock} ${sup.unit || 'pcs'}`}
-                                            </div>
-                                        </div>
 
-                                        {isSelected && (
-                                            <div className="vm-sup-amount-wrap" onClick={e => e.stopPropagation()}>
-                                                <input
-                                                    type="number"
-                                                    className="vm-sup-amount-input"
-                                                    placeholder="Amount"
-                                                    value={supplementAmounts[sup.id] || ''}
-                                                    onChange={e => setSupplementAmounts(prev => ({ ...prev, [sup.id]: e.target.value }))}
-                                                    min="1"
-                                                    max={sup.stock}
-                                                />
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
 
                     <div className="pv-modal-footer">
                         <button type="button" className="vm-btn vm-btn--cancel" onClick={onClose}>Cancel</button>
@@ -226,7 +160,8 @@ const RecordVitalsModal = ({ patient, onSave, onClose, supplements }) => {
                     </div>
                 </form>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 
@@ -237,11 +172,37 @@ const PatientsList = () => {
     const initialTrimester = searchParams.get('trimester');
     
     const { alert: customAlert, confirm } = useModal();
+    const { hasPermission } = useRolePermissions();
 
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [patients, setPatients] = useState([]);
     const [availableStations, setAvailableStations] = useState([]);
     const [assignmentAccess, setAssignmentAccess] = useState({ role: '', stationId: null });
     const [defaultApplied, setDefaultApplied] = useState(false);
+
+    const {
+        isStationStaff,
+        assignedStation,
+        canViewOtherStations,
+        availableStations: permittedStations,
+        matchStation: matchStationHook,
+    } = useDefaultStation({
+        permissionKey: 'patient.view.other_station',
+        allStations: availableStations,
+        isArray: true,
+    });
+
+    const hasPatientStationPermission = (patient, ownPermission, otherPermission) => (
+        patient.stationId != null && patient.stationId === assignmentAccess.stationId
+            ? hasPermission(ownPermission)
+            : hasPermission(otherPermission)
+    );
+    const canChangeArchiveState = (patient) => hasPatientStationPermission(
+        patient,
+        'patient.archive.own_station',
+        'patient.archive.other_station'
+    );
 
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -252,14 +213,14 @@ const PatientsList = () => {
         const defaultView = settings?.tables?.defaultPatientView || 'Active Patients';
         return defaultView === 'All Patients' ? 'all' : 'active';
     });
-    const [filters, setFilters] = useState({
+    const [filters, setFilters] = useState(() => ({
         trimesters: initialTrimester ? [initialTrimester] : [],
         risks: [],
-        stations: [],
+        stations: isStationStaff && assignedStation ? [assignedStation] : [],
         assignmentStatus: 'All',
         patientType: 'All',
         sortBy: 'newest'
-    });
+    }));
     
     const [activePopover, setActivePopover] = useState(null);
     const [stationSearch, setStationSearch] = useState('');
@@ -305,12 +266,60 @@ const PatientsList = () => {
     }, [activePopover]);
 
     const [currentPage, setCurrentPage] = useState(1);
+    const [conditionPopover, setConditionPopover] = useState(null);
+
+    useEffect(() => {
+        if (!conditionPopover) return;
+        const handleClickOutside = (e) => {
+            if (!e.target.closest('.conditions-popover-card') && !e.target.closest('.condition-more-btn')) {
+                setConditionPopover(null);
+            }
+        };
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                setConditionPopover(null);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('touchstart', handleClickOutside);
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('touchstart', handleClickOutside);
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [conditionPopover]);
+
+    const handleOpenConditionPopover = (e, patient) => {
+        e.stopPropagation();
+        if (conditionPopover && conditionPopover.patient?.id === patient.id) {
+            setConditionPopover(null);
+            return;
+        }
+        const rect = e.currentTarget.getBoundingClientRect();
+        const popoverWidth = 320;
+        const popoverEstimatedHeight = 260;
+        let top = rect.bottom + 6;
+        if (top + popoverEstimatedHeight > window.innerHeight && rect.top - popoverEstimatedHeight > 10) {
+            top = rect.top - popoverEstimatedHeight - 6;
+        }
+        let left = rect.left;
+        if (left + popoverWidth > window.innerWidth - 16) {
+            left = window.innerWidth - popoverWidth - 16;
+        }
+        if (left < 16) left = 16;
+
+        setConditionPopover({
+            patient,
+            top,
+            left
+        });
+    };
 
     const [vitalModalPatient, setVitalModalPatient] = useState(null);
     const [vitalToast, setVitalToast] = useState(false);
     const [editModalPatient, setEditModalPatient] = useState(null);
     const [modalLoading, setModalLoading] = useState({ edit: false, vitals: false });
-    const [supplements, setSupplements] = useState([]);
 
     const openEditModal = async (patientId) => {
         setEditModalPatient(null);
@@ -327,75 +336,69 @@ const PatientsList = () => {
         }
     };
 
-    const openVitalsModal = async (patientId) => {
-        setVitalModalPatient(null);
-        setModalLoading(prev => ({ ...prev, vitals: true }));
-        try {
-            const patientService = new PatientService();
-            const detailedPatient = await patientService.getPatientById(patientId);
-            setVitalModalPatient(detailedPatient);
-        } catch (err) {
-            console.error('Error loading patient details for vitals:', err);
-            await customAlert({ title: 'Error', text: 'Unable to load patient details. Please try again.', iconType: 'danger' });
-        } finally {
-            setModalLoading(prev => ({ ...prev, vitals: false }));
+    const openVitalsModal = (patientOrId) => {
+        if (!patientOrId) return;
+        if (typeof patientOrId === 'object') {
+            setVitalModalPatient(patientOrId);
+        } else {
+            const found = patients.find(p => p.id === patientOrId);
+            setVitalModalPatient(found || { id: patientOrId, name: 'Patient' });
         }
     };
 
-    useEffect(() => {
-    const fetchPatients = async () => {
+    const loadInitialData = async () => {
+        setLoading(true);
+        setError(null);
         try {
-            const patientService = new PatientService();  
-            const data = await patientService.getAllPatients({ includeArchived: true });
+            const patientService = new PatientService();
+            const [data, access, stns] = await Promise.all([
+                patientService.getAllPatients({ includeArchived: true }),
+                patientService.getCurrentUserAccess(),
+                patientService.getAllStations()
+            ]);
             setPatients(data || []);
-            setAssignmentAccess(await patientService.getCurrentUserAccess());
+            setAssignmentAccess(access || { role: '', stationId: null });
+            setAvailableStations(stns || []);
         } catch (err) {
-            console.error(err);
+            console.error('Failed to load patient profiles:', err);
+            setError(err);
+        } finally {
+            setLoading(false);
         }
     };
-
-    const fetchSupplements = async () => {
-        try {
-            const patientService = new PatientService();
-            const data = await patientService.getSupplementInventory();
-            setSupplements(data);
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
-    const fetchStations = async () => {
-        try {
-            const patientService = new PatientService();
-            const data = await patientService.getAllStations();
-            setAvailableStations(data);
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
-    fetchPatients();
-    fetchSupplements();
-    fetchStations();
-}, []);
 
     useEffect(() => {
-        if (!defaultApplied && availableStations.length > 0 && assignmentAccess.role) {
-            if (assignmentAccess.role === 'staff' && assignmentAccess.stationId) {
-                const assignedStation = availableStations.find(s => s.id === assignmentAccess.stationId);
-                if (assignedStation) {
-                    setFilters(prev => ({ ...prev, stations: [assignedStation.station_name] }));
-                }
-            }
+        loadInitialData();
+    }, []);
+
+    useEffect(() => {
+        if (!defaultApplied && isStationStaff && assignedStation) {
+            setFilters(prev => ({
+                ...prev,
+                stations: prev.stations && prev.stations.length > 0 ? prev.stations : [assignedStation]
+            }));
             setDefaultApplied(true);
         }
-    }, [availableStations, assignmentAccess, defaultApplied]);
+    }, [defaultApplied, isStationStaff, assignedStation]);
 
-    const filteredPatients = patients.filter(p => {
+    const filterDate = new Date();
+    const filterYear = filterDate.getFullYear();
+    const filterMonth = filterDate.getMonth();
+    const normalizedSearch = searchTerm.toLowerCase();
+    const filteredPatients = useMemo(() => patients.filter(p => {
+        if (String(p.pregnancyStatus || '').toLowerCase() !== 'pregnant') return false;
+
+        const conditionMatches = (p.activeCategories || []).some(cat => 
+            cat.category.toLowerCase().includes(normalizedSearch) ||
+            cat.conditions.some(cond => cond.toLowerCase().includes(normalizedSearch))
+        ) || (p.documentedConditions || []).some(c => c.toLowerCase().includes(normalizedSearch));
+
         const matchesSearch =
-            p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            p.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (p.station || '').toLowerCase().includes(searchTerm.toLowerCase());
+            p.name.toLowerCase().includes(normalizedSearch) ||
+            p.id.toLowerCase().includes(normalizedSearch) ||
+            formatMotherId(p.id).toLowerCase().includes(normalizedSearch) ||
+            (p.station || '').toLowerCase().includes(normalizedSearch) ||
+            conditionMatches;
 
         const matchesTri = filters.trimesters.length === 0 || filters.trimesters.includes(String(p.trimester || 1));
         
@@ -405,7 +408,7 @@ const PatientsList = () => {
             filters.risks.includes('none') && !p.hasHealthConditions
         );
         const matchesType = filters.patientType === 'All' || (p.patientType || p.type) === filters.patientType;
-        const matchesStation = filters.stations.length === 0 || filters.stations.includes(p.station);
+        const matchesStation = matchStationHook(p.station, filters.stations);
         const matchesAssignment = filters.assignmentStatus === 'All'
             || (filters.assignmentStatus === 'Unassigned' ? !p.assignedStaffId : Boolean(p.assignedStaffId));
         
@@ -423,11 +426,10 @@ const PatientsList = () => {
             if (!created) {
                 matchesDate = false;
             } else {
-                const now = new Date();
                 if (dateFilter === 'this_month') {
-                    matchesDate = created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
+                    matchesDate = created.getMonth() === filterMonth && created.getFullYear() === filterYear;
                 } else if (dateFilter === 'this_year') {
-                    matchesDate = created.getFullYear() === now.getFullYear();
+                    matchesDate = created.getFullYear() === filterYear;
                 } else if (dateFilter === 'custom' && customDateFrom && customDateTo) {
                     const from = new Date(`${customDateFrom}T00:00:00`);
                     const to = new Date(`${customDateTo}T23:59:59.999`);
@@ -437,9 +439,9 @@ const PatientsList = () => {
         }
 
         return matchesSearch && matchesTri && matchesRisk && matchesType && matchesStation && matchesAssignment && matchesArchive && matchesDate;
-    });
+    }), [patients, normalizedSearch, filters, archiveFilter, dateFilter, customDateFrom, customDateTo, filterYear, filterMonth]);
 
-    const sortedPatients = [...filteredPatients].sort((a, b) => {
+    const sortedPatients = useMemo(() => [...filteredPatients].sort((a, b) => {
         if (filters.sortBy === 'newest') return new Date(b.createdAt) - new Date(a.createdAt);
         if (filters.sortBy === 'oldest') return new Date(a.createdAt) - new Date(b.createdAt);
         if (filters.sortBy === 'alpha_az') return a.name.localeCompare(b.name);
@@ -456,7 +458,7 @@ const PatientsList = () => {
             return new Date(b.edd) - new Date(a.edd);
         }
         return 0;
-    });
+    }), [filteredPatients, filters.sortBy]);
 
     // availableStations fetched dynamically from DB
 
@@ -472,16 +474,23 @@ const PatientsList = () => {
     const toggleArrayFilter = (field, value) => {
         setFilters(prev => {
             const current = [...prev[field]];
-            const updated = current.includes(value) 
+            let updated = current.includes(value) 
                 ? current.filter(item => item !== value)
                 : [...current, value];
+            if (field === 'stations' && isStationStaff && !canViewOtherStations) {
+                // Restricted staff cannot deselect their assigned station
+                updated = assignedStation ? [assignedStation] : ['__UNASSIGNED__'];
+            }
             return { ...prev, [field]: updated };
         });
         setCurrentPage(1);
     };
 
     const clearFilters = () => {
-        setFilters({ trimesters: [], risks: [], stations: [], assignmentStatus: 'All', patientType: 'All', sortBy: 'newest' });
+        const defaultStations = (isStationStaff && !canViewOtherStations)
+            ? (assignedStation ? [assignedStation] : ['__UNASSIGNED__'])
+            : [];
+        setFilters({ trimesters: [], risks: [], stations: defaultStations, assignmentStatus: 'All', patientType: 'All', sortBy: 'newest' });
         setArchiveFilter('active');
         setDateFilter('all');
         setCustomDateFrom('');
@@ -520,11 +529,11 @@ const PatientsList = () => {
             'Station': p.station || 'Unassigned',
             'Age': p.age || 'N/A',
             'Gestation': p.weeks ? `${p.weeks} weeks (T${p.trimester || 1})` : 'N/A',
-            'Health Conditions': p.hasHealthConditions ? (
-                (p.documentedConditions && p.documentedConditions.length > 0) 
-                    ? p.documentedConditions.join(', ') 
-                    : 'With Health Conditions'
-            ) : 'None Reported',
+            'Health Conditions': (p.activeCategories && p.activeCategories.length > 0)
+                ? p.activeCategories.map(cat => `${cat.category}: ${cat.conditions.join(', ')}`).join('; ')
+                : (p.documentedConditions && p.documentedConditions.length > 0
+                    ? p.documentedConditions.join(', ')
+                    : 'None Reported'),
             'Total Visits': p.totalVisits || 0,
             'Next Appointment': p.nextAppt || 'No upcoming appt'
         }));
@@ -536,17 +545,6 @@ const PatientsList = () => {
             XLSX.writeFile(workbook, `patient_profiles_${reportPeriodText || 'all'}.xlsx`);
         } else if (format === 'pdf') {
             try {
-                const jsPDF = (await import('jspdf')).default;
-                const autoTable = (await import('jspdf-autotable')).default;
-                
-                const doc = new jsPDF();
-                
-                doc.text("Patient Profiles List", 14, 15);
-                if (reportPeriodText) {
-                    doc.setFontSize(10);
-                    doc.text(`Period: ${reportPeriodText}`, 14, 22);
-                }
-                
                 const tableColumn = ["Patient ID", "Name", "Type", "Station", "Age", "Gestation", "Health Conditions", "Total Visits", "Next Appt"];
                 const tableRows = exportData.map(obj => [
                     obj['Patient ID'],
@@ -560,15 +558,18 @@ const PatientsList = () => {
                     obj['Next Appointment']
                 ]);
 
-                autoTable(doc, {
-                    head: [tableColumn],
-                    body: tableRows,
-                    startY: reportPeriodText ? 28 : 20,
-                    styles: { fontSize: 8 },
-                    headStyles: { fillColor: [147, 111, 199] }
-                });
+                const stationText = filters.stations && filters.stations.length > 0 ? filters.stations.join(', ') : 'All Stations';
 
-                doc.save(`patient_profiles_${reportPeriodText || 'all'}.pdf`);
+                exportStandardStaffPdf({
+                    orientation: 'landscape',
+                    title: 'Patient Profiles Masterlist',
+                    period: reportPeriodText || 'All Dates',
+                    station: stationText,
+                    totalRecords: exportData.length,
+                    columns: tableColumn,
+                    rows: tableRows,
+                    filename: `patient_profiles_${reportPeriodText || 'all'}.pdf`
+                });
             } catch (error) {
                 console.error("Error generating PDF:", error);
                 await customAlert({ title: 'Error', text: 'Unable to generate PDF right now.', iconType: 'danger' });
@@ -576,13 +577,14 @@ const PatientsList = () => {
         }
     };
 
-    const handleSaveVitals = async (patientId, record, supplements) => {
+    const handleSaveVitals = async (patientId, record) => {
         try {
             const patientService = new PatientService();
-            await patientService.recordVitals(patientId, record, supplements);
+            await patientService.recordVitals(patientId, record);
             setVitalModalPatient(null);
             setVitalToast(true);
             setTimeout(() => setVitalToast(false), 3500);
+            loadInitialData();
         } catch (err) {
             console.error('Error saving vitals:', err);
             await customAlert({ title: 'Error', text: 'Error saving vitals: ' + err.message, iconType: 'danger' });
@@ -656,9 +658,19 @@ const PatientsList = () => {
         }
     };
 
+    if (loading) {
+        return (
+            <StaffPageLoader 
+                message="Loading patient profiles..." 
+                error={error} 
+                onRetry={loadInitialData} 
+            />
+        );
+    }
+
     return (
         <>
-        <div className="patients-page">
+        <div className="patients-page staff-page-ready">
 
             <div className="page-header">
                 <div>
@@ -789,7 +801,7 @@ const PatientsList = () => {
                                     autoFocus
                                 />
                                 <div className="popover-options">
-                                    {availableStations
+                                    {permittedStations
                                         .filter(s => s.toLowerCase().includes(stationSearch.toLowerCase()))
                                         .map(station => (
                                             <label key={station} className="popover-checkbox-label">
@@ -797,7 +809,7 @@ const PatientsList = () => {
                                                 {station}
                                             </label>
                                         ))}
-                                    {availableStations.filter(s => s.toLowerCase().includes(stationSearch.toLowerCase())).length === 0 && (
+                                    {permittedStations.filter(s => s.toLowerCase().includes(stationSearch.toLowerCase())).length === 0 && (
                                         <div className="popover-empty">No stations found</div>
                                     )}
                                 </div>
@@ -942,8 +954,19 @@ const PatientsList = () => {
                             {
                                 title: "Health Conditions",
                                 items: [
-                                    { label: "With Health Conditions", className: "risk-badge condition-present" },
+                                    { label: "Pre-existing Medical Conditions", className: "category-badge category-badge--pre-existing" },
+                                    { label: "Pregnancy-Related Conditions", className: "category-badge category-badge--pregnancy-related" },
+                                    { label: "Relevant Obstetric History", className: "category-badge category-badge--obstetric-history" },
                                     { label: "None Reported", className: "risk-badge condition-none" }
+                                ]
+                            },
+                            {
+                                title: "Patient Status & Assignment",
+                                items: [
+                                    { label: "Assigned Staff", style: { backgroundColor: 'rgba(109, 184, 160, 0.15)', color: '#3d8870' } },
+                                    { label: "Unassigned", style: { backgroundColor: 'rgba(230, 184, 110, 0.2)', color: '#8a6a10' } },
+                                    { label: "Pregnant", style: { backgroundColor: 'rgba(122, 162, 219, 0.15)', color: '#3b5a8c' } },
+                                    { label: "Postpartum", style: { backgroundColor: 'rgba(185, 129, 138, 0.15)', color: '#8a505b' } }
                                 ]
                             }
                         ]}
@@ -998,7 +1021,6 @@ const PatientsList = () => {
                                                         patientId={p.id}
                                                         patientStationId={p.stationId}
                                                         assignedStaffId={p.assignedStaffId}
-                                                        role={assignmentAccess.role}
                                                         viewerStationId={assignmentAccess.stationId}
                                                         onAssigned={({ id: assignedStaffId }) => setPatients(previous => previous.map(patient =>
                                                             patient.id === p.id ? { ...patient, assignedStaffId } : patient
@@ -1018,23 +1040,66 @@ const PatientsList = () => {
                                         </td>
 
                                         <td>
-                                            <div>
+                                            {(!p.activeCategories || p.activeCategories.length === 0) ? (
                                                 <span 
-                                                    className={`risk-badge ${p.hasHealthConditions ? 'condition-present' : 'condition-none'}`}
+                                                    className="risk-badge condition-none"
                                                     onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/${p.id}?from=patients&tab=history`); }}
                                                     style={{ cursor: 'pointer', transition: 'opacity 0.2s' }}
                                                     onMouseOver={(e) => { e.target.style.opacity = '0.75'; }}
                                                     onMouseOut={(e) => { e.target.style.opacity = '1'; }}
                                                     title="View Medical History"
                                                 >
-                                                    {p.hasHealthConditions ? 'With Health Conditions' : 'None Reported'}
+                                                    None Reported
                                                 </span>
-                                                {p.hasHealthConditions && (p.documentedConditions || p.riskFactors || []).filter(f => f && f.toLowerCase() !== 'none').length > 0 && (
-                                                    <div className="risk-factors">
-                                                        {(p.documentedConditions || p.riskFactors || []).filter(f => f && f.toLowerCase() !== 'none').join(', ')}
-                                                    </div>
-                                                )}
-                                            </div>
+                                            ) : (
+                                                <div className="patient-conditions-cell" onClick={(e) => e.stopPropagation()}>
+                                                    {p.activeCategories.slice(0, 2).map((catGroup, catIdx) => {
+                                                        const theme = getCategoryTheme(catGroup.category);
+                                                        const allConditions = catGroup.conditions || [];
+                                                        const displayConditions = allConditions.slice(0, 2);
+                                                        const extraConditionsCount = allConditions.length - displayConditions.length;
+
+                                                        return (
+                                                            <div key={catIdx} className="category-group">
+                                                                <span 
+                                                                    className={`category-badge category-badge--${theme}`}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        navigate(`/dashboard/patients/${p.id}?from=patients&tab=history`);
+                                                                    }}
+                                                                    title="View in Medical History"
+                                                                >
+                                                                    {catGroup.category}
+                                                                </span>
+                                                                <div className="category-conditions-text">
+                                                                    {displayConditions.join(', ')}
+                                                                    {extraConditionsCount > 0 && (
+                                                                        <button
+                                                                            type="button"
+                                                                            className="condition-more-btn"
+                                                                            onClick={(e) => handleOpenConditionPopover(e, p)}
+                                                                            title="View all documented conditions"
+                                                                        >
+                                                                            +{extraConditionsCount} more
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+
+                                                    {p.activeCategories.length > 2 && (
+                                                        <button
+                                                            type="button"
+                                                            className="condition-more-btn condition-more-btn--categories"
+                                                            onClick={(e) => handleOpenConditionPopover(e, p)}
+                                                            title="View all categories & conditions"
+                                                        >
+                                                            +{p.activeCategories.length - 2} more {p.activeCategories.length - 2 === 1 ? 'category' : 'categories'}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
                                         </td>
 
                                         <td className="cell-bold">
@@ -1066,25 +1131,31 @@ const PatientsList = () => {
 
                                         <td>
                                             <div className="actions-group">
-                                                <ActionTooltip text="View Profile">
-                                                    <button type="button" className="action-btn view-btn" onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/${p.id}?from=patients`); }}>
-                                                        <Eye size={16} />
-                                                    </button>
-                                                </ActionTooltip>
+                                                {hasPatientStationPermission(p, 'patient.view.own_station', 'patient.view.other_station') && (
+                                                    <ActionTooltip text="View Profile">
+                                                        <button type="button" className="action-btn view-btn" onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/${p.id}?from=patients`); }}>
+                                                            <Eye size={16} />
+                                                        </button>
+                                                    </ActionTooltip>
+                                                )}
 
-                                                <ActionTooltip text="Record Vitals">
-                                                    <button type="button" className="action-btn vitals-btn" onClick={(e) => { e.stopPropagation(); openVitalsModal(p.id); }} disabled={modalLoading.vitals}>
-                                                        <Activity size={16} />
-                                                    </button>
-                                                </ActionTooltip>
+                                                {hasPatientStationPermission(p, 'prenatal.record.own_station', 'prenatal.record.other_station') && (
+                                                    <ActionTooltip text="Record Vitals">
+                                                        <button type="button" className="action-btn vitals-btn" onClick={(e) => { e.stopPropagation(); openVitalsModal(p); }}>
+                                                            <Activity size={16} />
+                                                        </button>
+                                                    </ActionTooltip>
+                                                )}
 
-                                                <ActionTooltip text="Edit Patient">
-                                                    <button type="button" className="action-btn edit-btn" onClick={(e) => { e.stopPropagation(); openEditModal(p.id); }} disabled={modalLoading.edit}>
-                                                        <Edit size={16} />
-                                                    </button>
-                                                </ActionTooltip>
+                                                {hasPatientStationPermission(p, 'patient.edit.own_station', 'patient.edit.other_station') && (
+                                                    <ActionTooltip text="Edit Patient">
+                                                        <button type="button" className="action-btn edit-btn" onClick={(e) => { e.stopPropagation(); openEditModal(p.id); }} disabled={modalLoading.edit}>
+                                                            <Edit size={16} />
+                                                        </button>
+                                                    </ActionTooltip>
+                                                )}
 
-                                                {(p.archiveStatus || 'active') === 'archived' ? (
+                                                {canChangeArchiveState(p) && ((p.archiveStatus || 'active') === 'archived' ? (
                                                     <ActionTooltip text="Restore Patient">
                                                         <button type="button" className="action-btn restore-btn" onClick={(e) => {
                                                             e.stopPropagation();
@@ -1102,7 +1173,7 @@ const PatientsList = () => {
                                                             <Archive size={16} />
                                                         </button>
                                                     </ActionTooltip>
-                                                )}
+                                                ))}
                                             </div>
                                         </td>
                                     </tr>
@@ -1141,15 +1212,16 @@ const PatientsList = () => {
 
         {vitalModalPatient && (
             <RecordVitalsModal
+                key={vitalModalPatient.id}
                 patient={vitalModalPatient}
                 onSave={handleSaveVitals}
                 onClose={() => setVitalModalPatient(null)}
-                supplements={supplements}
             />
         )}
 
         {editModalPatient && (
             <EditPatientModal
+                key={editModalPatient.id}
                 patient={editModalPatient}
                 onClose={() => setEditModalPatient(null)}
                 onSave={handlePatientUpdate}
@@ -1168,6 +1240,71 @@ const PatientsList = () => {
             onClose={() => setShowExportModal(false)} 
             onExport={handleExport} 
         />
+
+        {conditionPopover && createPortal(
+            <div 
+                className="conditions-popover-card" 
+                style={{
+                    position: 'fixed',
+                    top: `${conditionPopover.top}px`,
+                    left: `${conditionPopover.left}px`,
+                    zIndex: 9999
+                }}
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="conditions-popover-header">
+                    <div>
+                        <h4 className="conditions-popover-title">Documented Health Conditions</h4>
+                        <p className="conditions-popover-sub">
+                            {conditionPopover.patient.name} &middot; {getShortPatientId(conditionPopover.patient.id)}
+                        </p>
+                    </div>
+                    <button 
+                        type="button" 
+                        className="conditions-popover-close" 
+                        onClick={() => setConditionPopover(null)}
+                        aria-label="Close"
+                    >
+                        <X size={15} />
+                    </button>
+                </div>
+
+                <div className="conditions-popover-body">
+                    {(conditionPopover.patient.activeCategories || []).map((catGroup, idx) => {
+                        const theme = getCategoryTheme(catGroup.category);
+                        return (
+                            <div key={idx} className="conditions-popover-group">
+                                <span className={`category-badge category-badge--${theme}`}>
+                                    {catGroup.category}
+                                </span>
+                                <div className="conditions-popover-tags">
+                                    {(catGroup.conditions || []).map((c, cIdx) => (
+                                        <span key={cIdx} className="conditions-popover-tag">
+                                            {c}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                <div className="conditions-popover-footer">
+                    <button 
+                        type="button"
+                        className="conditions-popover-history-link"
+                        onClick={() => {
+                            const patientId = conditionPopover.patient.id;
+                            setConditionPopover(null);
+                            navigate(`/dashboard/patients/${patientId}?from=patients&tab=history`);
+                        }}
+                    >
+                        View Full Medical History &rarr;
+                    </button>
+                </div>
+            </div>,
+            document.body
+        )}
         </>
     );
 };

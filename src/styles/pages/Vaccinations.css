@@ -173,7 +173,7 @@
 ════════════════════════════ */
 .vacc-stats-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 16px;
 }
 
@@ -752,13 +752,17 @@
 .modal-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.4);
-    backdrop-filter: blur(4px);
-    z-index: 2000;
+    width: 100%;
+    height: 100dvh;
+    background: rgba(20, 20, 30, 0.45);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    z-index: 9999;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 24px;
+    box-sizing: border-box;
 }
 
 .vacc-modal {
@@ -1247,5 +1251,59 @@
     flex-shrink: 0;
     stroke: currentColor;
     stroke-width: 2.2;
+}
+
+/* ════════════════════════════
+   SEARCHABLE SELECT / COMBOBOX
+════════════════════════════ */
+.searchable-select-trigger {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1.5px solid #eef0f4;
+    font-size: 13px;
+    background: #ffffff;
+    color: var(--color-text, #1f2937);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    min-height: 40px;
+    box-sizing: border-box;
+    outline: none;
+}
+
+.searchable-select-trigger:hover:not(:disabled) {
+    border-color: #cbd5e1;
+}
+
+.searchable-select-trigger:focus,
+.searchable-select-trigger.is-open {
+    border-color: var(--color-rose, #803035);
+    box-shadow: 0 0 0 2px rgba(128, 48, 53, 0.12);
+}
+
+.searchable-select-trigger:disabled {
+    background-color: #f8fafc;
+    color: #94a3b8;
+    cursor: not-allowed;
+    border-color: #e2e8f0;
+}
+
+.searchable-select-clear-btn:hover {
+    color: var(--color-rose, #803035) !important;
+}
+
+@keyframes searchablePopoverFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(3px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 

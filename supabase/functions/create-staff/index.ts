@@ -1,6 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { accountEmail, DUPLICATE_EMAIL_MESSAGE, isDuplicateEmailError, sendBrevoEmail } from '../_shared/email.ts';
+import { accountEmail, DUPLICATE_EMAIL_MESSAGE, isDuplicateEmailError, PASSWORD_RESET_URL, sendBrevoEmail } from '../_shared/email.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,6 +11,7 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
 const admin = createClient(supabaseUrl, serviceRoleKey);
 
 const json = (body: unknown, status = 200) =>
@@ -78,6 +79,21 @@ async function getCallerRole(request: Request) {
   };
 }
 
+async function callerHasPermission(request: Request, permissionKey: string) {
+  const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
+  if (!token || !anonKey) throw new Error('Permission verification is not configured');
+
+  const callerClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data, error } = await callerClient.rpc('has_permission', {
+    p_permission_key: permissionKey,
+  });
+  if (error) throw error;
+  return data === true;
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -104,7 +120,7 @@ Deno.serve(async (request) => {
       return json({ error: 'Email, password, full name, and role are required' }, 400);
     }
 
-    if (!['admin', 'staff', 'cho personnel'].includes(role)) {
+    if (['patient', 'mother', 'user'].includes(role)) {
       return json({ error: 'Invalid staff role' }, 400);
     }
 
@@ -113,6 +129,16 @@ Deno.serve(async (request) => {
     }
     if (caller.role === 'cho personnel' && !['staff', 'cho personnel'].includes(role)) {
       return json({ error: 'CHO Personnel can only create Staff or CHO Personnel accounts' }, 403);
+    }
+    if (caller.role === 'admin') {
+      const { data: userTypes, error: userTypesError } = await admin
+        .from('user_type')
+        .select('user_type');
+      if (userTypesError) throw userTypesError;
+      const roleExists = (userTypes || []).some(userType =>
+        String(userType.user_type || '').trim().toLowerCase().replace(/_/g, ' ') === role.replace(/_/g, ' ')
+      );
+      if (!roleExists) return json({ error: 'Invalid staff role' }, 400);
     }
 
     let effectiveStationId = stationId;
@@ -126,10 +152,26 @@ Deno.serve(async (request) => {
       if (!callerProfile?.station_ass) {
         return json({ error: 'Your account must have an assigned station' }, 403);
       }
-      if (stationId && stationId !== callerProfile.station_ass) {
-        return json({ error: 'You can only add staff to your own station' }, 403);
+      effectiveStationId = stationId || callerProfile.station_ass;
+
+      const permissionKey = effectiveStationId === callerProfile.station_ass
+        ? 'staff.register.own_station'
+        : 'staff.register.other_station';
+      if (!await callerHasPermission(request, permissionKey)) {
+        return json({ error: 'You do not have permission to register staff at that station' }, 403);
       }
-      effectiveStationId = callerProfile.station_ass;
+    } else if (!await callerHasPermission(request, 'staff.register.other_station')) {
+      return json({ error: 'You do not have permission to register staff at that station' }, 403);
+    }
+
+    if (effectiveStationId) {
+      const { data: station, error: stationError } = await admin
+        .from('stations')
+        .select('id')
+        .eq('id', effectiveStationId)
+        .maybeSingle();
+      if (stationError) throw stationError;
+      if (!station) return json({ error: 'The selected station does not exist' }, 400);
     }
 
     currentStep = 'duplicate email check';
@@ -157,11 +199,20 @@ Deno.serve(async (request) => {
       p_user_id: createdUserId,
       p_email: email,
       p_role: role,
-      p_password: password,
     });
 
     if (userError) throw userError;
   console.log('[create-staff] public.users record created');
+
+    currentStep = 'password setup link generation';
+    const { data: setupLinkData, error: setupLinkError } = await admin.auth.admin.generateLink({
+      type: 'recovery',
+      email,
+      options: { redirectTo: PASSWORD_RESET_URL },
+    });
+    if (setupLinkError) throw setupLinkError;
+    const setupLink = setupLinkData.properties?.action_link;
+    if (!setupLink) throw new Error('Supabase Auth did not return a password setup link');
 
   currentStep = 'station lookup';
     let stationName = caller.role === 'admin' ? String(body.stationName || '').trim() : '';
@@ -182,7 +233,7 @@ Deno.serve(async (request) => {
       email,
       role,
       station: stationName,
-      password,
+      setupLink,
       accountType: 'staff',
     }));
     console.log('[create-staff] Brevo email sent');

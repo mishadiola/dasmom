@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import useClickOutside from '../../hooks/useClickOutside';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -15,14 +16,16 @@ import PatientService from '../../services/patientservice';
 import supabase from '../../config/supabaseclient';
 import '../../styles/components/SharedFilters.css';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import ExportModal from '../../components/ExportModal';
-import { formatTime12Hour, isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
+import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
+import { formatTime12Hour, isNewbornVaccinationEligible, calculateGestationalAgeAtEvent } from '../../utils/pregnancyUtils';
 import { useModal } from '../../context/ModalContext';
+import { useRolePermissions } from '../../context/RolePermissionContext';
 import Legend from '../../components/Legend/Legend';
 import { formatMotherId } from '../../utils/displayIds';
 import ActionTooltip from '../../components/Common/ActionTooltip';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import { useDefaultStation } from '../../hooks/useDefaultStation';
 
 const COMPLICATION_OPTIONS = ['None', 'Hemorrhage', 'Infection', 'Preeclampsia', 'Placenta Previa', 'Preterm'];
 const DELIVERY_TYPES = ['NSD', 'CS', 'Breech'];
@@ -56,18 +59,44 @@ const getSections = (outcome) => outcome === 'Miscarriage'
 const DeliveryOutcomes = () => {
     const navigate = useNavigate();
     const { confirm, alert: customAlert } = useModal();
+    const { hasPermission } = useRolePermissions();
+    const canAddDelivery = hasPermission('delivery.add.own_station');
     const babyService = new BabyService();
+    const [stations, setStations] = useState(['All Stations']);
     const [searchTerm, setSearchTerm] = useState('');
     const [periodFilter, setPeriodFilter] = useState('This Year');
     const [customDateRange, setCustomDateRange] = useState({ from: '', to: '' });
     const [appliedCustomDateRange, setAppliedCustomDateRange] = useState({ from: '', to: '' });
-    const [filters, setFilters] = useState({
+
+    const {
+        isStationStaff,
+        assignedStation,
+        canViewOtherStations,
+        availableStations: permittedStations,
+        matchStation,
+    } = useDefaultStation({
+        permissionKey: 'delivery.view.other_station',
+        allStations: stations.filter(s => s !== 'All Stations'),
+        isArray: false
+    });
+
+    const [filters, setFilters] = useState(() => ({
         type: 'All',
         outcome: 'All',
         complication: 'All',
-        station: 'All',
+        station: isStationStaff && assignedStation ? assignedStation : 'All',
         view: 'outcomes'
-    });
+    }));
+    const userHasChangedStationRef = useRef(false);
+
+    useEffect(() => {
+        if (!userHasChangedStationRef.current && isStationStaff && assignedStation) {
+            setFilters(prev => ({
+                ...prev,
+                station: prev.station !== 'All' ? prev.station : assignedStation
+            }));
+        }
+    }, [isStationStaff, assignedStation]);
 
     const [showModal, setShowModal] = useState(false);
     const [showViewModal, setShowViewModal] = useState(false);
@@ -81,7 +110,7 @@ const DeliveryOutcomes = () => {
     const [deliveries, setDeliveries] = useState([]);
     const [stats, setStats] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [stations, setStations] = useState(['All Stations']);
+    const [error, setError] = useState(null);
     const [showExportModal, setShowExportModal] = useState(false);
 
     // Table date filter state (separate from summary period filter and export modal)
@@ -96,7 +125,8 @@ const DeliveryOutcomes = () => {
     const hasActiveFilters = filters.type !== 'All' || filters.outcome !== 'All' || filters.complication !== 'All' || filters.station !== 'All' || searchTerm !== '' || dateFilter !== 'all' || cardFilter !== null;
 
     const clearFilters = () => {
-        setFilters({ ...filters, type: 'All', outcome: 'All', complication: 'All', station: 'All' });
+        const defStation = (isStationStaff && !canViewOtherStations) ? (assignedStation || '__UNASSIGNED__') : 'All';
+        setFilters({ ...filters, type: 'All', outcome: 'All', complication: 'All', station: defStation });
         setSearchTerm('');
         setDateFilter('all');
         setCustomDateFrom('');
@@ -145,6 +175,7 @@ const DeliveryOutcomes = () => {
         }
 
         const periodDeliveries = deliveries.filter(d => {
+            if (!matchStation(d.station, filters.station)) return false;
             if (!d.deliveryDate) return false;
             const dDate = new Date(d.deliveryDate);
             if (isNaN(dDate.getTime())) return false;
@@ -189,6 +220,7 @@ const DeliveryOutcomes = () => {
 
     const loadData = async () => {
         setLoading(true);
+        setError(null);
         try {
             const [allDeliv, allStats] = await Promise.all([
                 babyService.getAllDeliveries(),
@@ -197,6 +229,7 @@ const DeliveryOutcomes = () => {
             setDeliveries(allDeliv || []);
         } catch (err) {
             console.error('Error loading delivery outcomes:', err);
+            setError(err);
             setDeliveries([]);
         } finally {
             setLoading(false);
@@ -304,33 +337,24 @@ const DeliveryOutcomes = () => {
             const dateStr = new Date().toISOString().split('T')[0];
             XLSX.writeFile(wb, `Delivery_Outcomes_${dateStr}.xlsx`);
         } else if (format === 'pdf') {
-            const doc = new jsPDF('landscape');
-            
-            doc.setFontSize(16);
-            doc.text("Delivery Outcomes Report", 14, 20);
-            
-            doc.setFontSize(10);
-            doc.setTextColor(100);
-            doc.text(`Period: ${reportPeriodText}`, 14, 28);
-            
-            if (exportData.length === 0) {
-                doc.text("No records found for the selected period.", 14, 40);
-            } else {
-                const head = [Object.keys(exportData[0])];
-                const body = exportData.map(obj => Object.values(obj));
-                
-                doc.autoTable({
-                    startY: 35,
-                    head: head,
-                    body: body,
-                    theme: 'grid',
-                    styles: { fontSize: 8 },
-                    headStyles: { fillColor: [185, 129, 138] }
-                });
-            }
-            
             const dateStr = new Date().toISOString().split('T')[0];
-            doc.save(`Delivery_Outcomes_${dateStr}.pdf`);
+            const stationText = (filters.station && filters.station !== 'All' && filters.station !== 'All Stations')
+                ? filters.station
+                : 'All Stations';
+
+            const head = exportData.length > 0 ? [Object.keys(exportData[0])] : [["Patient Name", "Patient ID", "Station", "Delivery Date", "Delivery Time", "Delivery Type", "Health Conditions", "Complications", "Baby Name", "Baby Outcome", "Staff"]];
+            const body = exportData.length > 0 ? exportData.map(obj => Object.values(obj)) : [];
+
+            exportStandardStaffPdf({
+                orientation: 'landscape',
+                title: 'Delivery Outcomes Report',
+                period: reportPeriodText || 'All Dates',
+                station: stationText,
+                totalRecords: exportData.length,
+                head: head,
+                body: body,
+                filename: `Delivery_Outcomes_${dateStr}.pdf`
+            });
         }
     };
 
@@ -352,13 +376,14 @@ const DeliveryOutcomes = () => {
                 const matchSearch = 
                     d.patientName?.toLowerCase().includes(s) ||
                     d.patientId?.toString().toLowerCase().includes(s) ||
+                    formatMotherId(d.patientId).toLowerCase().includes(s) ||
                     d.station?.toLowerCase().includes(s);
 
                 const matchType = filters.type === 'All' || d.deliveryType === filters.type;
                 const matchOutcome = filters.outcome === 'All' || d.pregnancyOutcome === filters.outcome;
                 const matchComp = filters.complication === 'All' || 
                     (filters.complication === 'None' ? d.complications === 'None' : d.complications !== 'None');
-                const matchStation = filters.station === 'All' || d.station === filters.station;
+                const matchStationVal = matchStation(d.station, filters.station);
 
                 // Date filter using deliveryDate
                 let matchDate = true;
@@ -389,7 +414,7 @@ const DeliveryOutcomes = () => {
                 }
                 // 'total' and 'type' show all records (type just focuses attention, no exclusion)
 
-                return matchSearch && matchType && matchOutcome && matchComp && matchStation && matchDate && matchCard;
+                return matchSearch && matchType && matchOutcome && matchComp && matchStationVal && matchDate && matchCard;
             })
             .sort((a, b) => {
                 const field = sortField;
@@ -488,8 +513,18 @@ const DeliveryOutcomes = () => {
 
 
 
+    if (loading) {
+        return (
+            <StaffPageLoader 
+                message="Loading delivery outcomes..." 
+                error={error} 
+                onRetry={loadData} 
+            />
+        );
+    }
+
     return (
-        <div className="do-page">
+        <div className="do-page staff-page-ready">
             <div className="page-header">
                 <div>
                     <h1 className="page-title">
@@ -506,9 +541,11 @@ const DeliveryOutcomes = () => {
                     >
                         <Download size={16} /> Export
                     </button>
-                    <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-                        <Plus size={16} /> Record New Delivery
-                    </button>
+                    {canAddDelivery && (
+                        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+                            <Plus size={16} /> Record New Delivery
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -760,9 +797,11 @@ const DeliveryOutcomes = () => {
                             <div className="filter-popover">
                                 <div className="popover-title">Station</div>
                                 <div className="popover-options">
-                                    <button className={`popover-opt-btn ${filters.station === 'All' || filters.station === 'All Stations' ? 'selected' : ''}`} onClick={() => { handleFilter('station', 'All'); setActivePopover(null); }}>All Stations</button>
-                                    {stations.filter(s => s !== 'All Stations').map(s => (
-                                        <button key={s} className={`popover-opt-btn ${filters.station === s ? 'selected' : ''}`} onClick={() => { handleFilter('station', s); setActivePopover(null); }}>{s}</button>
+                                    {(!isStationStaff || canViewOtherStations) && (
+                                        <button className={`popover-opt-btn ${filters.station === 'All' || filters.station === 'All Stations' ? 'selected' : ''}`} onClick={() => { userHasChangedStationRef.current = true; handleFilter('station', 'All'); setActivePopover(null); }}>All Stations</button>
+                                    )}
+                                    {permittedStations.map(s => (
+                                        <button key={s} className={`popover-opt-btn ${filters.station === s ? 'selected' : ''}`} onClick={() => { userHasChangedStationRef.current = true; handleFilter('station', s); setActivePopover(null); }}>{s}</button>
                                     ))}
                                 </div>
                             </div>
@@ -947,7 +986,7 @@ const DeliveryOutcomes = () => {
                                                         <button className="action-btn new-pregnancy-btn" onClick={() => handleNewPregnancy(d.patientId)}><RefreshCw size={13} /></button>
                                                     </ActionTooltip>
                                                     <ActionTooltip text="Edit Record">
-                                                        <button className="action-btn edit-btn" onClick={() => { setSelectedDelivery(d); setShowModal(true); }}><Edit2 size={13} /></button>
+                                                        {canAddDelivery && <button className="action-btn edit-btn" onClick={() => { setSelectedDelivery(d); setShowModal(true); }}><Edit2 size={13} /></button>}
                                                     </ActionTooltip>
                                                 </div>
                                             </td>
@@ -966,64 +1005,6 @@ const DeliveryOutcomes = () => {
                         </div>
                     </div>
 
-
-                </div>
-                {/* ── Right Column: Panels ── */}
-                <div className="do-side-col" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    {/* Station Distribution */}
-                    <div className="do-card">
-                        <div className="do-card-head">
-                            <h2>
-                                <MapPin size={16} /> Station Distribution
-                            </h2>
-                        </div>
-                        <div className="station-dist-list">
-                            {(() => {
-                                const counts = {};
-                                filtered.forEach((p) => {
-                                    const st = p.station || 'Unassigned';
-                                    counts[st] = (counts[st] || 0) + 1;
-                                });
-                                const dist = Object.entries(counts)
-                                    .map(([name, count]) => ({ name, count }))
-                                    .sort((a, b) => b.count - a.count);
-                                
-                                return (
-                                    <>
-                                        {dist.map((b) => (
-                                            <div key={b.name} className="station-dist-item">
-                                                <span>{b.name}</span>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    <div className="station-bar-wrap">
-                                                        <div
-                                                            className="station-bar-fill"
-                                                            style={{
-                                                                width: `${(b.count / Math.max(filtered.length, 1)) * 100}%`,
-                                                            }}
-                                                        ></div>
-                                                    </div>
-                                                    <span
-                                                        style={{
-                                                            fontSize: '12px',
-                                                            fontWeight: 700,
-                                                            color: 'var(--color-rose)',
-                                                            minWidth: '20px',
-                                                            textAlign: 'right',
-                                                        }}
-                                                    >
-                                                        {b.count}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                        {dist.length === 0 && (
-                                            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', textAlign: 'center', margin: '20px 0' }}>No records found.</p>
-                                        )}
-                                    </>
-                                );
-                            })()}
-                        </div>
-                    </div>
                 </div>
             </div>
             
@@ -1054,6 +1035,9 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
         stationId: '',
         visitStationId: userAccess?.stationId || '',
         visitStation: stationRows.find(station => station.id === userAccess?.stationId)?.station_name || '',
+        lmpDate: '',
+        eddDate: '',
+        pregnancyId: '',
         gestationalAge: '',
         riskLevel: '',
         pregnancyType: '',
@@ -1061,6 +1045,10 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
         deliveryTime: '',
         deliveryType: '',
         pregnancyOutcome: '',
+        confirmedEarlyLiveBirth: false,
+        confirmedEarlyStillbirth: false,
+        confirmedLateMiscarriage: false,
+        confirmedUncertainDating: false,
         attendingStaffId: '',
         attendingStaffName: '',
         facility: '',
@@ -1105,6 +1093,26 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
             if (formData.pregnancyOutcome !== 'Miscarriage' && !formData.deliveryType) errors.push('Delivery Type');
             if (formData.pregnancyOutcome !== 'Miscarriage' && !formData.attendingStaffId) errors.push('Attending Staff');
             if (!formData.pregnancyOutcome) errors.push('Pregnancy Outcome');
+
+            // Gestational-age-aware clinical validation
+            const ga = calculateGestationalAgeAtEvent(formData.lmpDate, formData.eddDate, formData.deliveryDate, formData.gestationalAge);
+            if (ga.status === 'inconsistent') {
+                errors.push('Chronological Inconsistency: Delivery Date is prior to documented LMP');
+            }
+            if (formData.pregnancyOutcome) {
+                if (ga.status === 'missing_dating' && !formData.confirmedUncertainDating) {
+                    errors.push('Dating Verification Required');
+                }
+                if (formData.pregnancyOutcome === 'Live Birth' && ga.isPreViable && ga.status === 'calculated' && !formData.confirmedEarlyLiveBirth) {
+                    errors.push('Signs of Life Confirmation for Early Live Birth');
+                }
+                if (formData.pregnancyOutcome === 'Stillbirth' && ga.isPreViable && ga.status === 'calculated' && !formData.confirmedEarlyStillbirth) {
+                    errors.push('Clinical Confirmation for Early Stillbirth (< 20 weeks)');
+                }
+                if (formData.pregnancyOutcome === 'Miscarriage' && ga.weeks !== null && ga.weeks >= 20 && ga.status === 'calculated' && !formData.confirmedLateMiscarriage) {
+                    errors.push('Clinical Confirmation for Late Miscarriage (≥ 20 weeks)');
+                }
+            }
         }
         if (sectionId === 'baby' && formData.pregnancyOutcome !== 'Miscarriage') {
             formData.newborns.forEach((nb, i) => {
@@ -1187,6 +1195,45 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
         if (!touchedFields.has(fieldName) && !validationErrors.includes(fieldName)) return false;
         return !value || (typeof value === 'string' && !value.trim());
     };
+
+    const gaInfo = useMemo(() => {
+        return calculateGestationalAgeAtEvent(form.lmpDate, form.eddDate, form.deliveryDate, form.gestationalAge);
+    }, [form.lmpDate, form.eddDate, form.deliveryDate, form.gestationalAge]);
+
+    // Ensure verified dating info is loaded from pregnancy_info if not populated via search
+    useEffect(() => {
+        if (!form.patientId) return;
+        if (form.lmpDate || form.eddDate) return;
+        let isMounted = true;
+        (async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('pregnancy_info')
+                    .select('id, lmd, edd, pregnancy_type')
+                    .eq('patient_id', form.patientId)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                if (!error && data && isMounted) {
+                    setForm(prev => {
+                        const nextLmp = data.lmd || '';
+                        const nextEdd = data.edd || '';
+                        const ga = calculateGestationalAgeAtEvent(nextLmp, nextEdd, prev.deliveryDate, prev.gestationalAge);
+                        return {
+                            ...prev,
+                            lmpDate: nextLmp,
+                            eddDate: nextEdd,
+                            pregnancyId: prev.pregnancyId || data.id,
+                            gestationalAge: ga.status === 'calculated' ? ga.formatted : prev.gestationalAge
+                        };
+                    });
+                }
+            } catch (err) {
+                console.error('Failed to load pregnancy dating:', err);
+            }
+        })();
+        return () => { isMounted = false; };
+    }, [form.patientId, form.lmpDate, form.eddDate]);
      useEffect(() => {
         const loadConfiguration = async () => {
             setStaffLoading(true);
@@ -1229,8 +1276,23 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
                 next.visitStation = stationRows.find(station => station.id === value)?.station_name || '';
             }
             
+            if (key === 'deliveryDate') {
+                const ga = calculateGestationalAgeAtEvent(prev.lmpDate, prev.eddDate, value, prev.gestationalAge);
+                if (ga.status === 'calculated') {
+                    next.gestationalAge = ga.formatted;
+                }
+                next.confirmedEarlyLiveBirth = false;
+                next.confirmedEarlyStillbirth = false;
+                next.confirmedLateMiscarriage = false;
+                next.confirmedUncertainDating = false;
+            }
+
             // Logic for Pregnancy Outcome
             if (key === 'pregnancyOutcome') {
+                next.confirmedEarlyLiveBirth = false;
+                next.confirmedEarlyStillbirth = false;
+                next.confirmedLateMiscarriage = false;
+                next.confirmedUncertainDating = false;
                 if (value === 'Miscarriage') {
                     next.deliveryType = 'N/A - Not Applicable';
                     next.facility = '';
@@ -1265,7 +1327,15 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
 
         // Clear validation errors when user fills in a field
         if (value && validationErrors.length > 0) {
-            setValidationErrors(prev => prev.filter(e => !e.toLowerCase().includes(key.toLowerCase())));
+            setValidationErrors(prev => prev.filter(e => {
+                const lowerE = e.toLowerCase();
+                const lowerKey = key.toLowerCase();
+                if (key === 'confirmedEarlyLiveBirth' && lowerE.includes('signs of life')) return false;
+                if (key === 'confirmedEarlyStillbirth' && lowerE.includes('early stillbirth')) return false;
+                if (key === 'confirmedLateMiscarriage' && lowerE.includes('late miscarriage')) return false;
+                if (key === 'confirmedUncertainDating' && lowerE.includes('dating')) return false;
+                return !lowerE.includes(lowerKey);
+            }));
         }
         if (key === 'patientName' && value.length > 2) {
             handleSearch(value);
@@ -1304,13 +1374,18 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
     // Populate form when editing existing delivery
     useEffect(() => {
         if (editDelivery && show) {
+            const editLmp = editDelivery.lmp || '';
+            const editEdd = editDelivery.edd || '';
             setForm({
                 patientId: editDelivery.patientId || '',
+                pregnancyId: editDelivery.pregnancyId || '',
                 patientName: editDelivery.patientName || '',
                 station: editDelivery.station || '',
                 stationId: editDelivery.stationId || '',
                 visitStationId: editDelivery.stationId || '',
                 visitStation: editDelivery.station || '',
+                lmpDate: editLmp,
+                eddDate: editEdd,
                 gestationalAge: editDelivery.gestationalAge || '',
                 riskLevel: editDelivery.riskLevel || '',
                 pregnancyType: editDelivery.pregnancyType || '',
@@ -1318,6 +1393,10 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
                 deliveryTime: editDelivery.deliveryTime || '',
                 deliveryType: editDelivery.deliveryType || '',
                 pregnancyOutcome: editDelivery.pregnancyOutcome || 'Live Birth',
+                confirmedEarlyLiveBirth: false,
+                confirmedEarlyStillbirth: false,
+                confirmedLateMiscarriage: false,
+                confirmedUncertainDating: false,
                 attendingStaffId: editDelivery.attendingStaffId || '',
                 attendingStaffName: editDelivery.staff || '',
                 facility: editDelivery.facility || '',
@@ -1345,11 +1424,14 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
             // Reset form for new delivery
             setForm({
                 patientId: '',
+                pregnancyId: '',
                 patientName: '',
                 station: '',
                 stationId: '',
                 visitStationId: '',
                 visitStation: '',
+                lmpDate: '',
+                eddDate: '',
                 gestationalAge: '',
                 riskLevel: '',
                 pregnancyType: '',
@@ -1357,6 +1439,10 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
                 deliveryTime: '',
                 deliveryType: '',
                 pregnancyOutcome: '',
+                confirmedEarlyLiveBirth: false,
+                confirmedEarlyStillbirth: false,
+                confirmedLateMiscarriage: false,
+                confirmedUncertainDating: false,
                 attendingStaffId: userAccess?.currentUser?.id || '',
                 attendingStaffName: userAccess?.currentUser?.fullName || userAccess?.currentUser?.displayName || '',
                 facility: '',
@@ -1396,9 +1482,13 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
     };
 
     const selectPatient = (patient) => {
+        const nextLmp = patient.lmp || null;
+        const nextEdd = patient.edd || null;
+        const ga = calculateGestationalAgeAtEvent(nextLmp, nextEdd, form.deliveryDate, patient.gestationalAge);
         setForm(prev => ({
             ...prev,
             patientId: patient.id,
+            pregnancyId: patient.pregnancyId || '',
             patientName: patient.name,
             station: patient.station,
             stationId: patient.stationId || '',
@@ -1407,9 +1497,15 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
             facility: prev.facility,
             riskLevel: patient.riskLevel,
             pregnancyType: patient.pregnancyType || 'Singleton',
-            gestationalAge: patient.gestationalAge || '',
+            lmpDate: nextLmp || '',
+            eddDate: nextEdd || '',
+            gestationalAge: ga.status === 'calculated' ? ga.formatted : (patient.gestationalAge || ''),
             attendingStaffId: userAccess?.currentUser?.id || '',
-            attendingStaffName: userAccess?.currentUser?.fullName || userAccess?.currentUser?.displayName || ''
+            attendingStaffName: userAccess?.currentUser?.fullName || userAccess?.currentUser?.displayName || '',
+            confirmedEarlyLiveBirth: false,
+            confirmedEarlyStillbirth: false,
+            confirmedLateMiscarriage: false,
+            confirmedUncertainDating: false
         }));
         setSearchResults([]);
         // Clear patient-related validation errors
@@ -1493,14 +1589,17 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
         setValidationErrors([]);
         setLoading(true);
         try {
+            const ga = calculateGestationalAgeAtEvent(form.lmpDate, form.eddDate, form.deliveryDate, form.gestationalAge);
+            const verifiedGestationalAge = ga.status === 'calculated' ? ga.formatted : (form.gestationalAge || null);
+
             const deliveryData = {
                 mother_id: form.patientId,
                 station_ass: form.visitStationId,
-                pregnancy_id: editDelivery?.pregnancyId || null,
+                pregnancy_id: editDelivery?.pregnancyId || form.pregnancyId || null,
                 delivery_date: form.deliveryDate,
                 delivery_time: form.deliveryTime || '00:00',
                 delivery_type: form.deliveryType,
-                gestational_age: form.gestationalAge || null,
+                gestational_age: verifiedGestationalAge,
                 risk_level: form.riskLevel || 'Normal',
                 complications: form.complications.filter(c => c !== 'None'),
                 attending_staff: form.attendingStaffId || null,
@@ -1512,7 +1611,8 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
                 deliveryData.outcome = 'Miscarriage';
                 deliveryData.miscarriage_info = {
                     ...form.miscarriageInfo,
-                    date: form.miscarriageInfo.date || form.deliveryDate
+                    date: form.miscarriageInfo.date || form.deliveryDate,
+                    gestational_age: verifiedGestationalAge
                 };
             }
 
@@ -1573,7 +1673,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
         icon: sectionItem.id === 'patient' ? User : sectionItem.id === 'delivery' ? Stethoscope : sectionItem.id === 'complications' ? AlertTriangle : sectionItem.id === 'baby' ? Baby : sectionItem.id === 'miscarriage' ? AlertCircle : Calendar
     }));
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="do-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
@@ -1606,7 +1706,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
                             <AlertTriangle size={15} />
                             <div>
                                 <span className="delivery-validation-title">Please complete the required fields before continuing.</span>
-                                <span className="delivery-validation-missing">Missing: {validationErrors.join(', ')}</span>
+                                <span className="delivery-validation-missing">{validationErrors.some(e => e.includes('Confirmation') || e.includes('Verification') || e.includes('Inconsistency')) ? 'Required: ' : 'Missing: '}{validationErrors.join(', ')}</span>
                             </div>
                         </div>
                     </div>
@@ -1627,7 +1727,7 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
                                 <label>Search Patient <span className="req">*</span></label>
                                 <input
                                     type="text"
-                                    placeholder="Type mother&apos;s name..."
+                                    placeholder="Type mother&apos;s name or ID..."
                                     value={form.patientName}
                                     onChange={e => updateForm('patientName', e.target.value)}
                                     autoComplete="off"
@@ -1639,14 +1739,14 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
                                             <div key={p.id} className="search-result-item" onClick={() => selectPatient(p)}>
                                                 <div className="res-name">{p.name}</div>
                                                 <div className="res-meta">
-                                                    {p.id} · {p.station} · {p.isPregnant ? 'Pregnant' : p.riskLevel}
+                                                    {formatMotherId(p.id)} · {p.station} · {p.isPregnant ? 'Pregnant' : p.riskLevel}
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
                                 )}
                             </div>
-                            <div className="form-group"><label>Patient ID</label><input value={form.patientId} readOnly className="readonly-field" /></div>
+                            <div className="form-group"><label>Patient ID</label><input value={form.patientId ? formatMotherId(form.patientId) : ''} readOnly className="readonly-field" /></div>
                             <div className="form-group"><label>Station</label><input value={form.station} readOnly className="readonly-field" /></div>
                             <div className="form-group"><label>Health Conditions</label><input value={form.riskLevel?.includes('High') ? 'With Health Conditions' : 'None Reported'} readOnly className="readonly-field" /></div>
                             <div className="form-group"><label>Pregnancy Type</label><input value={form.pregnancyType} readOnly className="readonly-field" /></div>
@@ -1664,14 +1764,163 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
                                 <label>Time</label>
                                 <input type="time" value={form.deliveryTime} onChange={e => updateForm('deliveryTime', e.target.value)} />
                             </div>
-                            <div className="form-group">
+                            <div className="form-group ga-outcome-form-group">
+                                <div className="ga-event-indicator-wrapper">
+                                    <div className={`ga-event-indicator ga-status-${gaInfo.status}`}>
+                                        <span className="ga-indicator-label">Gestational Age at Event:</span>
+                                        <span className="ga-indicator-value">{gaInfo.formatted}</span>
+                                        {gaInfo.trimester && (
+                                            <span className={`ga-trimester-badge badge-${gaInfo.isFirstTrimester ? 't1' : gaInfo.weeks >= 28 ? 't3' : 't2'}`}>
+                                                {gaInfo.trimester}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
                                 <label>Pregnancy Outcome <span className="req">*</span></label>
-                                <select value={form.pregnancyOutcome} onChange={e => updateForm('pregnancyOutcome', e.target.value)} className={isFieldInvalid('Pregnancy Outcome', form.pregnancyOutcome) ? 'field-error' : ''}>
+                                <select
+                                    value={form.pregnancyOutcome}
+                                    onChange={e => updateForm('pregnancyOutcome', e.target.value)}
+                                    className={isFieldInvalid('Pregnancy Outcome', form.pregnancyOutcome) ? 'field-error' : ''}
+                                >
                                     <option value="">Select outcome...</option>
                                     <option value="Live Birth">Live Birth</option>
                                     <option value="Stillbirth">Stillbirth</option>
                                     <option value="Miscarriage">Miscarriage</option>
                                 </select>
+
+                                {/* Case 1: Inconsistent Delivery Date (Delivery Date before LMP) */}
+                                {gaInfo.status === 'inconsistent' && (
+                                    <div className="ga-outcome-advisory advisory-danger">
+                                        <div className="ga-advisory-header">
+                                            <AlertTriangle size={14} />
+                                            <span>Chronological Inconsistency</span>
+                                        </div>
+                                        <div className="ga-advisory-text">
+                                            Delivery date cannot be earlier than the documented Last Menstrual Period ({form.lmpDate}). Please correct the delivery date or verify dating.
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Case 2: Early Live Birth (< 20 weeks) */}
+                                {form.pregnancyOutcome === 'Live Birth' && gaInfo.isPreViable && gaInfo.status === 'calculated' && (
+                                    <div className="ga-outcome-advisory advisory-warning">
+                                        <div className="ga-advisory-header">
+                                            <AlertTriangle size={14} />
+                                            <span>Clinical Advisory</span>
+                                        </div>
+                                        <div className="ga-advisory-text">
+                                            This outcome is unusual for the recorded gestational age. Verify the pregnancy dating, signs of life at birth, and documented clinical findings before proceeding.
+                                        </div>
+                                        <div className="ga-advisory-guideline">
+                                            Clinical Standard: Live birth is defined by documented signs of life after delivery (heartbeat, respiration, cord pulsation, voluntary movement), regardless of gestational duration.
+                                        </div>
+                                        <label className="ga-confirmation-checkbox">
+                                            <input
+                                                type="checkbox"
+                                                checked={!!form.confirmedEarlyLiveBirth}
+                                                onChange={e => updateForm('confirmedEarlyLiveBirth', e.target.checked)}
+                                            />
+                                            <span>
+                                                I confirm that signs of life were documented at birth, authorized clinical review has been performed, and pregnancy dating has been verified.
+                                            </span>
+                                        </label>
+                                        {validationErrors.some(e => e.includes('Signs of Life')) && !form.confirmedEarlyLiveBirth && (
+                                            <div className="ga-field-error-msg">
+                                                Explicit confirmation of documented signs of life and authorized clinical review is required before proceeding.
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Case 3: Early Stillbirth (< 20 weeks) */}
+                                {form.pregnancyOutcome === 'Stillbirth' && gaInfo.isPreViable && gaInfo.status === 'calculated' && (
+                                    <div className="ga-outcome-advisory advisory-warning">
+                                        <div className="ga-advisory-header">
+                                            <AlertTriangle size={14} />
+                                            <span>Clinical Advisory</span>
+                                        </div>
+                                        <div className="ga-advisory-text">
+                                            This outcome is unusual for the recorded gestational age. Verify the pregnancy dating, signs of life at birth, and documented clinical findings before proceeding.
+                                        </div>
+                                        <div className="ga-advisory-guideline">
+                                            CHO III / DOH Reporting Standard: Fetal demise prior to 20 completed weeks is classified as Miscarriage. If fetal loss occurred at or after 20 weeks, verify pregnancy dating.
+                                        </div>
+                                        <label className="ga-confirmation-checkbox">
+                                            <input
+                                                type="checkbox"
+                                                checked={!!form.confirmedEarlyStillbirth}
+                                                onChange={e => updateForm('confirmedEarlyStillbirth', e.target.checked)}
+                                            />
+                                            <span>
+                                                I confirm that attending clinical staff authorizes recording this record as Stillbirth (&lt; 20 weeks) under clinical protocol.
+                                            </span>
+                                        </label>
+                                        {validationErrors.some(e => e.includes('Early Stillbirth')) && !form.confirmedEarlyStillbirth && (
+                                            <div className="ga-field-error-msg">
+                                                Clinical confirmation is required to report Stillbirth at this gestational age.
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Case 4: Late Miscarriage (>= 20 weeks) */}
+                                {form.pregnancyOutcome === 'Miscarriage' && gaInfo.weeks !== null && gaInfo.weeks >= 20 && gaInfo.status === 'calculated' && (
+                                    <div className="ga-outcome-advisory advisory-info">
+                                        <div className="ga-advisory-header">
+                                            <AlertCircle size={14} />
+                                            <span>Clinical Reporting Advisory</span>
+                                        </div>
+                                        <div className="ga-advisory-text">
+                                            CHO III / DOH Reporting Standard: Pregnancy loss at 20 weeks or later is typically classified and reported as Fetal Death / Stillbirth.
+                                        </div>
+                                        <div className="ga-advisory-guideline">
+                                            Verify whether this event meets the reporting definition for Stillbirth or was authorized as Miscarriage.
+                                        </div>
+                                        <label className="ga-confirmation-checkbox">
+                                            <input
+                                                type="checkbox"
+                                                checked={!!form.confirmedLateMiscarriage}
+                                                onChange={e => updateForm('confirmedLateMiscarriage', e.target.checked)}
+                                            />
+                                            <span>
+                                                I confirm that attending clinical staff authorizes documenting this event as Miscarriage (&ge; 20 weeks) based on clinical assessment.
+                                            </span>
+                                        </label>
+                                        {validationErrors.some(e => e.includes('Late Miscarriage')) && !form.confirmedLateMiscarriage && (
+                                            <div className="ga-field-error-msg">
+                                                Clinical confirmation is required to document Miscarriage at this gestational age.
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Case 5: Missing / Unverified Dating */}
+                                {form.pregnancyOutcome && gaInfo.status === 'missing_dating' && (
+                                    <div className="ga-outcome-advisory advisory-warning">
+                                        <div className="ga-advisory-header">
+                                            <AlertTriangle size={14} />
+                                            <span>Dating Verification Required</span>
+                                        </div>
+                                        <div className="ga-advisory-text">
+                                            Pregnancy dating (LMP/EDD) is unverified or missing for this patient. Verify dating records before proceeding.
+                                        </div>
+                                        <label className="ga-confirmation-checkbox">
+                                            <input
+                                                type="checkbox"
+                                                checked={!!form.confirmedUncertainDating}
+                                                onChange={e => updateForm('confirmedUncertainDating', e.target.checked)}
+                                            />
+                                            <span>
+                                                I have reviewed the clinical records and confirm clinical verification of this pregnancy outcome without verified LMP/EDD.
+                                            </span>
+                                        </label>
+                                        {validationErrors.some(e => e.includes('Dating')) && !form.confirmedUncertainDating && (
+                                            <div className="ga-field-error-msg">
+                                                Clinical verification of patient records is required before proceeding.
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                             <div className="form-group">
                                 <label>Type <span className="req">*</span></label>
@@ -1853,14 +2102,15 @@ const AddDeliveryModal = ({ show, onClose, onSuccess, stations, editDelivery }) 
                     )}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 
 const ViewDeliveryModal = ({ show, onClose, delivery }) => {
     if (!show || !delivery) return null;
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="do-modal" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
@@ -2000,7 +2250,8 @@ const ViewDeliveryModal = ({ show, onClose, delivery }) => {
                     <button className="btn btn-outline" onClick={onClose}>Close</button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

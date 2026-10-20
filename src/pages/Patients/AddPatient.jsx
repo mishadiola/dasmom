@@ -4,13 +4,14 @@ import { AuthContext } from '../../context/AuthContext';
 import {
     ArrowLeft, Save, X, FileText, User, Activity,
     Calendar, HeartPulse, UploadCloud, AlertTriangle,
-    CheckCircle2, XCircle, Loader2, Search, Info, History, Plus, Trash2
+    CheckCircle2, XCircle, Loader2, Search, Info, History, Plus, Trash2, AlertCircle
 } from 'lucide-react';
 import '../../styles/pages/AddPatient.css';
 import PatientService from "../../services/patientservice";
 import InventoryService from '../../services/inventoryservice';
 import { formatDate } from '../../utils/formatters';
 import { formatMotherId } from '../../utils/displayIds';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 
 const patientService = new PatientService();
 const inventoryService = new InventoryService();
@@ -27,6 +28,7 @@ const MATERNAL_HEALTH_CATEGORIES = [
         title: 'Pre-existing Medical Conditions',
         subtitle: 'Diagnosed before the current pregnancy',
         icon: Activity,
+        otherKey: 'Other Pre-existing Condition',
         conditions: [
             'Chronic Hypertension',
             'Pre-existing Diabetes',
@@ -41,6 +43,7 @@ const MATERNAL_HEALTH_CATEGORIES = [
         title: 'Pregnancy-Related Conditions',
         subtitle: 'Identified during current pregnancy',
         icon: HeartPulse,
+        otherKey: 'Other Pregnancy-Related Condition',
         conditions: [
             'Gestational Hypertension',
             'Gestational Diabetes',
@@ -55,6 +58,7 @@ const MATERNAL_HEALTH_CATEGORIES = [
         title: 'Relevant Obstetric History',
         subtitle: 'Previous pregnancy & delivery history',
         icon: History,
+        otherKey: 'Other Relevant Obstetric History',
         conditions: [
             'Previous C-section',
             'Previous Preterm Birth',
@@ -93,6 +97,147 @@ const formatStationName = (station) => {
         .join(' ');
 };
 
+/* ═══════════════════════════════════════════════════════
+   PHILIPPINE LOCAL DATE & AGE VALIDATION HELPERS
+═══════════════════════════════════════════════════════ */
+const getPhilippineDate = () => {
+    try {
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Manila',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        const phDateStr = formatter.format(new Date());
+        const [year, month, day] = phDateStr.split('-').map(Number);
+        return { year, month, day, dateStr: phDateStr };
+    } catch {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1;
+        const day = now.getDate();
+        const pad = n => String(n).padStart(2, '0');
+        return { year, month, day, dateStr: `${year}-${pad(month)}-${pad(day)}` };
+    }
+};
+
+const calculatePhilippineAgeInfo = (dobString) => {
+    if (!dobString) {
+        return { age: null, error: null, advisory: null, tier: null, canSubmitNormally: false };
+    }
+
+    const trimmed = String(dobString).trim();
+    const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) {
+        return {
+            age: null,
+            error: 'Please enter a valid date of birth.',
+            advisory: null,
+            tier: 'invalid',
+            canSubmitNormally: false
+        };
+    }
+
+    const birthYear = parseInt(match[1], 10);
+    const birthMonth = parseInt(match[2], 10);
+    const birthDay = parseInt(match[3], 10);
+
+    const testDate = new Date(birthYear, birthMonth - 1, birthDay);
+    if (
+        testDate.getFullYear() !== birthYear ||
+        testDate.getMonth() !== birthMonth - 1 ||
+        testDate.getDate() !== birthDay
+    ) {
+        return {
+            age: null,
+            error: 'Please enter a valid date of birth.',
+            advisory: null,
+            tier: 'invalid',
+            canSubmitNormally: false
+        };
+    }
+
+    const { year: currentYear, month: currentMonth, day: currentDay, dateStr: phTodayStr } = getPhilippineDate();
+
+    // Future date check
+    if (trimmed > phTodayStr) {
+        return {
+            age: null,
+            error: 'Date of birth cannot be in the future.',
+            advisory: null,
+            tier: 'future',
+            canSubmitNormally: false
+        };
+    }
+
+    if (birthYear < 1900) {
+        return {
+            age: null,
+            error: 'Please enter a valid date of birth.',
+            advisory: null,
+            tier: 'invalid',
+            canSubmitNormally: false
+        };
+    }
+
+    let age = currentYear - birthYear;
+    if (currentMonth < birthMonth || (currentMonth === birthMonth && currentDay < birthDay)) {
+        age--;
+    }
+
+    if (age < 0) {
+        return {
+            age: null,
+            error: 'Date of birth cannot be in the future.',
+            advisory: null,
+            tier: 'future',
+            canSubmitNormally: false
+        };
+    }
+
+    // Ages 0-9: Prevent normal submission
+    if (age <= 9) {
+        return {
+            age,
+            error: null,
+            advisory: "Registration cannot proceed through the standard process for this age. Please verify the patient's date of birth and immediately refer the case to an authorized healthcare professional for clinical assessment and appropriate safeguarding procedures, following CHO III protocols.",
+            tier: 'under_10',
+            canSubmitNormally: false
+        };
+    }
+
+    // Ages 10-17: Non-blocking adolescent advisory
+    if (age >= 10 && age <= 17) {
+        return {
+            age,
+            error: null,
+            advisory: 'Adolescent pregnancy: Please ensure appropriate clinical assessment and follow-up.',
+            tier: 'adolescent',
+            canSubmitNormally: true
+        };
+    }
+
+    // Ages 50+: Clinical verification advisory without automatic rejection
+    if (age >= 50) {
+        return {
+            age,
+            error: null,
+            advisory: 'Clinical verification advisory: Please confirm patient date of birth and ensure appropriate clinical assessment.',
+            tier: 'advanced_age',
+            canSubmitNormally: true
+        };
+    }
+
+    // Ages 18-49: Proceed normally
+    return {
+        age,
+        error: null,
+        advisory: null,
+        tier: 'adult',
+        canSubmitNormally: true
+    };
+};
+
 const AddPatient = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -124,6 +269,20 @@ const AddPatient = () => {
     const [suggestedSort, setSuggestedSort] = useState('recent'); // 'recent', 'oldest', 'az', 'za'
     const [suggestedStation, setSuggestedStation] = useState('All');
     const [suggestedPeriod, setSuggestedPeriod] = useState('All Time'); // 'All Time', 'This Year', 'Last Year'
+
+    // Custom categorized health conditions states
+    const [customConditions, setCustomConditions] = useState([]);
+    const [newCustomCategory, setNewCustomCategory] = useState('');
+    const [newCustomName, setNewCustomName] = useState('');
+    const [customConditionError, setCustomConditionError] = useState('');
+    const [inlineOtherInputs, setInlineOtherInputs] = useState({
+        'Other Pre-existing Condition': '',
+        'Other Pregnancy-Related Condition': '',
+        'Other Relevant Obstetric History': ''
+    });
+    const customNameInputRef = useRef(null);
+    const customCategorySelectRef = useRef(null);
+    const clinicalNotesRef = useRef(null);
 
     const updateScheduledVisit = (index, date) => {
         if (!date) return;
@@ -259,6 +418,8 @@ const AddPatient = () => {
     const [tempWarning, setTempWarning] = useState(null);
     const [sameAsPatientAddress, setSameAsPatientAddress] = useState(false);
     const [lmpError, setLmpError] = useState('');
+    const [dobError, setDobError] = useState('');
+    const [ageAdvisory, setAgeAdvisory] = useState(null);
 
     const getDisplayRole = (roleStr) => {
         if (!roleStr) return 'Loading...';
@@ -282,7 +443,7 @@ const AddPatient = () => {
         pregnancyStatus: 'Pregnant', gravida: '', para: '',
         lmp: '', edd: '', gestationalAge: '', pregnancyType: 'Not Yet Determined',
         plannedDeliveryPlace: 'Hospital',
-        conditions: [], otherConditions: '', riskLevel: 'None Reported',
+        conditions: [], otherConditions: '', clinicalNotes: '', riskLevel: 'None Reported',
         retained_staff: '',
         attending_staff: '',
         scheduleTemplate: 'Standard Prenatal Schedule',
@@ -397,12 +558,28 @@ const AddPatient = () => {
 
     useEffect(() => {
         if (formData.dob) {
-            const today = new Date();
-            const birthDate = new Date(formData.dob);
-            let age = today.getFullYear() - birthDate.getFullYear();
-            const m = today.getMonth() - birthDate.getMonth();
-            if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
-            setFormData(prev => ({ ...prev, age: age.toString() }));
+            const info = calculatePhilippineAgeInfo(formData.dob);
+            if (info.age !== null) {
+                setFormData(prev => ({ ...prev, age: info.age.toString() }));
+            } else {
+                setFormData(prev => ({ ...prev, age: '' }));
+            }
+
+            if (info.error) {
+                setDobError(info.error);
+            } else {
+                setDobError('');
+            }
+
+            if (info.advisory) {
+                setAgeAdvisory({ message: info.advisory, tier: info.tier });
+            } else {
+                setAgeAdvisory(null);
+            }
+        } else {
+            setFormData(prev => ({ ...prev, age: '' }));
+            setDobError('');
+            setAgeAdvisory(null);
         }
     }, [formData.dob]);
 
@@ -462,22 +639,24 @@ const AddPatient = () => {
     }, [formData.lmp]);
 
     useEffect(() => {
-        // Documented health conditions check
+        // Documented health conditions check (Rule: Clinical notes do not auto-diagnose)
         const isMultipleBirth = formData.pregnancyType === 'Twins' || formData.pregnancyType === 'Multiple';
         const cleanConditions = (formData.conditions || []).filter(c => {
             if (!c) return false;
             const lower = c.trim().toLowerCase();
-            return lower !== 'none' && lower !== 'none reported' && lower !== 'normal';
+            return lower !== 'none' && lower !== 'none reported' && lower !== 'normal' && !lower.startsWith('other ');
         });
-        const hasOtherCondition = Boolean(formData.otherConditions && formData.otherConditions.trim() !== '');
-        const hasDocumented = isMultipleBirth || cleanConditions.length > 0 || hasOtherCondition;
+        const hasActiveCustomConditions = (customConditions || []).some(c => 
+            c.category === 'Pre-existing Medical Conditions' || c.category === 'Pregnancy-Related Conditions'
+        );
+        const hasDocumented = isMultipleBirth || cleanConditions.length > 0 || hasActiveCustomConditions;
 
         setFormData(prev => ({ 
             ...prev, 
             hasHealthConditions: hasDocumented,
             riskLevel: hasDocumented ? 'With Health Conditions' : 'None Reported' 
         }));
-    }, [formData.conditions, formData.otherConditions, formData.pregnancyType]);
+    }, [formData.conditions, customConditions, formData.pregnancyType]);
 
     useEffect(() => {
         // Calculate BMI when weight and height change
@@ -676,6 +855,21 @@ const AddPatient = () => {
             setTempWarning(null);
         }
 
+        // Clear and evaluate Date of Birth on change
+        if (name === 'dob') {
+            const info = calculatePhilippineAgeInfo(finalValue);
+            if (info.error) {
+                setDobError(info.error);
+            } else {
+                setDobError('');
+            }
+            if (info.advisory) {
+                setAgeAdvisory({ message: info.advisory, tier: info.tier });
+            } else {
+                setAgeAdvisory(null);
+            }
+        }
+
         // Validate blood pressure format and classification
         if (name === 'bp' && value) {
             const bpMatch = value.match(/^(\d+)[/\s](\d+)$/);
@@ -713,34 +907,164 @@ const AddPatient = () => {
         }
     };
 
+    const handleAddCustomCondition = () => {
+        const trimmedCategory = (newCustomCategory || '').trim();
+        const trimmedName = (newCustomName || '').trim();
+
+        if (!trimmedCategory || !trimmedName) {
+            setCustomConditionError('Please select a condition category and enter a condition name / description.');
+            return;
+        }
+
+        // Check for duplicate custom conditions
+        const isDuplicateCustom = customConditions.some(
+            c => c.name.toLowerCase() === trimmedName.toLowerCase() && c.category === trimmedCategory
+        );
+        const isDuplicateStandard = (formData.conditions || []).some(
+            c => c.toLowerCase() === trimmedName.toLowerCase()
+        );
+
+        if (isDuplicateCustom || isDuplicateStandard) {
+            setCustomConditionError('This condition has already been added.');
+            return;
+        }
+
+        const newEntry = {
+            id: Date.now() + '-' + Math.random().toString(36).substr(2, 6),
+            name: trimmedName,
+            category: trimmedCategory
+        };
+
+        setCustomConditions(prev => [...prev, newEntry]);
+        setNewCustomName('');
+        setCustomConditionError('');
+
+        // Automatically deselect "None Reported"
+        setFormData(prev => ({
+            ...prev,
+            conditions: (prev.conditions || []).filter(c => c !== 'None' && c !== 'None Reported')
+        }));
+
+        setToast({
+            type: 'success',
+            message: `Added "${trimmedName}" under ${trimmedCategory}.`
+        });
+    };
+
+    const handleRemoveCustomCondition = (id) => {
+        setCustomConditions(prev => prev.filter(c => c.id !== id));
+    };
+
+    const handleAddInlineOther = (otherKey, categoryTitle) => {
+        const val = (inlineOtherInputs[otherKey] || '').trim();
+        if (!val) {
+            setToast({ type: 'error', message: 'Please enter a condition description.' });
+            return;
+        }
+
+        const isDuplicate = customConditions.some(
+            c => c.name.toLowerCase() === val.toLowerCase() && c.category === categoryTitle
+        );
+        if (isDuplicate) {
+            setToast({ type: 'error', message: `"${val}" has already been documented.` });
+            return;
+        }
+
+        const newEntry = {
+            id: Date.now() + '-' + Math.random().toString(36).substr(2, 6),
+            name: val,
+            category: categoryTitle
+        };
+
+        setCustomConditions(prev => [...prev, newEntry]);
+        setInlineOtherInputs(prev => ({ ...prev, [otherKey]: '' }));
+
+        // Automatically deselect "None Reported"
+        setFormData(prev => ({
+            ...prev,
+            conditions: (prev.conditions || []).filter(c => c !== 'None' && c !== 'None Reported')
+        }));
+
+        setToast({
+            type: 'success',
+            message: `Added "${val}" under ${categoryTitle}.`
+        });
+    };
+
+    const handleDocumentFromNote = () => {
+        let selectedText = '';
+        if (clinicalNotesRef.current) {
+            const start = clinicalNotesRef.current.selectionStart;
+            const end = clinicalNotesRef.current.selectionEnd;
+            if (start !== end) {
+                selectedText = clinicalNotesRef.current.value.substring(start, end).trim();
+            }
+        }
+
+        if (selectedText) {
+            setNewCustomName(selectedText);
+        }
+
+        if (customCategorySelectRef.current) {
+            customCategorySelectRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            customCategorySelectRef.current.focus();
+        }
+
+        setToast({
+            type: 'info',
+            message: selectedText 
+                ? `Condition name "${selectedText}" populated. Please select a category to add it.`
+                : 'Select a category and specify the condition name to document it.'
+        });
+    };
+
     const handleCheckbox = (conditionName) => {
+        const isNone = conditionName === 'None Reported' || conditionName === 'None';
+        
+        if (isNone) {
+            const current = formData.conditions || [];
+            if (current.includes('None Reported') || current.includes('None')) {
+                setFormData(prev => ({ ...prev, conditions: [] }));
+                return;
+            }
+
+            const hasActiveConditions = current.some(c => c !== 'None' && c !== 'None Reported') || customConditions.length > 0;
+            if (hasActiveConditions) {
+                const confirmed = window.confirm(
+                    "Selecting 'None Reported' will clear all currently selected and custom health conditions. Do you want to proceed?"
+                );
+                if (!confirmed) return;
+            }
+
+            setCustomConditions([]);
+            setInlineOtherInputs({
+                'Other Pre-existing Condition': '',
+                'Other Pregnancy-Related Condition': '',
+                'Other Relevant Obstetric History': ''
+            });
+            setFormData(prev => ({ ...prev, conditions: ['None Reported'] }));
+            return;
+        }
+
+        // Toggling regular condition or "Other ..."
         setFormData(prev => {
             const current = [...(prev.conditions || [])];
-            
-            // Check if this is the "None Reported" or "None" option
-            const isNone = conditionName === 'None Reported' || conditionName === 'None';
-            
-            if (isNone) {
-                // If "None Reported" is already selected, deselect it
-                if (current.includes('None Reported') || current.includes('None')) {
-                    return { ...prev, conditions: [] };
-                } else {
-                    // Select "None Reported" and clear all other selected conditions
-                    return { ...prev, conditions: ['None Reported'] };
-                }
+            if (current.includes(conditionName)) {
+                return { ...prev, conditions: current.filter(c => c !== conditionName) };
             } else {
-                // If a regular condition is being toggled
-                if (current.includes(conditionName)) {
-                    // Deselect this condition
-                    const updated = current.filter(c => c !== conditionName);
-                    return { ...prev, conditions: updated };
-                } else {
-                    // Select this condition and deselect "None Reported" / "None" if selected
-                    const updated = current.filter(c => c !== 'None' && c !== 'None Reported');
-                    return { ...prev, conditions: [...updated, conditionName] };
-                }
+                const updated = current.filter(c => c !== 'None' && c !== 'None Reported');
+                return { ...prev, conditions: [...updated, conditionName] };
             }
         });
+
+        // Auto-assign corresponding category in custom builder if "Other ..." checkbox was checked
+        if (conditionName === 'Other Pre-existing Condition') {
+            setNewCustomCategory('Pre-existing Medical Conditions');
+        } else if (conditionName === 'Other Pregnancy-Related Condition') {
+            setNewCustomCategory('Pregnancy-Related Conditions');
+        } else if (conditionName === 'Other Relevant Obstetric History') {
+            setNewCustomCategory('Relevant Obstetric History');
+        }
     };
 
     const handleSave = async (e) => {
@@ -784,6 +1108,39 @@ const AddPatient = () => {
         if (isExistingPatientMode && !patientIdForPregnancy) {
             setToast({ type: 'error', message: 'Please select an existing patient before saving the new pregnancy.' });
             return;
+        }
+
+        // Validate Date of Birth and Age according to Philippine local date & clinical guidelines
+        if (!isExistingPatientMode || formData.dob) {
+            if (!formData.dob) {
+                setMissingFields(prev => [...new Set([...prev, 'dob'])]);
+                setDobError('Date of birth is required.');
+                setToast({ type: 'error', message: 'Date of birth is required.' });
+                setIsSaving(false);
+                setActiveTab('personal');
+                return;
+            }
+
+            const ageInfo = calculatePhilippineAgeInfo(formData.dob);
+            if (ageInfo.error && (ageInfo.tier === 'future' || ageInfo.tier === 'invalid')) {
+                setMissingFields(prev => [...new Set([...prev, 'dob-invalid'])]);
+                setDobError(ageInfo.error);
+                setToast({ type: 'error', message: ageInfo.error });
+                setIsSaving(false);
+                setActiveTab('personal');
+                return;
+            }
+
+            if (ageInfo.tier === 'under_10') {
+                setMissingFields(prev => [...new Set([...prev, 'dob-underage'])]);
+                setToast({
+                    type: 'error',
+                    message: "Registration cannot proceed through the standard process for this age. Please verify the patient's date of birth and immediately refer the case to an authorized healthcare professional for clinical assessment and appropriate safeguarding procedures, following CHO III protocols."
+                });
+                setIsSaving(false);
+                setActiveTab('personal');
+                return;
+            }
         }
 
         // Validate EDD is not in the past for pregnant patients
@@ -881,11 +1238,15 @@ const AddPatient = () => {
 
         const filteredSchedulePreview = patientService.filterScheduleAfterToday(schedulePreview);
 
+        // Clinical risk factors: Age alone does not auto-diagnose high/low risk or medical conditions (Rule 7)
+        const standardConditions = (formData.conditions || []).filter(c => 
+            c !== 'None' && c !== 'None Reported' && !c.startsWith('Other ')
+        );
+        const customConditionStrings = (customConditions || []).map(cc => `${cc.name.trim()} [${cc.category}]`);
         const riskFactors = [
-            ...(formData.conditions || []).filter(c => c !== 'None' && c !== 'None Reported'),
-            ...(formData.otherConditions ? [formData.otherConditions] : []),
+            ...standardConditions,
+            ...customConditionStrings,
             ...(formData.pregnancyType === 'Twins' || formData.pregnancyType === 'Multiple' ? [`${formData.pregnancyType} Pregnancy`] : []),
-            ...(formData.age && (formData.age < 18 || formData.age > 35) ? [`Age ${formData.age} (${formData.age < 18 ? 'Teenage' : 'Advanced Maternal Age'})`] : []),
         ].filter(Boolean);
 
         if (riskFactors.length === 0 && (formData.conditions || []).includes('None Reported')) {
@@ -909,8 +1270,17 @@ const AddPatient = () => {
             }
         }
 
+        const categorizedConditionsList = [
+            ...standardConditions.map(c => patientService.parseCategorizedCondition(c)),
+            ...(customConditions || []).map(cc => ({ name: cc.name.trim(), category: cc.category }))
+        ].filter(Boolean);
+
         const patientData = {
             ...formData,
+            conditions: [...standardConditions, ...customConditionStrings],
+            customConditions: customConditions || [],
+            categorizedConditions: categorizedConditionsList,
+            clinicalNotes: formData.clinicalNotes || formData.visitNotes || '',
             firstVisitDate: autoFirstVisitDate,
             schedulePreview: filteredSchedulePreview,
             riskFactors: riskFactors.join(', '),
@@ -1009,6 +1379,28 @@ const AddPatient = () => {
                 if (formData.middleName && !namePattern.test(formData.middleName)) missing.push('middleName-invalid');
                 if (formData.lastName && !namePattern.test(formData.lastName)) missing.push('lastName-invalid');
             }
+
+            // Validate Date of Birth on Personal tab progression
+            if (!isExistingPatientMode || formData.dob) {
+                if (!formData.dob) {
+                    missing.push('dob');
+                    setDobError('Date of birth is required.');
+                    setToast({ type: 'error', message: 'Date of birth is required.' });
+                } else {
+                    const ageInfo = calculatePhilippineAgeInfo(formData.dob);
+                    if (ageInfo.error && (ageInfo.tier === 'future' || ageInfo.tier === 'invalid')) {
+                        missing.push('dob-invalid');
+                        setDobError(ageInfo.error);
+                        setToast({ type: 'error', message: ageInfo.error });
+                    } else if (ageInfo.tier === 'under_10') {
+                        missing.push('dob-underage');
+                        setToast({
+                            type: 'error',
+                            message: "Registration cannot proceed through the standard process for this age. Please verify the patient's date of birth and immediately refer the case to an authorized healthcare professional for clinical assessment and appropriate safeguarding procedures, following CHO III protocols."
+                        });
+                    }
+                }
+            }
         } else if (activeTab === 'pregnancy') {
             const requiredPregnancy = ['gravida', 'para', 'lmp'];
             checkFields(requiredPregnancy);
@@ -1099,8 +1491,16 @@ const AddPatient = () => {
         return result;
     }, [suggestedMothers, searchQuery, suggestedStation, suggestedPeriod, suggestedSort]);
 
+    if (loadingStations) {
+        return (
+            <StaffPageLoader 
+                message="Loading registration form..." 
+            />
+        );
+    }
+
     return (
-        <div className="add-patient-page">
+        <div className="add-patient-page staff-page-ready">
 
             {toast && (
                 <div className={`toast toast--${toast.type}`}>
@@ -1128,22 +1528,25 @@ const AddPatient = () => {
                     <ArrowLeft size={16} /> Back to Patient List
                 </button>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                     <h1 style={{ fontSize: '1.65rem', margin: 0, fontWeight: 600 }}>
                         {formData.pregnancyStatus === 'Postpartum' 
                             ? 'Register Postpartum Patient' 
                             : 'Register New Pregnancy'}
                     </h1>
                     
-                    <div style={{ 
-                        backgroundColor: 'rgba(255, 255, 255, 0.2)', 
-                        padding: '4px 12px', 
-                        borderRadius: '20px', 
-                        fontSize: '0.8rem',
-                        fontWeight: 500,
-                        whiteSpace: 'nowrap'
-                    }}>
-                        BHW: {currentStaff.full_name}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+
+                        <div style={{
+                            backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                            padding: '4px 12px',
+                            borderRadius: '20px',
+                            fontSize: '0.8rem',
+                            fontWeight: 500,
+                            whiteSpace: 'nowrap'
+                        }}>
+                            BHW: {currentStaff.full_name}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1154,7 +1557,16 @@ const AddPatient = () => {
                         <button
                             key={tab.id}
                             className={`ap-tab ${activeTab === tab.id ? 'active' : ''}`}
-                            onClick={() => setActiveTab(tab.id)}
+                            onClick={() => {
+                                if (activeTab === 'personal' && tab.id !== 'personal' && ageAdvisory?.tier === 'under_10') {
+                                    setToast({
+                                        type: 'error',
+                                        message: "Registration cannot proceed through the standard process for this age. Please verify the patient's date of birth and immediately refer the case to an authorized healthcare professional for clinical assessment and appropriate safeguarding procedures, following CHO III protocols."
+                                    });
+                                    return;
+                                }
+                                setActiveTab(tab.id);
+                            }}
                             type="button"
                         >
                             <tab.icon size={18} />
@@ -1410,15 +1822,57 @@ const AddPatient = () => {
                                         name="dob" 
                                         value={formData.dob} 
                                         onChange={handleChange} 
+                                        max={getPhilippineDate().dateStr} 
                                         required 
-                                        className={missingFields.includes('dob') ? 'error-field' : ''} 
+                                        className={missingFields.includes('dob') || dobError ? 'error-field' : ''} 
                                     />
+                                    {dobError && (
+                                        <span className="error-text" style={{ color: '#dc2626', fontSize: '0.8rem', marginTop: '4px', display: 'block' }}>
+                                            {dobError}
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="form-group">
                                     <label>Age <i>(Auto)</i></label>
                                     <input type="number" readOnly value={formData.age} className="computed-field" />
                                 </div>
                             </div>
+
+                            {ageAdvisory && (
+                                <div style={{
+                                    borderRadius: '8px',
+                                    padding: '10px 14px',
+                                    marginTop: '8px',
+                                    marginBottom: '16px',
+                                    display: 'flex',
+                                    alignItems: 'flex-start',
+                                    gap: '10px',
+                                    backgroundColor: ageAdvisory.tier === 'under_10' ? '#fef2f2' : (ageAdvisory.tier === 'adolescent' ? '#fffbeb' : '#eff6ff'),
+                                    border: `1px solid ${ageAdvisory.tier === 'under_10' ? '#fecaca' : (ageAdvisory.tier === 'adolescent' ? '#fef3c7' : '#dbeafe')}`,
+                                }}>
+                                    {ageAdvisory.tier === 'under_10' ? (
+                                        <AlertCircle size={18} color="#dc2626" style={{ flexShrink: 0, marginTop: '2px' }} />
+                                    ) : ageAdvisory.tier === 'adolescent' ? (
+                                        <Info size={18} color="#d97706" style={{ flexShrink: 0, marginTop: '2px' }} />
+                                    ) : (
+                                        <Info size={18} color="#2563eb" style={{ flexShrink: 0, marginTop: '2px' }} />
+                                    )}
+                                    <div style={{
+                                        fontSize: '0.85rem',
+                                        color: ageAdvisory.tier === 'under_10' ? '#991b1b' : (ageAdvisory.tier === 'adolescent' ? '#92400e' : '#1e40af'),
+                                        lineHeight: '1.45'
+                                    }}>
+                                        <strong style={{ display: 'block', marginBottom: '2px', fontSize: '0.875rem' }}>
+                                            {ageAdvisory.tier === 'under_10' 
+                                                ? 'Registration Requires Medical Referral' 
+                                                : (ageAdvisory.tier === 'adolescent' 
+                                                    ? 'Adolescent Pregnancy Advisory' 
+                                                    : 'Clinical Verification Advisory')}
+                                        </strong>
+                                        <p style={{ margin: 0 }}>{ageAdvisory.message}</p>
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="form-grid-3">
                                 <div className="form-group">
@@ -1760,8 +2214,14 @@ const AddPatient = () => {
                                             <label>Planned Place of Delivery</label>
                                             <select name="plannedDeliveryPlace" value={formData.plannedDeliveryPlace} onChange={handleChange}>
                                                 <option value="Hospital">Hospital</option>
-                                                <option value="Lying-in">Lying-in Clinic</option>
-                                                <option value="Home">Home</option>
+                                                <option value="Lying-in Clinic">Lying-in Clinic</option>
+                                                <option value="City Health Office 3">City Health Office 3</option>
+                                                {formData.plannedDeliveryPlace === 'Home' && (
+                                                    <option value="Home" disabled hidden>Home</option>
+                                                )}
+                                                {formData.plannedDeliveryPlace === 'Lying-in' && (
+                                                    <option value="Lying-in" disabled hidden>Lying-in Clinic</option>
+                                                )}
                                             </select>
                                         </div>
                                     </div>
@@ -1964,19 +2424,45 @@ const AddPatient = () => {
                                             <div className="maternal-category-options">
                                                 {category.conditions.map(name => {
                                                     const isChecked = (formData.conditions || []).includes(name);
+                                                    const isOtherOption = name.startsWith('Other ');
                                                     return (
-                                                        <label 
-                                                            key={name} 
-                                                            className={`maternal-option-row ${isChecked ? 'is-checked' : ''}`}
-                                                        >
-                                                            <input 
-                                                                type="checkbox" 
-                                                                checked={isChecked}
-                                                                onChange={() => handleCheckbox(name)} 
-                                                            />
-                                                            <span className="checkmark"></span> 
-                                                            <span className="maternal-option-label">{name}</span>
-                                                        </label>
+                                                        <React.Fragment key={name}>
+                                                            <label 
+                                                                className={`maternal-option-row ${isChecked ? 'is-checked' : ''}`}
+                                                            >
+                                                                <input 
+                                                                    type="checkbox" 
+                                                                    checked={isChecked}
+                                                                    onChange={() => handleCheckbox(name)} 
+                                                                />
+                                                                <span className="checkmark"></span> 
+                                                                <span className="maternal-option-label">{name}</span>
+                                                            </label>
+                                                            {isOtherOption && isChecked && (
+                                                                <div className="maternal-inline-other-wrap">
+                                                                    <input 
+                                                                        type="text" 
+                                                                        placeholder={`Specify ${category.title.toLowerCase().replace('conditions', 'condition')}...`}
+                                                                        value={inlineOtherInputs[name] || ''}
+                                                                        onChange={(e) => setInlineOtherInputs(prev => ({ ...prev, [name]: e.target.value }))}
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === 'Enter') {
+                                                                                e.preventDefault();
+                                                                                handleAddInlineOther(name, category.title);
+                                                                            }
+                                                                        }}
+                                                                        className="maternal-inline-other-input"
+                                                                    />
+                                                                    <button 
+                                                                        type="button" 
+                                                                        onClick={() => handleAddInlineOther(name, category.title)}
+                                                                        className="maternal-inline-other-btn"
+                                                                    >
+                                                                        <Plus size={13} /> Add
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </React.Fragment>
                                                     );
                                                 })}
                                             </div>
@@ -1985,15 +2471,136 @@ const AddPatient = () => {
                                 })}
                             </div>
 
-                            {/* Other Health Conditions / Clinical Notes */}
+                            {/* Add Custom Health Condition Section */}
+                            <div className="maternal-custom-builder" id="maternal-custom-builder">
+                                <div className="maternal-custom-head">
+                                    <h3 className="maternal-custom-title">
+                                        <Plus size={16} color="var(--color-primary, #b9818a)" />
+                                        Add Custom Health Condition
+                                    </h3>
+                                    <p className="maternal-custom-desc">
+                                        Manually enter and categorize any other diagnosed health condition or relevant obstetric history.
+                                    </p>
+                                </div>
+
+                                <div className="maternal-custom-form">
+                                    <div>
+                                        <select
+                                            ref={customCategorySelectRef}
+                                            value={newCustomCategory}
+                                            onChange={(e) => {
+                                                setNewCustomCategory(e.target.value);
+                                                setCustomConditionError('');
+                                            }}
+                                            className="maternal-custom-select"
+                                            aria-label="Condition Category"
+                                        >
+                                            <option value="">-- Condition Category * --</option>
+                                            <option value="Pre-existing Medical Conditions">Pre-existing Medical Conditions</option>
+                                            <option value="Pregnancy-Related Conditions">Pregnancy-Related Conditions</option>
+                                            <option value="Relevant Obstetric History">Relevant Obstetric History</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <input
+                                            ref={customNameInputRef}
+                                            type="text"
+                                            value={newCustomName}
+                                            onChange={(e) => {
+                                                setNewCustomName(e.target.value);
+                                                setCustomConditionError('');
+                                            }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    handleAddCustomCondition();
+                                                }
+                                            }}
+                                            placeholder="Condition Name / Description * (e.g., Hypothyroidism, Placenta Previa, Previous Ectopic)"
+                                            className="maternal-custom-input"
+                                            aria-label="Condition Name or Description"
+                                        />
+                                    </div>
+                                    <div>
+                                        <button
+                                            type="button"
+                                            onClick={handleAddCustomCondition}
+                                            className="maternal-custom-add-btn"
+                                        >
+                                            <Plus size={15} /> Add Condition
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {customConditionError && (
+                                    <div className="maternal-custom-error">
+                                        <AlertCircle size={14} />
+                                        <span>{customConditionError}</span>
+                                    </div>
+                                )}
+
+                                {/* Documented Custom Conditions Chips */}
+                                {customConditions.length > 0 && (
+                                    <div className="maternal-custom-list-wrap">
+                                        <span className="maternal-custom-list-label">
+                                            Documented Custom Conditions ({customConditions.length})
+                                        </span>
+                                        <div className="maternal-custom-chips">
+                                            {customConditions.map(item => {
+                                                let pillClass = 'maternal-cat-pill--pre-existing';
+                                                if (item.category === 'Pregnancy-Related Conditions') {
+                                                    pillClass = 'maternal-cat-pill--pregnancy-related';
+                                                } else if (item.category === 'Relevant Obstetric History') {
+                                                    pillClass = 'maternal-cat-pill--obstetric-history';
+                                                }
+                                                return (
+                                                    <div key={item.id} className="maternal-custom-chip">
+                                                        <span className="maternal-custom-chip-name">{item.name}</span>
+                                                        <span className={`maternal-cat-pill ${pillClass}`}>{item.category}</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleRemoveCustomCondition(item.id)}
+                                                            className="maternal-custom-chip-remove"
+                                                            title="Remove condition"
+                                                            aria-label={`Remove ${item.name}`}
+                                                        >
+                                                            <X size={14} />
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Clinical Notes & Medical Observations Section */}
                             <div className="maternal-notes-container">
-                                <label className="maternal-notes-title">Other Health Conditions / Clinical Notes</label>
+                                <div className="maternal-notes-head">
+                                    <div>
+                                        <label className="maternal-notes-title" style={{ margin: 0 }}>
+                                            Clinical Notes & Medical Observations
+                                        </label>
+                                        <p className="maternal-notes-hint">
+                                            General observations, consultation remarks, or examination findings. Notes are saved for reference and are not automatically classified as diagnosed conditions.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleDocumentFromNote}
+                                        className="maternal-notes-action-btn"
+                                        title="Highlight text in the notes or click to document a structured condition"
+                                    >
+                                        <Plus size={13} /> Add Condition from Note
+                                    </button>
+                                </div>
                                 <textarea 
-                                    name="otherConditions" 
+                                    ref={clinicalNotesRef}
+                                    name="clinicalNotes" 
                                     rows={3} 
-                                    value={formData.otherConditions} 
+                                    value={formData.clinicalNotes || ''} 
                                     onChange={handleChange} 
-                                    placeholder="Specify other documented conditions or relevant clinical information..."
+                                    placeholder="Enter general clinical observations, patient history remarks, or consultation notes..."
                                     className="maternal-notes-input"
                                 />
                             </div>
@@ -2388,7 +2995,13 @@ const AddPatient = () => {
                                 {isSaving ? 'Saving...' : 'Save & Auto-Schedule Visits'}
                             </button>
                         ) : (
-                            <button className="btn btn-primary" onClick={handleNext} disabled={isSaving} type="button">
+                            <button 
+                                className="btn btn-primary" 
+                                onClick={handleNext} 
+                                disabled={isSaving || (activeTab === 'personal' && ageAdvisory?.tier === 'under_10')} 
+                                type="button"
+                                title={activeTab === 'personal' && ageAdvisory?.tier === 'under_10' ? "Registration cannot proceed for ages 0–9" : undefined}
+                            >
                                 Next
                             </button>
                         )}

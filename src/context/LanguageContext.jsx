@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { isAndroidApp } from '../services/secureStorage';
 import { translations } from '../utils/motherTranslations';
 
@@ -36,8 +37,10 @@ export const LanguageProvider = ({ children }) => {
         return fallback !== undefined ? fallback : key;
     }, [language]);
 
+    const contextValue = useMemo(() => ({ language, toggleLanguage, t }), [language, toggleLanguage, t]);
+
     return (
-        <LanguageContext.Provider value={{ language, toggleLanguage, t }}>
+        <LanguageContext.Provider value={contextValue}>
             {children}
         </LanguageContext.Provider>
     );

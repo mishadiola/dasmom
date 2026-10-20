@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, useContext } from 'react';
+import { createPortal } from 'react-dom';
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import PatientService from '../../services/patientservice';
 import '../../styles/components/SharedFilters.css';
@@ -6,7 +7,7 @@ import '../../styles/pages/PrenatalVisits.css';
 import {
     Search, Plus, Eye, Edit2, Trash2, CalendarCheck,
     AlertTriangle, HeartPulse, Filter, Clock, ChevronLeft,
-    ChevronRight, Calendar as CalendarIcon, Users, MapPin, X,
+    ChevronRight, ChevronDown, Calendar as CalendarIcon, Users, MapPin, X,
     CheckCircle2, Zap, RotateCcw, ArchiveRestore,
     Download, CalendarPlus
 } from 'lucide-react';
@@ -16,18 +17,49 @@ import PatientModal from '../../components/Prenatal/PatientModal';
 import PostpartumVisitModal from '../../components/PostpartumVisitModal';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import ExportModal from '../../components/ExportModal';
-import '../../styles/pages/PrenatalVisits.css';
 import Legend from '../../components/Legend/Legend';
+import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
 import { formatMotherId } from '../../utils/displayIds';
 import VisitStaffAssignment from '../../components/Prenatal/VisitStaffAssignment';
 import ActionTooltip from '../../components/Common/ActionTooltip';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import { useRolePermissions } from '../../context/RolePermissionContext';
+import { useDefaultStation } from '../../hooks/useDefaultStation';
 
 const toLocalDateStr = (d) => {
     const offset = d.getTimezoneOffset() * 60000;
     return new Date(d.getTime() - offset).toISOString().split('T')[0];
+};
+
+// Helper functions for Philippine Standard Time (Asia/Manila)
+const getManilaTodayStr = () => {
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(new Date());
+};
+
+const getManilaDateStr = (value) => {
+    if (!value) return '';
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+            return trimmed;
+        }
+    }
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) {
+        return String(value).split('T')[0] || '';
+    }
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(d);
 };
 
 const withPreservedManilaTime = (date, scheduledAt) => {
@@ -81,11 +113,12 @@ const SearchableDropdown = ({ patients, value, onChange }) => {
     const ref = useRef(null);
 
     const selectedPatient = patients.find(p => p.id === value);
-    const displayValue = open ? query : (selectedPatient ? `${selectedPatient.name} (${selectedPatient.id})` : '');
+    const displayValue = open ? query : (selectedPatient ? `${selectedPatient.name} (${formatMotherId(selectedPatient.id)})` : '');
 
     const filtered = patients.filter(p =>
         p.name?.toLowerCase().includes(query.toLowerCase()) ||
-        p.id?.toLowerCase().includes(query.toLowerCase())
+        p.id?.toLowerCase().includes(query.toLowerCase()) ||
+        formatMotherId(p.id).toLowerCase().includes(query.toLowerCase())
     );
 
     useEffect(() => {
@@ -111,7 +144,7 @@ const SearchableDropdown = ({ patients, value, onChange }) => {
                 <Search size={14} className="sd-icon" />
                 <input
                     type="text"
-                    placeholder={selectedPatient ? `${selectedPatient.name} (${selectedPatient.id})` : 'Search by name or ID...'}
+                    placeholder={selectedPatient ? `${selectedPatient.name} (${formatMotherId(selectedPatient.id)})` : 'Search by name or ID...'}
                     value={displayValue}
                     onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
                     onFocus={() => { setOpen(true); setQuery(''); }}
@@ -136,7 +169,7 @@ const SearchableDropdown = ({ patients, value, onChange }) => {
                             onMouseDown={() => handleSelect(p)}
                         >
                             <span className="sd-name">{p.name}</span>
-                            <span className="sd-meta">{p.id}</span>
+                            <span className="sd-meta">{formatMotherId(p.id)}</span>
                         </li>
                     )) : (
                         <li className="sd-empty">No patients found</li>
@@ -150,15 +183,48 @@ const SearchableDropdown = ({ patients, value, onChange }) => {
 const PrenatalVisits = () => {
     const navigate = useNavigate();
     const { user } = useContext(AuthContext);
+    const { hasAnyPermission, hasPermission } = useRolePermissions();
 
+    const [initialLoading, setInitialLoading] = useState(true);
+    const [initialError, setInitialError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('All');
-    const [archiveFilter, setArchiveFilter] = useState('active');
+    const [archiveFilter, setArchiveFilter] = useState('all');
+    const [allStationsList, setAllStationsList] = useState([]);
+    const [activePopover, setActivePopover] = useState(null);
+
+    const {
+        isStationStaff,
+        assignedStation,
+        canViewOtherStations,
+        availableStations: permittedStations,
+        matchStation,
+    } = useDefaultStation({
+        permissionKey: [
+            'prenatal.schedule.view.other_station',
+            'postpartum.schedule.view.other_station',
+            'patient.reschedule.other_station'
+        ],
+        allStations: allStationsList,
+        isArray: false
+    });
+
+    const [filterStation, setFilterStation] = useState(() => (
+        isStationStaff && assignedStation ? assignedStation : 'All'
+    ));
+    const userHasChangedStationRef = useRef(false);
+
+    useEffect(() => {
+        if (!userHasChangedStationRef.current && isStationStaff && assignedStation) {
+            setFilterStation(assignedStation);
+        }
+    }, [isStationStaff, assignedStation]);
     const [currentPage, setCurrentPage] = useState(1);
     const { settings } = useSystemSettings();
     const itemsPerPage = settings?.tables?.rowsPerPage || 10;
     const [currentDate, setCurrentDate] = useState(new Date());
     const [toast, setToast] = useState(null);
+    const toastTimeoutRef = useRef(null);
     const [calendarView, setCalendarView] = useState('day');
     const [selectedVisit, setSelectedVisit] = useState(null);
     const [postpartumVisitMother, setPostpartumVisitMother] = useState(null);
@@ -173,6 +239,7 @@ const PrenatalVisits = () => {
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [visitTypeTab, setVisitTypeTab] = useState('prenatal'); // 'prenatal' | 'postpartum'
     const [visitCategoryTab, setVisitCategoryTab] = useState('upcoming'); // 'upcoming' | 'missed' | 'completed'
+    const [dateFilter, setDateFilter] = useState('today'); // 'today' | 'all' (Today default)
     const [visitAccess, setVisitAccess] = useState(null);
     const [assignmentStaff, setAssignmentStaff] = useState([]);
     const [assignmentStations, setAssignmentStations] = useState([]);
@@ -208,14 +275,35 @@ const PrenatalVisits = () => {
     const [rescheduleResults, setRescheduleResults] = useState([]);
     const [isRescheduling, setIsRescheduling] = useState(false);
 
+    const scheduleToastClear = useCallback((duration) => {
+        if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+        toastTimeoutRef.current = setTimeout(() => {
+            setToast(null);
+            toastTimeoutRef.current = null;
+        }, duration);
+    }, []);
+
+    useEffect(() => () => {
+        if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    }, []);
+
     const patientService = useMemo(() => new PatientService(), []);
-    const canReschedule = ['admin', 'staff', 'cho personnel'].includes(visitAccess?.role);
+    const canReschedule = ['admin', 'staff', 'cho personnel'].includes(visitAccess?.role)
+        && hasAnyPermission(['patient.reschedule.own_station', 'patient.reschedule.other_station']);
+    const canScheduleVisit = ['admin', 'staff', 'cho personnel'].includes(visitAccess?.role)
+        && hasAnyPermission(['visit.schedule.own_station', 'visit.schedule.other_station']);
     const patientsForVisitCategory = useMemo(() => allPatients.filter(patient => (
         addVisitForm.visit_category === 'Postpartum'
             ? patient.hasDelivery
             : !patient.hasDelivery && String(patient.pregnancyStatus).toLowerCase() === 'pregnant'
     )), [addVisitForm.visit_category, allPatients]);
-    const selectedAddVisitPatient = allPatients.find(patient => patient.id === addVisitForm.patient_id);
+    const scheduleablePatients = useMemo(() => patientsForVisitCategory.filter(patient => {
+        const permission = patient.stationId && patient.stationId === visitAccess?.stationId
+            ? 'visit.schedule.own_station'
+            : 'visit.schedule.other_station';
+        return hasPermission(permission);
+    }), [hasPermission, patientsForVisitCategory, visitAccess?.stationId]);
+    const selectedAddVisitPatient = scheduleablePatients.find(patient => patient.id === addVisitForm.patient_id);
     const assignableVisitStaff = addVisitForm.visit_category === 'Postpartum' && selectedAddVisitPatient?.assignedStaffId
         ? assignmentStaff.filter(staff => staff.id === selectedAddVisitPatient.assignedStaffId)
         : assignmentStaff;
@@ -235,6 +323,7 @@ const PrenatalVisits = () => {
                 if (stationError) throw stationError;
                 if (!active) return;
                 setAssignmentStations(stations || []);
+                setAllStationsList((stations || []).map(s => s.station_name).filter(Boolean));
                 if (access.stationId) {
                     setAddVisitForm(current => ({
                         ...current,
@@ -329,9 +418,12 @@ const PrenatalVisits = () => {
             }));
 
             setVisitsTable(processedVisits);
+            setInitialLoading(false);
 
         } catch (error) {
             console.error('Prenatal fetch error:', error);
+            setInitialError(error);
+            setInitialLoading(false);
         }
     }, [currentDate, calendarView, archiveFilter, patientService]);
 
@@ -344,11 +436,11 @@ const PrenatalVisits = () => {
             await patientService.updatePrenatalVisitStatus(visitId, updates);
             await fetchData();
             setToast('Visit status updated successfully!');
-            setTimeout(() => setToast(null), 3000);
+            scheduleToastClear(3000);
         } catch (error) {
             console.error('Error updating visit:', error);
             setToast('Failed to update visit status.');
-            setTimeout(() => setToast(null), 3000);
+            scheduleToastClear(3000);
         }
     };
 
@@ -357,11 +449,11 @@ const PrenatalVisits = () => {
             await patientService.reassignPrenatalVisit(visitId, assignedStaffId);
             await fetchData();
             setToast('Visit assignment updated.');
-            setTimeout(() => setToast(null), 3000);
+            scheduleToastClear(3000);
         } catch (error) {
             console.error('Error assigning prenatal visit:', error);
             setToast(error.message || 'Could not update visit assignment.');
-            setTimeout(() => setToast(null), 3000);
+            scheduleToastClear(3000);
         }
     };
 
@@ -456,16 +548,18 @@ const PrenatalVisits = () => {
                 const rows = (postpartumVisits || []).map(visit => {
                     const attendedDate = visit.attended_date || null;
                     const scheduledDate = visit.scheduled_at || '';
-                    const dateStr = attendedDate || visit.scheduled_date || scheduledDate;
+                    const scheduledDateOnly = visit.scheduled_date || getManilaDateStr(scheduledDate);
+                    const todayManila = getManilaTodayStr();
+                    const dateStr = attendedDate || scheduledDateOnly || scheduledDate;
                     const patient = patientById.get(visit.patient_id);
                     const patientName = patient
                         ? `${patient.first_name || ''} ${patient.last_name || ''}`.trim()
-                        : visit.patient_id;
+                        : 'Unlinked patient';
                     const status = visit.status === 'Attended'
                         ? 'Attended'
                         : visit.status === 'Cancelled'
                             ? 'Cancelled'
-                            : scheduledDate && (visit.scheduled_date || toLocalDateStr(new Date(scheduledDate))) < toLocalDateStr(new Date())
+                            : scheduledDate && scheduledDateOnly < todayManila
                                 ? 'Missed'
                                 : 'Scheduled';
 
@@ -473,13 +567,14 @@ const PrenatalVisits = () => {
                         id: visit.id,
                         deliveryId: visit.delivery_id,
                         patientId: visit.patient_id,
-                        patientName: patientName || visit.patient_id,
+                        patientName: patientName || 'Unlinked patient',
+                        patientRecordAvailable: Boolean(patient),
                         vaccineName: visit.visit_type,
                         doseText: '',
                         assignedStaffId: visit.assigned_staff || null,
                         assignedStaff: staffById.get(visit.assigned_staff) || null,
-                        visitDate: dateStr,
-                        visitDateOnly: visit.scheduled_date || toLocalDateStr(new Date(scheduledDate)),
+                        visitDate: scheduledDateOnly || dateStr,
+                        visitDateOnly: scheduledDateOnly,
                         reschedule_reason: visit.reschedule_reason || null,
                         status,
                         attendedDate,
@@ -560,52 +655,52 @@ const PrenatalVisits = () => {
                 console.error('Could not load vaccinations for rescheduling:', error);
                 if (active) {
                     setToast('Could not load scheduled vaccinations for rescheduling.');
-                    setTimeout(() => setToast(null), 4000);
+                    scheduleToastClear(4000);
                 }
             }
         };
         loadVaccinationsForRescheduling();
         return () => { active = false; };
-    }, [patientService.supabase]);
+    }, [patientService.supabase, scheduleToastClear]);
 
     const handleAddVisitSubmit = async (e) => {
         e.preventDefault();
         const role = visitAccess?.role;
         if (!['admin', 'staff', 'cho personnel'].includes(role)) {
             setToast('Your account is not authorized to schedule visits.');
-            setTimeout(() => setToast(null), 3500);
+            scheduleToastClear(3500);
             return;
         }
         const mayAssignOutsideOwnStation = role === 'admin';
         if (!addVisitForm.assigned_station) {
             setToast('Select an assigned station for this visit.');
-            setTimeout(() => setToast(null), 3500);
+            scheduleToastClear(3500);
             return;
         }
         if (!mayAssignOutsideOwnStation
             && addVisitForm.assigned_station !== visitAccess?.stationId
             && addVisitForm.assigned_staff) {
             setToast('Staff and CHO personnel can only assign a worker when the visit station is their own station.');
-            setTimeout(() => setToast(null), 4000);
+            scheduleToastClear(4000);
             return;
         }
         if (addVisitForm.assigned_staff
             && !assignmentStaff.some(staff => staff.id === addVisitForm.assigned_staff)) {
             setToast('Select a healthcare worker from the assigned station.');
-            setTimeout(() => setToast(null), 3500);
+            scheduleToastClear(3500);
             return;
         }
-        const patient = patientsForVisitCategory.find(p => p.id === addVisitForm.patient_id);
+        const patient = scheduleablePatients.find(p => p.id === addVisitForm.patient_id);
         if (!patient) {
-            setToast('Select a patient who matches the selected visit category.');
-            setTimeout(() => setToast(null), 3500);
+            setToast('Select a patient for whom you have visit-scheduling permission.');
+            scheduleToastClear(3500);
             return;
         }
         if (addVisitForm.visit_category === 'Postpartum'
             && addVisitForm.assigned_staff
             && patient.assignedStaffId !== addVisitForm.assigned_staff) {
             setToast("Postpartum visits can only be assigned to the patient's assigned prenatal healthcare worker.");
-            setTimeout(() => setToast(null), 4000);
+            scheduleToastClear(4000);
             return;
         }
         setIsAddingVisit(true);
@@ -768,11 +863,11 @@ const PrenatalVisits = () => {
             setToast(postInsertWarnings.length
                 ? `Visit saved. ${postInsertWarnings.join(' ')}`
                 : 'Visit scheduled successfully. An email notification was sent.');
-            setTimeout(() => setToast(null), 3000);
+            scheduleToastClear(3000);
         } catch (error) {
             console.error('Failed to schedule visit:', error);
             setToast(`Failed to schedule visit: ${error.message || 'Please try again.'}`);
-            setTimeout(() => setToast(null), 5000);
+            scheduleToastClear(5000);
         } finally {
             setIsAddingVisit(false);
         }
@@ -782,7 +877,7 @@ const PrenatalVisits = () => {
         e.preventDefault();
         if (!canReschedule) {
             setToast('Your account is not authorized to reschedule visits.');
-            setTimeout(() => setToast(null), 3500);
+            scheduleToastClear(3500);
             return;
         }
         const visitsToReschedule = selectedRescheduleVisitIds
@@ -790,12 +885,12 @@ const PrenatalVisits = () => {
             .filter(Boolean);
         if (!visitsToReschedule.length || visitsToReschedule.length !== selectedRescheduleVisitIds.length) {
             setToast('Select one or more current scheduled visits.');
-            setTimeout(() => setToast(null), 3500);
+            scheduleToastClear(3500);
             return;
         }
         if (!rescheduleForm.new_date || !/^\d{4}-\d{2}-\d{2}$/.test(rescheduleForm.new_date)) {
             setToast('Please select a valid new visit date.');
-            setTimeout(() => setToast(null), 3500);
+            scheduleToastClear(3500);
             return;
         }
         const [year, month, day] = rescheduleForm.new_date.split('-').map(Number);
@@ -807,28 +902,28 @@ const PrenatalVisits = () => {
             || parsedDate.getDate() !== day
         ) {
             setToast('Please select a valid new visit date.');
-            setTimeout(() => setToast(null), 3500);
+            scheduleToastClear(3500);
             return;
         }
         if (rescheduleForm.reason.length > 1000) {
             setToast('The rescheduling reason must be 1000 characters or fewer.');
-            setTimeout(() => setToast(null), 3500);
+            scheduleToastClear(3500);
             return;
         }
         const todayStr = toLocalDateStr(new Date());
         if (rescheduleForm.new_date < todayStr) {
             setToast('Cannot reschedule to a past date.');
-            setTimeout(() => setToast(null), 3500);
+            scheduleToastClear(3500);
             return;
         }
         if (visitsToReschedule.some(visit => visit.currentDate === rescheduleForm.new_date)) {
             setToast('The new date must differ from the current date for every selected visit.');
-            setTimeout(() => setToast(null), 4000);
+            scheduleToastClear(4000);
             return;
         }
         if (!user?.id) {
             setToast('Your staff session is unavailable. Sign in again to reschedule visits.');
-            setTimeout(() => setToast(null), 4000);
+            scheduleToastClear(4000);
             return;
         }
 
@@ -968,7 +1063,7 @@ const PrenatalVisits = () => {
         const succeeded = results.filter(result => result.status === 'success').length;
         const failed = results.length - succeeded;
         setToast(`${succeeded} visit${succeeded === 1 ? '' : 's'} rescheduled; ${failed} failed. Review the result list.`);
-        setTimeout(() => setToast(null), 5000);
+        scheduleToastClear(5000);
     };
 
 
@@ -1006,48 +1101,83 @@ const PrenatalVisits = () => {
 
 
     const visibleDays = getVisibleDays(currentDate, calendarView);
-    const filteredVisits = visitsTable.filter(v => {
-        const matchesSearch = (v.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            v.patientId?.toLowerCase().includes(searchTerm.toLowerCase()));
-        const matchesStatus = (filterStatus === 'All' || v.status === filterStatus);
-        const matchesArchive =
-            archiveFilter === 'all' ||
-            (archiveFilter === 'archived' ? archivedPatientIds.has(v.patientId) : !archivedPatientIds.has(v.patientId));
-        return matchesSearch && matchesStatus && matchesArchive;
-    });
+    const filteredVisits = useMemo(() => {
+        const normalizedSearch = searchTerm.toLowerCase();
+        return visitsTable.filter(v => {
+            const matchesSearch = (v.patientName?.toLowerCase().includes(normalizedSearch) ||
+                v.patientId?.toLowerCase().includes(normalizedSearch) ||
+                formatMotherId(v.patientId).toLowerCase().includes(normalizedSearch));
+            const matchesStatus = (filterStatus === 'All' || v.status === filterStatus);
+            const matchesArchive =
+                archiveFilter === 'all' ||
+                (archiveFilter === 'archived' ? archivedPatientIds.has(v.patientId) : !archivedPatientIds.has(v.patientId));
+            const matchesStation = matchStation(v.assignedStation || v.visitStation, filterStation);
+            return matchesSearch && matchesStatus && matchesArchive && matchesStation;
+        });
+    }, [visitsTable, searchTerm, filterStatus, archiveFilter, archivedPatientIds, matchStation, filterStation]);
 
     const todayOnly = new Date().toISOString().split('T')[0];
-    // Group visits by patient
-    const latestPatientVisitMap = new Map();
-    filteredVisits
-      .slice()
-      .sort((a, b) => new Date(b.visitDateOnly) - new Date(a.visitDateOnly))
-      .forEach((visit) => {
-        if (!latestPatientVisitMap.has(visit.patientId)) {
-          latestPatientVisitMap.set(visit.patientId, visit);
-        }
-      });
+    const uniquePatients = useMemo(() => {
+        const patientById = new Map();
+        allPatients.forEach(patient => {
+            if (!patientById.has(patient.id)) patientById.set(patient.id, patient);
+        });
+        const summaries = new Map();
 
-    const uniquePatients = Array.from(latestPatientVisitMap.values()).map((visit) => ({
-      id: visit.patientId,
-      name: visit.patientName,
-      risk: allPatients.find(p => p.id === visit.patientId)?.riskLevel || 'Unknown',
-      nextVisit: (() => {
-        const nextScheduled = filteredVisits.filter(v => v.patientId === visit.patientId && v.status === 'Scheduled' && v.visitDateOnly >= todayOnly).sort((a, b) => a.visitDateOnly.localeCompare(b.visitDateOnly))[0];
-        return nextScheduled ? nextScheduled.visitDateOnly : 'No upcoming';
-      })(),
-      // Show last ATTENDED visit (not just any visit)
-      lastVisit: (() => {
-        const attended = filteredVisits.filter(v => v.patientId === visit.patientId && v.status === 'Attended')
-          .sort((a, b) => {
-            const dateA = a.attendedDate ? new Date(a.attendedDate) : new Date(a.visitDate);
-            const dateB = b.attendedDate ? new Date(b.attendedDate) : new Date(b.visitDate);
-            return dateB - dateA;
-          })[0];
-        return attended ? (attended.attendedDate || attended.visitDate) : 'No completed visit';
-      })(),
-      totalVisits: filteredVisits.filter(v => v.patientId === visit.patientId).length
-    }));
+        filteredVisits.forEach((visit, index) => {
+            const visitDate = visit.visitDateOnly || '';
+            const visitTimestamp = new Date(visitDate).getTime();
+            let summary = summaries.get(visit.patientId);
+            if (!summary) {
+                const patient = patientById.get(visit.patientId);
+                summary = {
+                    id: visit.patientId,
+                    name: visit.patientName,
+                    risk: patient?.riskLevel || 'Unknown',
+                    latestVisitTimestamp: Number.isNaN(visitTimestamp) ? -Infinity : visitTimestamp,
+                    latestVisitIndex: index,
+                    nextVisit: null,
+                    lastVisit: null,
+                    lastAttendedTimestamp: -Infinity,
+                    totalVisits: 0
+                };
+                summaries.set(visit.patientId, summary);
+            }
+
+            summary.totalVisits += 1;
+            if (!Number.isNaN(visitTimestamp) && visitTimestamp > summary.latestVisitTimestamp) {
+                summary.latestVisitTimestamp = visitTimestamp;
+                summary.latestVisitIndex = index;
+                summary.name = visit.patientName;
+            }
+
+            if (visit.status === 'Scheduled' && visitDate >= todayOnly
+                && (!summary.nextVisit || visitDate < summary.nextVisit)) {
+                summary.nextVisit = visitDate;
+            }
+
+            if (visit.status === 'Attended') {
+                const attendedDate = visit.attendedDate || visit.visitDate;
+                const attendedTimestamp = new Date(attendedDate).getTime();
+                if (!Number.isNaN(attendedTimestamp) && attendedTimestamp > summary.lastAttendedTimestamp) {
+                    summary.lastAttendedTimestamp = attendedTimestamp;
+                    summary.lastVisit = attendedDate;
+                }
+            }
+        });
+
+        return Array.from(summaries.values())
+            .sort((left, right) => right.latestVisitTimestamp - left.latestVisitTimestamp
+                || left.latestVisitIndex - right.latestVisitIndex)
+            .map(patient => ({
+                id: patient.id,
+                name: patient.name,
+                risk: patient.risk,
+                nextVisit: patient.nextVisit || 'No upcoming',
+                lastVisit: patient.lastVisit || 'No completed visit',
+                totalVisits: patient.totalVisits
+            }));
+    }, [allPatients, filteredVisits, todayOnly]);
 
     const totalPages = Math.ceil(uniquePatients.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -1059,18 +1189,20 @@ const PrenatalVisits = () => {
     const archivedVisitRows = visitsTable.filter(v => archivedPatientIds.has(v.patientId));
 
     const categorizeVisits = () => {
-        const today = new Date().toISOString().split('T')[0];
+        const manilaToday = getManilaTodayStr();
 
         let activeRows = [];
         if (visitTypeTab === 'postpartum') {
             activeRows = postpartumTable.filter(v => {
                 const matchesSearch = (v.patientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                     v.patientId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    formatMotherId(v.patientId).toLowerCase().includes(searchTerm.toLowerCase()) ||
                     v.vaccineName?.toLowerCase().includes(searchTerm.toLowerCase()));
                 const matchesArchive =
                     archiveFilter === 'all' ||
                     (archiveFilter === 'archived' ? archivedPatientIds.has(v.patientId) : !archivedPatientIds.has(v.patientId));
-                return matchesSearch && matchesArchive;
+                const matchesStation = matchStation(v.assignedStation, filterStation);
+                return matchesSearch && matchesArchive && matchesStation;
             });
         } else {
             activeRows = filteredVisits;
@@ -1078,44 +1210,60 @@ const PrenatalVisits = () => {
 
         const allEntries = activeRows.map(v => {
             const pat = allPatients.find(p => p.id === v.patientId);
+            const scheduledDateOnly = getManilaDateStr(v.visitDateOnly || v.visitDate || v.visit_date || v.scheduled_date || v.scheduledVaccination || v.raw?.scheduled_date || v.raw?.scheduled_at);
             return {
                 id: v.id,
                 patientId: v.patientId,
                 patientName: v.patientName,
+                patientRecordAvailable: v.patientRecordAvailable !== false,
                 hasHealthConditions: pat?.hasHealthConditions,
                 risk: pat?.hasHealthConditions ? 'Documented Conditions' : 'None Reported',
                 assignedStaffId: v.assignedStaffId || null,
-            assignedStaff: v.assignedStaff || null,
-            assignedStationId: v.assignedStationId || null,
-            assignedStation: v.assignedStation || null,
-            visitStation: v.visitStation || null,
-            vaccineName: v.vaccineName,
-            doseText: v.doseText,
-            visitDate: v.visitDateOnly || v.visitDate,
-            status: v.status,
-            attendedDate: v.attendedDate || v.vaccinatedDate,
-            visitDateTime: new Date(v.visitDateOnly || v.visitDate || today),
-            raw: v.raw || v
-        };
+                assignedStaff: v.assignedStaff || null,
+                assignedStationId: v.assignedStationId || null,
+                assignedStation: v.assignedStation || null,
+                visitStation: v.visitStation || null,
+                vaccineName: v.vaccineName,
+                doseText: v.doseText,
+                visitDate: scheduledDateOnly || v.visitDateOnly || v.visitDate,
+                scheduledDateOnly,
+                status: v.status,
+                attendedDate: v.attendedDate || v.vaccinatedDate,
+                visitDateTime: new Date(scheduledDateOnly || v.visitDateOnly || v.visitDate || manilaToday),
+                raw: v.raw || v
+            };
         });
 
-        const upcoming = allEntries.filter(v => 
+        // 1. Classify visits using existing definitions
+        const upcomingAll = allEntries.filter(v => 
             (v.status === 'Scheduled' || v.status === 'Pending') && 
-            v.visitDate >= today
+            (v.scheduledDateOnly || v.visitDate) >= manilaToday
         ).sort((a, b) => a.visitDateTime - b.visitDateTime);
 
-        const missed = allEntries.filter(v => 
+        const missedAll = allEntries.filter(v => 
             v.status === 'Missed' || 
-            ((v.status === 'Scheduled' || v.status === 'Pending') && v.visitDate < today)
+            ((v.status === 'Scheduled' || v.status === 'Pending') && (v.scheduledDateOnly || v.visitDate) < manilaToday)
         ).sort((a, b) => b.visitDateTime - a.visitDateTime);
 
-        const completed = allEntries.filter(v => 
+        const completedAll = allEntries.filter(v => 
             v.status === 'Attended' || v.status === 'Completed' || v.status === 'Given' || v.status === 'Done' || v.attendedDate
         ).sort((a, b) => {
             const dateA = a.attendedDate ? new Date(a.attendedDate) : a.visitDateTime;
             const dateB = b.attendedDate ? new Date(b.attendedDate) : b.visitDateTime;
             return dateB - dateA;
         });
+
+        // 2. Apply Date Filter (Today vs All)
+        const filterByDate = (entries) => {
+            if (dateFilter === 'today') {
+                return entries.filter(v => (v.scheduledDateOnly || v.visitDate) === manilaToday);
+            }
+            return entries;
+        };
+
+        const upcoming = filterByDate(upcomingAll);
+        const missed = filterByDate(missedAll);
+        const completed = filterByDate(completedAll);
 
         const latestByPatient = (entries) => Array.from(
             entries.reduce((patients, entry) => {
@@ -1198,6 +1346,7 @@ const PrenatalVisits = () => {
             && (!q
                 || visit.patientName?.toLowerCase().includes(q)
                 || visit.patientId?.toLowerCase().includes(q)
+                || formatMotherId(visit.patientId).toLowerCase().includes(q)
                 || visit.visitType?.toLowerCase().includes(q))
         );
     }, [eligibleVisitsToReschedule, rescheduleDateFilter, rescheduleSearch]);
@@ -1220,7 +1369,10 @@ const PrenatalVisits = () => {
         const monthYear = date.toLocaleString('default', { month: 'long', year: 'numeric' });
         const typeStr = visitTypeTab.charAt(0).toUpperCase() + visitTypeTab.slice(1);
         const catStr = visitCategoryTab.charAt(0).toUpperCase() + visitCategoryTab.slice(1);
-        let desc = `${monthYear} · ${typeStr} · ${catStr}`;
+        let desc = `${monthYear} · ${typeStr} · ${catStr} · Filter: ${dateFilter === 'today' ? 'Today' : 'All Dates'}`;
+        if (filterStation !== 'All') {
+            desc += ` · Station: ${filterStation}`;
+        }
         if (filterStatus !== 'All') {
             desc += ` · Status: ${filterStatus}`;
         }
@@ -1246,7 +1398,7 @@ const PrenatalVisits = () => {
 
         return filteredForExport.map(v => ({
             "Patient Name": v.patientName || 'N/A',
-            "Patient ID": v.patientId || 'N/A',
+            "Patient ID": formatMotherId(v.patientId) || 'N/A',
             "Visit Type": (v.type || v.visitType || visitTypeTab).toUpperCase(),
             "Scheduled Date": formatReadableDate(v.visitDate || v.date) || v.visitDate || v.date || 'N/A',
             "Scheduled Time": v.visitTime || v.time || 'N/A',
@@ -1294,39 +1446,41 @@ const PrenatalVisits = () => {
             const dateStr = new Date().toISOString().split('T')[0];
             XLSX.writeFile(wb, `Visits_Schedules_${dateStr}.xlsx`);
         } else if (format === 'pdf') {
-            const doc = new jsPDF('landscape');
-            
-            doc.setFontSize(16);
-            doc.text("Visits & Scheduling Report", 14, 20);
-            
-            doc.setFontSize(10);
-            doc.setTextColor(100);
-            doc.text(`Period: ${reportPeriodText}`, 14, 28);
-            doc.text(`Filters: ${filterDesc}`, 14, 34);
-            
-            if (data.length === 0) {
-                doc.text("No records found for the selected period and filters.", 14, 46);
-            } else {
-                const head = [Object.keys(data[0])];
-                const body = data.map(obj => Object.values(obj));
-                
-                autoTable(doc, {
-                    startY: 42,
-                    head: head,
-                    body: body,
-                    theme: 'grid',
-                    styles: { fontSize: 8 },
-                    headStyles: { fillColor: [185, 129, 138] }
-                });
-            }
-            
             const dateStr = new Date().toISOString().split('T')[0];
-            doc.save(`Visits_Schedules_${dateStr}.pdf`);
+            const head = data.length > 0 ? [Object.keys(data[0])] : [["Patient Name", "Patient ID", "Visit Type", "Scheduled Date", "Scheduled Time", "Assigned Station", "Visit Station", "Assigned Staff", "Status"]];
+            const body = data.length > 0 ? data.map(obj => Object.values(obj)) : [];
+
+            const stationText = filterStation === 'All' ? 'All Stations' : filterStation;
+            exportStandardStaffPdf({
+                orientation: 'landscape',
+                title: 'Visits & Scheduling Report',
+                period: reportPeriodText || 'All Dates',
+                station: stationText,
+                scope: filterDesc || '',
+                totalRecords: data.length,
+                head: head,
+                body: body,
+                filename: `Visits_Schedules_${dateStr}.pdf`
+            });
         }
     };
 
+    if (initialLoading) {
+        return (
+            <StaffPageLoader 
+                message="Loading visits & scheduling..." 
+                error={initialError} 
+                onRetry={() => {
+                    setInitialLoading(true);
+                    setInitialError(null);
+                    fetchData();
+                }} 
+            />
+        );
+    }
+
     return (
-        <div className="prenatal-visits-overall">
+        <div className="prenatal-visits-overall staff-page-ready">
             {toast && <div className="toast toast--success"><CheckCircle2 size={16} /> {toast}</div>}
 
             {/* Page Header */}
@@ -1395,12 +1549,20 @@ const PrenatalVisits = () => {
                             <Legend 
                                 categories={[
                                     {
-                                        title: "Status",
+                                        title: "Appointment Status",
                                         items: [
                                             { label: "Available", style: { backgroundColor: 'rgba(122, 162, 219, 0.15)', color: '#3b5a8c' } },
                                             { label: "Scheduled", style: { backgroundColor: 'rgba(230, 184, 110, 0.2)', color: '#8a6a10' } },
                                             { label: "Attended / Completed", style: { backgroundColor: 'rgba(109, 184, 160, 0.2)', color: '#3d8870' } },
                                             { label: "Missed", style: { backgroundColor: 'rgba(224, 122, 138, 0.15)', color: '#a04070' } }
+                                        ]
+                                    },
+                                    {
+                                        title: "Visit Type & Calendar",
+                                        items: [
+                                            { label: "Routine Prenatal", style: { backgroundColor: 'rgba(122, 162, 219, 0.15)', color: '#3b5a8c' } },
+                                            { label: "Postpartum Follow-up", style: { backgroundColor: 'rgba(185, 129, 138, 0.15)', color: '#8a505b' } },
+                                            { label: "Today's Schedule (Rose Outline)", style: { backgroundColor: 'rgba(185, 129, 138, 0.08)', border: '1px solid #b9818a', color: '#8a505b' } }
                                         ]
                                     }
                                 ]}
@@ -1414,8 +1576,8 @@ const PrenatalVisits = () => {
                         <div className="day-view-container">
                             {visibleDays.map(day => {
                                 const dayItems = visitTypeTab === 'postpartum'
-                                    ? postpartumTable.filter(v => v.visitDateOnly === day.date)
-                                    : visitsTable.filter(v => v.visitDateOnly === day.date);
+                                    ? postpartumTable.filter(v => v.patientRecordAvailable && v.visitDateOnly === day.date && matchStation(v.assignedStation, filterStation))
+                                    : visitsTable.filter(v => v.visitDateOnly === day.date && matchStation(v.assignedStation || v.visitStation, filterStation));
 
                                 return (
                                     <div key={day.date} className={`day-schedule-card ${day.date === TODAY ? 'day-today' : ''}`}>
@@ -1457,8 +1619,8 @@ const PrenatalVisits = () => {
                                 <div className="week-row">
                                     {visibleDays.map(day => {
                                         const dayItems = visitTypeTab === 'postpartum'
-                                            ? postpartumTable.filter(v => v.visitDateOnly === day.date)
-                                            : visitsTable.filter(v => v.visitDateOnly === day.date);
+                                            ? postpartumTable.filter(v => v.patientRecordAvailable && v.visitDateOnly === day.date && matchStation(v.assignedStation, filterStation))
+                                            : visitsTable.filter(v => v.visitDateOnly === day.date && matchStation(v.assignedStation || v.visitStation, filterStation));
 
                                         return (
                                             <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`} onClick={() => { setCalendarView('day'); setCurrentDate(new Date(day.date)); }}>
@@ -1496,8 +1658,8 @@ const PrenatalVisits = () => {
                                         <div key={weekIndex} className="week-row">
                                             {week.map(day => {
                                                 const dayItems = visitTypeTab === 'postpartum'
-                                                    ? postpartumTable.filter(v => v.visitDateOnly === day.date)
-                                                    : visitsTable.filter(v => v.visitDateOnly === day.date);
+                                                    ? postpartumTable.filter(v => v.patientRecordAvailable && v.visitDateOnly === day.date && matchStation(v.assignedStation, filterStation))
+                                                    : visitsTable.filter(v => v.visitDateOnly === day.date && matchStation(v.assignedStation || v.visitStation, filterStation));
 
                                                 return (
                                                     <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`} onClick={() => { setCalendarView('day'); setCurrentDate(new Date(day.date)); }}>
@@ -1540,16 +1702,74 @@ const PrenatalVisits = () => {
                     <h2 className="section-title">
                         <Clock size={18} /> Visit Records
                     </h2>
-                    <div className="table-filters" style={{ flexGrow: 1, display: 'flex', justifyContent: 'flex-end' }}>
-                        <div className="shared-search-wrap" style={{ maxWidth: '400px' }}>
+                    <div className="table-filters">
+                        {/* ── Search Patient Name ── */}
+                        <div className="shared-search-wrap pv-header-search">
                             <Search size={16} className="shared-search-icon" />
                             <input 
                                 type="text" 
                                 placeholder="Search Patient Name"
                                 value={searchTerm}
                                 onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                                className="shared-search-input"
+                                className="shared-search-input pv-header-search-input"
                             />
+                        </div>
+
+                        {/* ── Filter Group: Today/All Date Filter & Station Dropdown ── */}
+                        <div className="pv-header-filter-group">
+                            {/* ── Today / All Date Filter ── */}
+                            <div className="date-filter-toggle" role="group" aria-label="Filter records by date">
+                                <button
+                                    type="button"
+                                    className={`date-filter-btn ${dateFilter === 'today' ? 'active' : ''}`}
+                                    onClick={() => { setDateFilter('today'); setCurrentPage(1); }}
+                                >
+                                    Today
+                                </button>
+                                <button
+                                    type="button"
+                                    className={`date-filter-btn ${dateFilter === 'all' ? 'active' : ''}`}
+                                    onClick={() => { setDateFilter('all'); setCurrentPage(1); }}
+                                >
+                                    All
+                                </button>
+                            </div>
+
+                            {/* ── Station Filter Dropdown ── */}
+                            <div className="filter-dropdown-container">
+                                <button 
+                                    className={`filter-btn pv-header-filter-btn ${filterStation !== 'All' ? 'active-filter' : ''}`}
+                                    onClick={() => setActivePopover(activePopover === 'station' ? null : 'station')}
+                                >
+                                    <MapPin size={14} className="filter-btn-icon" />
+                                    <span>{filterStation === 'All' ? 'All Stations' : filterStation}</span>
+                                    <ChevronDown size={14} className="filter-btn-icon" />
+                                </button>
+                                {activePopover === 'station' && (
+                                    <div className="filter-popover" style={{ right: 0, left: 'auto', minWidth: '180px' }}>
+                                        <div className="popover-title">Station</div>
+                                        <div className="popover-options">
+                                            {(!isStationStaff || canViewOtherStations) && (
+                                                <button 
+                                                    className={`popover-opt-btn ${filterStation === 'All' ? 'selected' : ''}`} 
+                                                    onClick={() => { userHasChangedStationRef.current = true; setFilterStation('All'); setActivePopover(null); setCurrentPage(1); }}
+                                                >
+                                                    All Stations
+                                                </button>
+                                            )}
+                                            {permittedStations.map((station) => (
+                                                <button 
+                                                    key={station} 
+                                                    className={`popover-opt-btn ${filterStation === station ? 'selected' : ''}`} 
+                                                    onClick={() => { userHasChangedStationRef.current = true; setFilterStation(station); setActivePopover(null); setCurrentPage(1); }}
+                                                >
+                                                    {station}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1560,19 +1780,22 @@ const PrenatalVisits = () => {
                         className={`visit-category-tab ${visitCategoryTab === 'upcoming' ? 'active' : ''}`}
                         onClick={() => { setVisitCategoryTab('upcoming'); setCurrentPage(1); }}
                     >
-                        Upcoming
+                        <span>Upcoming</span>
+                        <span className="tab-count-badge">{categorizedVisits.upcoming.length}</span>
                     </button>
                     <button
                         className={`visit-category-tab ${visitCategoryTab === 'missed' ? 'active' : ''}`}
                         onClick={() => { setVisitCategoryTab('missed'); setCurrentPage(1); }}
                     >
-                        Missed
+                        <span>Missed</span>
+                        <span className="tab-count-badge">{categorizedVisits.missed.length}</span>
                     </button>
                     <button
                         className={`visit-category-tab ${visitCategoryTab === 'completed' ? 'active' : ''}`}
                         onClick={() => { setVisitCategoryTab('completed'); setCurrentPage(1); }}
                     >
-                        Completed
+                        <span>Completed</span>
+                        <span className="tab-count-badge">{categorizedVisits.completed.length}</span>
                     </button>
                 </div>
 
@@ -1619,17 +1842,16 @@ const PrenatalVisits = () => {
                                             <td onClick={event => event.stopPropagation()}>
                                                 <VisitStaffAssignment
                                                     visitId={visit.id}
-                                                    visitStationId={visit.assignedStationId}
+                                                    patientStationId={visit.patientStationId}
                                                     assignedStaffId={visit.assignedStaffId}
                                                     assignedStaffName={visit.assignedStaff}
                                                     assignedStationName={visit.assignedStation}
                                                     visitStationName={visit.visitStation}
                                                     visitStatus={visit.status}
-                                                    userRole={visitAccess?.role}
                                                     userStationId={visitAccess?.stationId}
                                                     onAssigned={async ({ assignedStaffId, assignedStaffName }) => {
                                                         setToast('Healthcare worker assigned successfully.');
-                                                        setTimeout(() => setToast(null), 3000);
+                                                        scheduleToastClear(3000);
                                                         await fetchData();
                                                     }}
                                                 />
@@ -1651,24 +1873,12 @@ const PrenatalVisits = () => {
                                 ) : (
                                     <tr>
                                         <td colSpan="7" className="empty-tab-state">
-                                            {visitCategoryTab === 'upcoming' && (
-                                                <div className="empty-state-content">
-                                                    <CalendarCheck size={32} />
-                                                    <p>No upcoming visits.</p>
-                                                </div>
-                                            )}
-                                            {visitCategoryTab === 'missed' && (
-                                                <div className="empty-state-content">
-                                                    <AlertTriangle size={32} />
-                                                    <p>No missed visits.</p>
-                                                </div>
-                                            )}
-                                            {visitCategoryTab === 'completed' && (
-                                                <div className="empty-state-content">
-                                                    <CheckCircle2 size={32} />
-                                                    <p>No completed visits.</p>
-                                                </div>
-                                            )}
+                                            <div className="empty-state-content">
+                                                {visitCategoryTab === 'upcoming' && <CalendarCheck size={32} />}
+                                                {visitCategoryTab === 'missed' && <AlertTriangle size={32} />}
+                                                {visitCategoryTab === 'completed' && <CheckCircle2 size={32} />}
+                                                <p>{dateFilter === 'today' ? 'No visits found for today.' : 'No visit records found.'}</p>
+                                            </div>
                                         </td>
                                     </tr>
                                 )}
@@ -1697,7 +1907,9 @@ const PrenatalVisits = () => {
                                             <td>
                                                 <div className="p-info">
                                                     <span className="p-name">{visit.patientName}</span>
-                                                    <span className="p-id">{formatMotherId(visit.patientId)}</span>
+                                                    <span className="p-id">
+                                                        {visit.patientRecordAvailable ? formatMotherId(visit.patientId) : 'Patient record unavailable'}
+                                                    </span>
                                                 </div>
                                             </td>
                                             <td>
@@ -1716,7 +1928,7 @@ const PrenatalVisits = () => {
                                                 </span>
                                             </td>
                                             <td className="text-right">
-                                                <div className="row-actions">
+                                                {visit.patientRecordAvailable ? <div className="row-actions">
                                                     <ActionTooltip text="View Details">
                                                         <button className="action-btn-text action-btn-secondary" onClick={() => setSelectedVisit({ ...visit, type: 'Postpartum' })} style={{ padding: '6px 8px', minWidth: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                             <Eye size={14} />
@@ -1732,31 +1944,19 @@ const PrenatalVisits = () => {
                                                             <Users size={14} /> Profile
                                                         </button>
                                                     </ActionTooltip>
-                                                </div>
+                                                </div> : <span className="p-id">Actions unavailable: patient link is missing</span>}
                                             </td>
                                         </tr>
                                     ))
                                 ) : (
                                     <tr>
                                         <td colSpan="7" className="empty-tab-state">
-                                            {visitCategoryTab === 'upcoming' && (
-                                                <div className="empty-state-content">
-                                                    <CalendarCheck size={32} />
-                                                    <p>No upcoming postpartum follow-ups.</p>
-                                                </div>
-                                            )}
-                                            {visitCategoryTab === 'missed' && (
-                                                <div className="empty-state-content">
-                                                    <AlertTriangle size={32} />
-                                                    <p>No missed postpartum follow-ups.</p>
-                                                </div>
-                                            )}
-                                            {visitCategoryTab === 'completed' && (
-                                                <div className="empty-state-content">
-                                                    <CheckCircle2 size={32} />
-                                                    <p>No completed postpartum follow-ups.</p>
-                                                </div>
-                                            )}
+                                            <div className="empty-state-content">
+                                                {visitCategoryTab === 'upcoming' && <CalendarCheck size={32} />}
+                                                {visitCategoryTab === 'missed' && <AlertTriangle size={32} />}
+                                                {visitCategoryTab === 'completed' && <CheckCircle2 size={32} />}
+                                                <p>{dateFilter === 'today' ? 'No visits found for today.' : 'No visit records found.'}</p>
+                                            </div>
                                         </td>
                                     </tr>
                                 )}
@@ -1797,7 +1997,7 @@ const PrenatalVisits = () => {
             </div>
 
             {/* ── MANAGE VISITS SELECTION MODAL ── */}
-            {showManageModal && (
+            {showManageModal && createPortal(
                 <div className="modal-overlay" onClick={() => setShowManageModal(false)}>
                     <div
                         className="modal-content mv-selection-modal"
@@ -1818,33 +2018,35 @@ const PrenatalVisits = () => {
                             </button>
                         </div>
                         <div className="mv-selection-grid">
-                            <div
-                                className="mv-option-card"
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => {
-                                    setShowManageModal(false);
-                                    setAddVisitForm({
-                                        visit_category: 'Prenatal',
-                                        visit_type: 'emergency',
-                                        patient_id: '',
-                                        visit_date: new Date().toISOString().split('T')[0],
-                                        assigned_staff: '',
-                                        assigned_station: visitAccess?.stationId || '',
-                                        reason: '',
-                                        notes: ''
-                                    });
-                                    setShowAddVisitModal(true);
-                                }}
-                            >
-                                <div className="mv-option-icon mv-option-icon--schedule">
-                                    <CalendarPlus size={24} />
+                            {canScheduleVisit && (
+                                <div
+                                    className="mv-option-card"
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => {
+                                        setShowManageModal(false);
+                                        setAddVisitForm({
+                                            visit_category: 'Prenatal',
+                                            visit_type: 'emergency',
+                                            patient_id: '',
+                                            visit_date: new Date().toISOString().split('T')[0],
+                                            assigned_staff: '',
+                                            assigned_station: visitAccess?.stationId || '',
+                                            reason: '',
+                                            notes: ''
+                                        });
+                                        setShowAddVisitModal(true);
+                                    }}
+                                >
+                                    <div className="mv-option-icon mv-option-icon--schedule">
+                                        <CalendarPlus size={24} />
+                                    </div>
+                                    <div>
+                                        <h3 className="mv-option-title">Schedule a Visit</h3>
+                                        <p className="mv-option-desc">Create a new appointment for a patient.</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h3 className="mv-option-title">Schedule a Visit</h3>
-                                    <p className="mv-option-desc">Create a new appointment for a patient.</p>
-                                </div>
-                            </div>
+                            )}
 
                             {canReschedule && (
                                 <div
@@ -1872,11 +2074,12 @@ const PrenatalVisits = () => {
                             )}
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             {/* ── SCHEDULE A VISIT MODAL (Formerly Add Visit) ── */}
-            {showAddVisitModal && (
+            {showAddVisitModal && createPortal(
                 <div className="modal-overlay" onClick={() => setShowAddVisitModal(false)}>
                     <div
                         className="modal-content"
@@ -1940,7 +2143,7 @@ const PrenatalVisits = () => {
                                     <div className="form-group">
                                         <label>Patient <span style={{ color: '#e05c73' }}>*</span></label>
                                         <SearchableDropdown
-                                            patients={patientsForVisitCategory}
+                                            patients={scheduleablePatients}
                                             value={addVisitForm.patient_id}
                                             onChange={val => {
                                                 const selected = patientsForVisitCategory.find(patient => patient.id === val);
@@ -2075,11 +2278,12 @@ const PrenatalVisits = () => {
                             </div>
                         </form>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             {/* ── RESCHEDULE A VISIT MODAL ── */}
-            {showRescheduleModal && (
+            {showRescheduleModal && createPortal(
                 <div className="modal-overlay" onClick={() => !isRescheduling && setShowRescheduleModal(false)}>
                     <div
                         className="modal-content"
@@ -2237,7 +2441,8 @@ const PrenatalVisits = () => {
                             </div>
                         </form>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             {selectedVisit && (

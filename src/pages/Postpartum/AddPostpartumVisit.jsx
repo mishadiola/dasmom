@@ -10,6 +10,7 @@ import BabyService from '../../services/babyservices';
 import { AuthContext } from '../../context/AuthContext';
 import { formatMotherId } from '../../utils/displayIds';
 import supabase from '../../config/supabaseclient';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
 import '../../styles/pages/AddPrenatalVisit.css';
 import '../../styles/pages/PatientProfile.css';
 
@@ -109,6 +110,7 @@ const AddPostpartumVisit = () => {
     const [isSaving, setIsSaving] = useState(false);
     const saveInFlightRef = useRef(false);
     const [loadingData, setLoadingData] = useState(true);
+    const [error, setError] = useState(null);
 
     // Form Data
     const [formData, setFormData] = useState({
@@ -167,11 +169,40 @@ const AddPostpartumVisit = () => {
     useEffect(() => {
         let active = true;
         const loadAllData = async () => {
-            if (!patientId) return;
             try {
+                setError(null);
                 setLoadingData(true);
+                let resolvedPatientId = patientId;
+                const visitId = location.state?.visitId;
+
+                if (visitId) {
+                    const { data: scheduledVisit, error: scheduledVisitError } = await supabase
+                        .from('postpartum_visits')
+                        .select('patient_id, delivery_id')
+                        .eq('id', visitId)
+                        .maybeSingle();
+                    if (scheduledVisitError) throw scheduledVisitError;
+                    if (!scheduledVisit) throw new Error('The selected postpartum visit could not be found.');
+
+                    if (scheduledVisit.delivery_id) {
+                        const { data: linkedDelivery, error: linkedDeliveryError } = await supabase
+                            .from('deliveries')
+                            .select('mother_id')
+                            .eq('id', scheduledVisit.delivery_id)
+                            .maybeSingle();
+                        if (linkedDeliveryError) throw linkedDeliveryError;
+                        resolvedPatientId = linkedDelivery?.mother_id || scheduledVisit.patient_id || resolvedPatientId;
+                    } else {
+                        resolvedPatientId = scheduledVisit.patient_id || resolvedPatientId;
+                    }
+                }
+
+                if (!resolvedPatientId) {
+                    throw new Error('A patient could not be identified for this postpartum visit.');
+                }
+
                 const [patientData, deliveryRes, visitsRes] = await Promise.all([
-                    patientService.getPatientById(patientId),
+                    patientService.getPatientById(resolvedPatientId),
                     supabase
                         .from('deliveries')
                         .select(`
@@ -181,22 +212,53 @@ const AddPostpartumVisit = () => {
                             complications,
                             station_ass,
                             stations:station_ass(station_name),
+                            patient_basic_info!deliveries_mother_id_fkey (
+                                id, first_name, last_name, date_of_birth, station_ass,
+                                stations:station_ass(station_name)
+                            ),
                             newborns(birth_weight, condition_at_birth)
                         `)
-                        .eq('mother_id', patientId)
+                        .eq('mother_id', resolvedPatientId)
                         .order('delivery_date', { ascending: false })
                         .limit(1)
                         .maybeSingle(),
                     supabase
                         .from('postpartum_visits')
                         .select('*')
-                        .eq('patient_id', patientId)
+                        .eq('patient_id', resolvedPatientId)
                         .order('scheduled_at', { ascending: true })
                 ]);
 
                 if (!active) return;
-                setPatient(patientData);
-                const dData = deliveryRes.data || (patientData?.deliveries?.[0] || null);
+                if (deliveryRes.error) throw deliveryRes.error;
+                if (visitsRes.error) throw visitsRes.error;
+                const linkedPatient = deliveryRes.data?.patient_basic_info;
+                const fallbackPatient = linkedPatient ? {
+                    ...linkedPatient,
+                    name: `${linkedPatient.first_name || ''} ${linkedPatient.last_name || ''}`.trim()
+                        || location.state?.visit?.patientName
+                        || 'Unknown Patient',
+                    age: linkedPatient.date_of_birth
+                        ? Math.floor((Date.now() - new Date(linkedPatient.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+                        : 'N/A',
+                    stationId: linkedPatient.station_ass || null,
+                    station: linkedPatient.stations?.station_name || 'Registered Station'
+                } : location.state?.visit?.patientName ? {
+                    id: resolvedPatientId,
+                    name: location.state.visit.patientName,
+                    age: 'N/A',
+                    stationId: null,
+                    station: location.state.visit.location || location.state.visit.assignedStation || 'Registered Station'
+                } : null;
+                const resolvedPatient = patientData || fallbackPatient;
+                if (!resolvedPatient) {
+                    throw new Error(
+                        'Patient details are unavailable. Confirm the patient record exists and your role can view patients at this station.'
+                    );
+                }
+
+                setPatient(resolvedPatient);
+                const dData = deliveryRes.data || (resolvedPatient?.deliveries?.[0] || null);
                 setDelivery(dData);
 
                 const pVisits = visitsRes.data || [];
@@ -221,6 +283,7 @@ const AddPostpartumVisit = () => {
                 }
             } catch (err) {
                 console.error('Error loading postpartum patient data:', err);
+                if (active) setError(err);
             } finally {
                 if (active) setLoadingData(false);
             }
@@ -455,14 +518,15 @@ const AddPostpartumVisit = () => {
 
     if (loadingData || !patient) {
         return (
-            <div className="add-pvisit-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '300px' }}>
-                <p style={{ color: 'var(--color-text-muted)', fontSize: '15px' }}>Loading postpartum patient record...</p>
-            </div>
+            <StaffPageLoader 
+                message="Loading postpartum patient record..." 
+                error={error} 
+            />
         );
     }
 
     return (
-        <div className="add-pvisit-page">
+        <div className="add-pvisit-page staff-page-ready">
             {toast && (
                 <div className={`toast toast--${toast.type}`}>
                     <span>{toast.type === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />} {toast.message}</span>

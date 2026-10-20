@@ -1,20 +1,20 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Users, Activity, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown, Minus,
     Calendar, MapPin, Filter, ChevronRight, ArrowUpRight, Baby, PieChart,
     BarChart3, AlertCircle, Download, HeartPulse, Syringe, XCircle, ClipboardCheck, Award,
-    Clock, Sparkles, ShieldAlert, BrainCircuit
+    Clock, Sparkles, ShieldAlert
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import supabase from '../../config/supabaseclient';
 import PatientService from '../../services/patientservice';
 import '../../styles/pages/Analytics.css';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
-import * as XLSX from 'xlsx';
 import ExportModal from '../../components/ExportModal';
 import { getSystemSettings } from '../../utils/systemSettings';
+import { buildPregnancyRiskTrend } from '../../utils/analyticsTrendUtils';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import { drawStaffPdfHeader, getStaffTableStyles, finalizeAndSaveStaffPdf, JsPDFConstructor, runAutoTable } from '../../utils/staffPdfTemplate';
+import PregnancyAgeReport from './PregnancyAgeReport';
 
 /* ════════════════════════════════════════════════════════════════
    ERROR BOUNDARY — catches render crashes and shows fallback UI
@@ -118,6 +118,10 @@ const Analytics = () => {
 
     // ── Live DB Data State ──
     const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState(null);
+    const [reloadKey, setReloadKey] = useState(0);
+    const hasLoadedOnceRef = useRef(false);
+    const [pregnancyAgeRows, setPregnancyAgeRows] = useState([]);
     const [dbData, setDbData] = useState({
         patients: [],
         pregnancies: [],
@@ -135,6 +139,20 @@ const Analytics = () => {
     // ── Hover Tooltip State ──
     const [hoveredDot, setHoveredDot] = useState(null);
 
+    // ── Vaccination Progress State (Analytics Tab) ──
+    const [vaccCategory, setVaccCategory] = useState('Newborns'); // 'Newborns' | 'Mothers'
+    const [activeVaccTooltip, setActiveVaccTooltip] = useState(null);
+
+    // ── Delivery & Postpartum Tooltips ──
+    const [activeDelivTooltip, setActiveDelivTooltip] = useState(null);
+    const [activeCompTooltip, setActiveCompTooltip] = useState(null);
+
+    useEffect(() => {
+        setActiveVaccTooltip(null);
+        setActiveDelivTooltip(null);
+        setActiveCompTooltip(null);
+    }, [filters, activeTab, vaccCategory]);
+
     // ── Export Modal State ──
     const [showExportModal, setShowExportModal] = useState(false);
 
@@ -142,8 +160,20 @@ const Analytics = () => {
     useEffect(() => {
         let isMounted = true;
         let pollingTimer = null;
-        let hasLoadedOnce = false;
+        let refreshTimer = null;
+        let hasLoadedOnce = hasLoadedOnceRef.current;
         const realtimeTables = ['patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'deliveries', 'vaccinations', 'newborns', 'stations'];
+        const tableKeys = {
+            patient_basic_info: 'patients',
+            pregnancy_info: 'pregnancies',
+            prenatal_visits: 'visits',
+            deliveries: 'deliveries',
+            vaccinations: 'vaccinations',
+            newborns: 'newborns',
+            stations: 'stations'
+        };
+        const tableRequestIds = Object.fromEntries(realtimeTables.map(table => [table, 0]));
+        const pendingTables = new Set();
 
         const startPollingFallback = (fetchData) => {
             if (pollingTimer || !isMounted) return;
@@ -156,52 +186,97 @@ const Analytics = () => {
             pollingTimer = null;
         };
 
-        const fetchAllData = async () => {
+        const fetchTableData = (table) => {
+            switch (table) {
+                case 'patient_basic_info':
+                    return supabase.from(table).select('id, first_name, last_name, station_ass, stations:station_ass(station_name), date_of_birth, created_at');
+                case 'pregnancy_info':
+                    return supabase.from(table).select('patient_id, pregn_postp, pregnancy_type, lmd, edd, gravida, para, miscarriage_info, created_at');
+                case 'prenatal_visits':
+                    return supabase.from(table).select('id, patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm, next_appt_date, next_appt_type');
+                case 'deliveries':
+                    return supabase.from(table).select('id, mother_id, station_ass, stations:station_ass(station_name), delivery_date, delivery_type, complications, risk_level');
+                case 'vaccinations':
+                    return supabase.from(table).select('id, patient_id, newborn_id, status, dose_number, scheduled_vaccination, vaccinated_date, created_at');
+                case 'newborns':
+                    return supabase.from(table).select('id, mother_id, delivery_id');
+                case 'stations':
+                    return supabase.from(table).select('id, station_name').order('station_name');
+                default:
+                    throw new Error(`Unsupported analytics table: ${table}`);
+            }
+        };
+
+        const fetchTables = async (tables, isInitialLoad = false) => {
+            const shouldFetchAgeReport = isInitialLoad || tables.includes('patient_basic_info') || tables.includes('pregnancy_info');
+            const patientService = new PatientService();
+            const requests = tables.map(async table => {
+                const requestId = ++tableRequestIds[table];
+                const { data, error } = await fetchTableData(table);
+                if (error) throw error;
+                return { table, requestId, data: data || [] };
+            });
+
             try {
-                if (!hasLoadedOnce) setLoading(true);
-                const [
-                    { data: patients },
-                    { data: pregnancies },
-                    { data: visits },
-                    { data: deliveries },
-                    { data: vaccinations },
-                    { data: newborns },
-                    { data: stations }
-                ] = await Promise.all([
-                    supabase.from('patient_basic_info').select('id, first_name, last_name, station_ass, stations:station_ass(station_name), date_of_birth, created_at'),
-                    supabase.from('pregnancy_info').select('patient_id, pregn_postp, pregnancy_type, lmd, edd, gravida, para, miscarriage_info, created_at'),
-                    supabase.from('prenatal_visits').select('id, patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm, next_appt_date, next_appt_type'),
-                    supabase.from('deliveries').select('id, mother_id, station_ass, stations:station_ass(station_name), delivery_date, delivery_type, complications, risk_level'),
-                    supabase.from('vaccinations').select('id, newborn_id, status, dose_number, scheduled_vaccination, vaccinated_date').not('newborn_id', 'is', null),
-                    supabase.from('newborns').select('id, mother_id, delivery_id'),
-                    supabase.from('stations').select('id, station_name').order('station_name')
+                if (isInitialLoad && !hasLoadedOnceRef.current) setLoading(true);
+                setFetchError(null);
+                const [results, ageReportRows] = await Promise.all([
+                    Promise.all(requests),
+                    shouldFetchAgeReport ? patientService.getStationPregnancyAgeReport().catch(err => {
+                        console.warn('Error fetching station pregnancy age report in Analytics:', err);
+                        return [];
+                    }) : Promise.resolve(null)
                 ]);
 
-                if (isMounted) setDbData({
-                    patients: patients || [],
-                    pregnancies: pregnancies || [],
-                    visits: visits || [],
-                    deliveries: deliveries || [],
-                    vaccinations: vaccinations || [],
-                    newborns: newborns || [],
-                    stations: stations || []
+                if (!isMounted) return;
+                setDbData(current => {
+                    const next = { ...current };
+                    results.forEach(({ table, requestId, data }) => {
+                        if (requestId === tableRequestIds[table]) {
+                            next[tableKeys[table]] = data;
+                        }
+                    });
+                    return next;
                 });
+                if (ageReportRows !== null) {
+                    setPregnancyAgeRows(ageReportRows || []);
+                }
                 hasLoadedOnce = true;
+                hasLoadedOnceRef.current = true;
             } catch (error) {
                 console.error('Error fetching Supabase data in Analytics:', error);
+                if (isMounted) {
+                    setFetchError(error);
+                    if (isInitialLoad) setPregnancyAgeRows([]);
+                }
             } finally {
-                if (isMounted) setLoading(false);
+                if (isMounted && isInitialLoad) setLoading(false);
             }
+        };
+
+        const fetchAllData = () => fetchTables(realtimeTables, true);
+
+        const scheduleRefresh = (table) => {
+            pendingTables.add(table);
+            if (table === 'stations') {
+                pendingTables.add('patient_basic_info');
+                pendingTables.add('deliveries');
+            }
+            if (refreshTimer) clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(() => {
+                const tablesToRefresh = [...pendingTables];
+                pendingTables.clear();
+                fetchTables(tablesToRefresh);
+            }, 250);
         };
 
         fetchAllData();
 
-        const channel = supabase
-            .channel('analytics-live-data')
-            .on('postgres_changes', { event: '*', schema: 'public' }, payload => {
-                if (realtimeTables.includes(payload.table)) fetchAllData();
-            })
-            .subscribe(status => {
+        const channel = supabase.channel('analytics-live-data');
+        realtimeTables.forEach(table => {
+            channel.on('postgres_changes', { event: '*', schema: 'public', table }, () => scheduleRefresh(table));
+        });
+        channel.subscribe(status => {
                 if (status === 'SUBSCRIBED') {
                     stopPollingFallback();
                 } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
@@ -212,9 +287,10 @@ const Analytics = () => {
         return () => {
             isMounted = false;
             stopPollingFallback();
+            if (refreshTimer) clearTimeout(refreshTimer);
             supabase.removeChannel(channel);
         };
-    }, []);
+    }, [reloadKey]);
 
     // ── Dynamic Aggregator Logic ──
     // Processes Supabase DB data depending on active filters
@@ -236,15 +312,24 @@ const Analytics = () => {
             return true;
         };
 
+        const stationMap = new Map((dbData.stations || []).map(s => [s.id, s.station_name]));
         const riskService = new PatientService();
+        const patientById = new Map(dbData.patients.map(patient => [patient.id, patient]));
+        const visitsByPatient = new Map();
+        const newbornById = new Map(dbData.newborns.map(newborn => [newborn.id, newborn]));
 
         // Determine latest attended visit for each patient so resolved risk is removed.
         const latestVisits = {};
         dbData.visits.forEach(v => {
-            if (!v.patient_id || v.status !== 'Attended') return;
-            const existing = latestVisits[v.patient_id];
-            if (!existing || new Date(v.visit_date) > new Date(existing.visit_date)) {
-                latestVisits[v.patient_id] = v;
+            if (!v.patient_id) return;
+            const patientVisits = visitsByPatient.get(v.patient_id) || [];
+            patientVisits.push(v);
+            visitsByPatient.set(v.patient_id, patientVisits);
+            if (v.status === 'Attended') {
+                const existing = latestVisits[v.patient_id];
+                if (!existing || new Date(v.visit_date) > new Date(existing.visit_date)) {
+                    latestVisits[v.patient_id] = v;
+                }
             }
         });
 
@@ -283,16 +368,18 @@ const Analytics = () => {
 
         // Loop patients
         dbData.patients.forEach(pat => {
-            const station = normalizeStation(pat.stations?.station_name);
+            const station = normalizeStation(pat.stations?.station_name || stationMap.get(pat.station_ass));
+            if (!liveAgg[station]) return;
             const detail = patientDetails[pat.id] || { trimester: '1', risk: 'Low', status: 'Pregnant' };
 
             // Apply Trimester and Risk filters explicitly here
             if (filters.trimester !== 'All' && filters.trimester !== detail.trimester) return;
             if (filters.risk !== 'All' && filters.risk !== detail.risk) return;
             
-            // Apply Date filter based on registration or lmd
+            // Apply Date filter: active pregnant patients remain valid for care metrics, while historical/non-active match dateRange
+            const isCurrentlyPregnant = String(detail.status || '').toLowerCase() === 'pregnant';
             const refDate = detail.created_at || pat.created_at;
-            if (!isWithinDateRange(refDate)) return;
+            if (!isCurrentlyPregnant && !isWithinDateRange(refDate)) return;
 
             let age = 25;
             if (pat.date_of_birth) {
@@ -300,7 +387,7 @@ const Analytics = () => {
                 age = new Date().getFullYear() - birth.getFullYear();
             }
 
-            if (detail.status?.toLowerCase() === 'pregnant') {
+            if (isCurrentlyPregnant) {
                 liveAgg[station].patients++;
                 if (detail.risk === 'High') liveAgg[station].highRisk++;
                 else if (detail.risk === 'Moderate') liveAgg[station].moderateRisk++;
@@ -324,8 +411,9 @@ const Analytics = () => {
 
         // Loop visits for missed appts
         dbData.visits.forEach(v => {
-            const pat = dbData.patients.find(p => p.id === v.patient_id);
-            const station = normalizeStation(pat?.stations?.station_name);
+            const pat = patientById.get(v.patient_id);
+            const station = normalizeStation(pat?.stations?.station_name || stationMap.get(pat?.station_ass));
+            if (!liveAgg[station]) return;
             if (!isWithinDateRange(v.visit_date)) return;
             const isMissed = v.status === 'Missed' || (v.visit_date && new Date(v.visit_date) < new Date() && v.status === 'Scheduled');
             if (isMissed) liveAgg[station].missedAppt++;
@@ -333,7 +421,8 @@ const Analytics = () => {
 
         // Loop deliveries
         dbData.deliveries.forEach(d => {
-            const station = normalizeStation(d.stations?.station_name);
+            const mother = patientById.get(d.mother_id);
+            const station = normalizeStation(d.stations?.station_name || stationMap.get(d.station_ass) || mother?.stations?.station_name || stationMap.get(mother?.station_ass));
             if (!isWithinDateRange(d.delivery_date)) return;
             if (!liveAgg[station]) return;
 
@@ -346,7 +435,12 @@ const Analytics = () => {
             else liveAgg[station].normalDel++;
 
             const comps = toStr(d.complications);
-            if (comps.includes('hemorrhage') || comps.includes('bleed')) liveAgg[station].compHemorr++;
+            if (comps && comps !== 'none') {
+                if (comps.includes('hemorrhage') || comps.includes('bleed')) liveAgg[station].compHemorr++;
+                else if (comps.includes('hypertens') || comps.includes('preeclampsia') || comps.includes('eclampsia')) liveAgg[station].compHyper++;
+                else if (comps.includes('infect') || comps.includes('sepsis')) liveAgg[station].compInfect++;
+                else liveAgg[station].compOther++;
+            }
         });
 
         // Calculate postpartum follow-up compliance from delivery to 42 days after delivery.
@@ -354,13 +448,13 @@ const Analytics = () => {
         dbData.deliveries.forEach(delivery => {
             const deliveryDate = new Date(delivery.delivery_date);
             if (Number.isNaN(deliveryDate.getTime()) || deliveryDate > now || !isWithinDateRange(delivery.delivery_date)) return;
-            const mother = dbData.patients.find(patient => patient.id === delivery.mother_id);
-            const station = normalizeStation(delivery.stations?.station_name);
+            const mother = patientById.get(delivery.mother_id);
+            const station = normalizeStation(delivery.stations?.station_name || stationMap.get(delivery.station_ass) || mother?.stations?.station_name || stationMap.get(mother?.station_ass));
             if (!postpartumByStation[station]) postpartumByStation[station] = { eligible: 0, completed: 0 };
             postpartumByStation[station].eligible++;
             const endDate = new Date(deliveryDate);
             endDate.setDate(endDate.getDate() + 42);
-            const completed = dbData.visits.some(visit => {
+            const completed = (visitsByPatient.get(delivery.mother_id) || []).some(visit => {
                 if (visit.patient_id !== delivery.mother_id || visit.status !== 'Attended') return false;
                 const visitDate = new Date(visit.visit_date);
                 return !Number.isNaN(visitDate.getTime()) && visitDate >= deliveryDate && visitDate <= endDate;
@@ -376,11 +470,19 @@ const Analytics = () => {
 
         // Loop vaccinations
         dbData.vaccinations.forEach(v => {
-            if (!v.newborn_id) return;
-            const newborn = dbData.newborns.find(n => n.id === v.newborn_id);
-            const mother = dbData.patients.find(p => p.id === newborn?.mother_id);
-            const station = normalizeStation(mother?.stations?.station_name);
-            if (!isWithinDateRange(v.vaccinated_date)) return;
+            let mother = null;
+            if (v.newborn_id) {
+                const newborn = newbornById.get(v.newborn_id);
+                mother = patientById.get(newborn?.mother_id);
+            } else if (v.patient_id) {
+                mother = patientById.get(v.patient_id);
+            }
+            if (!mother) return;
+            const station = normalizeStation(mother.stations?.station_name || stationMap.get(mother.station_ass));
+            if (!liveAgg[station]) return;
+
+            const vaccDate = v.vaccinated_date || v.scheduled_vaccination || v.created_at;
+            if (!isWithinDateRange(vaccDate)) return;
 
             liveAgg[station].totalVacc++;
             if (v.status === 'Completed') liveAgg[station].completedVacc++;
@@ -466,8 +568,9 @@ const Analytics = () => {
         const ppRate = totals.ppEligible > 0 ? Math.round((totals.ppCompleted / totals.ppEligible) * 100) : 0;
         
         // Missed Appt Rate
+        const stationMap = new Map((dbData.stations || []).map(s => [s.id, s.station_name]));
         const selectedPatientIds = new Set(selectedStations.flatMap(station => dbData.patients
-            .filter(patient => normalizeStation(patient.stations?.station_name) === station.name)
+            .filter(patient => normalizeStation(patient.stations?.station_name || stationMap.get(patient.station_ass)) === station.name)
             .map(patient => patient.id)));
         const scopedVisits = dbData.visits.filter(visit => selectedPatientIds.has(visit.patient_id) && isDateWithinRange(visit.visit_date, filters.dateRange));
         const totalVisitsCount = scopedVisits.filter(visit => visit.status !== 'Cancelled').length;
@@ -500,7 +603,7 @@ const Analytics = () => {
             ,ppEligible: totals.ppEligible
             ,ppCompleted: totals.ppCompleted
         };
-    }, [filters, dashboardMetrics]);
+    }, [filters, dashboardMetrics, dbData]);
 
     // ── Time Series Trend Data Generative Engine ──
     const trendData = useMemo(() => {
@@ -513,36 +616,37 @@ const Analytics = () => {
             end.setDate(end.getDate() + 7);
             return { start, end, label: `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` };
         });
+        const stationMap = new Map((dbData.stations || []).map(s => [s.id, s.station_name]));
         const selectedPatientIds = new Set(dbData.patients
-            .filter(patient => filters.station === 'All Stations' || normalizeStation(patient.stations?.station_name) === filters.station)
+            .filter(patient => filters.station === 'All Stations' || normalizeStation(patient.stations?.station_name || stationMap.get(patient.station_ass)) === filters.station)
             .map(patient => patient.id));
-        const latestRiskByPatient = {};
+        const visitsByPatient = new Map();
         dbData.visits.forEach(visit => {
-            if (!visit.patient_id || !visit.calculated_risk) return;
-            const current = latestRiskByPatient[visit.patient_id];
-            if (!current || new Date(visit.visit_date) > new Date(current.visit_date)) latestRiskByPatient[visit.patient_id] = visit;
+            if (!visit.patient_id) return;
+            const visits = visitsByPatient.get(visit.patient_id) || [];
+            visits.push(visit);
+            visitsByPatient.set(visit.patient_id, visits);
         });
+        const newbornById = new Map(dbData.newborns.map(newborn => [newborn.id, newborn]));
         const bucket = (dateValue) => weeks.findIndex(week => {
             const date = new Date(dateValue);
             return !Number.isNaN(date.getTime()) && isWithin(date, week.start, week.end);
         });
-        const totalVal = weeks.map(() => 0);
-        const highRiskVal = weeks.map(() => 0);
+        const riskService = new PatientService();
+        const { totalVal, highRiskVal } = buildPregnancyRiskTrend({
+            patients: dbData.patients,
+            pregnancies: dbData.pregnancies,
+            visits: dbData.visits,
+            selectedPatientIds,
+            weeks,
+            getRiskAssessment: (patient, pregnancy, visit) =>
+                riskService.getPregnancyRisk(patient, pregnancy, visit)
+        });
         const deliveriesVal = weeks.map(() => 0);
         const vaccNewborn = weeks.map(() => ({ completed: 0, total: 0 }));
         const postpartum = weeks.map(() => ({ eligible: 0, completed: 0 }));
         const visitsByWeek = weeks.map(() => ({ missed: 0, total: 0 }));
 
-        dbData.pregnancies.forEach(pregnancy => {
-            if (!selectedPatientIds.has(pregnancy.patient_id) || String(pregnancy.pregn_postp || '').toLowerCase() !== 'pregnant') return;
-            const index = bucket(pregnancy.created_at);
-            if (index >= 0) {
-                totalVal[index]++;
-                const pregnancyRisk = String(pregnancy.risk_level || '').toLowerCase();
-                const visitRisk = String(latestRiskByPatient[pregnancy.patient_id]?.calculated_risk || '').toLowerCase();
-                if (pregnancyRisk.includes('high') || visitRisk.includes('high')) highRiskVal[index]++;
-            }
-        });
         dbData.deliveries.forEach(delivery => {
             if (!selectedPatientIds.has(delivery.mother_id)) return;
             const index = bucket(delivery.delivery_date);
@@ -552,7 +656,7 @@ const Analytics = () => {
                 const deliveryDate = new Date(delivery.delivery_date);
                 const endDate = new Date(deliveryDate);
                 endDate.setDate(endDate.getDate() + 42);
-                if (dbData.visits.some(visit => visit.patient_id === delivery.mother_id && visit.status === 'Attended' && new Date(visit.visit_date) >= deliveryDate && new Date(visit.visit_date) <= endDate)) postpartum[index].completed++;
+                if ((visitsByPatient.get(delivery.mother_id) || []).some(visit => visit.status === 'Attended' && new Date(visit.visit_date) >= deliveryDate && new Date(visit.visit_date) <= endDate)) postpartum[index].completed++;
             }
         });
         dbData.visits.forEach(visit => {
@@ -564,9 +668,9 @@ const Analytics = () => {
         });
         dbData.vaccinations.forEach(vaccination => {
             if (!vaccination.newborn_id) return;
-            const newborn = dbData.newborns.find(n => n.id === vaccination.newborn_id);
+            const newborn = newbornById.get(vaccination.newborn_id);
             if (!selectedPatientIds.has(newborn?.mother_id)) return;
-            const index = bucket(vaccination.vaccinated_date || vaccination.scheduled_vaccination);
+            const index = bucket(vaccination.vaccinated_date || vaccination.scheduled_vaccination || vaccination.created_at);
             if (index < 0) return;
             const series = vaccNewborn[index];
             series.total++;
@@ -582,6 +686,205 @@ const Analytics = () => {
             missedRate: visitsByWeek.map(series => series.total ? Math.round((series.missed / series.total) * 100) : 0)
         };
     }, [filters, dbData]);
+
+    // ── Dedicated Vaccination Progress Trend Engine (Unique Patient Tracking) ──
+    const vaccProgressData = useMemo(() => {
+        const now = new Date();
+        const refDate = new Date(now);
+        refDate.setHours(23, 59, 59, 999);
+
+        // Generate time buckets matching active dateRange filter
+        let buckets = [];
+        if (filters.dateRange === 'monthly') {
+            buckets = Array.from({ length: 4 }, (_, i) => {
+                const end = new Date(refDate);
+                end.setDate(end.getDate() - (3 - i) * 7);
+                const start = new Date(end);
+                start.setDate(start.getDate() - 6);
+                start.setHours(0, 0, 0, 0);
+                return {
+                    start,
+                    end,
+                    label: start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                    periodLabel: `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                };
+            });
+        } else if (filters.dateRange === 'semiannual') {
+            buckets = Array.from({ length: 6 }, (_, i) => {
+                const start = new Date(refDate.getFullYear(), refDate.getMonth() - (5 - i), 1, 0, 0, 0, 0);
+                const end = new Date(start.getFullYear(), start.getMonth() + 1, 0, 23, 59, 59, 999);
+                return {
+                    start,
+                    end,
+                    label: start.toLocaleDateString('en-US', { month: 'short' }),
+                    periodLabel: start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                };
+            });
+        } else if (filters.dateRange === 'annual') {
+            buckets = Array.from({ length: 12 }, (_, i) => {
+                const start = new Date(refDate.getFullYear(), refDate.getMonth() - (11 - i), 1, 0, 0, 0, 0);
+                const end = new Date(start.getFullYear(), start.getMonth() + 1, 0, 23, 59, 59, 999);
+                return {
+                    start,
+                    end,
+                    label: start.toLocaleDateString('en-US', { month: 'short' }),
+                    periodLabel: start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                };
+            });
+        } else {
+            // quarterly (default: 8 weekly intervals)
+            buckets = Array.from({ length: 8 }, (_, i) => {
+                const end = new Date(refDate);
+                end.setDate(end.getDate() - (7 - i) * 7);
+                const start = new Date(end);
+                start.setDate(start.getDate() - 6);
+                start.setHours(0, 0, 0, 0);
+                return {
+                    start,
+                    end,
+                    label: start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                    periodLabel: `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                };
+            });
+        }
+
+        const isRecordCompleted = (v) => {
+            if (v.vaccinated_date) return true;
+            const s = String(v.status || '').trim().toLowerCase();
+            return s === 'completed';
+        };
+
+        const isRecordMissed = (v) => {
+            if (isRecordCompleted(v)) return false;
+            const s = String(v.status || '').trim().toLowerCase();
+            if (s === 'missed' || s === 'overdue') return true;
+            if (s === 'cancelled') return false;
+            if (v.scheduled_vaccination) {
+                const sched = new Date(v.scheduled_vaccination);
+                if (!isNaN(sched.getTime()) && sched <= now) return true;
+            }
+            return false;
+        };
+
+        // Filter relevant vaccinations for the selected category and station
+        const patientById = new Map(dbData.patients.map(patient => [patient.id, patient]));
+        const newbornById = new Map(dbData.newborns.map(newborn => [newborn.id, newborn]));
+        const stationMap = new Map((dbData.stations || []).map(s => [s.id, s.station_name]));
+
+        const relevantVaccs = (dbData.vaccinations || []).filter(v => {
+            if (vaccCategory === 'Newborns') {
+                if (!v.newborn_id) return false;
+                const newborn = newbornById.get(v.newborn_id);
+                const mother = patientById.get(newborn?.mother_id);
+                const station = normalizeStation(mother?.stations?.station_name || stationMap.get(mother?.station_ass));
+                if (filters.station && filters.station !== 'All Stations' && station !== filters.station) return false;
+                return true;
+            } else {
+                // Mothers
+                if (!v.patient_id || v.newborn_id) return false;
+                const patient = patientById.get(v.patient_id);
+                const station = normalizeStation(patient?.stations?.station_name || stationMap.get(patient?.station_ass));
+                if (filters.station && filters.station !== 'All Stations' && station !== filters.station) return false;
+                return true;
+            }
+        });
+
+        const allPeriodEligible = new Set();
+        const allPeriodCompleted = new Set();
+
+        const bucketStats = buckets.map(b => {
+            const bucketRecords = relevantVaccs.filter(v => {
+                const dateStr = v.vaccinated_date || v.scheduled_vaccination || v.created_at;
+                if (!dateStr) return false;
+                const d = new Date(dateStr);
+                return !isNaN(d.getTime()) && d >= b.start && d <= b.end;
+            });
+
+            // Group by unique patient/newborn ID to avoid duplicate counts
+            const entityMap = new Map();
+            bucketRecords.forEach(v => {
+                const entityId = vaccCategory === 'Newborns' ? v.newborn_id : v.patient_id;
+                if (!entityId) return;
+                if (!entityMap.has(entityId)) entityMap.set(entityId, []);
+                entityMap.get(entityId).push(v);
+            });
+
+            const bucketCompleted = new Set();
+            const bucketEligible = new Set();
+
+            entityMap.forEach((recs, entityId) => {
+                const nonCancelled = recs.filter(r => String(r.status || '').toLowerCase() !== 'cancelled');
+                if (nonCancelled.length === 0) return;
+
+                const allComp = nonCancelled.every(isRecordCompleted);
+                const hasMissed = nonCancelled.some(isRecordMissed);
+                const hasComp = nonCancelled.some(isRecordCompleted);
+
+                if (allComp) {
+                    bucketCompleted.add(entityId);
+                    bucketEligible.add(entityId);
+                    allPeriodCompleted.add(entityId);
+                    allPeriodEligible.add(entityId);
+                } else if (hasMissed) {
+                    bucketEligible.add(entityId);
+                    allPeriodEligible.add(entityId);
+                } else if (hasComp) {
+                    bucketCompleted.add(entityId);
+                    bucketEligible.add(entityId);
+                    allPeriodCompleted.add(entityId);
+                    allPeriodEligible.add(entityId);
+                }
+            });
+
+            const completed = bucketCompleted.size;
+            const eligible = bucketEligible.size;
+            const rate = eligible > 0 ? Math.round((completed / eligible) * 100) : 0;
+
+            return {
+                label: b.label,
+                periodLabel: b.periodLabel,
+                completed,
+                eligible,
+                rate
+            };
+        });
+
+        const totalEligible = allPeriodEligible.size;
+        const totalCompleted = allPeriodCompleted.size;
+        const overallRate = totalEligible > 0 ? Math.round((totalCompleted / totalEligible) * 100) : 0;
+
+        const numPoints = bucketStats.length;
+        const points = bucketStats.map((st, i) => {
+            const pctX = numPoints <= 1 ? 50 : (i / (numPoints - 1)) * 100;
+            const svgX = (pctX / 100) * 1000;
+            const svgY = 190 - (st.rate / 100) * 180;
+            const pctY = (svgY / 200) * 100;
+
+            return {
+                ...st,
+                pctX,
+                pctY,
+                svgX,
+                svgY
+            };
+        });
+
+        let linePath = '';
+        let areaPath = '';
+        if (points.length > 0) {
+            linePath = `M ${points.map(p => `${p.svgX.toFixed(1)} ${p.svgY.toFixed(1)}`).join(' L ')}`;
+            areaPath = `M ${points[0].svgX.toFixed(1)} 190 L ${points.map(p => `${p.svgX.toFixed(1)} ${p.svgY.toFixed(1)}`).join(' L ')} L ${points[points.length - 1].svgX.toFixed(1)} 190 Z`;
+        }
+
+        return {
+            points,
+            linePath,
+            areaPath,
+            totalEligible,
+            totalCompleted,
+            overallRate
+        };
+    }, [filters, dbData, vaccCategory]);
 
     // ── Station Comparison Logic ──
     const [stationSortBy, setStationSortBy] = useState('patients'); // 'patients' | 'risk' | 'vacc' | 'compliance'
@@ -624,83 +927,12 @@ const Analytics = () => {
         };
     }, [activeData]);
 
-    // ── Automated Executive Healthcare Insights Engine ──
-    const intelligenceInsights = useMemo(() => {
-        const insights = [];
-        
-        // Find teenage pregnancy hot spots
-        const sortedTeenage = Object.values(dashboardMetrics).sort((a,b) => b.teenage - a.teenage);
-        const topTeenStation = sortedTeenage[0];
-
-        // Find high risk condition leader
-        const sortedRisk = Object.values(dashboardMetrics).sort((a,b) => b.highRisk - a.highRisk);
-        const topRiskStation = sortedRisk[0];
-
-        // Find compliance leader
-        const sortedCompl = Object.values(dashboardMetrics).sort((a,b) => b.compliancePP - a.compliancePP);
-        const topComplStation = sortedCompl[0];
-
-        // High Risk Trend insight
-        const riskPercentChange = formatPercentChange(
-            trendData.highRiskVal.at(-1) || 0,
-            trendData.highRiskVal.at(-2) || 0
-        );
-        insights.push({
-            id: 'ins-1',
-            priority: 'critical',
-            relatedMetric: 'Health Conditions Monitoring',
-            title: `Pregnancies with health conditions changed by ${riskPercentChange} compared to last week.`,
-            recommendation: 'Deploy mobile ultrasound vans and increase home visitation schedules for warning-level mothers.'
-        });
-
-        // Top Station compliance insight
-        insights.push({
-            id: 'ins-2',
-            priority: 'success',
-            relatedMetric: 'Immunization Coverage',
-            title: `${topComplStation?.name || 'Dasma 3'} currently has the highest vaccination compliance.`,
-            recommendation: `Replicate ${topComplStation?.name || 'Dasma 3'}'s community follow-up and text reminder system in other sectors.`
-        });
-
-        // Teenage Hotspot
-        if (topTeenStation && topTeenStation.teenage > 5) {
-            insights.push({
-                id: 'ins-3',
-                priority: 'warning',
-                relatedMetric: 'Population Health Demographics',
-                title: `Teenage pregnancies are heavily concentrated in ${topTeenStation.name} station.`,
-                recommendation: 'Deploy focused youth reproductive health campaigns and set up adolescent counselling hours.'
-            });
-        }
-
-        // Anemia/Supplement insight
-        insights.push({
-            id: 'ins-4',
-            priority: 'info',
-            relatedMetric: 'Supplements & Co-morbidities',
-            title: 'Anemia remains the most prevalent maternal underlying condition.',
-            recommendation: 'Ensure Iron and Folic Acid stocks are distributed directly to home care bags at next midwife visit.'
-        });
-
-        // Missed Postpartum visits
-        const totalMissedPP = activeData.missedCount;
-        if (totalMissedPP > 0) {
-            insights.push({
-                id: 'ins-5',
-                priority: 'critical',
-                relatedMetric: 'Postpartum Follow-up Care',
-                title: `${totalMissedPP} prenatal visits were missed in the selected period.`,
-                recommendation: 'Instruct assigned midwives to conduct immediate phone callbacks or physical outreach checks today.'
-            });
-        }
-
-        return insights;
-    }, [activeData, dashboardMetrics, trendData]);
-
     // ── Export Data Aggregation ──
     const getExportDataForDateRange = (dateRange) => {
         const stationNames = [...new Set([...(dbData.stations || []).map(station => station.station_name), 'Unassigned'])];
         const liveAgg = Object.fromEntries(stationNames.map(station => [station, createStationMetrics(true)]));
+        const patientById = new Map(dbData.patients.map(patient => [patient.id, patient]));
+        const newbornById = new Map(dbData.newborns.map(newborn => [newborn.id, newborn]));
 
         const isWithinExportDateRange = (dateString) => {
             if (!dateString) return true;
@@ -773,7 +1005,7 @@ const Analytics = () => {
         });
 
         dbData.visits.forEach(v => {
-            const pat = dbData.patients.find(p => p.id === v.patient_id);
+            const pat = patientById.get(v.patient_id);
             const station = normalizeStation(pat?.stations?.station_name);
             if (!liveAgg[station]) return;
             if (!isWithinExportDateRange(v.visit_date)) return;
@@ -795,16 +1027,27 @@ const Analytics = () => {
             else liveAgg[station].normalDel++;
 
             const comps = toStr(d.complications);
-            if (comps.includes('hemorrhage') || comps.includes('bleed')) liveAgg[station].compHemorr++;
+            if (comps && comps !== 'none') {
+                if (comps.includes('hemorrhage') || comps.includes('bleed')) liveAgg[station].compHemorr++;
+                else if (comps.includes('hypertens') || comps.includes('preeclampsia') || comps.includes('eclampsia')) liveAgg[station].compHyper++;
+                else if (comps.includes('infect') || comps.includes('sepsis')) liveAgg[station].compInfect++;
+                else liveAgg[station].compOther++;
+            }
         });
 
+        const stationMap = new Map((dbData.stations || []).map(s => [s.id, s.station_name]));
         dbData.vaccinations.forEach(v => {
-            if (!v.newborn_id) return;
-            const newborn = dbData.newborns.find(n => n.id === v.newborn_id);
-            const mother = dbData.patients.find(p => p.id === newborn?.mother_id);
-            const station = normalizeStation(mother?.stations?.station_name);
+            let mother = null;
+            if (v.newborn_id) {
+                const newborn = newbornById.get(v.newborn_id);
+                mother = patientById.get(newborn?.mother_id);
+            } else if (v.patient_id) {
+                mother = patientById.get(v.patient_id);
+            }
+            if (!mother) return;
+            const station = normalizeStation(mother.stations?.station_name || stationMap.get(mother.station_ass));
             if (!liveAgg[station]) return;
-            if (!isWithinExportDateRange(v.vaccinated_date)) return;
+            if (!isWithinExportDateRange(v.vaccinated_date || v.scheduled_vaccination || v.created_at)) return;
 
             liveAgg[station].totalVacc++;
             if (v.status === 'Completed') liveAgg[station].completedVacc++;
@@ -858,7 +1101,7 @@ const Analytics = () => {
     };
 
     // ── Export Sheet Handler ──
-    const handleExport = (exportConfig) => {
+    const handleExport = async (exportConfig) => {
         const { format, dateRange, reportPeriodText } = exportConfig;
         const reportSettings = exportConfig.reportSettings || {};
         const data = getExportDataForDateRange(dateRange);
@@ -902,6 +1145,7 @@ const Analytics = () => {
         ];
 
         if (format === 'excel') {
+            const XLSX = await import('xlsx');
             const wb = XLSX.utils.book_new();
             
             if (reportSettings.includePatientSummary) {
@@ -920,58 +1164,71 @@ const Analytics = () => {
             const dateStr = new Date().toISOString().split('T')[0];
             XLSX.writeFile(wb, `DASMOM_Analytics_Intelligence_${dateStr}.xlsx`);
         } else if (format === 'pdf') {
-            const doc = new jsPDF('portrait');
-            
-            doc.setFontSize(16);
-            doc.text("DASMOM+ Analytics Intelligence Report", 14, 20);
-            
-            doc.setFontSize(10);
-            doc.setTextColor(100);
-            doc.text(`Period: ${reportPeriodText}`, 14, 28);
-            
-            doc.setFontSize(12);
-            doc.setTextColor(0);
-            let finalY = 38;
-
-            if (reportSettings.includePatientSummary) {
-                doc.text("Executive Summary", 14, finalY);
-                doc.autoTable({
-                    startY: finalY + 4,
-                    head: [['Intelligence Metric', 'Value / Rate']],
-                    body: kpiOverview.map(obj => [obj['Intelligence Metric'], obj['Value / Rate']]),
-                    theme: 'grid',
-                    styles: { fontSize: 8 },
-                    headStyles: { fillColor: [185, 129, 138] }
-                });
-                finalY = doc.lastAutoTable.finalY + 10;
-            }
-
-            if (reportSettings.includeStation) {
-                doc.text("Station Comparison", 14, finalY);
-                doc.autoTable({
-                    startY: finalY + 4,
-                    head: [Object.keys(stationComparison[0])],
-                    body: stationComparison.map(obj => Object.values(obj)),
-                    theme: 'grid',
-                    styles: { fontSize: 8 },
-                    headStyles: { fillColor: [185, 129, 138] }
-                });
-                finalY = doc.lastAutoTable.finalY + 10;
-            }
-
-            doc.text("Deliveries and Recovery", 14, finalY);
-            
-            doc.autoTable({
-                startY: finalY + 4,
-                head: [['Category', 'Count']],
-                body: outcomesSheet.map(obj => [obj['Outcomes Segment'] || obj['Complications'] || obj['Recovery State'], obj['Count']]),
-                theme: 'grid',
-                styles: { fontSize: 8 },
-                headStyles: { fillColor: [185, 129, 138] }
+            const doc = new JsPDFConstructor({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4'
             });
-            
+
+            let finalY = drawStaffPdfHeader(doc, {
+                title: 'Analytics Intelligence Report',
+                period: reportPeriodText || 'All Dates',
+                station: 'All Stations'
+            });
+
+            const tableStyles = getStaffTableStyles({ fontSize: 7.5, headFontSize: 8 });
+
+            if (reportSettings.includePatientSummary && kpiOverview && kpiOverview.length > 0) {
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(9.5);
+                doc.setTextColor(45, 34, 52);
+                doc.text("Executive Summary", 14, finalY + 4);
+                runAutoTable(doc, {
+                    ...tableStyles,
+                    startY: finalY + 6,
+                    head: [['Intelligence Metric', 'Value / Rate']],
+                    body: kpiOverview.map(obj => [obj['Intelligence Metric'], obj['Value / Rate']])
+                });
+                finalY = (doc.lastAutoTable ? doc.lastAutoTable.finalY : finalY) + 6;
+            }
+
+            if (reportSettings.includeStation && stationComparison && stationComparison.length > 0) {
+                if (finalY > doc.internal.pageSize.getHeight() - 45) {
+                    doc.addPage();
+                    finalY = 16;
+                }
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(9.5);
+                doc.setTextColor(45, 34, 52);
+                doc.text("Station Comparison", 14, finalY + 4);
+                runAutoTable(doc, {
+                    ...tableStyles,
+                    startY: finalY + 6,
+                    head: [Object.keys(stationComparison[0])],
+                    body: stationComparison.map(obj => Object.values(obj))
+                });
+                finalY = (doc.lastAutoTable ? doc.lastAutoTable.finalY : finalY) + 6;
+            }
+
+            if (outcomesSheet && outcomesSheet.length > 0) {
+                if (finalY > doc.internal.pageSize.getHeight() - 45) {
+                    doc.addPage();
+                    finalY = 16;
+                }
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(9.5);
+                doc.setTextColor(45, 34, 52);
+                doc.text("Deliveries and Recovery", 14, finalY + 4);
+                runAutoTable(doc, {
+                    ...tableStyles,
+                    startY: finalY + 6,
+                    head: [['Category', 'Count']],
+                    body: outcomesSheet.map(obj => [obj['Outcomes Segment'] || obj['Complications'] || obj['Recovery State'], obj['Count']])
+                });
+            }
+
             const dateStr = new Date().toISOString().split('T')[0];
-            doc.save(`DASMOM_Analytics_Intelligence_${dateStr}.pdf`);
+            finalizeAndSaveStaffPdf(doc, `DASMOM_Analytics_Intelligence_${dateStr}.pdf`);
         }
     };
 
@@ -1008,108 +1265,6 @@ const Analytics = () => {
         });
     };
 
-    // ── Health Score calculation ──
-    const healthScore = useMemo(() => {
-        const vacc = activeData.vaccRate || 0;
-        const pp = activeData.ppRate || 0;
-        const missed = activeData.missedRate || 0;
-        const hrCount = activeData.highRisk || 0;
-        const totCount = Math.max(1, activeData.totalPregnant || 0);
-        const hrRate = (hrCount / totCount) * 100;
-
-        const score = Math.round(
-            (vacc * 0.3) + 
-            (pp * 0.3) + 
-            (Math.max(0, 100 - missed * 3.5) * 0.2) + 
-            (Math.max(0, 100 - hrRate * 2.5) * 0.2)
-        );
-        return Math.max(10, Math.min(100, score));
-    }, [activeData]);
-
-    const healthStatus = useMemo(() => {
-        if (healthScore >= 85) return { label: 'Excellent', class: 'status-excellent', color: '#c3cfb7' };
-        if (healthScore >= 72) return { label: 'Good', class: 'status-good', color: '#a0c282' };
-        if (healthScore >= 55) return { label: 'Warning', class: 'status-warning', color: '#ffe3a4' };
-        return { label: 'Critical', class: 'status-critical', color: '#b9818a' };
-    }, [healthScore]);
-
-    const heroInsights = useMemo(() => {
-        const station = filters.station;
-        if (station === 'All Stations') {
-            return {
-                concern: "Pregnancies with health conditions increased by 12% this quarter across all sectors.",
-                action: "Prioritize monitoring and outreach in stations with elevated risk and missed visits."
-            };
-        }
-        const stData = dashboardMetrics[station];
-        if (!stData) {
-            return {
-                concern: "No active trends detected for this station.",
-                action: "Maintain standard prenatal checkup frequencies."
-            };
-        }
-        const vRate = stData.totalVacc > 0 ? Math.round((stData.completedVacc / stData.totalVacc) * 100) : 85;
-        const missedTotal = stData.patients * 4;
-        const mRate = missedTotal > 0 ? Math.round((stData.missedAppt / missedTotal) * 100) : 6;
-        
-        if (stData.highRisk > 10 || mRate > 8) {
-            return {
-                concern: `${station} exhibits elevated clinical monitoring need with ${stData.highRisk} documented condition cases and a ${mRate}% missed appointment rate.`,
-                action: `Deploy immediate home care visitation cards and prioritize outreach for registered mothers in ${station}.`
-            };
-        } else if (vRate < 80) {
-            return {
-                concern: `Vaccination completion coverage is currently under-target at ${vRate}% in ${station}.`,
-                action: `Coordinate with CHO midwives to launch localized immunization sweeps this week in ${station}.`
-            };
-        } else {
-            return {
-                concern: `${station} maintains stable metrics, but postpartum compliance is at ${stData.compliancePP}%.`,
-                action: `Enforce strict phone checkpoints for mothers who recently delivered to improve postpartum outcomes.`
-            };
-        }
-    }, [filters.station, dashboardMetrics]);
-
-    const trendsCalculated = useMemo(() => {
-        const vals = trendData.totalVal;
-        const hr = trendData.highRiskVal;
-        const del = trendData.deliveriesVal;
-        const length = vals.length;
-        if (length < 2) return { totChange: '+0.0%', hrChange: '+0.0%', delChange: '+0.0%', ppChange: '+0.0%', missedChange: '+0.0%' };
-        
-        const totDiff = vals[length - 1] - vals[length - 2];
-        const totPct = vals[length - 2] > 0 ? (totDiff / vals[length - 2]) * 100 : (vals[length - 1] ? 100 : 0);
-
-        const hrDiff = hr[length - 1] - hr[length - 2];
-        const hrPct = hr[length - 2] > 0 ? (hrDiff / hr[length - 2]) * 100 : (hr[length - 1] ? 100 : 0);
-
-        const delDiff = del[length - 1] - del[length - 2];
-        const delPct = del[length - 2] > 0 ? (delDiff / del[length - 2]) * 100 : (del[length - 1] ? 100 : 0);
-
-        return {
-            totChange: formatPercentChange(vals[length - 1], vals[length - 2]),
-            totIsUp: totPct >= 0,
-            hrChange: formatPercentChange(hr[length - 1], hr[length - 2]),
-            hrIsUp: hrPct >= 0,
-            delChange: formatPercentChange(del[length - 1], del[length - 2]),
-            delIsUp: delPct >= 0,
-            ppChange: formatPercentChange(trendData.postpartumRate[length - 1], trendData.postpartumRate[length - 2]),
-            missedChange: formatPercentChange(trendData.missedRate[length - 1], trendData.missedRate[length - 2])
-        };
-    }, [trendData, activeData.missedRate]);
-
-    const vaccTrendsCalculated = useMemo(() => {
-        const newbornRates = trendData.vaccNewborn;
-        const length = newbornRates.length;
-        if (length < 2) return { isUp: true, change: '+0%' };
-
-        const difference = newbornRates[length - 1] - newbornRates[length - 2];
-        return {
-            isUp: difference >= 0,
-            change: formatPercentChange(newbornRates[length - 1], newbornRates[length - 2])
-        };
-    }, [trendData]);
-
     const stationHighlights = useMemo(() => {
         const list = Object.values(dashboardMetrics);
         if (list.length === 0) return {};
@@ -1133,13 +1288,125 @@ const Analytics = () => {
         };
     }, [dashboardMetrics]);
 
+    // ── Delivery Mode Trend Engine (Supabase Live Records) ──
     const deliveryTrendsData = useMemo(() => {
-        const labels = trendData.labels;
-        const normal = trendData.deliveriesVal.map(v => Math.round(v * 0.65));
-        const assisted = trendData.deliveriesVal.map(v => Math.round(v * 0.12));
-        const cs = trendData.deliveriesVal.map(v => Math.max(0, v - Math.round(v * 0.65) - Math.round(v * 0.12)));
-        return { labels, normal, assisted, cs };
-    }, [trendData]);
+        const now = new Date();
+        const refDate = new Date(now);
+        refDate.setHours(23, 59, 59, 999);
+
+        // Buckets matching active dateRange filter
+        let buckets = [];
+        if (filters.dateRange === 'monthly') {
+            buckets = Array.from({ length: 4 }, (_, i) => {
+                const end = new Date(refDate);
+                end.setDate(end.getDate() - (3 - i) * 7);
+                const start = new Date(end);
+                start.setDate(start.getDate() - 6);
+                start.setHours(0, 0, 0, 0);
+                return {
+                    start,
+                    end,
+                    label: start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                    periodLabel: `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                };
+            });
+        } else if (filters.dateRange === 'semiannual') {
+            buckets = Array.from({ length: 6 }, (_, i) => {
+                const start = new Date(refDate.getFullYear(), refDate.getMonth() - (5 - i), 1, 0, 0, 0, 0);
+                const end = new Date(start.getFullYear(), start.getMonth() + 1, 0, 23, 59, 59, 999);
+                return {
+                    start,
+                    end,
+                    label: start.toLocaleDateString('en-US', { month: 'short' }),
+                    periodLabel: start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                };
+            });
+        } else if (filters.dateRange === 'annual') {
+            buckets = Array.from({ length: 12 }, (_, i) => {
+                const start = new Date(refDate.getFullYear(), refDate.getMonth() - (11 - i), 1, 0, 0, 0, 0);
+                const end = new Date(start.getFullYear(), start.getMonth() + 1, 0, 23, 59, 59, 999);
+                return {
+                    start,
+                    end,
+                    label: start.toLocaleDateString('en-US', { month: 'short' }),
+                    periodLabel: start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                };
+            });
+        } else {
+            // quarterly (default: 8 weekly intervals)
+            buckets = Array.from({ length: 8 }, (_, i) => {
+                const end = new Date(refDate);
+                end.setDate(end.getDate() - (7 - i) * 7);
+                const start = new Date(end);
+                start.setDate(start.getDate() - 6);
+                start.setHours(0, 0, 0, 0);
+                return {
+                    start,
+                    end,
+                    label: start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                    periodLabel: `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                };
+            });
+        }
+
+        // Filter deliveries by station
+        const filteredDeliveries = (dbData.deliveries || []).filter(d => {
+            const station = normalizeStation(d.stations?.station_name);
+            if (filters.station && filters.station !== 'All Stations' && station !== filters.station) return false;
+            return true;
+        });
+
+        let totalNSD = 0;
+        let totalAssisted = 0;
+        let totalCS = 0;
+
+        const bucketPoints = buckets.map(b => {
+            const inBucket = filteredDeliveries.filter(d => {
+                if (!d.delivery_date) return false;
+                const dDate = new Date(d.delivery_date);
+                return !isNaN(dDate.getTime()) && dDate >= b.start && dDate <= b.end;
+            });
+
+            let nsd = 0;
+            let assisted = 0;
+            let cs = 0;
+
+            inBucket.forEach(d => {
+                const dtype = String(d.delivery_type || '').toLowerCase();
+                if (dtype.includes('cs') || dtype.includes('cesarean')) {
+                    cs++;
+                } else if (dtype.includes('assist') || dtype.includes('forceps') || dtype.includes('vacuum') || dtype.includes('breech')) {
+                    assisted++;
+                } else {
+                    nsd++;
+                }
+            });
+
+            totalNSD += nsd;
+            totalAssisted += assisted;
+            totalCS += cs;
+
+            return {
+                label: b.label,
+                periodLabel: b.periodLabel,
+                nsd,
+                assisted,
+                cs,
+                total: nsd + assisted + cs
+            };
+        });
+
+        const maxCount = Math.max(...bucketPoints.map(p => Math.max(p.nsd, p.assisted, p.cs, p.total)), 4);
+
+        return {
+            points: bucketPoints,
+            totalNSD,
+            totalAssisted,
+            totalCS,
+            totalDeliveries: totalNSD + totalAssisted + totalCS,
+            maxCount
+        };
+    }, [filters, dbData]);
 
     const riskDeltas = useMemo(() => {
         const station = filters.station;
@@ -1173,17 +1440,24 @@ const Analytics = () => {
 
     if (loading) {
         return (
-            <div className="analytics-loading-screen">
-                <div className="heartbeat-loader">
-                    <HeartPulse size={48} className="pulse-icon" />
-                    <p>Aggregating Health Intelligence...</p>
-                </div>
-            </div>
+            <StaffPageLoader 
+                message="Aggregating Health Intelligence..." 
+            />
+        );
+    }
+
+    if (fetchError && !hasLoadedOnceRef.current) {
+        return (
+            <StaffPageLoader 
+                error="Unable to retrieve analytics records. Please check your network connection and try again." 
+                errorTitle="Failed to Load Analytics"
+                onRetry={() => setReloadKey(k => k + 1)}
+            />
         );
     }
 
     return (
-        <div className="analytics-page">
+        <div className="analytics-page staff-page-ready">
             
             {/* ── Page Header ── */}
             <header className="page-header">
@@ -1297,122 +1571,57 @@ const Analytics = () => {
             {/* ════════════════════════════════════════════════════════════════ */}
             {activeTab === 'overview' && (
                 <>
-                    {/* ── Executive Maternal Health Score Hero Section ── */}
-                    <motion.section 
-                        initial={{ opacity: 0, y: 15 }} 
-                        animate={{ opacity: 1, y: 0 }} 
-                        transition={{ duration: 0.4 }} 
-                        className="health-score-hero"
-                    >
-                        <div className="hero-left-score glass-card">
-                            <div className="score-ring-container">
-                                <svg className="score-ring-svg" viewBox="0 0 120 120">
-                                    <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(185, 129, 138, 0.15)" strokeWidth="12" />
-                                    <circle cx="60" cy="60" r="50" fill="none" stroke="url(#scoreGrad)" strokeWidth="12" strokeDasharray="314.15" strokeDashoffset={314.15 - (314.15 * healthScore) / 100} strokeLinecap="round" style={{ transform: 'rotate(-90deg)', transformOrigin: '60px 60px', transition: 'stroke-dashoffset 1s ease' }} />
-                                    <defs>
-                                        <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                            <stop offset="0%" stopColor="#ac97b4" />
-                                            <stop offset="50%" stopColor="#b9818a" />
-                                            <stop offset="100%" stopColor="#b9818a" />
-                                        </linearGradient>
-                                    </defs>
-                                </svg>
-                                <div className="score-ring-center">
-                                    <span className="score-number">{healthScore}</span>
-                                    <span className="score-denominator">/100</span>
-                                </div>
-                            </div>
-                            <div className="score-header">
-                                <h2>Overall Maternal Health</h2>
-                                <span className={`status-text ${healthStatus.class}`}>{healthStatus.label}</span>
-                                <p>Overall performance across CHO III<br/>Based on key maternal health indicators</p>
-                            </div>
-                        </div>
-                        
-                        <div className="hero-right-details glass-card">
-                            <div className="clinical-insight-header">
-                                <div className="insight-icon"><BrainCircuit size={20} /></div>
-                                <h2>Clinical Insight</h2>
-                            </div>
-                            <div className="hero-insights-narrative">
-                                <div className="narrative-box warning-box">
-                                    <span className="narrative-label text-critical"><AlertTriangle size={14}/> MAIN CONCERN</span>
-                                    <span className="narrative-text">{heroInsights.concern}</span>
-                                </div>
-                                <div className="narrative-box action-box">
-                                    <span className="narrative-label text-success"><CheckCircle2 size={14}/> SUGGESTED ACTION</span>
-                                    <span className="narrative-text">{heroInsights.action}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </motion.section>
-
                     {/* Overview 5 Core KPI Cards */}
-                    <section className="kpi-grid priority-tiered">
-                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="kpi-card glass-card tier-general">
-                            <div className="kpi-card-header">
-                                <div className="kpi-icon-circle"><HeartPulse size={20} /></div>
-                                <span className={`trend-badge ${trendsCalculated.totIsUp ? 'trend-up' : 'trend-down'}`}>{trendsCalculated.totIsUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />} {trendsCalculated.totChange}</span>
-                                <span className="kpi-priority-badge badge-general">GENERAL</span>
+                    <section className="analytics-summary-grid analytics-summary-grid--5">
+                        <div className="st-stat-card st-stat-card--lavender">
+                            <div className="st-stat-icon st-stat-icon--lavender">
+                                <HeartPulse size={18} />
                             </div>
-                            <div className="kpi-card-body">
-                                <span className="kpi-val">{activeData.totalPregnant}</span>
-                                <h3 className="kpi-label">Total Pregnant Patients</h3>
-                                <span className="kpi-sub">Active registry cases</span>
+                            <div className="st-stat-info">
+                                <span className="st-stat-value">{activeData.totalPregnant}</span>
+                                <span className="st-stat-label">Total Pregnant Patients</span>
                             </div>
-                        </motion.div>
+                        </div>
 
-                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="kpi-card glass-card tier-critical">
-                            <div className="kpi-card-header">
-                                <div className="kpi-icon-circle"><AlertTriangle size={20} /></div>
-                                <span className={`trend-badge ${trendsCalculated.hrIsUp ? 'trend-up' : 'trend-down'}`}>{trendsCalculated.hrIsUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />} {trendsCalculated.hrChange}</span>
-                                <span className="kpi-priority-badge badge-critical">CRITICAL</span>
+                        <div className="st-stat-card st-stat-card--rose">
+                            <div className="st-stat-icon st-stat-icon--rose">
+                                <AlertTriangle size={18} />
                             </div>
-                            <div className="kpi-card-body">
-                                <span className="kpi-val">{activeData.highRisk}</span>
-                                <h3 className="kpi-label">Pregnancies with Health Conditions</h3>
-                                <span className="kpi-sub">Documented health conditions</span>
+                            <div className="st-stat-info">
+                                <span className="st-stat-value">{activeData.highRisk}</span>
+                                <span className="st-stat-label">Pregnancies with Health Conditions</span>
                             </div>
-                        </motion.div>
+                        </div>
 
-                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="kpi-card glass-card tier-success">
-                            <div className="kpi-card-header">
-                                <div className="kpi-icon-circle"><Syringe size={20} /></div>
-                                <span className={`trend-badge ${vaccTrendsCalculated.isUp ? 'trend-up' : 'trend-down'}`}>{vaccTrendsCalculated.isUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />} {vaccTrendsCalculated.change}</span>
-                                <span className="kpi-priority-badge badge-success">SUCCESS</span>
+                        <div className="st-stat-card st-stat-card--sage">
+                            <div className="st-stat-icon st-stat-icon--sage">
+                                <Syringe size={18} />
                             </div>
-                            <div className="kpi-card-body">
-                                <span className="kpi-val">{activeData.vaccRate}%</span>
-                                <h3 className="kpi-label">Vaccination Completion</h3>
-                                <span className="kpi-sub">Newborn vaccination schedule</span>
+                            <div className="st-stat-info">
+                                <span className="st-stat-value">{activeData.vaccRate}%</span>
+                                <span className="st-stat-label">Vaccination Completion</span>
                             </div>
-                        </motion.div>
+                        </div>
 
-                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="kpi-card glass-card tier-success">
-                            <div className="kpi-card-header">
-                                <div className="kpi-icon-circle"><ClipboardCheck size={20} /></div>
-                                <span className={`trend-badge ${trendsCalculated.ppChange.startsWith('-') ? 'trend-down' : 'trend-up'}`}><TrendingDown size={12} /> {trendsCalculated.ppChange}</span>
-                                <span className="kpi-priority-badge badge-success">SUCCESS</span>
+                        <div className="st-stat-card st-stat-card--peach">
+                            <div className="st-stat-icon st-stat-icon--peach">
+                                <ClipboardCheck size={18} />
                             </div>
-                            <div className="kpi-card-body">
-                                <span className="kpi-val">{activeData.ppRate}%</span>
-                                <h3 className="kpi-label">Postpartum Follow-Up</h3>
-                                <span className="kpi-sub">42-day recovery check compliance</span>
+                            <div className="st-stat-info">
+                                <span className="st-stat-value">{activeData.ppRate}%</span>
+                                <span className="st-stat-label">Postpartum Follow-Up</span>
                             </div>
-                        </motion.div>
+                        </div>
 
-                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="kpi-card glass-card tier-critical">
-                            <div className="kpi-card-header">
-                                <div className="kpi-icon-circle"><XCircle size={20} /></div>
-                                <span className={`trend-badge ${trendsCalculated.missedChange.startsWith('-') ? 'trend-up' : 'trend-down'}`}><TrendingDown size={12} /> {trendsCalculated.missedChange}</span>
-                                <span className="kpi-priority-badge badge-critical">CRITICAL</span>
+                        <div className="st-stat-card st-stat-card--pink">
+                            <div className="st-stat-icon st-stat-icon--pink">
+                                <Clock size={18} />
                             </div>
-                            <div className="kpi-card-body">
-                                <span className="kpi-val">{activeData.missedRate}%</span>
-                                <h3 className="kpi-label">Missed Appointment Rate</h3>
-                                <span className="kpi-sub">Prenatal visit defaults</span>
+                            <div className="st-stat-info">
+                                <span className="st-stat-value">{activeData.missedRate}%</span>
+                                <span className="st-stat-label">Missed Appointment Rate</span>
                             </div>
-                        </motion.div>
+                        </div>
                     </section>
 
                     {/* Overview Trends (Pregnancy Trend + Vaccination Progress) */}
@@ -1489,6 +1698,12 @@ const Analytics = () => {
                             </div>
                         </div>
                     </section>
+
+                    {/* Pregnancy Age & Outcome Report (Overview Tab only) */}
+                    <PregnancyAgeReport 
+                        rows={pregnancyAgeRows} 
+                        globalStation={filters.station} 
+                    />
                 </>
             )}
 
@@ -1497,22 +1712,46 @@ const Analytics = () => {
             {/* ════════════════════════════════════════════════════════════════ */}
             {activeTab === 'maternal' && (
                 <>
-                    <section className="kpi-grid priority-tiered">
-                        <div className="kpi-card glass-card tier-general">
-                            <div className="kpi-card-header"><div className="kpi-icon-circle"><HeartPulse size={20} /></div></div>
-                            <div className="kpi-card-body"><span className="kpi-val">{activeData.totalPregnant}</span><h3 className="kpi-label">Total Pregnant Patients</h3></div>
+                    {/* Maternal Health 4 Core KPI Cards */}
+                    <section className="analytics-summary-grid analytics-summary-grid--4">
+                        <div className="st-stat-card st-stat-card--lavender">
+                            <div className="st-stat-icon st-stat-icon--lavender">
+                                <HeartPulse size={18} />
+                            </div>
+                            <div className="st-stat-info">
+                                <span className="st-stat-value">{activeData.totalPregnant}</span>
+                                <span className="st-stat-label">Total Pregnant Patients</span>
+                            </div>
                         </div>
-                        <div className="kpi-card glass-card tier-critical">
-                            <div className="kpi-card-header"><div className="kpi-icon-circle"><AlertTriangle size={20} /></div></div>
-                            <div className="kpi-card-body"><span className="kpi-val">{activeData.highRisk}</span><h3 className="kpi-label">Pregnancies with Health Conditions</h3></div>
+
+                        <div className="st-stat-card st-stat-card--rose">
+                            <div className="st-stat-icon st-stat-icon--rose">
+                                <AlertTriangle size={18} />
+                            </div>
+                            <div className="st-stat-info">
+                                <span className="st-stat-value">{activeData.highRisk}</span>
+                                <span className="st-stat-label">Pregnancies with Health Conditions</span>
+                            </div>
                         </div>
-                        <div className="kpi-card glass-card tier-warning">
-                            <div className="kpi-card-header"><div className="kpi-icon-circle"><Users size={20} /></div></div>
-                            <div className="kpi-card-body"><span className="kpi-val">{activeData.teenage}</span><h3 className="kpi-label">Teenage Pregnancies</h3></div>
+
+                        <div className="st-stat-card st-stat-card--peach">
+                            <div className="st-stat-icon st-stat-icon--peach">
+                                <Users size={18} />
+                            </div>
+                            <div className="st-stat-info">
+                                <span className="st-stat-value">{activeData.teenage}</span>
+                                <span className="st-stat-label">Teenage Pregnancies</span>
+                            </div>
                         </div>
-                        <div className="kpi-card glass-card tier-warning">
-                            <div className="kpi-card-header"><div className="kpi-icon-circle"><Activity size={20} /></div></div>
-                            <div className="kpi-card-body"><span className="kpi-val">{activeData.advancedAge}</span><h3 className="kpi-label">Advanced Maternal Age</h3></div>
+
+                        <div className="st-stat-card st-stat-card--yellow">
+                            <div className="st-stat-icon st-stat-icon--yellow">
+                                <Activity size={18} />
+                            </div>
+                            <div className="st-stat-info">
+                                <span className="st-stat-value">{activeData.advancedAge}</span>
+                                <span className="st-stat-label">Advanced Maternal Age</span>
+                            </div>
                         </div>
                     </section>
 
@@ -1576,37 +1815,6 @@ const Analytics = () => {
                                 ))}
                             </div>
                         </div>
-
-                        <div className="glass-card risk-panel-right operational-desk-panel">
-                            <h2 className="panel-title">Patients Needing Immediate Attention</h2>
-                            <p className="panel-subtitle">Situational health desk alerts</p>
-                            <div className="critical-alerts-list operational-alerts" style={{ marginTop: 12 }}>
-                                {activeData.highRisk === 0 && conditionStats.Preeclampsia === 0 ? (
-                                    <div className="alert-card priority-success alert-operational-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '32px 16px', border: '1px dashed #c3cfb7' }}>
-                                        <CheckCircle2 size={32} color="#8a9e71" style={{ marginBottom: 12 }} />
-                                        <p style={{ color: '#5b6951', fontWeight: 600 }}>No immediate alerts</p>
-                                        <p style={{ color: '#7c8c71', fontSize: '12px' }}>All tracked maternal risk metrics are within normal ranges for the selected filters.</p>
-                                    </div>
-                                ) : (
-                                    <>
-                                        {activeData.highRisk > 0 && (
-                                            <div className="alert-card priority-high alert-operational-card">
-                                                <div className="alert-card-head"><span className="alert-priority-tag font-bold text-critical">CLINICAL ALERT</span><AlertTriangle size={14} /></div>
-                                                <p className="alert-card-text"><strong>{activeData.highRisk} {activeData.highRisk === 1 ? 'Patient' : 'Patients'} with documented health conditions</strong> require ongoing medical follow-up.</p>
-                                                <button className="alert-btn-action" onClick={() => navigate('/patients')}>View Patients</button>
-                                            </div>
-                                        )}
-                                        {conditionStats.Preeclampsia > 0 && (
-                                            <div className="alert-card priority-moderate alert-operational-card">
-                                                <div className="alert-card-head"><span className="alert-priority-tag font-bold text-warning">PRE-ECLAMPSIA MONITOR</span><Activity size={14} /></div>
-                                                <p className="alert-card-text">Pre-eclampsia warnings triggered for <strong>{conditionStats.Preeclampsia} {conditionStats.Preeclampsia === 1 ? 'patient' : 'patients'}</strong>. Coordinate home BP checks today.</p>
-                                                <button className="alert-btn-action" onClick={() => navigate('/cases')}>View Cases</button>
-                                            </div>
-                                        )}
-                                    </>
-                                )}
-                            </div>
-                        </div>
                     </section>
                 </>
             )}
@@ -1616,51 +1824,223 @@ const Analytics = () => {
             {/* ════════════════════════════════════════════════════════════════ */}
             {activeTab === 'vaccination' && (
                 <>
-                    <section className="kpi-grid priority-tiered">
-                        <div className="kpi-card glass-card tier-success">
-                            <div className="kpi-card-header"><div className="kpi-icon-circle"><Syringe size={20} /></div></div>
-                            <div className="kpi-card-body"><span className="kpi-val">{Math.round(activeData.totalPregnant * (activeData.vaccRate / 100))}</span><h3 className="kpi-label">Mothers Vaccinated</h3></div>
+                    {/* Vaccination 4 Core KPI Cards */}
+                    <section className="analytics-summary-grid analytics-summary-grid--4">
+                        <div className="st-stat-card st-stat-card--lavender">
+                            <div className="st-stat-icon st-stat-icon--lavender">
+                                <Syringe size={18} />
+                            </div>
+                            <div className="st-stat-info">
+                                <span className="st-stat-value">{Math.round(activeData.totalPregnant * (activeData.vaccRate / 100))}</span>
+                                <span className="st-stat-label">Mothers Vaccinated</span>
+                            </div>
                         </div>
-                        <div className="kpi-card glass-card tier-success">
-                            <div className="kpi-card-header"><div className="kpi-icon-circle"><Baby size={20} /></div></div>
-                            <div className="kpi-card-body"><span className="kpi-val">{Math.round(activeData.deliveries * 0.95)}</span><h3 className="kpi-label">Babies Vaccinated</h3></div>
+
+                        <div className="st-stat-card st-stat-card--pink">
+                            <div className="st-stat-icon st-stat-icon--pink">
+                                <Baby size={18} />
+                            </div>
+                            <div className="st-stat-info">
+                                <span className="st-stat-value">{Math.round(activeData.deliveries * 0.95)}</span>
+                                <span className="st-stat-label">Babies Vaccinated</span>
+                            </div>
                         </div>
-                        <div className="kpi-card glass-card tier-success">
-                            <div className="kpi-card-header"><div className="kpi-icon-circle"><CheckCircle2 size={20} /></div></div>
-                            <div className="kpi-card-body"><span className="kpi-val">{activeData.vaccRate}%</span><h3 className="kpi-label">Vaccination Completion</h3></div>
+
+                        <div className="st-stat-card st-stat-card--sage">
+                            <div className="st-stat-icon st-stat-icon--sage">
+                                <CheckCircle2 size={18} />
+                            </div>
+                            <div className="st-stat-info">
+                                <span className="st-stat-value">{activeData.vaccRate}%</span>
+                                <span className="st-stat-label">Vaccination Completion</span>
+                            </div>
                         </div>
-                        <div className="kpi-card glass-card tier-critical">
-                            <div className="kpi-card-header"><div className="kpi-icon-circle"><XCircle size={20} /></div></div>
-                            <div className="kpi-card-body"><span className="kpi-val">{activeData.missedCount || 12}</span><h3 className="kpi-label">Missed Vaccinations</h3></div>
+
+                        <div className="st-stat-card st-stat-card--rose">
+                            <div className="st-stat-icon st-stat-icon--rose">
+                                <XCircle size={18} />
+                            </div>
+                            <div className="st-stat-info">
+                                <span className="st-stat-value">{activeData.missedCount || 12}</span>
+                                <span className="st-stat-label">Missed Vaccinations</span>
+                            </div>
                         </div>
                     </section>
 
                     <section className="analytics-section">
-                        <div className="glass-card chart-card-container" style={{ width: '100%' }}>
-                            <div className="card-header-compact">
-                                <div>
+                        <div className="glass-card chart-card-container vacc-progress-card">
+                            <div className="vacc-progress-header">
+                                <div className="vacc-header-left">
                                     <h2 className="section-header-title">Vaccination Progress</h2>
-                                    <p className="section-header-subtitle">Newborn immunization completion rate over time</p>
+                                    <p className="section-header-subtitle">
+                                        {vaccCategory === 'Mothers'
+                                            ? 'Maternal vaccination completion rate over time'
+                                            : 'Newborn vaccination completion rate over time'}
+                                    </p>
                                 </div>
-                                <div className="chart-legend">
-                                    <span className="legend-item"><span className="legend-dot color-vacc-nb"></span>Newborns ({activeData.vaccRate}%)</span>
-                                    <span className="legend-item"><span className="legend-target-line"></span>90% Target</span>
+                                <div className="vacc-header-right">
+                                    {/* Segmented Category Filter */}
+                                    <div className="vacc-category-segmented" role="group" aria-label="Vaccination Category Filter">
+                                        <button
+                                            type="button"
+                                            className={`vacc-seg-btn ${vaccCategory === 'Mothers' ? 'active' : ''}`}
+                                            onClick={() => { setVaccCategory('Mothers'); setActiveVaccTooltip(null); }}
+                                        >
+                                            Mothers
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`vacc-seg-btn ${vaccCategory === 'Newborns' ? 'active' : ''}`}
+                                            onClick={() => { setVaccCategory('Newborns'); setActiveVaccTooltip(null); }}
+                                        >
+                                            Newborns
+                                        </button>
+                                    </div>
+
+                                    {/* Category Legend (No 90% Target) */}
+                                    <div className="chart-legend">
+                                        <span className="legend-item">
+                                            <span className={`legend-dot ${vaccCategory === 'Newborns' ? 'color-vacc-nb' : 'color-vacc-m'}`}></span>
+                                            {vaccCategory} ({vaccProgressData.overallRate}%)
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
-                            <div className="chart-wrapper">
-                                <svg className="svg-line-chart" viewBox="0 0 500 240" width="100%" height="100%">
-                                    {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => (
-                                        <line key={i} x1="40" x2="480" y1={20 + ratio * 180} y2={20 + ratio * 180} stroke="#f1f3f5" strokeWidth="1" />
-                                    ))}
-                                    <line x1="40" x2="480" y1="38" y2="38" stroke="#b9818a" strokeWidth="1.5" strokeDasharray="4,4" className="vacc-target-line" />
-                                    <path d={getSvgLinePath(trendData.vaccNewborn, 500, 240, 40, 20, 20, 40, 100)} className="chart-line stroke-vacc-nb" />
-                                    {trendData.labels.map((lbl, idx) => {
-                                        const labelDivisor2 = trendData.labels.length <= 1 ? 1 : trendData.labels.length - 1;
-                                        const x = 40 + (idx / labelDivisor2) * 440;
-                                        return <text key={idx} x={isFinite(x) ? x : 40} y="225" textAnchor="middle" className="axis-label">{lbl}</text>;
-                                    })}
-                                </svg>
-                            </div>
+
+                            {vaccProgressData.totalEligible === 0 ? (
+                                <div className="vacc-progress-empty-state">
+                                    <div className="vacc-empty-icon-wrap">
+                                        <ShieldAlert size={24} />
+                                    </div>
+                                    <div className="vacc-empty-title">No eligible vaccination records for this period</div>
+                                    <p className="vacc-empty-desc">
+                                        There are no scheduled or completed {vaccCategory.toLowerCase()} vaccination records for the selected station and time range.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="vacc-chart-stage">
+                                    <div className="vacc-chart-body">
+                                        <div className="vacc-y-axis">
+                                            <span>100%</span>
+                                            <span>75%</span>
+                                            <span>50%</span>
+                                            <span>25%</span>
+                                            <span>0%</span>
+                                        </div>
+
+                                        <div className="vacc-plot-area">
+                                            <svg
+                                                className="vacc-svg-chart"
+                                                viewBox="0 0 1000 200"
+                                                preserveAspectRatio="none"
+                                                aria-hidden="true"
+                                            >
+                                                <defs>
+                                                    <linearGradient id={`vaccGrad-${vaccCategory}`} x1="0" y1="0" x2="0" y2="1">
+                                                        <stop
+                                                            offset="0%"
+                                                            stopColor={vaccCategory === 'Newborns' ? '#d681a8' : '#9d7bb0'}
+                                                            stopOpacity="0.25"
+                                                        />
+                                                        <stop
+                                                            offset="100%"
+                                                            stopColor={vaccCategory === 'Newborns' ? '#d681a8' : '#9d7bb0'}
+                                                            stopOpacity="0.0"
+                                                        />
+                                                    </linearGradient>
+                                                </defs>
+
+                                                {[0, 0.25, 0.5, 0.75, 1].map((r, i) => (
+                                                    <line
+                                                        key={i}
+                                                        x1="0"
+                                                        x2="1000"
+                                                        y1={10 + r * 180}
+                                                        y2={10 + r * 180}
+                                                        stroke="#f1f3f5"
+                                                        strokeWidth="1"
+                                                        strokeDasharray={i > 0 && i < 4 ? '3,3' : 'none'}
+                                                    />
+                                                ))}
+
+                                                {vaccProgressData.areaPath && (
+                                                    <path
+                                                        d={vaccProgressData.areaPath}
+                                                        fill={`url(#vaccGrad-${vaccCategory})`}
+                                                    />
+                                                )}
+
+                                                {vaccProgressData.linePath && (
+                                                    <path
+                                                        d={vaccProgressData.linePath}
+                                                        className={`vacc-chart-line ${vaccCategory === 'Newborns' ? 'stroke-vacc-nb' : 'stroke-vacc-m'}`}
+                                                    />
+                                                )}
+                                            </svg>
+
+                                            <div className="vacc-interactive-points">
+                                                {vaccProgressData.points.map((pt, idx) => {
+                                                    const isHovered = activeVaccTooltip === idx;
+                                                    return (
+                                                        <div
+                                                            key={idx}
+                                                            className="vacc-point-node"
+                                                            style={{
+                                                                left: `${pt.pctX}%`,
+                                                                top: `${pt.pctY}%`
+                                                            }}
+                                                            onMouseEnter={() => setActiveVaccTooltip(idx)}
+                                                            onMouseLeave={() => setActiveVaccTooltip(null)}
+                                                            onClick={() => setActiveVaccTooltip(prev => prev === idx ? null : idx)}
+                                                            tabIndex={0}
+                                                            role="button"
+                                                            aria-label={`${pt.periodLabel} - ${vaccCategory}: ${pt.rate}% completion`}
+                                                        >
+                                                            <div
+                                                                className={`vacc-point-dot ${vaccCategory === 'Newborns' ? 'dot-nb' : 'dot-m'} ${isHovered ? 'active' : ''}`}
+                                                            />
+
+                                                            {isHovered && (
+                                                                <div
+                                                                    className={`vacc-tooltip ${pt.pctX > 75 ? 'align-right' : pt.pctX < 25 ? 'align-left' : 'align-center'}`}
+                                                                >
+                                                                    <div className="vacc-tooltip-header">
+                                                                        {pt.periodLabel} — {vaccCategory}
+                                                                    </div>
+                                                                    <div className="vacc-tooltip-row">
+                                                                        <span className="vacc-tooltip-label">Completed:</span>
+                                                                        <span className="vacc-tooltip-val val-success">{pt.completed}</span>
+                                                                    </div>
+                                                                    <div className="vacc-tooltip-row">
+                                                                        <span className="vacc-tooltip-label">Eligible:</span>
+                                                                        <span className="vacc-tooltip-val">{pt.eligible}</span>
+                                                                    </div>
+                                                                    <div className="vacc-tooltip-row vacc-tooltip-highlight">
+                                                                        <span className="vacc-tooltip-label">Completion:</span>
+                                                                        <span className="vacc-tooltip-val val-accent">{pt.rate}%</span>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="vacc-x-axis">
+                                        {vaccProgressData.points.map((pt, idx) => (
+                                            <div
+                                                key={idx}
+                                                className="vacc-x-label"
+                                                style={{ left: `${pt.pctX}%` }}
+                                            >
+                                                {pt.label}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </section>
                 </>
@@ -1671,99 +2051,258 @@ const Analytics = () => {
             {/* ════════════════════════════════════════════════════════════════ */}
             {activeTab === 'delivery' && (
                 <>
-                    <section className="kpi-grid priority-tiered">
-                        <div className="kpi-card glass-card tier-general">
-                            <div className="kpi-card-header"><div className="kpi-icon-circle"><Baby size={20} /></div></div>
-                            <div className="kpi-card-body"><span className="kpi-val">{activeData.deliveries}</span><h3 className="kpi-label">Deliveries Count</h3></div>
+                    {/* Delivery & Postpartum 5 Core KPI Cards */}
+                    <section className="analytics-summary-grid analytics-summary-grid--5">
+                        <div className="st-stat-card st-stat-card--lavender">
+                            <div className="st-stat-icon st-stat-icon--lavender">
+                                <Baby size={18} />
+                            </div>
+                            <div className="st-stat-info">
+                                <span className="st-stat-value">{activeData.deliveries}</span>
+                                <span className="st-stat-label">Deliveries Count</span>
+                            </div>
                         </div>
-                        <div className="kpi-card glass-card tier-success">
-                            <div className="kpi-card-header"><div className="kpi-icon-circle"><CheckCircle2 size={20} /></div></div>
-                            <div className="kpi-card-body"><span className="kpi-val">{activeData.normalDel}</span><h3 className="kpi-label">Normal Delivery (NSD)</h3></div>
+
+                        <div className="st-stat-card st-stat-card--sage">
+                            <div className="st-stat-icon st-stat-icon--sage">
+                                <CheckCircle2 size={18} />
+                            </div>
+                            <div className="st-stat-info">
+                                <span className="st-stat-value">{activeData.normalDel}</span>
+                                <span className="st-stat-label">Normal Delivery (NSD)</span>
+                            </div>
                         </div>
-                        <div className="kpi-card glass-card tier-warning">
-                            <div className="kpi-card-header"><div className="kpi-icon-circle"><Activity size={20} /></div></div>
-                            <div className="kpi-card-body"><span className="kpi-val">{activeData.csDel}</span><h3 className="kpi-label">Cesarean Deliveries</h3></div>
+
+                        <div className="st-stat-card st-stat-card--peach">
+                            <div className="st-stat-icon st-stat-icon--peach">
+                                <Activity size={18} />
+                            </div>
+                            <div className="st-stat-info">
+                                <span className="st-stat-value">{activeData.csDel}</span>
+                                <span className="st-stat-label">Cesarean Deliveries</span>
+                            </div>
                         </div>
-                        <div className="kpi-card glass-card tier-success">
-                            <div className="kpi-card-header"><div className="kpi-icon-circle"><ClipboardCheck size={20} /></div></div>
-                            <div className="kpi-card-body"><span className="kpi-val">{activeData.ppRate}%</span><h3 className="kpi-label">Postpartum Follow-up</h3></div>
+
+                        <div className="st-stat-card st-stat-card--pink">
+                            <div className="st-stat-icon st-stat-icon--pink">
+                                <ClipboardCheck size={18} />
+                            </div>
+                            <div className="st-stat-info">
+                                <span className="st-stat-value">{activeData.ppRate}%</span>
+                                <span className="st-stat-label">Postpartum Follow-up</span>
+                            </div>
+                        </div>
+
+                        <div className="st-stat-card st-stat-card--yellow" title="No clinical assessment records">
+                            <div className="st-stat-icon st-stat-icon--yellow">
+                                <HeartPulse size={18} />
+                            </div>
+                            <div className="st-stat-info">
+                                <span className="st-stat-value">N/A</span>
+                                <span className="st-stat-label">Postpartum Recovery</span>
+                            </div>
                         </div>
                     </section>
 
-                    <section className="analytics-section deliveries-and-insights">
-                        <div className="glass-card outcomes-panel">
-                            <h2 className="panel-title">Delivery &amp; Postpartum Outcomes</h2>
-                            <p className="panel-subtitle">Childbirth modes, complications, and recovery metrics</p>
-                            <div className="outcomes-charts-grid" style={{ marginTop: 16 }}>
-                                <div className="outcome-chart-box outcome-chart-box-large">
-                                    <h3 className="outcome-chart-title">Delivery Mode over Time</h3>
-                                    <div className="delivery-trends-container">
-                                        <svg className="svg-delivery-trends" viewBox="0 0 240 120" width="100%" height="110">
-                                            {deliveryTrendsData.labels.map((lbl, idx) => {
-                                                const x = 30 + idx * 50;
-                                                const nHeight = deliveryTrendsData.normal[idx] || 0;
-                                                const aHeight = deliveryTrendsData.assisted[idx] || 0;
-                                                const cHeight = deliveryTrendsData.cs[idx] || 0;
-                                                const scale = 1.1;
+                    <section className="analytics-section two-column-charts">
+                        {/* 1. Delivery Mode Over Time */}
+                        <div className="glass-card chart-card-container deliv-chart-card">
+                            <div className="card-header-compact">
+                                <div>
+                                    <h2 className="section-header-title">Delivery Mode Over Time</h2>
+                                    <p className="section-header-subtitle">Childbirth methods across reporting intervals</p>
+                                </div>
+                                <div className="chart-legend">
+                                    <span className="legend-item">
+                                        <span className="legend-dot" style={{ background: '#88a86c' }}></span>
+                                        NSD ({deliveryTrendsData.totalNSD})
+                                    </span>
+                                    <span className="legend-item">
+                                        <span className="legend-dot" style={{ background: '#f3b869' }}></span>
+                                        Assisted ({deliveryTrendsData.totalAssisted})
+                                    </span>
+                                    <span className="legend-item">
+                                        <span className="legend-dot" style={{ background: '#c26d7c' }}></span>
+                                        CS ({deliveryTrendsData.totalCS})
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="deliv-chart-stage">
+                                <div className="deliv-chart-body">
+                                    <div className="deliv-y-axis">
+                                        <span>{deliveryTrendsData.maxCount}</span>
+                                        <span>{Math.round(deliveryTrendsData.maxCount * 0.75)}</span>
+                                        <span>{Math.round(deliveryTrendsData.maxCount * 0.5)}</span>
+                                        <span>{Math.round(deliveryTrendsData.maxCount * 0.25)}</span>
+                                        <span>0</span>
+                                    </div>
+
+                                    <div className="deliv-plot-area">
+                                        <div className="deliv-grid-lines">
+                                            {[0, 0.25, 0.5, 0.75, 1].map((r, i) => (
+                                                <div
+                                                    key={i}
+                                                    className="deliv-grid-line"
+                                                    style={{ top: `${r * 100}%` }}
+                                                />
+                                            ))}
+                                        </div>
+
+                                        <div className="deliv-columns-container">
+                                            {deliveryTrendsData.points.map((pt, idx) => {
+                                                const isHovered = activeDelivTooltip === idx;
+                                                const nsdHeight = deliveryTrendsData.maxCount > 0 ? (pt.nsd / deliveryTrendsData.maxCount) * 100 : 0;
+                                                const assistedHeight = deliveryTrendsData.maxCount > 0 ? (pt.assisted / deliveryTrendsData.maxCount) * 100 : 0;
+                                                const csHeight = deliveryTrendsData.maxCount > 0 ? (pt.cs / deliveryTrendsData.maxCount) * 100 : 0;
+
                                                 return (
-                                                    <g key={idx}>
-                                                        <rect x={x} y={100 - nHeight * scale} width="8" height={Math.max(1, nHeight * scale)} fill="#c3cfb7" rx="1" />
-                                                        <rect x={x + 10} y={100 - aHeight * scale} width="8" height={Math.max(1, aHeight * scale)} fill="#ffe3a4" rx="1" />
-                                                        <rect x={x + 20} y={100 - cHeight * scale} width="8" height={Math.max(1, cHeight * scale)} fill="#b9818a" rx="1" />
-                                                        <text x={x + 14} y="112" textAnchor="middle" style={{ fontSize: '7px', fill: 'var(--color-text-muted)', fontWeight: 600 }}>{lbl}</text>
-                                                    </g>
+                                                    <div
+                                                        key={idx}
+                                                        className={`deliv-bar-col ${isHovered ? 'hovered' : ''}`}
+                                                        onMouseEnter={() => setActiveDelivTooltip(idx)}
+                                                        onMouseLeave={() => setActiveDelivTooltip(null)}
+                                                        onClick={() => setActiveDelivTooltip(prev => prev === idx ? null : idx)}
+                                                        tabIndex={0}
+                                                        role="button"
+                                                        aria-label={`${pt.periodLabel}: NSD ${pt.nsd}, Assisted ${pt.assisted}, CS ${pt.cs}`}
+                                                    >
+                                                        <div className="deliv-bars-group">
+                                                            <div
+                                                                className="deliv-bar bar-nsd"
+                                                                style={{ height: `${nsdHeight}%` }}
+                                                                title={`NSD: ${pt.nsd}`}
+                                                            />
+                                                            <div
+                                                                className="deliv-bar bar-assisted"
+                                                                style={{ height: `${assistedHeight}%` }}
+                                                                title={`Assisted: ${pt.assisted}`}
+                                                            />
+                                                            <div
+                                                                className="deliv-bar bar-cs"
+                                                                style={{ height: `${csHeight}%` }}
+                                                                title={`CS: ${pt.cs}`}
+                                                            />
+                                                        </div>
+
+                                                        {isHovered && (
+                                                            <div className={`deliv-tooltip ${idx > deliveryTrendsData.points.length - 3 ? 'align-right' : idx < 2 ? 'align-left' : 'align-center'}`}>
+                                                                <div className="deliv-tooltip-header">{pt.periodLabel}</div>
+                                                                <div className="deliv-tooltip-row">
+                                                                    <span className="deliv-tooltip-lbl"><span className="legend-dot" style={{ background: '#88a86c' }}></span>NSD:</span>
+                                                                    <strong>{pt.nsd}</strong>
+                                                                </div>
+                                                                <div className="deliv-tooltip-row">
+                                                                    <span className="deliv-tooltip-lbl"><span className="legend-dot" style={{ background: '#f3b869' }}></span>Assisted:</span>
+                                                                    <strong>{pt.assisted}</strong>
+                                                                </div>
+                                                                <div className="deliv-tooltip-row">
+                                                                    <span className="deliv-tooltip-lbl"><span className="legend-dot" style={{ background: '#c26d7c' }}></span>Cesarean (CS):</span>
+                                                                    <strong>{pt.cs}</strong>
+                                                                </div>
+                                                                <div className="deliv-tooltip-row deliv-tooltip-total">
+                                                                    <span>Total Deliveries:</span>
+                                                                    <strong>{pt.total}</strong>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 );
                                             })}
-                                            <line x1="20" x2="230" y1="100" y2="100" stroke="#e1e3e5" strokeWidth="1" />
-                                        </svg>
-                                    </div>
-                                    <div className="outcome-labels-list">
-                                        <div className="outcome-lbl-row"><span className="dot col-sage"></span><span>NSD</span></div>
-                                        <div className="outcome-lbl-row"><span className="dot col-yellow"></span><span>Assisted</span></div>
-                                        <div className="outcome-lbl-row"><span className="dot col-rose"></span><span>CS</span></div>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="outcome-chart-box outcome-chart-box-large">
-                                    <h3 className="outcome-chart-title">Delivery Complications</h3>
-                                    <div className="complications-horizontal-bars">
-                                        {[
-                                            { name: 'Hemorrhage', count: activeData.compHemorr, color: '#b9818a' },
-                                            { name: 'Hypertension', count: activeData.compHyper, color: '#ac97b4' },
-                                            { name: 'Infection', count: activeData.compInfect, color: '#edbd9a' },
-                                            { name: 'Other', count: activeData.compOther, color: '#ffe3a4' }
-                                        ].map((com, i) => (
-                                            <div className="comp-row" key={i}>
-                                                <div className="comp-meta"><span>{com.name}</span><span>{com.count} cases</span></div>
-                                                <div className="comp-bar-track"><div className="comp-bar-fill" style={{ width: `${Math.min(100, (com.count / (activeData.deliveries || 1)) * 300)}%`, backgroundColor: com.color }} /></div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div className="outcome-chart-box outcome-chart-box-large">
-                                    <h3 className="outcome-chart-title">Postpartum Recovery</h3>
-                                    <div className="postpartum-recovery-metric">
-                                        <span className="recovery-success-rate">88%</span>
-                                        <span className="recovery-success-label">Recovery Success Rate</span>
-                                    </div>
+                                <div className="deliv-x-axis">
+                                    {deliveryTrendsData.points.map((pt, idx) => (
+                                        <div key={idx} className="deliv-x-label">
+                                            {pt.label}
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         </div>
 
-                        <div className="glass-card intelligence-panel">
-                            <div className="intelligence-header-icon">
-                                <Award size={18} className="icon-glow" />
-                                <h2 className="panel-title">Health Alerts</h2>
+                        {/* 2. Delivery Complications */}
+                        <div className="glass-card chart-card-container deliv-chart-card">
+                            <div className="card-header-compact">
+                                <div>
+                                    <h2 className="section-header-title">Delivery Complications</h2>
+                                    <p className="section-header-subtitle">Recorded complications during childbirth</p>
+                                </div>
+                                <div className="chart-legend">
+                                    <span className="legend-item">
+                                        <span className="legend-dot" style={{ background: '#b9818a' }}></span>
+                                        Total Cases ({activeData.compHemorr + activeData.compHyper + activeData.compInfect + activeData.compOther})
+                                    </span>
+                                </div>
                             </div>
-                            <p className="panel-subtitle">Administrative alerts and clinical recommendations</p>
-                            <div className="insights-vertical-stack" style={{ marginTop: 12 }}>
-                                {intelligenceInsights.map(ins => (
-                                    <div className={`insight-intelligence-card border-${ins.priority}`} key={ins.id}>
-                                        <p className="insight-title-text">{ins.title}</p>
-                                        <div className="insight-recommendation-box"><strong>Recommendation:</strong> {ins.recommendation}</div>
+
+                            <div className="deliv-complications-container">
+                                {[
+                                    { id: 'hemorrhage', name: 'Hemorrhage', count: activeData.compHemorr, color: '#b9818a', desc: 'Postpartum hemorrhage or excessive blood loss' },
+                                    { id: 'hypertension', name: 'Hypertension', count: activeData.compHyper, color: '#ac97b4', desc: 'Preeclampsia, eclampsia, or gestational hypertension' },
+                                    { id: 'infection', name: 'Infection', count: activeData.compInfect, color: '#edbd9a', desc: 'Puerperal infection, sepsis, or wound infection' },
+                                    { id: 'other', name: 'Other', count: activeData.compOther, color: '#ffe3a4', desc: 'Other documented clinical childbirth complications' }
+                                ].map((com) => {
+                                    const maxComp = Math.max(activeData.compHemorr, activeData.compHyper, activeData.compInfect, activeData.compOther, 1);
+                                    const barWidthPct = com.count > 0 ? Math.max(10, Math.round((com.count / maxComp) * 100)) : 0;
+                                    const isHovered = activeCompTooltip === com.id;
+
+                                    return (
+                                        <div
+                                            key={com.id}
+                                            className={`deliv-comp-row ${isHovered ? 'hovered' : ''}`}
+                                            onMouseEnter={() => setActiveCompTooltip(com.id)}
+                                            onMouseLeave={() => setActiveCompTooltip(null)}
+                                            onClick={() => setActiveCompTooltip(prev => prev === com.id ? null : com.id)}
+                                            tabIndex={0}
+                                            role="button"
+                                            aria-label={`${com.name}: ${com.count} cases`}
+                                        >
+                                            <div className="deliv-comp-header-row">
+                                                <span className="deliv-comp-name">{com.name}</span>
+                                                <div className="deliv-comp-badge">
+                                                    <span className="deliv-comp-val">{com.count}</span>
+                                                    <span className="deliv-comp-unit">{com.count === 1 ? 'case' : 'cases'}</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="deliv-comp-track">
+                                                <div
+                                                    className="deliv-comp-fill"
+                                                    style={{
+                                                        width: `${barWidthPct}%`,
+                                                        backgroundColor: com.color
+                                                    }}
+                                                />
+                                            </div>
+
+                                            {isHovered && (
+                                                <div className="deliv-comp-tooltip">
+                                                    <div className="deliv-tooltip-header">{com.name}</div>
+                                                    <div className="deliv-tooltip-row">
+                                                        <span>Recorded Cases:</span>
+                                                        <strong>{com.count}</strong>
+                                                    </div>
+                                                    <div className="deliv-tooltip-row">
+                                                        <span>Share of Deliveries:</span>
+                                                        <strong style={{ color: com.color }}>
+                                                            {activeData.deliveries > 0 ? Math.round((com.count / activeData.deliveries) * 100) : 0}%
+                                                        </strong>
+                                                    </div>
+                                                    <div className="deliv-tooltip-note">{com.desc}</div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+
+                                {activeData.compHemorr + activeData.compHyper + activeData.compInfect + activeData.compOther === 0 && (
+                                    <div className="deliv-comp-empty-hint">
+                                        No delivery complications recorded for the selected period and station.
                                     </div>
-                                ))}
+                                )}
                             </div>
                         </div>
                     </section>

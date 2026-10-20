@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import useClickOutside from '../../hooks/useClickOutside';
 import { useNavigate } from 'react-router-dom';
 import {
     Search, Filter, X, Baby, Heart, AlertTriangle,
     CheckCircle2, Clock, AlertCircle, Eye,
     Syringe, Calendar, Download, ChevronDown, ChevronUp,
-    TrendingUp, ShieldCheck, Timer, ChevronLeft, ChevronRight
+    TrendingUp, ShieldCheck, Timer, ChevronLeft, ChevronRight,
+    ClipboardList
 } from 'lucide-react';
 import NewbornService from '../../services/newbornservice';
 import PatientService from '../../services/patientservice';
@@ -18,6 +20,9 @@ import Legend from '../../components/Legend/Legend';
 import { MapPin, Activity } from 'lucide-react';
 import { formatNewbornId } from '../../utils/displayIds';
 import ActionTooltip from '../../components/Common/ActionTooltip';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
+import { useDefaultStation } from '../../hooks/useDefaultStation';
 
 /* ════════════════════════════
    CALENDAR HELPERS
@@ -74,7 +79,7 @@ const VaccinationDetailModal = ({ baby, onClose }) => {
 
     const progress = getVaccinationProgress();
 
-    return (
+    return createPortal(
         <div className="modal-backdrop" onClick={onClose}>
             <div className="nb-modal vacc-modal" onClick={e => e.stopPropagation()}>
                 {/* Header */}
@@ -173,7 +178,8 @@ const VaccinationDetailModal = ({ baby, onClose }) => {
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 
@@ -185,13 +191,42 @@ const NewbornTracking = () => {
     const patientService = useMemo(() => new PatientService(), []);
     const [availableStations, setAvailableStations] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filters, setFilters] = useState({ status: 'All', progress: 'All', station: 'All' });
+
+    const {
+        isStationStaff,
+        assignedStation,
+        canViewOtherStations,
+        availableStations: permittedStations,
+        matchStation: matchStationHook,
+    } = useDefaultStation({
+        permissionKey: 'newborn.view.other_station',
+        allStations: availableStations,
+        isArray: false
+    });
+
+    const [filters, setFilters] = useState(() => ({
+        status: 'All',
+        progress: 'All',
+        station: isStationStaff && assignedStation ? assignedStation : 'All'
+    }));
+    const userHasChangedStationRef = useRef(false);
+
+    useEffect(() => {
+        if (!userHasChangedStationRef.current && isStationStaff && assignedStation) {
+            setFilters(prev => ({
+                ...prev,
+                station: prev.station !== 'All' ? prev.station : assignedStation
+            }));
+        }
+    }, [isStationStaff, assignedStation]);
 
     const hasActiveFilters = filters.status !== 'All' || filters.progress !== 'All' || filters.station !== 'All' || searchTerm !== '';
 
     const clearFilters = () => {
-        setFilters({ status: 'All', progress: 'All', station: 'All' });
+        const defStation = (isStationStaff && !canViewOtherStations) ? (assignedStation || '__UNASSIGNED__') : 'All';
+        setFilters({ status: 'All', progress: 'All', station: defStation });
         setSearchTerm('');
         setActivePopover(null);
     };
@@ -218,11 +253,18 @@ const NewbornTracking = () => {
         upcomingDoses: 0
     });
     const [newborns, setNewborns] = useState([]);
+    const newbornRequestId = useRef(0);
 
-    const loadNewbornData = useCallback(async () => {
+    const loadNewbornData = useCallback(async (isSilent = false) => {
+        const requestId = ++newbornRequestId.current;
         try {
+            if (!isSilent && newborns.length === 0) {
+                setLoading(true);
+            }
+            setError(null);
             const service = new NewbornService();
             const newbornsData = await service.getAllNewborns();
+            if (requestId !== newbornRequestId.current) return;
             
             // Show ALL newborns, not just those with vaccination records
             const allNewborns = newbornsData || [];
@@ -257,11 +299,13 @@ const NewbornTracking = () => {
             });
             setNewborns(allNewborns);
         } catch (err) {
+            if (requestId !== newbornRequestId.current) return;
             console.error('Error loading newborn data:', err);
+            setError(err);
         } finally {
-            setLoading(false);
+            if (requestId === newbornRequestId.current) setLoading(false);
         }
-    }, []);
+    }, [newborns.length]);
 
     useEffect(() => {
         const fetchStations = async () => {
@@ -276,16 +320,25 @@ const NewbornTracking = () => {
     }, [patientService]);
 
     useEffect(() => {
-        loadNewbornData();
+        loadNewbornData(false);
 
         const service = new NewbornService();
+        let refreshTimer;
+        let mounted = true;
+        const scheduleRefresh = () => {
+            window.clearTimeout(refreshTimer);
+            refreshTimer = window.setTimeout(() => {
+                if (mounted) loadNewbornData(true);
+            }, 150);
+        };
         const subscription = service.subscribeToNewbornChanges(() => {
-            console.log('🔄 Newborn changes detected, re-fetching data...');
-            loadNewbornData();
+            scheduleRefresh();
         });
 
         return () => {
-            console.log('🔌 Unsubscribing from newborn changes');
+            mounted = false;
+            window.clearTimeout(refreshTimer);
+            newbornRequestId.current += 1;
             subscription.unsubscribe();
         };
     }, [loadNewbornData]);
@@ -364,6 +417,7 @@ const NewbornTracking = () => {
     const vaccByDate = useMemo(() => {
         const map = {};
         newborns.forEach(b => {
+            if (!matchStationHook(b.station, filters.station)) return;
             (b.vaccLog || []).forEach(v => {
                 if (!v.nextDue) return;
                 const key = v.nextDue.split('T')[0];
@@ -377,7 +431,7 @@ const NewbornTracking = () => {
             });
         });
         return map;
-    }, [newborns]);
+    }, [newborns, filters.station, matchStationHook]);
 
     const VACC_TODAY = new Date().toISOString().split('T')[0];
 
@@ -388,6 +442,7 @@ const NewbornTracking = () => {
             const matchSearch = b.babyName?.toLowerCase().includes(s) || 
                               b.motherName?.toLowerCase().includes(s) || 
                               b.id?.toLowerCase().includes(s) || 
+                              formatNewbornId(b.id).toLowerCase().includes(s) || 
                               b.station?.toLowerCase().includes(s);
             
             // Calculate vaccination progress
@@ -409,11 +464,11 @@ const NewbornTracking = () => {
                 (filters.progress === '76-99%' && percentage > 75 && percentage < 100) ||
                 (filters.progress === '100%' && percentage === 100);
             
-            const matchStation = filters.station === 'All' || b.station === filters.station;
+            const matchStation = matchStationHook(b.station, filters.station);
             
             return matchSearch && matchStatus && matchProgress && matchStation;
         });
-    }, [newborns, searchTerm, filters]);
+    }, [newborns, searchTerm, filters, matchStationHook]);
 
     const getVaccinationProgress = (baby) => {
         const completed = baby.vaccLog?.filter(v => v.status === 'Completed').length || 0;
@@ -512,7 +567,7 @@ const NewbornTracking = () => {
             return {
                 'Baby Name': b.babyName,
                 'Mother Name': b.motherName,
-                'Baby ID': b.id,
+                'Baby ID': formatNewbornId(b.id),
                 'Station': b.station,
                 'Birth Date': formatDateLong(b.birthDate),
                 'Vaccines Completed': progress.completed,
@@ -543,31 +598,24 @@ const NewbornTracking = () => {
             XLSX.writeFile(wb, `Newborn_Vaccination_Tracking_${dateStr}.xlsx`);
         } else if (format === 'pdf') {
             try {
-                const jsPDF = (await import('jspdf')).default;
-                const autoTable = (await import('jspdf-autotable')).default;
-                
-                const doc = new jsPDF('landscape');
-                
-                if (exportData.length === 0) {
-                    doc.text("No records found for the selected period.", 14, 20);
-                } else {
-                    const tableColumn = Object.keys(exportData[0]);
-                    const tableRows = exportData.map(obj => Object.values(obj));
-
-                    doc.text("Newborn Vaccination Tracking List", 14, 15);
-                    doc.setFontSize(10);
-                    doc.text(`Period: ${reportPeriodText}`, 14, 22);
-                    
-                    autoTable(doc, {
-                        head: [tableColumn],
-                        body: tableRows,
-                        startY: 28,
-                        styles: { fontSize: 8 },
-                        headStyles: { fillColor: [147, 111, 199] }
-                    });
-                }
                 const dateStr = new Date().toISOString().split('T')[0];
-                doc.save(`Newborn_Vaccination_Tracking_${dateStr}.pdf`);
+                const stationText = (filters.station && filters.station !== 'All' && filters.station !== 'All Stations')
+                    ? filters.station
+                    : 'All Stations';
+
+                const head = exportData.length > 0 ? [Object.keys(exportData[0])] : [["Baby Name", "Mother Name", "Baby ID", "Station", "Birth Date", "Vaccines Completed", "Total Vaccines", "Progress %", "Next Vaccine", "Next Due Date"]];
+                const body = exportData.length > 0 ? exportData.map(obj => Object.values(obj)) : [];
+
+                exportStandardStaffPdf({
+                    orientation: 'landscape',
+                    title: 'Newborn Vaccination Tracking Report',
+                    period: reportPeriodText || 'All Dates',
+                    station: stationText,
+                    totalRecords: exportData.length,
+                    head: head,
+                    body: body,
+                    filename: `Newborn_Vaccination_Tracking_${dateStr}.pdf`
+                });
             } catch (error) {
                 console.error("Error generating PDF:", error);
             }
@@ -582,17 +630,15 @@ const NewbornTracking = () => {
     ];
 
     if (loading) return (
-        <div className="nb-page">
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px', gap: '16px' }}>
-                <div className="spinner" style={{ width: '40px', height: '40px', border: '3px solid #f0f2f5', borderTopColor: 'var(--color-rose)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
-                <p style={{ fontSize: '14px', color: 'var(--color-text-muted)', fontWeight: 600 }}>Loading newborn records...</p>
-                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-            </div>
-        </div>
+        <StaffPageLoader 
+            message="Loading newborn records..." 
+            error={error} 
+            onRetry={loadNewbornData} 
+        />
     );
 
     return (
-        <div className="nb-page vacc-tracking-page">
+        <div className="nb-page vacc-tracking-page staff-page-ready">
 
             {/* ── Page Header ── */}
             <div className="page-header vacc-header">
@@ -708,9 +754,11 @@ const NewbornTracking = () => {
                             <div className="filter-popover">
                                 <div className="popover-title">Station</div>
                                 <div className="popover-options">
-                                    <button className={`popover-opt-btn ${filters.station === 'All' ? 'selected' : ''}`} onClick={() => { handleFilter('station', 'All'); setCurrentPage(1); setActivePopover(null); }}>All Stations</button>
-                                    {availableStations.map(s => (
-                                        <button key={s} className={`popover-opt-btn ${filters.station === s ? 'selected' : ''}`} onClick={() => { handleFilter('station', s); setCurrentPage(1); setActivePopover(null); }}>{s}</button>
+                                    {(!isStationStaff || canViewOtherStations) && (
+                                        <button className={`popover-opt-btn ${filters.station === 'All' ? 'selected' : ''}`} onClick={() => { userHasChangedStationRef.current = true; handleFilter('station', 'All'); setCurrentPage(1); setActivePopover(null); }}>All Stations</button>
+                                    )}
+                                    {permittedStations.map(s => (
+                                        <button key={s} className={`popover-opt-btn ${filters.station === s ? 'selected' : ''}`} onClick={() => { userHasChangedStationRef.current = true; handleFilter('station', s); setCurrentPage(1); setActivePopover(null); }}>{s}</button>
                                     ))}
                                 </div>
                             </div>
@@ -961,14 +1009,22 @@ const NewbornTracking = () => {
                                         </td>
                                         <td>
                                             <div className="row-actions registry-actions">
-                                                <ActionTooltip text="View Profile">
-                                                    <button className="action-btn-text action-btn-secondary" onClick={() => navigate(`/dashboard/patients/${b.motherId}`)}>
-                                                        <Eye size={13} /> View Profile
+                                                <ActionTooltip text="View History">
+                                                    <button 
+                                                        type="button" 
+                                                        className="action-btn record-btn" 
+                                                        onClick={() => setSelectedBaby(b)}
+                                                    >
+                                                        <ClipboardList size={15} />
                                                     </button>
                                                 </ActionTooltip>
-                                                <ActionTooltip text="View Vaccination History">
-                                                    <button className="action-btn-text action-btn-primary" onClick={() => setSelectedBaby(b)}>
-                                                        <Syringe size={13} /> View History
+                                                <ActionTooltip text="View Profile">
+                                                    <button 
+                                                        type="button" 
+                                                        className="action-btn view-btn" 
+                                                        onClick={() => navigate(`/dashboard/patients/${b.motherId}`)}
+                                                    >
+                                                        <Eye size={15} />
                                                     </button>
                                                 </ActionTooltip>
                                             </div>

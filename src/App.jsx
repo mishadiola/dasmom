@@ -2,48 +2,49 @@ import React, { useContext } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
 import { AuthProvider } from './context/AuthContext';
+import { RolePermissionProvider } from './context/RolePermissionContext';
+import { PermissionBoundary } from './context/RolePermissionContext';
 import { ModalProvider } from './context/ModalContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { SystemSettingsProvider } from './context/SystemSettingsContext';
 import ProtectedRoute from './routes/ProtectedRoute';
 import { AuthContext } from './context/AuthContext';
 import { isAndroidApp } from './services/secureStorage';
-
-import Landing from './pages/Landing/Landing';
+import ErrorBoundary from './components/Common/ErrorBoundary';
+import StaffPageLoader from './components/Common/StaffPageLoader';
 import Login from './pages/Login/Login';
-import MotherLogin from './pages/MotherLogin/MotherLogin';
-import ResetPassword from './pages/ResetPassword';
-
-import MotherDashboard from './pages/MotherDashboard/MotherDashboard';
-import UserAccount from './pages/MotherDashboard/UserAccount';
-import UserSettings from './pages/MotherDashboard/UserSettings';
-import MyVitals from './pages/MotherDashboard/MyVitals';
-import MyAppointments from './pages/MotherDashboard/MyAppointments';
-import UserVaccinations from './pages/MotherDashboard/UserVaccinations';
-import PregnancyTips from './pages/MotherDashboard/PregnancyTips';
-import TipDetailPage from './pages/MotherDashboard/TipDetailPage';
-import PregnancyDeliveryInfo from './pages/MotherDashboard/PregnancyDeliveryInfo';
-
-import DashboardLayout from './layouts/DashboardLayout';
-import Dashboard from './pages/Dashboard/Dashboard';
-
-import PatientsList from './pages/Patients/PatientsList';
-import PatientProfile from './pages/Patients/PatientProfile';
-import AddPatient from './pages/Patients/AddPatient';
-import HighRiskCases from './pages/HighRisk/HighRiskCases';
-import PrenatalVisits from './pages/Prenatal/PrenatalVisits';
-import AddPrenatalVisit from './pages/Prenatal/AddPrenatalVisit';
-import PostpartumRecords from './pages/Postpartum/PostpartumRecords';
-import AddPostpartumVisit from './pages/Postpartum/AddPostpartumVisit';
-import Vaccinations from './pages/Vaccinations/Vaccinations';
-import DeliveryOutcomes from './pages/Deliveries/DeliveryOutcomes';
-import NewbornTracking from './pages/Newborns/NewbornTracking';
-import Analytics from './pages/Analytics/Analytics';
-import StationReports from './pages/Station/StationReports';
-import Settings from './pages/Settings/Settings';
-import Inventory from './pages/Inventory/Inventory';
 
 import './App.css';
+
+const DashboardLayout = React.lazy(() => import('./layouts/DashboardLayout'));
+const Landing = React.lazy(() => import('./pages/Landing/Landing'));
+const MotherLogin = React.lazy(() => import('./pages/MotherLogin/MotherLogin'));
+const ResetPassword = React.lazy(() => import('./pages/ResetPassword'));
+const MotherDashboard = React.lazy(() => import('./pages/MotherDashboard/MotherDashboard'));
+const UserAccount = React.lazy(() => import('./pages/MotherDashboard/UserAccount'));
+const UserSettings = React.lazy(() => import('./pages/MotherDashboard/UserSettings'));
+const MyVitals = React.lazy(() => import('./pages/MotherDashboard/MyVitals'));
+const MyAppointments = React.lazy(() => import('./pages/MotherDashboard/MyAppointments'));
+const UserVaccinations = React.lazy(() => import('./pages/MotherDashboard/UserVaccinations'));
+const PregnancyTips = React.lazy(() => import('./pages/MotherDashboard/PregnancyTips'));
+const TipDetailPage = React.lazy(() => import('./pages/MotherDashboard/TipDetailPage'));
+const PregnancyDeliveryInfo = React.lazy(() => import('./pages/MotherDashboard/PregnancyDeliveryInfo'));
+const Dashboard = React.lazy(() => import('./pages/Dashboard/Dashboard'));
+const PatientsList = React.lazy(() => import('./pages/Patients/PatientsList'));
+const PatientProfile = React.lazy(() => import('./pages/Patients/PatientProfile'));
+const AddPatient = React.lazy(() => import('./pages/Patients/AddPatient'));
+const HighRiskCases = React.lazy(() => import('./pages/HighRisk/HighRiskCases'));
+const PrenatalVisits = React.lazy(() => import('./pages/Prenatal/PrenatalVisits'));
+const AddPrenatalVisit = React.lazy(() => import('./pages/Prenatal/AddPrenatalVisit'));
+const PostpartumRecords = React.lazy(() => import('./pages/Postpartum/PostpartumRecords'));
+const AddPostpartumVisit = React.lazy(() => import('./pages/Postpartum/AddPostpartumVisit'));
+const Vaccinations = React.lazy(() => import('./pages/Vaccinations/Vaccinations'));
+const DeliveryOutcomes = React.lazy(() => import('./pages/Deliveries/DeliveryOutcomes'));
+const NewbornTracking = React.lazy(() => import('./pages/Newborns/NewbornTracking'));
+const Analytics = React.lazy(() => import('./pages/Analytics/Analytics'));
+const StationReports = React.lazy(() => import('./pages/Station/StationReports'));
+const Settings = React.lazy(() => import('./pages/Settings/Settings'));
+const Inventory = React.lazy(() => import('./pages/Inventory/Inventory'));
 
 function AnalyticsTracker() {
   const location = useLocation();
@@ -79,14 +80,17 @@ function AndroidMotherRouteGate({ children }) {
 
 function App() {
   return (
-    <AuthProvider>
-      <LanguageProvider>
-      <ModalProvider>
-      <SystemSettingsProvider>
-        <BrowserRouter>
-          <AnalyticsTracker />
-          <AndroidMotherRouteGate>
-          <Routes>
+    <ErrorBoundary>
+      <AuthProvider>
+        <RolePermissionProvider>
+          <LanguageProvider>
+            <ModalProvider>
+              <SystemSettingsProvider>
+                <BrowserRouter>
+                  <AnalyticsTracker />
+                  <AndroidMotherRouteGate>
+                    <React.Suspense fallback={<StaffPageLoader />}>
+            <Routes>
 
           {/* PUBLIC ROUTES */}
           <Route path="/" element={<Login />} />
@@ -105,27 +109,75 @@ function App() {
             </ProtectedRoute>
           }>
             <Route index element={<Dashboard />} />
-            <Route path="patients" element={<PatientsList />} />
-            <Route path="patients/add" element={<AddPatient />} />
-            <Route path="patients/:id" element={<PatientProfile />} />
-            <Route path="high-risk" element={<HighRiskCases />} />
-            <Route path="prenatal" element={<PrenatalVisits />} />
-            <Route path="prenatal/add/:patientId" element={<AddPrenatalVisit />} />
-            <Route path="postpartum" element={<PostpartumRecords />} />
-            <Route path="postpartum/add/:patientId" element={<AddPostpartumVisit />} />
-            <Route path="vaccinations" element={<Vaccinations />} />
-            <Route path="inventory" element={<Inventory />} />
-            <Route path="deliveries" element={<DeliveryOutcomes />} />
-            <Route path="newborns" element={<NewbornTracking />} />
+            <Route path="patients" element={
+              <PermissionBoundary anyOf={['patient.view.own_station', 'patient.view.other_station']}>
+                <PatientsList />
+              </PermissionBoundary>
+            } />
+            <Route path="patients/add" element={
+              <PermissionBoundary anyOf={['patient.register.own_station', 'patient.register.other_station']}>
+                <AddPatient />
+              </PermissionBoundary>
+            } />
+            <Route path="patients/:id" element={
+              <PermissionBoundary anyOf={['patient.view.own_station', 'patient.view.other_station']}>
+                <PatientProfile />
+              </PermissionBoundary>
+            } />
+            <Route path="high-risk" element={
+              <PermissionBoundary anyOf={['patient.view.own_station', 'patient.view.other_station']}>
+                <HighRiskCases />
+              </PermissionBoundary>
+            } />
+            <Route path="prenatal" element={
+              <PermissionBoundary anyOf={['prenatal.schedule.view.own_station', 'prenatal.schedule.view.other_station']}>
+                <PrenatalVisits />
+              </PermissionBoundary>
+            } />
+            <Route path="prenatal/add/:patientId" element={
+              <PermissionBoundary anyOf={['prenatal.record.own_station', 'prenatal.record.other_station', 'prenatal.record.other_station_at_own_station']}>
+                <AddPrenatalVisit />
+              </PermissionBoundary>
+            } />
+            <Route path="postpartum" element={
+              <PermissionBoundary anyOf={['postpartum.schedule.view.own_station', 'postpartum.schedule.view.other_station']}>
+                <PostpartumRecords />
+              </PermissionBoundary>
+            } />
+            <Route path="postpartum/add/:patientId" element={
+              <PermissionBoundary anyOf={['postpartum.record.own_station', 'postpartum.record.other_station']}>
+                <AddPostpartumVisit />
+              </PermissionBoundary>
+            } />
+            <Route path="vaccinations" element={
+              <PermissionBoundary anyOf={['vaccine.schedule.view.own_station', 'vaccine.schedule.view.other_station']}>
+                <Vaccinations />
+              </PermissionBoundary>
+            } />
+            <Route path="inventory" element={
+              <PermissionBoundary anyOf={['inventory.main.view', 'inventory.station.view.own_station', 'inventory.station.view.other_station']}>
+                <Inventory />
+              </PermissionBoundary>
+            } />
+            <Route path="deliveries" element={
+              <PermissionBoundary anyOf={['delivery.view.own_station', 'delivery.view.other_station']}>
+                <DeliveryOutcomes />
+              </PermissionBoundary>
+            } />
+            <Route path="newborns" element={
+              <PermissionBoundary anyOf={['newborn.view.own_station', 'newborn.view.other_station']}>
+                <NewbornTracking />
+              </PermissionBoundary>
+            } />
             <Route path="stations" element={
-              <ProtectedRoute pageKey="reports">
+              <PermissionBoundary permission="reports.station.view">
                 <StationReports />
-              </ProtectedRoute>
+              </PermissionBoundary>
             } />
             <Route path="analytics" element={
-              <ProtectedRoute pageKey="analytics">
+              <PermissionBoundary permission="reports.analytics.view">
                 <Analytics />
-              </ProtectedRoute>
+              </PermissionBoundary>
             } />
             <Route path="settings" element={<Settings />} />
           </Route>
@@ -151,12 +203,15 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
 
         </Routes>
-        </AndroidMotherRouteGate>
+                    </React.Suspense>
+                  </AndroidMotherRouteGate>
         </BrowserRouter>
       </SystemSettingsProvider>
-        </ModalProvider>
-      </LanguageProvider>
-    </AuthProvider>
+            </ModalProvider>
+          </LanguageProvider>
+        </RolePermissionProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

@@ -203,3 +203,53 @@ img {
     transform: translateY(0);
 }
 
+/* ══════════════════════════════════════════
+   GLOBAL MODAL OVERLAYS (Full-Viewport Coverage)
+   Guarantees 100% viewport coverage without gaps or clipping
+══════════════════════════════════════════ */
+.modal-backdrop,
+.modal-overlay,
+.pv-modal-overlay,
+.sv-modal-overlay,
+.edit-patient-modal-overlay,
+.export-modal-overlay,
+.vsa-modal-overlay {
+    position: fixed !important;
+    inset: 0 !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 100dvh !important;
+    z-index: 9999 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: rgba(20, 20, 30, 0.45) !important;
+    backdrop-filter: blur(3px) !important;
+    -webkit-backdrop-filter: blur(3px) !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+}
+
+.system-modal-overlay {
+    position: fixed !important;
+    inset: 0 !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 100dvh !important;
+    z-index: 99999 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: rgba(20, 20, 30, 0.45) !important;
+    backdrop-filter: blur(3px) !important;
+    -webkit-backdrop-filter: blur(3px) !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+}
+

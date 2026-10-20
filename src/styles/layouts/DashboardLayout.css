@@ -1412,14 +1412,16 @@
 
 .hero-text-section .page-title {
     font-size: 38px;
-    margin-bottom: 28px;
+    margin-bottom: 12px;
     font-weight: 800;
+    flex-wrap: wrap;
+    word-break: break-word;
 }
 
 .hero-text-section .page-subtitle {
     font-size: 17px;
     line-height: 1.5;
-    margin-bottom: 56px;
+    margin-bottom: 0;
     opacity: 0.95;
     font-weight: 500;
 }
@@ -1428,6 +1430,7 @@
     display: flex;
     gap: 20px;
     flex-wrap: wrap;
+    margin-top: 24px;
 }
 
 /* -- Shared Mother PDF Download Button -- */
@@ -1470,6 +1473,28 @@
     opacity: 0.95;
 }
 
+/* -- Shared Decorative SVG Icon Treatment -- */
+.hero-decorative-icon-bg {
+    position: absolute;
+    right: 5%;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 0;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.12;
+    color: var(--color-rose, #b9818a);
+    transition: opacity 0.3s ease;
+}
+
+.hero-decorative-icon {
+    width: 170px;
+    height: 170px;
+    stroke-width: 1.15;
+}
+
 @media (max-width: 768px) {
     .hero-header-with-img {
         min-height: 340px;
@@ -1486,7 +1511,7 @@
     }
     
     .hero-text-section .page-subtitle {
-        margin-bottom: 30px;
+        margin-bottom: 20px;
     }
 
     .hero-silhouette-bg {
@@ -1498,5 +1523,31 @@
         bottom: auto;
         object-position: right top;
         opacity: 0.25;
+    }
+
+    .hero-decorative-icon-bg {
+        right: 2%;
+        top: 50%;
+        transform: translateY(-50%);
+        opacity: 0.08;
+    }
+
+    .hero-decorative-icon {
+        width: 110px;
+        height: 110px;
+    }
+}
+
+/* Accessibility: respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+    .page-header,
+    .hero-header-with-img,
+    .appt-hero-header,
+    .vitals-hero-header-with-img,
+    .pdi-custom-hero,
+    .user-settings-hero-header,
+    .user-account-hero-header,
+    .mother-welcome-banner {
+        animation: none !important;
     }
 }

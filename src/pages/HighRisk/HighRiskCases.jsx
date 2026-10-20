@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useSystemSettings } from '../../context/SystemSettingsContext';
 import useClickOutside from '../../hooks/useClickOutside';
 import { useNavigate } from 'react-router-dom';
@@ -18,7 +19,8 @@ import {
   Archive,
   ChevronDown,
   FileText,
-  Info
+  Info,
+  X
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import ExportModal from '../../components/ExportModal';
@@ -27,6 +29,18 @@ import PatientService from '../../services/patientservice';
 import PatientStaffAssignment from '../../components/Patient/PatientStaffAssignment';
 import '../../styles/components/SharedFilters.css';
 import '../../styles/pages/HighRiskCases.css';
+import StaffPageLoader from '../../components/Common/StaffPageLoader';
+import { formatMotherId } from '../../utils/displayIds';
+import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
+import { useDefaultStation } from '../../hooks/useDefaultStation';
+
+const getCategoryTheme = (category) => {
+  const lower = String(category || '').toLowerCase();
+  if (lower.includes('pre-existing') || lower.includes('preexisting')) return 'pre-existing';
+  if (lower.includes('pregnancy-related') || lower.includes('pregnancy related')) return 'pregnancy-related';
+  if (lower.includes('obstetric') || lower.includes('history')) return 'obstetric-history';
+  return 'pre-existing';
+};
 
 const TrimesterBadge = ({ weeks }) => {
   let trim = 1;
@@ -43,6 +57,7 @@ const TrimesterBadge = ({ weeks }) => {
 const HighRiskCases = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [stats, setStats] = useState({
     totalHighRisk: 0,
     criticalToday: 0,
@@ -51,27 +66,99 @@ const HighRiskCases = () => {
   });
   const [patients, setPatients] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStation, setFilterStation] = useState('All');
+  const [availableStations, setAvailableStations] = useState([]);
+  const [assignmentAccess, setAssignmentAccess] = useState({ role: '', stationId: null });
+
+  const {
+    isStationStaff,
+    assignedStation,
+    canViewOtherStations,
+    availableStations: permittedStations,
+    matchStation,
+  } = useDefaultStation({
+    permissionKey: 'patient.view.other_station',
+    allStations: availableStations,
+    isArray: false,
+  });
+
+  const [filterStation, setFilterStation] = useState(() => (
+    isStationStaff && assignedStation ? assignedStation : 'All'
+  ));
+  const userHasChangedStationRef = useRef(false);
+
+  useEffect(() => {
+    if (!userHasChangedStationRef.current && isStationStaff && assignedStation) {
+      setFilterStation(assignedStation);
+    }
+  }, [isStationStaff, assignedStation]);
+
   const [filterType, setFilterType] = useState('All');
   const [filterRiskLevel, setFilterRiskLevel] = useState('All');
   const [filterTrimester, setFilterTrimester] = useState('All');
   const [filterDateRange, setFilterDateRange] = useState('All');
-  const [filterAssignment, setFilterAssignment] = useState('All');
-  const [availableStations, setAvailableStations] = useState([]);
-  const [assignmentAccess, setAssignmentAccess] = useState({ role: '', stationId: null });
 
-  const hasActiveFilters = filterStation !== 'All' || filterType !== 'All' || filterRiskLevel !== 'All' || filterTrimester !== 'All' || filterDateRange !== 'All' || filterAssignment !== 'All' || searchTerm !== '';
+  const hasActiveFilters = filterStation !== 'All' || filterType !== 'All' || filterRiskLevel !== 'All' || filterTrimester !== 'All' || filterDateRange !== 'All' || searchTerm !== '';
 
   const clearFilters = () => {
-      setFilterStation('All');
+      const defStation = (isStationStaff && !canViewOtherStations) ? (assignedStation || '__UNASSIGNED__') : 'All';
+      setFilterStation(defStation);
       setFilterType('All');
       setFilterRiskLevel('All');
       setFilterTrimester('All');
       setFilterDateRange('All');
-      setFilterAssignment('All');
       setSearchTerm('');
       setActivePopover(null);
       setCurrentPage(1);
+  };
+
+  const [conditionPopover, setConditionPopover] = useState(null);
+
+  useEffect(() => {
+    if (!conditionPopover) return;
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.conditions-popover-card') && !e.target.closest('.condition-more-btn')) {
+        setConditionPopover(null);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setConditionPopover(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [conditionPopover]);
+
+  const handleOpenConditionPopover = (e, patient) => {
+    e.stopPropagation();
+    if (conditionPopover && conditionPopover.patient?.id === patient.id) {
+      setConditionPopover(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const popoverWidth = 320;
+    const popoverEstimatedHeight = 260;
+    let top = rect.bottom + 6;
+    if (top + popoverEstimatedHeight > window.innerHeight && rect.top - popoverEstimatedHeight > 10) {
+      top = rect.top - popoverEstimatedHeight - 6;
+    }
+    let left = rect.left;
+    if (left + popoverWidth > window.innerWidth - 16) {
+      left = window.innerWidth - popoverWidth - 16;
+    }
+    if (left < 16) left = 16;
+
+    setConditionPopover({
+      patient,
+      top,
+      left
+    });
   };
 
   const [activePopover, setActivePopover] = useState(null);
@@ -95,9 +182,14 @@ const HighRiskCases = () => {
     fetchStations();
   }, [service]);
 
-  const loadHighRiskData = useCallback(async () => {
+  const hasLoadedOnceRef = useRef(false);
+
+  const loadHighRiskData = useCallback(async (isSilent = false) => {
     try {
-      setLoading(true);
+      if (!isSilent && !hasLoadedOnceRef.current) {
+        setLoading(true);
+      }
+      setError(null);
 
       const [statsData, patientsData, access] = await Promise.all([
         service.getHighRiskStats(),
@@ -130,9 +222,10 @@ const HighRiskCases = () => {
         needsImmediate: 0,
       });
       setPatients(patientsWithConditions);
-      console.log('Loaded health conditions:', patientsWithConditions.length, 'patients');
+      hasLoadedOnceRef.current = true;
     } catch (err) {
       console.error('Error loading high risk data:', err);
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -140,14 +233,12 @@ const HighRiskCases = () => {
 
   useEffect(() => {
     let timeout;
-    loadHighRiskData();
+    loadHighRiskData(false);
 
     const subscription = service.subscribeToHighRiskChanges(() => {
-      console.log('High risk changes detected, re‑fetching...');
       clearTimeout(timeout);
       timeout = setTimeout(() => {
-        console.log('Debounced reload...');
-        loadHighRiskData();
+        loadHighRiskData(true);
       }, 500);
     });
 
@@ -155,16 +246,20 @@ const HighRiskCases = () => {
       if (timeout) clearTimeout(timeout);
       subscription.unsubscribe();
     };
-  }, [loadHighRiskData]);
+  }, [loadHighRiskData, service]);
 
   const filteredPatients = patients.filter((p) => {
     const search = searchTerm.toLowerCase();
+    const conditionMatches = (p.activeCategories || []).some(cat => 
+      cat.category.toLowerCase().includes(search) ||
+      cat.conditions.some(cond => cond.toLowerCase().includes(search))
+    ) || (p.documentedConditions || []).some(c => c.toLowerCase().includes(search));
+
     const matchesSearch =
       (p.name || '').toLowerCase().includes(search) ||
-      (p.id || '').toLowerCase().includes(search);
-    const matchesStation = filterStation === 'All' || p.station === filterStation;
-    const matchesAssignment = filterAssignment === 'All'
-      || (filterAssignment === 'Unassigned' ? !p.assignedStaffId : Boolean(p.assignedStaffId));
+      (p.id || '').toLowerCase().includes(search) ||
+      conditionMatches;
+    const matchesStation = matchStation(p.station, filterStation);
     const matchesType = filterType === 'All' || (p.type || 'Mother') === filterType;
     
     // Risk Level Filter
@@ -202,7 +297,7 @@ const HighRiskCases = () => {
       }
     }
     
-    return matchesSearch && matchesStation && matchesAssignment && matchesType && matchesRiskLevel && matchesTrimester && matchesDateRange && matchesPostpartum;
+    return matchesSearch && matchesStation && matchesType && matchesRiskLevel && matchesTrimester && matchesDateRange && matchesPostpartum;
   });
 
   const totalPages = Math.ceil(filteredPatients.length / itemsPerPage);
@@ -212,33 +307,20 @@ const HighRiskCases = () => {
     startIndex + itemsPerPage
   );
 
-  const getStationDistribution = () => {
-    const counts = {};
-    filteredPatients.forEach((p) => {
-      if (p.station && p.station !== 'Unassigned') {
-        counts[p.station] = (counts[p.station] || 0) + 1;
-      }
-    });
-    return Object.entries(counts)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count);
-  };
-
-  const stationDistribution = getStationDistribution();
-  const totalAssignedCases = stationDistribution.reduce((sum, item) => sum + item.count, 0);
-
   const [showExportModal, setShowExportModal] = useState(false);
 
   const handleExport = async (exportConfig) => {
-    const { format } = exportConfig;
+    const { format, reportPeriodText } = exportConfig;
     
     const exportData = filteredPatients.map(p => ({
-        'Patient ID': p.id || '',
+        'Patient ID': formatMotherId(p.id) || '',
         'Name': p.name || '',
         'Station': p.station || 'Unassigned',
         'Age': p.age || 'N/A',
         'Gestation': p.weeks ? `${p.weeks} weeks` : 'N/A',
-        'Documented Health Conditions': p.condition || 'None Reported',
+        'Documented Health Conditions': (p.activeCategories && p.activeCategories.length > 0)
+            ? p.activeCategories.map(cat => `${cat.category}: ${cat.conditions.join(', ')}`).join('; ')
+            : (p.condition || 'None Reported'),
         'Next Appointment': p.nextVisit || 'Initial'
     }));
 
@@ -249,11 +331,6 @@ const HighRiskCases = () => {
         XLSX.writeFile(workbook, 'health_conditions.xlsx');
     } else if (format === 'pdf') {
         try {
-            const jsPDF = (await import('jspdf')).default;
-            const autoTable = (await import('jspdf-autotable')).default;
-            
-            const doc = new jsPDF('landscape');
-            
             const tableColumn = ["Patient ID", "Name", "Station", "Age", "Gestation", "Documented Health Conditions", "Next Appt"];
             const tableRows = exportData.map(obj => [
                 obj['Patient ID'],
@@ -265,17 +342,19 @@ const HighRiskCases = () => {
                 obj['Next Appointment']
             ]);
 
-            doc.text("Patients with Health Conditions", 14, 15);
-            
-            autoTable(doc, {
-                head: [tableColumn],
-                body: tableRows,
-                startY: 20,
-                styles: { fontSize: 8 },
-                headStyles: { fillColor: [147, 111, 199] }
-            });
+            const stationText = filterStation === 'All' ? 'All Stations' : filterStation;
+            const periodText = reportPeriodText || (filterDateRange === 'All' ? 'All Dates' : filterDateRange);
 
-            doc.save("health_conditions.pdf");
+            exportStandardStaffPdf({
+                orientation: 'landscape',
+                title: 'Patients with Health Conditions',
+                period: periodText,
+                station: stationText,
+                totalRecords: exportData.length,
+                columns: tableColumn,
+                rows: tableRows,
+                filename: 'health_conditions.pdf'
+            });
         } catch (error) {
             console.error("Error generating PDF:", error);
         }
@@ -289,16 +368,15 @@ const HighRiskCases = () => {
 
   if (loading)
     return (
-      <div className="high-risk-page">
-        <div className="loading-state">
-          <div className="spinner"></div>
-          <p>Loading health conditions...</p>
-        </div>
-      </div>
+      <StaffPageLoader 
+        message="Loading health conditions..." 
+        error={error} 
+        onRetry={loadHighRiskData} 
+      />
     );
 
   return (
-    <div className="high-risk-page animate-fade">
+    <div className="high-risk-page animate-fade staff-page-ready">
       {/* ── Page Header ── */}
       <div className="page-header">
         <div>
@@ -315,7 +393,7 @@ const HighRiskCases = () => {
               Health Conditions
             </h1>
             <span className="title-statistic-badge">
-              Patients with Health Conditions: <strong>{stats.totalWithConditions ?? stats.totalHighRisk}</strong>
+              Patients with Health Conditions: <strong>{filteredPatients.length}</strong>
             </span>
           </div>
           <p className="page-subtitle">
@@ -349,18 +427,7 @@ const HighRiskCases = () => {
           <span className="filters-label">
             <Filter size={13} /> Filters:
           </span>
-          <label className="patient-assignment-filter">
-            <span>Health worker</span>
-            <select
-              value={filterAssignment}
-              onChange={event => { setFilterAssignment(event.target.value); setCurrentPage(1); }}
-              aria-label="Filter by health worker assignment"
-            >
-              <option value="All">All</option>
-              <option value="Unassigned">Unassigned</option>
-              <option value="Assigned">Assigned</option>
-            </select>
-          </label>
+          
           
           {/* Station Filter */}
           <div className="filter-dropdown-container">
@@ -377,9 +444,11 @@ const HighRiskCases = () => {
                   <div className="filter-popover">
                       <div className="popover-title">Station</div>
                       <div className="popover-options">
-                          <button className={`popover-opt-btn ${filterStation === 'All' ? 'selected' : ''}`} onClick={() => { setFilterStation('All'); setActivePopover(null); setCurrentPage(1); }}>All Stations</button>
-                          {availableStations.map((station) => (
-                              <button key={station} className={`popover-opt-btn ${filterStation === station ? 'selected' : ''}`} onClick={() => { setFilterStation(station); setActivePopover(null); setCurrentPage(1); }}>{station}</button>
+                          {(!isStationStaff || canViewOtherStations) && (
+                              <button className={`popover-opt-btn ${filterStation === 'All' ? 'selected' : ''}`} onClick={() => { userHasChangedStationRef.current = true; setFilterStation('All'); setActivePopover(null); setCurrentPage(1); }}>All Stations</button>
+                          )}
+                          {permittedStations.map((station) => (
+                              <button key={station} className={`popover-opt-btn ${filterStation === station ? 'selected' : ''}`} onClick={() => { userHasChangedStationRef.current = true; setFilterStation(station); setActivePopover(null); setCurrentPage(1); }}>{station}</button>
                           ))}
                       </div>
                   </div>
@@ -421,6 +490,14 @@ const HighRiskCases = () => {
           <Legend 
               categories={[
                   {
+                      title: "Health Conditions",
+                      items: [
+                          { label: "Pre-existing Medical Conditions", className: "category-badge category-badge--pre-existing" },
+                          { label: "Pregnancy-Related Conditions", className: "category-badge category-badge--pregnancy-related" },
+                          { label: "Relevant Obstetric History", className: "category-badge category-badge--obstetric-history" }
+                      ]
+                  },
+                  {
                       title: "Gestation",
                       items: [
                           { label: "1st Trim", className: "trim-1" },
@@ -455,7 +532,6 @@ const HighRiskCases = () => {
                     <th>Gestation</th>
                     <th>Documented Health Conditions</th>
                     <th>Due Date</th>
-                    <th>BP</th>
                     <th>Next Visit</th>
                   </tr>
                 </thead>
@@ -483,7 +559,6 @@ const HighRiskCases = () => {
                                 patientId={p.id}
                                 patientStationId={p.stationId}
                                 assignedStaffId={p.assignedStaffId}
-                                role={assignmentAccess.role}
                                 viewerStationId={assignmentAccess.stationId}
                                 onAssigned={({ id: assignedStaffId }) => setPatients(previous => previous.map(patient =>
                                   patient.id === p.id ? { ...patient, assignedStaffId } : patient
@@ -496,12 +571,64 @@ const HighRiskCases = () => {
                           <TrimesterBadge weeks={p.weeks} />
                         </td>
                         <td>
-                          <div className="condition-wrap">
-                            <span className="condition-main">{p.condition}</span>
-                            <span className="condition-meta">
-                              {p.isMultipleBirth && <span style={{display: 'block', marginTop: '4px'}}>Multiple births</span>}
+                          {(!p.activeCategories || p.activeCategories.length === 0) ? (
+                            <span 
+                              className="risk-badge condition-none"
+                              onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/patients/${p.id}?from=high-risk&tab=history`); }}
+                              style={{ cursor: 'pointer', transition: 'opacity 0.2s' }}
+                              title="View Medical History"
+                            >
+                              None Reported
                             </span>
-                          </div>
+                          ) : (
+                            <div className="patient-conditions-cell" onClick={(e) => e.stopPropagation()}>
+                              {p.activeCategories.slice(0, 2).map((catGroup, catIdx) => {
+                                const theme = getCategoryTheme(catGroup.category);
+                                const allConditions = catGroup.conditions || [];
+                                const displayConditions = allConditions.slice(0, 2);
+                                const extraConditionsCount = allConditions.length - displayConditions.length;
+
+                                return (
+                                  <div key={catIdx} className="category-group">
+                                    <span 
+                                      className={`category-badge category-badge--${theme}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate(`/dashboard/patients/${p.id}?from=high-risk&tab=history`);
+                                      }}
+                                      title="View in Medical History"
+                                    >
+                                      {catGroup.category}
+                                    </span>
+                                    <div className="category-conditions-text">
+                                      {displayConditions.join(', ')}
+                                      {extraConditionsCount > 0 && (
+                                        <button
+                                          type="button"
+                                          className="condition-more-btn"
+                                          onClick={(e) => handleOpenConditionPopover(e, p)}
+                                          title="View all documented conditions"
+                                        >
+                                          +{extraConditionsCount} more
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+
+                              {p.activeCategories.length > 2 && (
+                                <button
+                                  type="button"
+                                  className="condition-more-btn condition-more-btn--categories"
+                                  onClick={(e) => handleOpenConditionPopover(e, p)}
+                                  title="View all categories & conditions"
+                                >
+                                  +{p.activeCategories.length - 2} more {p.activeCategories.length - 2 === 1 ? 'category' : 'categories'}
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td>
                           <span className="due-date-val">
@@ -516,11 +643,6 @@ const HighRiskCases = () => {
                         </td>
                         <td>
                           <span>
-                            {p.bp || 'No Data'}
-                          </span>
-                        </td>
-                        <td>
-                          <span>
                             {p.nextVisit || 'Initial'}
                           </span>
                         </td>
@@ -528,7 +650,7 @@ const HighRiskCases = () => {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="7" className="hr-empty">
+                      <td colSpan="6" className="hr-empty">
                         <AlertTriangle size={28} />
                         <p>No patients with documented health conditions found matching your criteria.</p>
                       </td>
@@ -579,52 +701,6 @@ const HighRiskCases = () => {
             )}
           </div>
         </div>
-
-        {/* ── Right Column: Panels ── */}
-        <div className="hr-side-col">
-          {/* Station Distribution */}
-          <div className="hr-card">
-            <div className="hr-card-head">
-              <h2>
-                <MapPin size={16} /> Station Distribution
-              </h2>
-            </div>
-            <div className="station-dist-list">
-              {stationDistribution.map((b) => {
-                const percentage = totalAssignedCases > 0 ? ((b.count / totalAssignedCases) * 100).toFixed(1) : 0;
-                return (
-                  <div key={b.name} className="station-dist-item">
-                    <span>{b.name}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div className="station-bar-wrap">
-                        <div
-                          className="station-bar-fill"
-                          style={{
-                            width: `${percentage}%`,
-                          }}
-                        ></div>
-                      </div>
-                      <span
-                        style={{
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          color: 'var(--color-rose)',
-                          minWidth: '45px',
-                          textAlign: 'right',
-                        }}
-                      >
-                        {percentage}%
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-              {stationDistribution.length === 0 && (
-                <p className="empty-alerts">No records found.</p>
-              )}
-            </div>
-          </div>
-        </div>
       </div>
       <ExportModal 
           isOpen={showExportModal} 
@@ -632,6 +708,71 @@ const HighRiskCases = () => {
           onExport={handleExport} 
           hideDateRange={true}
       />
+
+      {conditionPopover && createPortal(
+        <div 
+          className="conditions-popover-card" 
+          style={{
+            position: 'fixed',
+            top: `${conditionPopover.top}px`,
+            left: `${conditionPopover.left}px`,
+            zIndex: 9999
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="conditions-popover-header">
+            <div>
+              <h4 className="conditions-popover-title">Documented Health Conditions</h4>
+              <p className="conditions-popover-sub">
+                {conditionPopover.patient.name} &middot; {formatMotherId(conditionPopover.patient.id)}
+              </p>
+            </div>
+            <button 
+              type="button" 
+              className="conditions-popover-close" 
+              onClick={() => setConditionPopover(null)}
+              aria-label="Close"
+            >
+              <X size={15} />
+            </button>
+          </div>
+
+          <div className="conditions-popover-body">
+            {(conditionPopover.patient.activeCategories || []).map((catGroup, idx) => {
+              const theme = getCategoryTheme(catGroup.category);
+              return (
+                <div key={idx} className="conditions-popover-group">
+                  <span className={`category-badge category-badge--${theme}`}>
+                    {catGroup.category}
+                  </span>
+                  <div className="conditions-popover-tags">
+                    {(catGroup.conditions || []).map((c, cIdx) => (
+                      <span key={cIdx} className="conditions-popover-tag">
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="conditions-popover-footer">
+            <button 
+              type="button"
+              className="conditions-popover-history-link"
+              onClick={() => {
+                const patientId = conditionPopover.patient.id;
+                setConditionPopover(null);
+                navigate(`/dashboard/patients/${patientId}?from=high-risk&tab=history`);
+              }}
+            >
+              View Full Medical History &rarr;
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

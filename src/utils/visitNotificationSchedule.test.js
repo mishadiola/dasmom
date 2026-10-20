@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
     buildVisitReminderSchedules,
     createVisitNotificationCopy,
+    createVisitChangeNotificationCopy,
+    getVisitChangeType,
     isEligibleVisitStatus
 } from './visitNotificationSchedule.js';
 
@@ -65,10 +67,17 @@ test('formats personalized reminders for each supported visit type', () => {
         vaccineName: 'BCG',
         doseNumber: 1
     }, 'October 20, 2026', 1);
+    const maternalVaccine = createVisitNotificationCopy({
+        visitType: 'maternal_vaccination',
+        vaccineName: 'Tdap',
+        doseNumber: 2
+    }, 'October 20, 2026', 3);
     assert.match(prenatal.body, /Prenatal checkup \(visit 2\).*October 20, 2026.*7-day reminder/i);
     assert.match(postpartum.body, /postpartum follow-up \(6 weeks after birth\).*3-day reminder/i);
     assert.match(newborn.body, /BCG \(dose 1\) for Baby Ana.*1-day reminder/);
     assert.equal(newborn.title, 'Upcoming Newborn Vaccination');
+    assert.match(maternalVaccine.body, /Your vaccination for Tdap \(dose 2\).*3-day reminder/i);
+    assert.equal(maternalVaccine.title, 'Upcoming Vaccination');
 });
 
 test('excludes cancelled, completed, and missed visits from reminder eligibility', () => {
@@ -77,4 +86,29 @@ test('excludes cancelled, completed, and missed visits from reminder eligibility
     });
     assert.equal(isEligibleVisitStatus('Scheduled'), true);
     assert.equal(isEligibleVisitStatus('Pending'), true);
+});
+
+test('detects added and rescheduled visits but ignores unrelated updates', () => {
+    assert.equal(getVisitChangeType({ eventType: 'INSERT', new: { visit_date: '2026-10-20' } }), 'added');
+    assert.equal(getVisitChangeType({
+        eventType: 'UPDATE',
+        old: { scheduled_date: '2026-10-20' },
+        new: { scheduled_date: '2026-10-21' }
+    }), 'rescheduled');
+    assert.equal(getVisitChangeType({
+        eventType: 'UPDATE',
+        old: { scheduled_date: '2026-10-20', status: 'Scheduled' },
+        new: { scheduled_date: '2026-10-20', status: 'Attended' }
+    }), null);
+    assert.equal(getVisitChangeType({
+        eventType: 'UPDATE',
+        old: { id: 'visit-1' },
+        new: { id: 'visit-1', rescheduled_at: '2026-10-20T10:00:00Z', status: 'Attended' }
+    }), null);
+});
+
+test('creates change alerts for maternal visits, postpartum visits, and vaccinations', () => {
+    const alert = createVisitChangeNotificationCopy('maternal_vaccination', 'rescheduled', '2026-10-20', 'Tdap');
+    assert.equal(alert.title, 'Visit Rescheduled');
+    assert.match(alert.body, /vaccination: Tdap has been rescheduled for October 20, 2026/);
 });
