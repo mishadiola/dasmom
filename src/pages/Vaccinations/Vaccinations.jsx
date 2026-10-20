@@ -2244,7 +2244,10 @@ const Vaccinations = () => {
 
 
     const SortBtn = ({ field }) => (
-        <button className="sort-btn" onClick={() => handleSort(field)}>
+        <button className="sort-btn" onClick={event => {
+            event.stopPropagation();
+            handleSort(field);
+        }}>
             {sortField === field ? (sortAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : <ChevronDown size={12} className="sort-inactive" />}
         </button>
     );
@@ -2600,6 +2603,11 @@ const Vaccinations = () => {
                                                                 {firstTwoRecords.map((record, rIdx) => (
                                                                     <div key={record.id || `${rowKey}-first-${rIdx}`} className="vacc-item-entry">
                                                                         <strong>{record.scheduledVaccination || record.itemName}</strong>
+                                                                        {isExpanded && record.scheduledDate && (
+                                                                            <small style={{ display: 'block' }}>
+                                                                                Scheduled: {formatReadableDate(record.scheduledDate)}
+                                                                            </small>
+                                                                        )}
                                                                         {record.actualVaccine && (
                                                                             <small style={{ display: 'block' }}>
                                                                                 Actual: {record.actualVaccine.vaccine_name}
@@ -2617,6 +2625,11 @@ const Vaccinations = () => {
                                                                         {remainingRecords.map((record, rIdx) => (
                                                                             <div key={record.id || `${rowKey}-rem-${rIdx}`} className="vacc-item-entry">
                                                                                 <strong>{record.scheduledVaccination || record.itemName}</strong>
+                                                                                {record.scheduledDate && (
+                                                                                    <small style={{ display: 'block' }}>
+                                                                                        Scheduled: {formatReadableDate(record.scheduledDate)}
+                                                                                    </small>
+                                                                                )}
                                                                                 {record.actualVaccine && (
                                                                                     <small style={{ display: 'block' }}>
                                                                                         Actual: {record.actualVaccine.vaccine_name}
@@ -2655,11 +2668,23 @@ const Vaccinations = () => {
                                                 })()}
                                             </td>
                                             <td className="col-date">
-                                                {activeTab === 'administered' ? (
-                                                    formatReadableDate(item.administeredDate) || <span className="not-yet">Unknown</span>
-                                                ) : (
-                                                    formatReadableDate(item.scheduledDate) || <span className="not-yet">Not scheduled</span>
-                                                )}
+                                                {(() => {
+                                                    const date = activeTab === 'administered'
+                                                        ? item.administeredDate
+                                                        : activeTab === 'missed'
+                                                            ? (item.records || [])
+                                                                .map(record => record.scheduledDate)
+                                                                .filter(Boolean)
+                                                                .sort()
+                                                                .pop()
+                                                            : item.scheduledDate;
+
+                                                    return formatReadableDate(date) || (
+                                                        <span className="not-yet">
+                                                            {activeTab === 'administered' ? 'Unknown' : 'Not scheduled'}
+                                                        </span>
+                                                    );
+                                                })()}
                                             </td>
                                             <td className="col-status">
                                                 <span className={`vacc-status ${

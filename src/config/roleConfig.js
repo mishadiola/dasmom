@@ -8,5 +8,9 @@ export const getRoleConfig = (role) => {
     patient: { redirect: '/mother-home', allowedPages: ['mother'] },
     user: { redirect: '/dashboard', allowedPages: [] }
   };
-  return configs[role] || configs.user;
+  const normalizedRole = String(role || 'user').trim().toLowerCase().replace(/_/g, ' ');
+  if (configs[normalizedRole]) return configs[normalizedRole];
+  return normalizedRole
+    ? { redirect: '/dashboard', allowedPages: ['dashboard'] }
+    : configs.user;
 };

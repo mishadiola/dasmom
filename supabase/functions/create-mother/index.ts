@@ -41,49 +41,30 @@ async function emailAlreadyRegistered(email: string) {
 
 async function requireStaff(request: Request) {
   const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
-  if (!token) {
-    console.warn('[create-mother] staff verification failed: missing bearer token');
+  if (!token || !anonKey || !supabaseUrl) {
+    console.warn('[create-mother] staff verification failed: missing authorization configuration');
     return false;
   }
 
   const { data: authData, error: authError } = await getAdmin().auth.getUser(token);
-  if (authError) {
-    console.error('[create-mother] staff verification auth lookup failed:', authError);
-    return false;
-  }
-  const userId = authData.user?.id;
-  if (!userId) {
-    console.warn('[create-mother] staff verification failed: token has no user');
+  if (authError || !authData.user?.id) {
+    console.warn('[create-mother] staff verification failed: token could not be verified');
     return false;
   }
 
-  const { data: userRow, error: userError } = await getAdmin()
-    .from('users')
-    .select('usertype')
-    .eq('id', userId)
-    .maybeSingle();
-  if (userError) {
-    console.error('[create-mother] staff verification public.users lookup failed:', userError);
-    throw userError;
-  }
-  if (!userRow?.usertype) {
-    console.warn('[create-mother] staff verification failed: no public.users role for authenticated user');
-    return false;
+  const callerClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data: callerRole, error: roleError } = await callerClient.rpc('get_my_role');
+  if (roleError) {
+    console.error('[create-mother] staff role verification RPC failed:', roleError);
+    throw roleError;
   }
 
-  const { data: userTypeRow, error: userTypeError } = await getAdmin()
-    .from('user_type')
-    .select('user_type')
-    .eq('id', userRow.usertype)
-    .maybeSingle();
-  if (userTypeError) {
-    console.error('[create-mother] staff verification user_type lookup failed:', userTypeError);
-    throw userTypeError;
-  }
-
-  const role = String(userTypeRow?.user_type || '').trim().toLowerCase();
-  const allowed = ['admin', 'staff', 'cho personnel'].includes(role);
-  if (!allowed) console.warn('[create-mother] staff verification denied: role is not operational');
+  const role = String(callerRole || '').trim().toLowerCase().replace(/_/g, ' ');
+  const allowed = ['admin', 'staff', 'station staff', 'cho personnel'].includes(role);
+  if (!allowed) console.warn('[create-mother] staff verification denied:', { role: role || 'missing' });
   return allowed;
 }
 

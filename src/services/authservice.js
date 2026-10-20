@@ -319,7 +319,7 @@ export default class AuthService {
     let assignedStationId = null;
 
     try {
-      if (role === 'admin' || role.includes('staff') || role === 'cho personnel' || role.includes('midwife') || role.includes('doctor')) {
+      if (!['mother', 'patient'].includes(role)) {
         const { data, error } = await this.supabase
           .from('staff_profiles')
           .select('full_name, station_ass, stations:station_ass(id, station_name)')

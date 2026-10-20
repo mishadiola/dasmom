@@ -103,7 +103,11 @@ function App() {
                 <PatientProfile />
               </PermissionBoundary>
             } />
-            <Route path="high-risk" element={<HighRiskCases />} />
+            <Route path="high-risk" element={
+              <PermissionBoundary anyOf={['patient.view.own_station', 'patient.view.other_station']}>
+                <HighRiskCases />
+              </PermissionBoundary>
+            } />
             <Route path="prenatal" element={
               <PermissionBoundary anyOf={['prenatal.schedule.view.own_station', 'prenatal.schedule.view.other_station']}>
                 <PrenatalVisits />
@@ -145,14 +149,14 @@ function App() {
               </PermissionBoundary>
             } />
             <Route path="stations" element={
-              <ProtectedRoute pageKey="reports">
+              <PermissionBoundary permission="reports.station.view">
                 <StationReports />
-              </ProtectedRoute>
+              </PermissionBoundary>
             } />
             <Route path="analytics" element={
-              <ProtectedRoute pageKey="analytics">
+              <PermissionBoundary permission="reports.analytics.view">
                 <Analytics />
-              </ProtectedRoute>
+              </PermissionBoundary>
             } />
             <Route path="settings" element={<Settings />} />
           </Route>

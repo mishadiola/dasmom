@@ -1708,75 +1708,8 @@ async getSlotCount(dateStr, timeSlot) {
 
   async getHighRiskStats({ includeArchived = false } = {}) {
     try {
-      const archivedPatientIds = includeArchived ? new Set() : await this.getArchivedPatientIds();
-      const { data: deliveries } = await this.supabase
-        .from('deliveries')
-        .select('mother_id');
-
-      const deliveredPatients = new Set();
-      (deliveries || []).forEach(d => {
-        if (d.mother_id) deliveredPatients.add(d.mother_id);
-      });
-
-      const { data: visits, error } = await this.supabase
-        .from('prenatal_visits')
-        .select('patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, weight_kg, height_cm, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm')
-        .eq('status', 'Attended')
-        .order('visit_date', { ascending: false });
-
-      if (error) throw error;
-
-      const { data: pregnancies, error: pregError } = await this.supabase
-        .from('pregnancy_info')
-        .select('patient_id, pregn_postp, pregnancy_type, gravida, created_at')
-        .order('created_at', { ascending: false });
-
-      if (pregError) throw pregError;
-
-      const latestPregMap = new Map();
-      (pregnancies || []).forEach(p => {
-        if (!p.patient_id) return;
-        const existing = latestPregMap.get(p.patient_id);
-        const currentTime = new Date(p.created_at).getTime() || 0;
-        const existingTime = existing ? new Date(existing.created_at).getTime() || 0 : 0;
-        if (!existing || currentTime > existingTime) {
-          latestPregMap.set(p.patient_id, p);
-        }
-      });
-
-      const latestVisitMap = new Map();
-      const heightByPatientMap = new Map();
-      (visits || []).forEach(v => {
-        if (!v.patient_id) return;
-        if (Number(v.height_cm) > 0 && !heightByPatientMap.has(v.patient_id)) {
-          heightByPatientMap.set(v.patient_id, v.height_cm);
-        }
-        if (!includeArchived && archivedPatientIds.has(v.patient_id)) return;
-        if (deliveredPatients.has(v.patient_id)) return;
-        const preg = latestPregMap.get(v.patient_id);
-        if (!preg || preg.pregn_postp?.toLowerCase() !== 'pregnant') return;
-
-        const existing = latestVisitMap.get(v.patient_id);
-        if (!existing || new Date(v.visit_date) > new Date(existing.visit_date)) {
-          latestVisitMap.set(v.patient_id, v);
-        }
-      });
-
-      const { data: patients, error: patientError } = await this.supabase
-        .from('patient_basic_info')
-        .select('id, date_of_birth');
-      if (patientError) throw patientError;
-      const patientMap = new Map((patients || []).map(patient => [patient.id, patient]));
-
-      const highRiskCount = Array.from(latestPregMap.entries()).filter(([patientId, pregnancy]) => {
-        if (pregnancy.pregn_postp?.toLowerCase() !== 'pregnant') return false;
-        if (!includeArchived && archivedPatientIds.has(patientId)) return false;
-        if (deliveredPatients.has(patientId)) return false;
-        const visit = latestVisitMap.get(patientId);
-        return visit && this.hasDocumentedHealthConditions(visit.risk_factors);
-      }).length;
-
-      return { highRiskCount };
+      const patients = await this.getHighRiskPatients({ includeArchived });
+      return { highRiskCount: patients.length };
     } catch (err) {
       console.error('Error fetching health conditions stats:', err);
       return { highRiskCount: 0 };
@@ -1798,11 +1731,11 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
           : this.getArchivedPatientIds(),
       this.supabase
         .from('deliveries')
-        .select('mother_id')
+        .select('mother_id, delivery_date')
         .order('delivery_date', { ascending: false }),
       this.supabase
         .from('pregnancy_info')
-        .select('patient_id, pregn_postp, pregnancy_type, gravida, created_at')
+        .select('patient_id, pregn_postp, pregnancy_type, gravida, lmd, created_at')
         .order('created_at', { ascending: false }),
       this.supabase
         .from('prenatal_visits')
@@ -1841,9 +1774,13 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
     const { data: deliveries, error: deliveryError } = deliveryResult;
     if (deliveryError) throw deliveryError;
 
-    const deliveredPatients = new Set();
+    const latestDeliveryByPatient = new Map();
     (deliveries || []).forEach(d => {
-      if (d.mother_id) deliveredPatients.add(d.mother_id);
+      if (!d.mother_id || !d.delivery_date) return;
+      const existing = latestDeliveryByPatient.get(d.mother_id);
+      if (!existing || new Date(d.delivery_date) > new Date(existing)) {
+        latestDeliveryByPatient.set(d.mother_id, d.delivery_date);
+      }
     });
 
     const { data: pregnancies, error: pregnancyError } = pregnancyResult;
@@ -1886,9 +1823,20 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
     (data || []).forEach((visit) => {
       if (!visit.patient_id || visit.status !== 'Attended') return;
       if (!includeArchived && archivedPatientIds.has(visit.patient_id)) return;
-      if (deliveredPatients.has(visit.patient_id)) return;
       const preg = latestPregMap.get(visit.patient_id);
       if (!preg || preg.pregn_postp?.toLowerCase() !== 'pregnant') return;
+      const pregnancyStart = preg.lmd || preg.created_at;
+      const latestDelivery = latestDeliveryByPatient.get(visit.patient_id);
+      if (
+        latestDelivery &&
+        pregnancyStart &&
+        new Date(latestDelivery).getTime() >= new Date(pregnancyStart).getTime()
+      ) return;
+      if (
+        pregnancyStart &&
+        visit.visit_date &&
+        new Date(visit.visit_date).getTime() < new Date(pregnancyStart).getTime()
+      ) return;
 
       if (!latestAttendedByPatient.has(visit.patient_id)) {
         latestAttendedByPatient.set(visit.patient_id, visit);
@@ -1902,7 +1850,11 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
       };
       const pregnancy = latestPregMap.get(visit.patient_id) || {};
 
-      const patientVisits = visitsByPatientMap.get(visit.patient_id) || [visit];
+      const pregnancyStart = pregnancy.lmd || pregnancy.created_at;
+      const patientVisits = (visitsByPatientMap.get(visit.patient_id) || [visit]).filter(v =>
+        !pregnancyStart || !v.visit_date ||
+        new Date(v.visit_date).getTime() >= new Date(pregnancyStart).getTime()
+      );
       const conditionSet = new Set();
       const categorizedMap = new Map();
 
@@ -1920,10 +1872,26 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
         });
       };
 
+      const processVisitVitals = (currentVisit) => {
+        if (!this.isBPHighRisk(currentVisit.bp_systolic, currentVisit.bp_diastolic)) return;
+
+        const condition = this.getBPStatus(currentVisit.bp_systolic, currentVisit.bp_diastolic);
+        conditionSet.add(condition);
+        const key = `Pregnancy-Related Conditions:::${condition.toLowerCase()}`;
+        if (!categorizedMap.has(key)) {
+          categorizedMap.set(key, {
+            name: condition,
+            category: 'Pregnancy-Related Conditions',
+          });
+        }
+      };
+
       patientVisits.forEach(v => {
         processVisitRiskFactors(v.risk_factors);
+        processVisitVitals(v);
       });
       processVisitRiskFactors(visit.risk_factors);
+      processVisitVitals(visit);
 
       const documentedConditions = Array.from(conditionSet);
 
@@ -1983,6 +1951,7 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
         categorizedConditions: Array.from(categorizedMap.values()),
         condition: conditionDisplay,
         conditionsList: documentedConditions,
+        risk_factors: visit.risk_factors,
         gravida: pregnancy.gravida || null,
         lmd: lmd ? lmd.toISOString().split('T')[0] : null,
         edd: edd ? edd.toISOString().split('T')[0] : null,
@@ -2009,7 +1978,7 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
     }).filter(p => p.hasHealthConditions);
   } catch (err) {
     console.error('Error fetching patients with health conditions:', err);
-    return [];
+    throw err;
   }
 }
 

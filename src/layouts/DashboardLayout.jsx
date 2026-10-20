@@ -12,6 +12,7 @@ import { AuthContext } from '../context/AuthContext';
 import supabase from '../config/supabaseclient';
 import { useModal } from '../context/ModalContext';
 import { useLanguage } from '../context/LanguageContext';
+import { useRolePermissions } from '../context/RolePermissionContext';
 import StaffPageLoader from '../components/Common/StaffPageLoader';
 
 const MotherAIChatAssistant = React.lazy(() => import('../components/MotherDashboard/MotherAIChatAssistant'));
@@ -78,6 +79,7 @@ const DashboardLayout = () => {
     const { user, logout: authLogout } = useContext(AuthContext);
     const { confirm } = useModal();
     const { language, toggleLanguage, t } = useLanguage();
+    const { hasPermission } = useRolePermissions();
 
     // Determine if we are in User View based on path
     const isUserView = location.pathname.startsWith('/mother-home');
@@ -350,10 +352,6 @@ const DashboardLayout = () => {
         return roleStr.toUpperCase();
     };
 
-    const userRole = String(user?.role || '').toLowerCase();
-    const canViewAnalytics = ['admin', 'cho personnel'].includes(userRole);
-    const canViewStationReports = ['admin', 'cho personnel', 'staff', 'station staff'].includes(userRole);
-
     const filteredNavItems = isUserView ? [
         {
             section: t('nav_section_dashboard'),
@@ -374,8 +372,8 @@ const DashboardLayout = () => {
     ] : NAV_ITEMS.map(group => {
         if (group.section === 'Reports') {
             const items = group.items.filter(item => {
-                if (item.path === '/dashboard/analytics') return canViewAnalytics;
-                if (item.path === '/dashboard/stations') return canViewStationReports;
+                if (item.path === '/dashboard/analytics') return hasPermission('reports.analytics.view');
+                if (item.path === '/dashboard/stations') return hasPermission('reports.station.view');
                 return true;
             });
             return { ...group, items };
