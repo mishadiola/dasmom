@@ -559,7 +559,6 @@ const HighRiskCases = () => {
                                 patientId={p.id}
                                 patientStationId={p.stationId}
                                 assignedStaffId={p.assignedStaffId}
-                                role={assignmentAccess.role}
                                 viewerStationId={assignmentAccess.stationId}
                                 onAssigned={({ id: assignedStaffId }) => setPatients(previous => previous.map(patient =>
                                   patient.id === p.id ? { ...patient, assignedStaffId } : patient

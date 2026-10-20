@@ -1842,13 +1842,12 @@ const PrenatalVisits = () => {
                                             <td onClick={event => event.stopPropagation()}>
                                                 <VisitStaffAssignment
                                                     visitId={visit.id}
-                                                    visitStationId={visit.assignedStationId}
+                                                    patientStationId={visit.patientStationId}
                                                     assignedStaffId={visit.assignedStaffId}
                                                     assignedStaffName={visit.assignedStaff}
                                                     assignedStationName={visit.assignedStation}
                                                     visitStationName={visit.visitStation}
                                                     visitStatus={visit.status}
-                                                    userRole={visitAccess?.role}
                                                     userStationId={visitAccess?.stationId}
                                                     onAssigned={async ({ assignedStaffId, assignedStaffName }) => {
                                                         setToast('Healthcare worker assigned successfully.');

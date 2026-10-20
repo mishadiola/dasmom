@@ -1129,7 +1129,7 @@ const PatientProfile = () => {
                                 patientStationId={p.station_ass}
                                 assignedStaffId={currentScheduledAssignment?.assigned_staff || null}
                                 assignedStaffName={currentScheduledAssignment?.assigned_staff_name}
-                                role={assignmentAccess.role}
+                                viewerStationId={assignmentAccess.stationId}
                                 onAssigned={({ id: assignedStaffId, name }) => setP(previous => ({
                                     ...previous,
                                     visits: previous.visits.map(visit => visit.status === 'Scheduled'

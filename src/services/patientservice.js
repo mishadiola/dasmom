@@ -101,7 +101,7 @@ export default class PatientService {
 
     if (role === 'station staff') role = 'staff';
 
-    if (role === 'cho personnel' || role === 'staff') {
+    if (currentUser?.id) {
       const { data } = await this.supabase
         .from('staff_profiles')
         .select('station_ass')
@@ -1233,7 +1233,7 @@ export default class PatientService {
         reschedule_reason,
         calculated_risk,
         risk_factors,
-        patient_basic_info!inner(first_name, last_name, middle_name)
+        patient_basic_info!inner(first_name, last_name, middle_name, station_ass)
       `)
       .order('visit_date', { ascending: false });
 
@@ -1273,6 +1273,7 @@ export default class PatientService {
       attendedDate: visit.attended_date,
       patientName: `${visit.patient_basic_info?.first_name || ''} ${visit.patient_basic_info?.middle_name ? visit.patient_basic_info.middle_name[0] + '. ' : ''}${visit.patient_basic_info?.last_name || ''}`.trim(),
       patientId: visit.patient_id,
+      patientStationId: visit.patient_basic_info?.station_ass || null,
       ga: visit.gestational_age || 'N/A',
       bp: visit.bp_systolic && visit.bp_diastolic ? `${visit.bp_systolic}/${visit.bp_diastolic}` : 'N/A',
       weight: visit.weight_kg ? `${visit.weight_kg}kg` : 'N/A',
@@ -2900,12 +2901,7 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
   }
 
   async reassignPrenatalVisit(visitId, assignedStaffId) {
-    const { role, stationId, currentUser } = await this.getCurrentUserAccess();
-    if (!['staff', 'cho personnel', 'admin'].includes(role)) {
-      throw new Error('Only station staff, CHO personnel, or admins can assign visits.');
-    }
-
-    let assignedStationId = role === 'admin' ? null : stationId;
+    let assignedStationId = null;
     if (assignedStaffId) {
       const { data: profile, error: profileError } = await this.supabase
         .from('staff_profiles')
@@ -2913,9 +2909,6 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
         .eq('id', assignedStaffId)
         .single();
       if (profileError) throw profileError;
-      if (role !== 'admin' && profile.station_ass !== stationId) {
-        throw new Error('You can assign only staff from your own station.');
-      }
       assignedStationId = profile.station_ass;
     }
 
