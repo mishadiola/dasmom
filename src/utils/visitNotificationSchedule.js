@@ -107,6 +107,19 @@ export const isEligibleVisitStatus = (status, defaultStatus = 'scheduled') => {
     return !['cancelled', 'canceled', 'missed', 'attended', 'completed', 'overdue', 'vaccinated'].includes(normalized);
 };
 
+export const getMotherCareStage = (pregnancyStatus, hasDelivery) => {
+    const status = String(pregnancyStatus || '').trim().toLowerCase();
+    if (status === 'pregnant') return 'pregnant';
+    if (status === 'postpartum' || hasDelivery) return 'postpartum';
+    return 'unknown';
+};
+
+export const isVisitRelevantForCareStage = (visitType, careStage) => {
+    if (visitType === 'prenatal') return careStage === 'pregnant';
+    if (visitType === 'postpartum') return careStage === 'postpartum';
+    return visitType === 'maternal_vaccination' || visitType === 'newborn_vaccination';
+};
+
 export const getVisitChangeType = (event) => {
     if (event?.eventType === 'INSERT') return 'added';
     if (event?.eventType !== 'UPDATE') return null;

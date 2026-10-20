@@ -4,8 +4,10 @@ import {
     buildVisitReminderSchedules,
     createVisitNotificationCopy,
     createVisitChangeNotificationCopy,
+    getMotherCareStage,
     getVisitChangeType,
-    isEligibleVisitStatus
+    isEligibleVisitStatus,
+    isVisitRelevantForCareStage
 } from './visitNotificationSchedule.js';
 
 const now = new Date('2026-10-01T01:00:00.000Z');
@@ -88,6 +90,20 @@ test('excludes cancelled, completed, and missed visits from reminder eligibility
     assert.equal(isEligibleVisitStatus('Pending'), true);
 });
 
+test('selects prenatal or postpartum reminders from the current maternal care stage', () => {
+    assert.equal(getMotherCareStage('Pregnant', false), 'pregnant');
+    assert.equal(getMotherCareStage('Postpartum', false), 'postpartum');
+    assert.equal(getMotherCareStage('Unknown', true), 'postpartum');
+    assert.equal(getMotherCareStage('Unknown', false), 'unknown');
+
+    assert.equal(isVisitRelevantForCareStage('prenatal', 'pregnant'), true);
+    assert.equal(isVisitRelevantForCareStage('postpartum', 'pregnant'), false);
+    assert.equal(isVisitRelevantForCareStage('prenatal', 'postpartum'), false);
+    assert.equal(isVisitRelevantForCareStage('postpartum', 'postpartum'), true);
+    assert.equal(isVisitRelevantForCareStage('maternal_vaccination', 'postpartum'), true);
+    assert.equal(isVisitRelevantForCareStage('newborn_vaccination', 'pregnant'), true);
+});
+
 test('detects added and rescheduled visits but ignores unrelated updates', () => {
     assert.equal(getVisitChangeType({ eventType: 'INSERT', new: { visit_date: '2026-10-20' } }), 'added');
     assert.equal(getVisitChangeType({
@@ -108,7 +124,14 @@ test('detects added and rescheduled visits but ignores unrelated updates', () =>
 });
 
 test('creates change alerts for maternal visits, postpartum visits, and vaccinations', () => {
-    const alert = createVisitChangeNotificationCopy('maternal_vaccination', 'rescheduled', '2026-10-20', 'Tdap');
-    assert.equal(alert.title, 'Visit Rescheduled');
-    assert.match(alert.body, /vaccination: Tdap has been rescheduled for October 20, 2026/);
+    const prenatal = createVisitChangeNotificationCopy('prenatal', 'added', '2026-10-20', 'Prenatal checkup');
+    const postpartum = createVisitChangeNotificationCopy('postpartum', 'rescheduled', '2026-10-20', '4 weeks after birth');
+    const vaccination = createVisitChangeNotificationCopy('maternal_vaccination', 'rescheduled', '2026-10-20', 'Tdap');
+
+    assert.equal(prenatal.title, 'New Visit Added');
+    assert.match(prenatal.body, /prenatal visit: Prenatal checkup has been added for October 20, 2026/);
+    assert.equal(postpartum.title, 'Visit Rescheduled');
+    assert.match(postpartum.body, /postpartum visit: 4 weeks after birth has been rescheduled for October 20, 2026/);
+    assert.equal(vaccination.title, 'Visit Rescheduled');
+    assert.match(vaccination.body, /vaccination: Tdap has been rescheduled for October 20, 2026/);
 });

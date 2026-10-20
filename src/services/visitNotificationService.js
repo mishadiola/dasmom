@@ -8,8 +8,10 @@ import {
     createVisitNotificationCopy,
     createVisitChangeNotificationCopy,
     formatVisitDate,
+    getMotherCareStage,
     getVisitChangeType,
-    isEligibleVisitStatus
+    isEligibleVisitStatus,
+    isVisitRelevantForCareStage
 } from '../utils/visitNotificationSchedule';
 
 const DATABASE_NAME = 'dasmom_visit_notifications';
@@ -42,6 +44,7 @@ class VisitNotificationService {
         this.database = null;
         this.databasePromise = null;
         this.motherId = null;
+        this.careStage = 'unknown';
         this.statusListener = null;
         this.syncPromise = null;
         this.syncRequested = false;
@@ -216,8 +219,10 @@ class VisitNotificationService {
         if (visitType === 'vaccination') {
             visitType = visit.newborn_id ? 'newborn_vaccination' : 'maternal_vaccination';
         }
+        if (!isVisitRelevantForCareStage(visitType, this.careStage)) return;
         const scheduledAt = visit.visit_date || visit.scheduled_at
             || visit.scheduled_date || visit.scheduled_vaccination;
+        if (!scheduledAt) return;
         if (!changeType && event?.eventType === 'UPDATE' && scheduledAt) {
             const previousSchedule = await this.queryRows(
                 `SELECT scheduled_visit_at FROM ${TABLE_NAME}
@@ -308,7 +313,14 @@ class VisitNotificationService {
     }
 
     async fetchMotherVisits(motherId) {
-        const [prenatalResult, postpartumResult, newbornResult, maternalVaccinationResult] = await Promise.all([
+        const [
+            prenatalResult,
+            postpartumResult,
+            newbornResult,
+            maternalVaccinationResult,
+            pregnancyResult,
+            deliveryResult
+        ] = await Promise.all([
             supabase
                 .from('prenatal_visits')
                 .select('id, visit_date, visit_number, next_appt_type, status')
@@ -325,13 +337,30 @@ class VisitNotificationService {
                 .from('vaccinations')
                 .select('id, scheduled_vaccination, vaccinated_date, status, notes, dose_number, vaccine_inventory (vaccine_name)')
                 .eq('patient_id', motherId)
-                .is('newborn_id', null)
+                .is('newborn_id', null),
+            supabase
+                .from('pregnancy_info')
+                .select('pregn_postp, created_at')
+                .eq('patient_id', motherId)
+                .order('created_at', { ascending: false })
+                .limit(1),
+            supabase
+                .from('deliveries')
+                .select('id')
+                .eq('mother_id', motherId)
+                .limit(1)
         ]);
         if (prenatalResult.error) throw Object.assign(new Error(prenatalResult.error.message), { ...prenatalResult.error, source: 'prenatal visits' });
         if (postpartumResult.error) throw Object.assign(new Error(postpartumResult.error.message), { ...postpartumResult.error, source: 'postpartum visits' });
         if (newbornResult.error) throw Object.assign(new Error(newbornResult.error.message), { ...newbornResult.error, source: 'newborn records' });
         if (maternalVaccinationResult.error) throw Object.assign(new Error(maternalVaccinationResult.error.message), { ...maternalVaccinationResult.error, source: 'maternal vaccinations' });
+        if (pregnancyResult.error) throw Object.assign(new Error(pregnancyResult.error.message), { ...pregnancyResult.error, source: 'pregnancy status' });
+        if (deliveryResult.error) throw Object.assign(new Error(deliveryResult.error.message), { ...deliveryResult.error, source: 'delivery records' });
 
+        const careStage = getMotherCareStage(
+            pregnancyResult.data?.[0]?.pregn_postp,
+            Boolean(deliveryResult.data?.length)
+        );
         const newborns = newbornResult.data || [];
         const newbornIds = newborns.map(newborn => newborn.id).filter(Boolean);
         let vaccinations = [];
@@ -347,7 +376,8 @@ class VisitNotificationService {
         const newbornById = new Map(newborns.map(newborn => [newborn.id, newborn]));
         const visits = [];
         (prenatalResult.data || []).forEach(visit => {
-            if (!visit.id || !visit.visit_date || !isEligibleVisitStatus(visit.status, 'scheduled')) return;
+            if (!isVisitRelevantForCareStage('prenatal', careStage)
+                || !visit.id || !visit.visit_date || !isEligibleVisitStatus(visit.status, 'scheduled')) return;
             const details = visit.next_appt_type || 'Prenatal checkup';
             visits.push({
                 motherId,
@@ -361,7 +391,8 @@ class VisitNotificationService {
         });
         (postpartumResult.data || []).forEach(visit => {
             const scheduledAt = visit.scheduled_at || visit.scheduled_date;
-            if (!visit.id || !scheduledAt || visit.attended_date
+            if (!isVisitRelevantForCareStage('postpartum', careStage)
+                || !visit.id || !scheduledAt || visit.attended_date
                 || !isEligibleVisitStatus(visit.status, 'scheduled')) return;
             visits.push({
                 motherId,
@@ -405,7 +436,7 @@ class VisitNotificationService {
                 body: vaccination.notes || vaccination.vaccine_inventory?.vaccine_name || 'Newborn vaccination'
             });
         });
-        return { visits, newbornIds };
+        return { visits, newbornIds, careStage };
     }
 
     buildDesiredSchedules(visits) {
@@ -622,13 +653,15 @@ class VisitNotificationService {
             reminderAt: row.reminder_at,
             title: row.title,
             body: row.body
-        }));
+        })).filter(schedule => this.careStage === 'unknown'
+            || isVisitRelevantForCareStage(schedule.visitType, this.careStage));
         return this.reconcileSchedules(motherId, schedules, permissionGranted);
     }
 
     async syncFromSupabase(motherId) {
         const result = await this.fetchMotherVisits(motherId);
         if (this.motherId !== motherId) return { pendingCount: 0, failures: 0, permissionDenied: !this.permissionGranted };
+        this.careStage = result.careStage;
         await this.setVaccinationSubscriptions(motherId, result.newbornIds);
         const schedules = this.buildDesiredSchedules(result.visits);
         return this.reconcileSchedules(motherId, schedules, this.permissionGranted);
@@ -746,6 +779,12 @@ class VisitNotificationService {
             event: '*', schema: 'public', table: 'newborns', filter: `mother_id=eq.${motherId}`
         }, refresh());
         channel.on('postgres_changes', {
+            event: '*', schema: 'public', table: 'pregnancy_info', filter: `patient_id=eq.${motherId}`
+        }, refresh());
+        channel.on('postgres_changes', {
+            event: '*', schema: 'public', table: 'deliveries', filter: `mother_id=eq.${motherId}`
+        }, refresh());
+        channel.on('postgres_changes', {
             event: '*', schema: 'public', table: 'vaccinations', filter: `patient_id=eq.${motherId}`
         }, refresh('vaccination'));
         channel.on('postgres_changes', {
@@ -810,6 +849,16 @@ class VisitNotificationService {
         if (generation !== this.startGeneration) return () => {};
         this.motherId = motherId;
         this.statusListener = statusListener;
+        try {
+            const cachedPatient = await motherOfflineDataService.getPatient(motherId);
+            this.careStage = getMotherCareStage(
+                cachedPatient?.pregnancyStatus,
+                Boolean(cachedPatient?.deliveries?.length)
+            );
+        } catch (error) {
+            console.error('Failed to restore the saved maternal care stage:', error);
+            this.careStage = 'unknown';
+        }
         await LocalNotifications.createChannel({
             id: CHANNEL_ID,
             name: 'Visit reminders',
@@ -870,6 +919,7 @@ class VisitNotificationService {
                 }
                 this.subscribedNewbornIds = [];
                 this.subscribedMotherId = null;
+                this.careStage = 'unknown';
                 this.motherId = null;
                 this.statusListener = null;
             }
