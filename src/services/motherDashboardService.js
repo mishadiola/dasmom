@@ -85,7 +85,8 @@ export async function getMotherDashboardData(patientId) {
       .from('postpartum_visits')
       .select(`
         id, delivery_id, patient_id, visit_number, visit_type, scheduled_date, scheduled_at,
-        status, attended_date, assessment, assigned_staff, assigned_station, station_ass,
+        status, attended_date, assessment, notes, clinical_notes, assigned_staff, assigned_station, station_ass,
+        weight_kg, bp_systolic, bp_diastolic, pulse_bpm, temp_c, resp_rate_cpm,
         staff_profiles:assigned_staff (
           id, full_name, station_ass,
           stations:station_ass (station_name)

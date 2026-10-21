@@ -15,6 +15,7 @@ import supabase from '../../config/supabaseclient';
 import { CHO3_FACEBOOK_URL } from '../../config/appConfig';
 import pregnancySilhouette from '../../assets/images/pregnancy-silhouette.png';
 import { calculateEDD, calculateTimeRemaining, calculateGestationalAge, getTrimester, isNewbornVaccinationEligible } from '../../utils/pregnancyUtils';
+import { getMotherVitalsData } from '../../utils/motherRecordUtils';
 import { useLanguage } from '../../context/LanguageContext';
 import { AuthContext } from '../../context/AuthContext';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
@@ -264,19 +265,17 @@ const MotherDashboard = () => {
                         
                     setAppointments(appts);
 
-                    // health records: extract Weight, BP, and Temp from latest visit
+                    // Keep dashboard health cards aligned with the current vitals view.
                     let weightVal = 'N/A';
                     let bpVal = 'N/A';
                     let tempVal = 'N/A';
-                    
-                    const latestVisit = currentVisits
-                        .filter(v => v.visit_date && (v.weight_kg || (v.bp_systolic && v.bp_diastolic) || v.temp_c || v.temperature))
-                        .sort((a, b) => new Date(b.visit_date) - new Date(a.visit_date))[0];
+
+                    const latestVisit = getMotherVitalsData(patient).current;
 
                     if (latestVisit) {
-                        weightVal = latestVisit.weight_kg ? `${latestVisit.weight_kg} kg` : 'N/A';
-                        bpVal = latestVisit.bp_systolic && latestVisit.bp_diastolic ? `${latestVisit.bp_systolic}/${latestVisit.bp_diastolic}` : 'N/A';
-                        tempVal = (latestVisit.temp_c || latestVisit.temperature) ? `${latestVisit.temp_c || latestVisit.temperature} °C` : 'N/A';
+                        weightVal = latestVisit.weight ? `${latestVisit.weight} kg` : 'N/A';
+                        bpVal = latestVisit.bp ? `${latestVisit.bp}` : 'N/A';
+                        tempVal = latestVisit.temp ? `${latestVisit.temp} °C` : 'N/A';
                     }
 
                     const records = [

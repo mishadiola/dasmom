@@ -140,6 +140,7 @@ const normalizeVitalVisit = (visit, stage, patient) => ({
 export const getMotherVitalsData = patient => {
     const prenatalVisits = uniqueVisits([
         ...(patient?.visits || []),
+        ...(patient?.currentPregnancy?.visits || []),
         ...(patient?.pregnancyHistory || []).flatMap(pregnancy => pregnancy.visits || [])
     ])
         .filter(visit => visitDate(visit) && hasRecordedVitals(visit))
@@ -167,7 +168,7 @@ export const getMotherVitalsData = patient => {
     const stageVisits = currentStage === 'Prenatal'
         ? prenatalVisits
         : currentStage === 'Postpartum'
-            ? postpartumVisits
+            ? (postpartumVisits.length ? postpartumVisits : prenatalVisits)
             : visits;
 
     return {
