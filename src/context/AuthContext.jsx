@@ -42,25 +42,20 @@ export const AuthProvider = ({ children }) => {
             return;
           }
 
-          const expectedGoogleEmail = localStorage.getItem('dasmom_google_email');
-          const sessionEmail = session.user.email?.trim().toLowerCase();
-          
-          if (expectedGoogleEmail && sessionEmail !== expectedGoogleEmail) {
-            localStorage.removeItem('dasmom_google_email');
-            await supabase.auth.signOut();
-            throw new Error('Use Google with the same email registered for your DasMom account.');
-          }
-
           const current = await authService.getAuthUser();
-          const googleEmail = localStorage.getItem('dasmom_google_email');
-          if (googleEmail && current?.id) {
-            authService.recordLoginEvent(current.id);
-          }
-          localStorage.removeItem('dasmom_google_email');
           if (isMounted && requestId === initRequest) {
             
             if (!current) {
-              await supabase.functions.invoke('google-account-check', { body: { action: 'cleanup' } });
+              if (session.user.app_metadata?.provider === 'google') {
+                sessionStorage.setItem(
+                  'dasmom_google_login_error',
+                  'This Google account is not linked to a registered DasMom account.'
+                );
+                const { error: cleanupError } = await supabase.functions.invoke('google-account-check', {
+                  body: { action: 'cleanup' },
+                });
+                if (cleanupError) console.error('Unable to clean up unregistered Google account:', cleanupError);
+              }
               await supabase.auth.signOut();
             }
             // Only update state if user changed to prevent re-render storms

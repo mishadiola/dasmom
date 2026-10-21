@@ -45,6 +45,13 @@ const MotherLogin = () => {
     
     [user, isAuthLoading, navigate, location.state]);
 
+    React.useEffect(() => {
+        const message = sessionStorage.getItem('dasmom_google_login_error');
+        if (!message) return;
+        sessionStorage.removeItem('dasmom_google_login_error');
+        customAlert({ title: t('login_error_title'), text: message, iconType: 'danger' });
+    }, [customAlert, t]);
+
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -93,16 +100,9 @@ const MotherLogin = () => {
 };
 
     const handleGoogleLogin = async () => {
-        const normalizedEmail = email.trim().toLowerCase();
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-            await customAlert({ title: t('login_error_title'), text: 'Enter your registered email before using Google sign-in.', iconType: 'danger' });
-            return;
-        }
-
         setIsLoading(true);
         try {
-            await prepareFirstLoginWelcome();
-            await authService.signInWithGoogle(normalizedEmail, `${DASMOM_APP_URL}/mother-login`);
+            await authService.signInWithGoogle(`${DASMOM_APP_URL}/mother-login`);
         } 
         
         catch (error) {

@@ -1,6 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { accountEmail, APK_DOWNLOAD_URL, APP_URL, DUPLICATE_EMAIL_MESSAGE, escapeHtml, isDuplicateEmailError, PASSWORD_RESET_URL, sendBrevoEmail } from '../_shared/email.ts';
+import { accountEmail, APK_DOWNLOAD_URL, DUPLICATE_EMAIL_MESSAGE, escapeHtml, isDuplicateEmailError, MOTHER_LANDING_URL, PASSWORD_RESET_URL, sendBrevoEmail } from '../_shared/email.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -263,7 +263,7 @@ Deno.serve(async (request: Request) => {
       passwordSetupBlock = `<p><a href="${escapeHtml(setupLink)}">Set or reset your DASMOM password</a></p>`;
     }
     const pregnancy = mother.pregnancy || {};
-    const html = `<h2>${isNewPregnancy ? `Congratulations, ${escapeHtml(name)}!` : `Welcome to DASMOM, ${escapeHtml(name)}!`}</h2><p>${isNewPregnancy ? 'Your new pregnancy has been registered in DASMOM.' : 'Your mother account has been created.'}</p>${passwordSetupBlock}<p><a href="${escapeHtml(APK_DOWNLOAD_URL)}">Download the DasMom Android app (APK)</a></p><h3>Pregnancy information</h3><p><strong>LMP:</strong> ${escapeHtml(dateLabel(pregnancy.lmd))}<br><strong>EDD:</strong> ${escapeHtml(dateLabel(pregnancy.edd))}<br><strong>Pregnancy type:</strong> ${escapeHtml(pregnancy.pregnancy_type || 'Not set')}<br><strong>Gravida / Para:</strong> ${escapeHtml(pregnancy.gravida || '-')} / ${escapeHtml(pregnancy.para || '-')}</p><h3>Your schedule</h3><table border="1" cellpadding="8" cellspacing="0"><thead><tr><th>Visit</th><th>Date</th><th>Type</th><th>Status</th></tr></thead><tbody>${scheduleRows(mother.visits)}</tbody></table><p><a href="${escapeHtml(APP_URL)}">Open DASMOM</a></p><p>Please contact your health worker if any information is incorrect.</p>`;
+    const html = `<h2>${isNewPregnancy ? `Congratulations, ${escapeHtml(name)}!` : `Welcome to DASMOM, ${escapeHtml(name)}!`}</h2><p>${isNewPregnancy ? 'Your new pregnancy has been registered in DASMOM.' : 'Your mother account has been created.'}</p>${passwordSetupBlock}<p><a href="${escapeHtml(APK_DOWNLOAD_URL)}">Download the DasMom Android app (APK)</a></p><h3>Pregnancy information</h3><p><strong>LMP:</strong> ${escapeHtml(dateLabel(pregnancy.lmd))}<br><strong>EDD:</strong> ${escapeHtml(dateLabel(pregnancy.edd))}<br><strong>Pregnancy type:</strong> ${escapeHtml(pregnancy.pregnancy_type || 'Not set')}<br><strong>Gravida / Para:</strong> ${escapeHtml(pregnancy.gravida || '-')} / ${escapeHtml(pregnancy.para || '-')}</p><h3>Your schedule</h3><table border="1" cellpadding="8" cellspacing="0"><thead><tr><th>Visit</th><th>Date</th><th>Type</th><th>Status</th></tr></thead><tbody>${scheduleRows(mother.visits)}</tbody></table><p><a href="${escapeHtml(MOTHER_LANDING_URL)}">Open DASMOM</a></p><p>Please contact your health worker if any information is incorrect.</p>`;
 
     currentStep = 'Brevo email sending';
     console.log('[create-mother] Sending Brevo email...');
