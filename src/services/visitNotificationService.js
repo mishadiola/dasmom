@@ -10,6 +10,7 @@ import {
     formatVisitDate,
     getMotherCareStage,
     getVisitChangeType,
+    getVisitSnapshotChanges,
     isEligibleVisitStatus,
     isVisitRelevantForCareStage
 } from '../utils/visitNotificationSchedule';
@@ -17,6 +18,8 @@ import {
 const DATABASE_NAME = 'dasmom_visit_notifications';
 const TABLE_NAME = 'visit_notification_schedules';
 const CHANGE_TABLE_NAME = 'visit_change_notifications';
+const SNAPSHOT_TABLE_NAME = 'visit_change_snapshots';
+const SNAPSHOT_STATE_TABLE_NAME = 'visit_change_snapshot_state';
 const CHANNEL_ID = 'visit-reminders';
 const sqlite = new SQLiteConnection(CapacitorSQLite);
 const createScheduleTableSql = tableName => `
@@ -55,6 +58,7 @@ class VisitNotificationService {
         this.subscribedNewbornIds = [];
         this.subscribedMotherId = null;
         this.changeNotificationKeys = new Set();
+        this.realtimeStatus = 'connecting';
     }
 
     isSupported() {
@@ -117,6 +121,17 @@ class VisitNotificationService {
                 );
                 CREATE INDEX IF NOT EXISTS visit_change_mother_idx
                     ON ${CHANGE_TABLE_NAME} (mother_id);
+                CREATE TABLE IF NOT EXISTS ${SNAPSHOT_TABLE_NAME} (
+                    mother_id TEXT NOT NULL,
+                    visit_type TEXT NOT NULL,
+                    visit_id TEXT NOT NULL,
+                    snapshot_json TEXT NOT NULL,
+                    PRIMARY KEY (mother_id, visit_type, visit_id)
+                );
+                CREATE TABLE IF NOT EXISTS ${SNAPSHOT_STATE_TABLE_NAME} (
+                    mother_id TEXT PRIMARY KEY NOT NULL,
+                    initialized_at TEXT NOT NULL
+                );
             `);
             return database;
         })();
@@ -213,16 +228,15 @@ class VisitNotificationService {
 
     async notifyVisitChange(motherId, visitType, event) {
         let changeType = getVisitChangeType(event);
-        const visit = event?.new;
-        if (!visit?.id) return;
+        const visit = event?.new || event?.old;
+        if (!visit?.id) return true;
 
         if (visitType === 'vaccination') {
             visitType = visit.newborn_id ? 'newborn_vaccination' : 'maternal_vaccination';
         }
-        if (!isVisitRelevantForCareStage(visitType, this.careStage)) return;
         const scheduledAt = visit.visit_date || visit.scheduled_at
             || visit.scheduled_date || visit.scheduled_vaccination;
-        if (!scheduledAt) return;
+        if (!scheduledAt) return true;
         if (!changeType && event?.eventType === 'UPDATE' && scheduledAt) {
             const previousSchedule = await this.queryRows(
                 `SELECT scheduled_visit_at FROM ${TABLE_NAME}
@@ -247,20 +261,34 @@ class VisitNotificationService {
                 changeType = 'rescheduled';
             }
         }
-        if (!changeType) return;
-        if (!isEligibleVisitStatus(visit.status, visitType.includes('vaccination') ? 'pending' : 'scheduled')) return;
-        if (visit.vaccinated_date || visit.attended_date) return;
+        if (!changeType) return true;
+        if (changeType !== 'cancelled') {
+            if (!isEligibleVisitStatus(visit.status, visitType.includes('vaccination') ? 'pending' : 'scheduled')) return true;
+            if (visit.vaccinated_date || visit.attended_date) return true;
+        }
 
-        const eventTime = event.commit_timestamp || visit.rescheduled_at || visit.updated_at || scheduledAt || '';
-        const eventKey = `${motherId}:${visitType}:${visit.id}:${changeType}:${eventTime}`;
-        if (this.changeNotificationKeys.has(eventKey)) return;
+        const oldVisit = event.old || {};
+        const nextVisit = event.new || {};
+        const getScheduledAt = row => row.visit_date || row.scheduled_at
+            || row.scheduled_date || row.scheduled_vaccination || '';
+        const eventKey = JSON.stringify([
+            motherId,
+            visitType,
+            visit.id,
+            changeType,
+            getScheduledAt(oldVisit),
+            getScheduledAt(nextVisit),
+            oldVisit.status || '',
+            nextVisit.status || ''
+        ]);
+        if (this.changeNotificationKeys.has(eventKey)) return false;
         this.changeNotificationKeys.add(eventKey);
 
         try {
             if ((await this.queryRows(
                 `SELECT event_key FROM ${CHANGE_TABLE_NAME} WHERE event_key = ?`,
                 [eventKey]
-            )).length) return;
+            )).length) return true;
 
             const nativeId = await this.allocateNativeId();
             const vaccineName = visit.notes || visit.vaccine_inventory?.vaccine_name;
@@ -289,11 +317,74 @@ class VisitNotificationService {
                 await this.run(`DELETE FROM ${CHANGE_TABLE_NAME} WHERE event_key = ?`, [eventKey]);
                 throw error;
             }
+            return true;
         } catch (error) {
             console.error('Failed to notify mother about a visit change:', error);
+            return false;
         } finally {
             this.changeNotificationKeys.delete(eventKey);
         }
+    }
+
+    async updateVisitChangeSnapshot(motherId, visits) {
+        const initialized = await this.queryRows(
+            `SELECT mother_id FROM ${SNAPSHOT_STATE_TABLE_NAME} WHERE mother_id = ?`,
+            [motherId]
+        );
+        const previousRows = await this.queryRows(
+            `SELECT visit_type, visit_id, snapshot_json
+             FROM ${SNAPSHOT_TABLE_NAME} WHERE mother_id = ?`,
+            [motherId]
+        );
+        const previousByKey = new Map(previousRows.map(row => [
+            `${row.visit_type}:${row.visit_id}`,
+            JSON.parse(row.snapshot_json)
+        ]));
+
+        if (initialized.length) {
+            let notificationFailed = false;
+            const toVisitRecord = (snapshot, dateField) => ({
+                id: snapshot.visitId,
+                status: snapshot.status,
+                [dateField]: snapshot.scheduledAt,
+                next_appt_type: snapshot.visitName,
+                visit_type: snapshot.visitName,
+                notes: snapshot.vaccineName,
+                dose_number: snapshot.doseNumber,
+                newborn_id: snapshot.newbornId,
+                attended_date: snapshot.attendedDate,
+                vaccinated_date: snapshot.vaccinatedDate
+            });
+            for (const change of getVisitSnapshotChanges(
+                [...previousByKey.values()],
+                visits
+            )) {
+                const dateField = change.visitType === 'prenatal' ? 'visit_date'
+                    : change.visitType === 'postpartum' ? 'scheduled_date' : 'scheduled_vaccination';
+                const notified = await this.notifyVisitChange(motherId, change.visitType, {
+                    eventType: change.eventType,
+                    old: change.old ? toVisitRecord(change.old, dateField) : undefined,
+                    new: change.new ? toVisitRecord(change.new, dateField) : undefined
+                });
+                notificationFailed = notificationFailed || !notified;
+            }
+            if (notificationFailed) return;
+        }
+
+        await this.run(`DELETE FROM ${SNAPSHOT_TABLE_NAME} WHERE mother_id = ?`, [motherId]);
+        for (const visit of visits) {
+            await this.run(
+                `INSERT INTO ${SNAPSHOT_TABLE_NAME}
+                    (mother_id, visit_type, visit_id, snapshot_json)
+                 VALUES (?, ?, ?, ?)`,
+                [motherId, visit.visitType, visit.visitId, JSON.stringify(visit)]
+            );
+        }
+        await this.run(
+            `INSERT OR IGNORE INTO ${SNAPSHOT_STATE_TABLE_NAME} (mother_id, initialized_at)
+             VALUES (?, ?)`,
+            [motherId, new Date().toISOString()]
+        );
     }
 
     async removeDeliveredNotificationIds(ids) {
@@ -323,7 +414,7 @@ class VisitNotificationService {
         ] = await Promise.all([
             supabase
                 .from('prenatal_visits')
-                .select('id, visit_date, visit_number, next_appt_type, status')
+                .select('id, visit_date, visit_number, next_appt_type, status, attended_date')
                 .eq('patient_id', motherId),
             supabase
                 .from('postpartum_visits')
@@ -385,6 +476,9 @@ class VisitNotificationService {
                 visitType: 'prenatal',
                 scheduledAt: visit.visit_date,
                 visitNumber: visit.visit_number,
+                status: visit.status,
+                attendedDate: visit.attended_date,
+                visitName: details,
                 title: 'Upcoming Prenatal Visit',
                 body: details
             });
@@ -400,6 +494,8 @@ class VisitNotificationService {
                 visitType: 'postpartum',
                 scheduledAt,
                 visitName: visit.visit_type,
+                status: visit.status,
+                attendedDate: visit.attended_date,
                 title: 'Upcoming Postpartum Visit',
                 body: visit.visit_type || 'Postpartum follow-up'
             });
@@ -414,6 +510,8 @@ class VisitNotificationService {
                 scheduledAt: vaccination.scheduled_vaccination,
                 vaccineName: vaccination.notes || vaccination.vaccine_inventory?.vaccine_name,
                 doseNumber: vaccination.dose_number,
+                status: vaccination.status,
+                vaccinatedDate: vaccination.vaccinated_date,
                 title: 'Upcoming Vaccination',
                 body: vaccination.notes || vaccination.vaccine_inventory?.vaccine_name || 'Maternal vaccination'
             });
@@ -432,11 +530,52 @@ class VisitNotificationService {
                 babyName: newborn.baby_name,
                 vaccineName: vaccination.notes || vaccination.vaccine_inventory?.vaccine_name,
                 doseNumber: vaccination.dose_number,
+                status: vaccination.status,
+                vaccinatedDate: vaccination.vaccinated_date,
+                newbornId: vaccination.newborn_id,
                 title: 'Upcoming Newborn Vaccination',
                 body: vaccination.notes || vaccination.vaccine_inventory?.vaccine_name || 'Newborn vaccination'
             });
         });
-        return { visits, newbornIds, careStage };
+        const visitChanges = [
+            ...(prenatalResult.data || []).map(visit => ({
+                visitType: 'prenatal',
+                visitId: String(visit.id),
+                scheduledAt: visit.visit_date,
+                status: visit.status,
+                visitName: visit.next_appt_type || 'Prenatal checkup',
+                attendedDate: visit.attended_date
+            })),
+            ...(postpartumResult.data || []).map(visit => ({
+                visitType: 'postpartum',
+                visitId: String(visit.id),
+                scheduledAt: visit.scheduled_at || visit.scheduled_date,
+                status: visit.status,
+                visitName: visit.visit_type,
+                attendedDate: visit.attended_date
+            })),
+            ...(maternalVaccinationResult.data || []).map(visit => ({
+                visitType: 'maternal_vaccination',
+                visitId: String(visit.id),
+                scheduledAt: visit.scheduled_vaccination,
+                status: visit.status,
+                vaccineName: visit.notes || visit.vaccine_inventory?.vaccine_name,
+                doseNumber: visit.dose_number,
+                vaccinatedDate: visit.vaccinated_date
+            })),
+            ...vaccinations.map(visit => ({
+                visitType: 'newborn_vaccination',
+                visitId: String(visit.id),
+                scheduledAt: visit.scheduled_vaccination,
+                status: visit.status,
+                vaccineName: visit.notes || visit.vaccine_inventory?.vaccine_name,
+                doseNumber: visit.dose_number,
+                vaccinatedDate: visit.vaccinated_date,
+                newbornId: visit.newborn_id,
+                babyName: newbornById.get(visit.newborn_id)?.baby_name
+            }))
+        ].filter(visit => visit.visitId && visit.scheduledAt);
+        return { visits, visitChanges, newbornIds, careStage };
     }
 
     buildDesiredSchedules(visits) {
@@ -663,6 +802,7 @@ class VisitNotificationService {
         if (this.motherId !== motherId) return { pendingCount: 0, failures: 0, permissionDenied: !this.permissionGranted };
         this.careStage = result.careStage;
         await this.setVaccinationSubscriptions(motherId, result.newbornIds);
+        await this.updateVisitChangeSnapshot(motherId, result.visitChanges);
         const schedules = this.buildDesiredSchedules(result.visits);
         return this.reconcileSchedules(motherId, schedules, this.permissionGranted);
     }
@@ -687,10 +827,15 @@ class VisitNotificationService {
                 message: `You’re offline. You’re viewing information saved on this device. Connect to Wi-Fi or turn on mobile data to sync changes.${result.pendingCount ? ` Your ${result.pendingCount} saved visit reminder(s) remain scheduled.` : ''}`
             });
         } else {
+            const message = result.pendingCount
+                ? `Schedule-change alerts are on, with ${result.pendingCount} upcoming visit reminder(s) scheduled.`
+                : 'Schedule-change alerts are on. New eligible visits will get reminders as their dates approach.';
             this.setStatus({
                 state: result.pendingCount ? 'active' : 'empty',
                 pendingCount: result.pendingCount,
-                message: 'You’re online. Your records are saved on this device and available offline.'
+                message: this.realtimeStatus === 'polling'
+                    ? `${message} Live updates are checked every 15 seconds while the app is open.`
+                    : message
             });
         }
     }
@@ -790,7 +935,18 @@ class VisitNotificationService {
         channel.on('postgres_changes', {
             event: '*', schema: 'public', table: 'vaccinations', filter: `patient_id=eq.${motherId}`
         }, refresh);
-        channel.subscribe();
+        channel.subscribe((status, error) => {
+            if (status === 'SUBSCRIBED') this.realtimeStatus = 'connected';
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                this.realtimeStatus = 'polling';
+                console.error('Realtime schedule updates could not be connected:', error || status);
+                this.setStatus({
+                    state: 'sync-failed',
+                    pendingCount: 0,
+                    message: 'Live schedule updates could not connect. DasMom will check for changes every 15 seconds while open.'
+                });
+            }
+        });
         this.visitChannel = channel;
     }
 
@@ -821,7 +977,18 @@ class VisitNotificationService {
                 if (this.motherId === motherId) this.requestSync();
             });
         });
-        channel.subscribe();
+        channel.subscribe((status, error) => {
+            if (status === 'SUBSCRIBED') this.realtimeStatus = 'connected';
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                this.realtimeStatus = 'polling';
+                console.error('Realtime newborn vaccination updates could not be connected:', error || status);
+                this.setStatus({
+                    state: 'sync-failed',
+                    pendingCount: 0,
+                    message: 'Live schedule updates could not connect. DasMom will check for changes every 15 seconds while open.'
+                });
+            }
+        });
         this.vaccinationChannel = channel;
     }
 
@@ -849,6 +1016,7 @@ class VisitNotificationService {
         if (generation !== this.startGeneration) return () => {};
         this.motherId = motherId;
         this.statusListener = statusListener;
+        this.realtimeStatus = 'connecting';
         try {
             const cachedPatient = await motherOfflineDataService.getPatient(motherId);
             this.careStage = getMotherCareStage(
@@ -887,12 +1055,18 @@ class VisitNotificationService {
             });
         };
         const onOnline = () => this.requestSync();
+        const pollForVisitChanges = () => {
+            if (this.motherId === motherId && !this.syncPromise && document.visibilityState === 'visible') {
+                this.requestSync();
+            }
+        };
         const onForeground = () => {
             if (document.visibilityState === 'visible') requestRefresh();
         };
         window.addEventListener('online', onOnline);
         window.addEventListener('focus', requestRefresh);
         document.addEventListener('visibilitychange', onForeground);
+        const pollingTimer = window.setInterval(pollForVisitChanges, 15000);
         if (navigator.onLine) {
             try {
                 await this.subscribeToMotherVisits(motherId);
@@ -907,6 +1081,7 @@ class VisitNotificationService {
             window.removeEventListener('online', onOnline);
             window.removeEventListener('focus', requestRefresh);
             document.removeEventListener('visibilitychange', onForeground);
+            window.clearInterval(pollingTimer);
             if (this.motherId === motherId) {
                 this.startGeneration += 1;
                 if (this.visitChannel) {
@@ -920,6 +1095,7 @@ class VisitNotificationService {
                 this.subscribedNewbornIds = [];
                 this.subscribedMotherId = null;
                 this.careStage = 'unknown';
+                this.realtimeStatus = 'connecting';
                 this.motherId = null;
                 this.statusListener = null;
             }

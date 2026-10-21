@@ -5,17 +5,24 @@ import AuthService from '../services/authservice';
 import supabase from '../config/supabaseclient';
 import { NATIVE_AUTH_CALLBACK_URL } from '../config/appConfig';
 import { isAndroidApp } from '../services/secureStorage';
+import visitNotificationService from '../services/visitNotificationService';
 
 export const AuthContext = createContext({
   user: null,
   setUser: () => {},
   logout: () => {},
   isAuthLoading: true,
+  visitNotificationStatus: { state: 'initializing', pendingCount: 0, message: '' },
 });
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [visitNotificationStatus, setVisitNotificationStatus] = useState({
+    state: 'initializing',
+    pendingCount: 0,
+    message: ''
+  });
   const userRef = useRef(null);
   userRef.current = user;
   const authService = new AuthService();
@@ -210,6 +217,44 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
+  useEffect(() => {
+    if (isAuthLoading) return undefined;
+    const role = String(user?.role || '').trim().toLowerCase().replace(/_/g, ' ');
+    if (!isAndroidApp() || !user?.id || !['mother', 'patient'].includes(role)) {
+      setVisitNotificationStatus({ state: 'unsupported', pendingCount: 0, message: '' });
+      return undefined;
+    }
+
+    let active = true;
+    let stopNotifications;
+    setVisitNotificationStatus({
+      state: 'initializing',
+      pendingCount: 0,
+      message: 'Setting up visit notifications...'
+    });
+
+    visitNotificationService.start(user.id, status => {
+      if (active) setVisitNotificationStatus(status);
+    }).then(stop => {
+      if (active) stopNotifications = stop;
+      else stop();
+    }).catch(error => {
+      console.error('Unable to start visit notifications:', error);
+      if (active) {
+        setVisitNotificationStatus({
+          state: 'failed',
+          pendingCount: 0,
+          message: 'Visit notifications could not be started. Reopen DasMom to try again.'
+        });
+      }
+    });
+
+    return () => {
+      active = false;
+      stopNotifications?.();
+    };
+  }, [isAuthLoading, user?.id, user?.role]);
+
   const logout = async () => {
     await authService.logout();
     setUser(null);
@@ -217,7 +262,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, setUser, logout, isAuthLoading }}>
+    <AuthContext.Provider value={{ user, setUser, logout, isAuthLoading, visitNotificationStatus }}>
       {children}
     </AuthContext.Provider>
   );

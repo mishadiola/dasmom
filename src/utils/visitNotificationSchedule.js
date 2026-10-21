@@ -122,10 +122,18 @@ export const isVisitRelevantForCareStage = (visitType, careStage) => {
 
 export const getVisitChangeType = (event) => {
     if (event?.eventType === 'INSERT') return 'added';
+    if (event?.eventType === 'DELETE') return 'cancelled';
     if (event?.eventType !== 'UPDATE') return null;
 
     const oldVisit = event.old || {};
     const newVisit = event.new || {};
+    const previousStatus = String(oldVisit.status || '').trim().toLowerCase();
+    const nextStatus = String(newVisit.status || '').trim().toLowerCase();
+    if (
+        ['scheduled', 'pending'].includes(previousStatus)
+        && ['cancelled', 'canceled'].includes(nextStatus)
+    ) return 'cancelled';
+
     if (oldVisit.rescheduled_at && newVisit.rescheduled_at
         && newVisit.rescheduled_at !== oldVisit.rescheduled_at) {
         return 'rescheduled';
@@ -136,9 +144,41 @@ export const getVisitChangeType = (event) => {
     return previousDate && nextDate && previousDate !== nextDate ? 'rescheduled' : null;
 };
 
+export const getVisitSnapshotChanges = (previousVisits, nextVisits) => {
+    const keyFor = visit => `${visit.visitType}:${visit.visitId}`;
+    const previousByKey = new Map(previousVisits.map(visit => [keyFor(visit), visit]));
+    const nextByKey = new Map(nextVisits.map(visit => [keyFor(visit), visit]));
+    const changes = [];
+
+    nextByKey.forEach((nextVisit, key) => {
+        const previousVisit = previousByKey.get(key);
+        if (!previousVisit) {
+            changes.push({ visitType: nextVisit.visitType, eventType: 'INSERT', new: nextVisit });
+            return;
+        }
+        const dateChanged = formatVisitDate(previousVisit.scheduledAt) !== formatVisitDate(nextVisit.scheduledAt);
+        const statusChanged = String(previousVisit.status || '').toLowerCase()
+            !== String(nextVisit.status || '').toLowerCase();
+        if (dateChanged || statusChanged) {
+            changes.push({
+                visitType: nextVisit.visitType,
+                eventType: 'UPDATE',
+                old: previousVisit,
+                new: nextVisit
+            });
+        }
+    });
+
+    previousByKey.forEach((previousVisit, key) => {
+        if (!nextByKey.has(key)) {
+            changes.push({ visitType: previousVisit.visitType, eventType: 'DELETE', old: previousVisit });
+        }
+    });
+    return changes;
+};
+
 export const createVisitChangeNotificationCopy = (visitType, changeType, scheduledAt, visitName = '') => {
     const date = formatVisitDate(scheduledAt);
-    const action = changeType === 'rescheduled' ? 'rescheduled' : 'added';
     const detail = visitName ? `: ${visitName}` : '';
     const typeName = {
         prenatal: 'prenatal visit',
@@ -146,7 +186,16 @@ export const createVisitChangeNotificationCopy = (visitType, changeType, schedul
         maternal_vaccination: 'vaccination',
         newborn_vaccination: 'newborn vaccination'
     }[visitType] || 'visit';
+    if (changeType === 'cancelled') {
+        return {
+            title: 'Visit Cancelled',
+            body: date
+                ? `Your ${typeName}${detail} scheduled for ${date} has been cancelled.`
+                : `Your ${typeName}${detail} has been cancelled.`
+        };
+    }
 
+    const action = changeType === 'rescheduled' ? 'rescheduled' : 'added';
     return {
         title: changeType === 'rescheduled' ? 'Visit Rescheduled' : 'New Visit Added',
         body: date

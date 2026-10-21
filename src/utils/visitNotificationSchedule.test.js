@@ -6,6 +6,7 @@ import {
     createVisitChangeNotificationCopy,
     getMotherCareStage,
     getVisitChangeType,
+    getVisitSnapshotChanges,
     isEligibleVisitStatus,
     isVisitRelevantForCareStage
 } from './visitNotificationSchedule.js';
@@ -107,6 +108,10 @@ test('selects prenatal or postpartum reminders from the current maternal care st
 test('detects added and rescheduled visits but ignores unrelated updates', () => {
     assert.equal(getVisitChangeType({ eventType: 'INSERT', new: { visit_date: '2026-10-20' } }), 'added');
     assert.equal(getVisitChangeType({
+        eventType: 'DELETE',
+        old: { status: 'Scheduled', visit_date: '2026-10-20' }
+    }), 'cancelled');
+    assert.equal(getVisitChangeType({
         eventType: 'UPDATE',
         old: { scheduled_date: '2026-10-20' },
         new: { scheduled_date: '2026-10-21' }
@@ -118,9 +123,37 @@ test('detects added and rescheduled visits but ignores unrelated updates', () =>
     }), null);
     assert.equal(getVisitChangeType({
         eventType: 'UPDATE',
+        old: { scheduled_vaccination: '2026-10-20', status: 'Pending' },
+        new: { scheduled_vaccination: '2026-10-20', status: 'Cancelled' }
+    }), 'cancelled');
+    assert.equal(getVisitChangeType({
+        eventType: 'UPDATE',
         old: { id: 'visit-1' },
         new: { id: 'visit-1', rescheduled_at: '2026-10-20T10:00:00Z', status: 'Attended' }
     }), null);
+});
+
+test('detects schedule additions, date or status changes, and deletions from snapshots', () => {
+    const original = [
+        { visitType: 'prenatal', visitId: 'visit-1', scheduledAt: '2026-10-20', status: 'Scheduled' },
+        { visitType: 'postpartum', visitId: 'visit-2', scheduledAt: '2026-10-22', status: 'Scheduled' }
+    ];
+    const updated = [
+        { visitType: 'prenatal', visitId: 'visit-1', scheduledAt: '2026-10-21', status: 'Scheduled' },
+        { visitType: 'maternal_vaccination', visitId: 'visit-3', scheduledAt: '2026-10-25', status: 'Pending' }
+    ];
+
+    const changes = getVisitSnapshotChanges(original, updated);
+    assert.deepEqual(changes.map(change => [change.visitType, change.eventType]), [
+        ['prenatal', 'UPDATE'],
+        ['maternal_vaccination', 'INSERT'],
+        ['postpartum', 'DELETE']
+    ]);
+    assert.equal(getVisitSnapshotChanges(updated, updated).length, 0);
+    assert.equal(getVisitSnapshotChanges(
+        [{ ...original[0], status: 'Scheduled' }],
+        [{ ...original[0], status: 'Cancelled' }]
+    )[0].eventType, 'UPDATE');
 });
 
 test('creates change alerts for maternal visits, postpartum visits, and vaccinations', () => {
@@ -134,4 +167,13 @@ test('creates change alerts for maternal visits, postpartum visits, and vaccinat
     assert.match(postpartum.body, /postpartum visit: 4 weeks after birth has been rescheduled for October 20, 2026/);
     assert.equal(vaccination.title, 'Visit Rescheduled');
     assert.match(vaccination.body, /vaccination: Tdap has been rescheduled for October 20, 2026/);
+});
+
+test('creates cancellation alerts for each scheduled visit type', () => {
+    const postpartum = createVisitChangeNotificationCopy('postpartum', 'cancelled', '2026-10-20', '6 weeks after birth');
+    const newbornVaccination = createVisitChangeNotificationCopy('newborn_vaccination', 'cancelled', '2026-10-20', 'BCG');
+
+    assert.equal(postpartum.title, 'Visit Cancelled');
+    assert.match(postpartum.body, /postpartum visit: 6 weeks after birth scheduled for October 20, 2026 has been cancelled/);
+    assert.match(newbornVaccination.body, /newborn vaccination: BCG scheduled for October 20, 2026 has been cancelled/);
 });
