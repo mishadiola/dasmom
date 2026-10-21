@@ -45,11 +45,12 @@ export default function Login() {
     }, [user, isAuthLoading, navigate, location.state]);
 
   useEffect(() => {
+    if (isAuthLoading) return;
     const message = sessionStorage.getItem('dasmom_google_login_error');
     if (!message) return;
     sessionStorage.removeItem('dasmom_google_login_error');
     setErrors(prev => ({ ...prev, form: message }));
-  }, []);
+  }, [isAuthLoading]);
 
   useEffect(() => {
     try {
