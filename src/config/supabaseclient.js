@@ -11,6 +11,7 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey, {
     auth: {
         lockAcquireTimeout: 30000,
+        ...(isAndroidApp() ? { flowType: 'pkce' } : {}),
         ...(isAndroidApp() ? { storage: supabaseSecureStorage } : {})
     }
 })

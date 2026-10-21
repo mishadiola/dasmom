@@ -61,6 +61,16 @@ const MotherLogin = () => {
 
     const [resetModalOpen, setResetModalOpen] = useState(false);
 
+    React.useEffect(() => {
+        const handleGoogleLoginError = event => {
+            sessionStorage.removeItem('dasmom_google_login_error');
+            setIsLoading(false);
+            customAlert({ title: t('login_error_title'), text: event.detail, iconType: 'danger' });
+        };
+        window.addEventListener('dasmom-google-login-error', handleGoogleLoginError);
+        return () => window.removeEventListener('dasmom-google-login-error', handleGoogleLoginError);
+    }, [customAlert, t]);
+
     const handleForgotPasswordClick = (event) => {
         event.preventDefault();
         setResetModalOpen(true);
@@ -100,10 +110,10 @@ const MotherLogin = () => {
     }
 };
 
-    const handleGoogleLogin = async () => {
-        setIsLoading(true);
-        try {
-            await authService.signInWithGoogle(`${DASMOM_APP_URL}/mother-login`);
+const handleGoogleLogin = async () => {
+    setIsLoading(true);
+    try {
+        await authService.signInWithGoogle(`${DASMOM_APP_URL}/mother-login`);
         } 
         
         catch (error) {

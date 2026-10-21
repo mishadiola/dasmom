@@ -65,7 +65,10 @@ const Landing = () => {
           throw new Error("Landing statistics returned an invalid response.");
         }
 
-        if (isMounted) setDbStats(stats);
+        if (isMounted) {
+          setDbStats(stats);
+          setStatsError(false);
+        }
       } catch (err) {
         console.error("Error fetching stats:", err);
         if (isMounted) setStatsError(true);
@@ -454,12 +457,12 @@ const Landing = () => {
                       Deliveries Recorded
                     </span>
                   </div>
+                  {statsLoading || statsError ? (
+                    <p className="ldg-stats-status" role="status" aria-live="polite">
+                      {statsLoading ? "Loading live statistics..." : "Live statistics are temporarily unavailable."}
+                    </p>
+                  ) : null}
                 </div>
-                {(statsLoading || statsError) && (
-                  <p className="ldg-stats-status" role="status">
-                    {statsLoading ? "Loading live statistics..." : "Live statistics are temporarily unavailable."}
-                  </p>
-                )}
               </div>
             </div>
           </div>
@@ -613,7 +616,7 @@ const Landing = () => {
                   </div>
                   <div className="ldg-about-vc-stat">
                     <span className="ldg-about-vc-stat__val">{displayStat(dbStats.stations)}</span>
-                    <span className="ldg-about-vc-stat__lbl">Health Stations</span>
+                    <span className="ldg-about-vc-stat__lbl">Stations</span>
                   </div>
                 </div>
               </div>

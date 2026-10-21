@@ -1,26 +1,15 @@
 
 import supabase from '../config/supabaseclient';
 import { getRoleConfig } from '../config/roleConfig';
-import { DASMOM_APP_URL } from '../config/appConfig';
-import { isAndroidApp, secureStorage } from './secureStorage';
-import motherOfflineDataService from './motherOfflineDataService';
+import { DASMOM_APP_URL, NATIVE_AUTH_CALLBACK_URL } from '../config/appConfig';
 import { getClientDeviceString } from '../utils/formatters';
+import { Browser } from '@capacitor/browser';
+import { isAndroidApp } from './secureStorage';
 
 const DUPLICATE_EMAIL_MESSAGE = 'Email already exists. Please use a different email address.';
 const normalizeRoleName = role => String(role || '').trim().toLowerCase().replace(/_/g, ' ');
-const authProfileKey = userId => `dasmom.auth_profile.${userId}`;
 let cachedAuthUser = null;
 let authUserLookupPromise = null;
-
-const isNetworkError = error => {
-  const message = String(error?.message || error || '').toLowerCase();
-  return error instanceof TypeError
-    || !error?.status && (message.includes('network')
-      || message.includes('fetch')
-      || message.includes('timeout')
-      || message.includes('timed out')
-      || message.includes('offline'));
-};
 
 export default class AuthService {
   constructor() {
@@ -227,11 +216,20 @@ export default class AuthService {
   }
 
   async signInWithGoogle(redirectTo = `${DASMOM_APP_URL}/login`) {
-    const { error } = await this.supabase.auth.signInWithOAuth({
+    const isNativeApp = isAndroidApp();
+    const { data, error } = await this.supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo },
+      options: {
+        redirectTo: isNativeApp ? NATIVE_AUTH_CALLBACK_URL : redirectTo,
+        ...(isNativeApp ? { skipBrowserRedirect: true } : {}),
+        queryParams: { prompt: 'select_account' },
+      },
     });
     if (error) throw error;
+    if (isNativeApp) {
+      if (!data.url) throw new Error('Google sign-in did not return an authorization URL.');
+      await Browser.open({ url: data.url });
+    }
   }
 
   async login(email, password) {
@@ -309,35 +307,10 @@ export default class AuthService {
       station: profile.assigned_station,
       stationId: profile.stationId || null,
       lastSignInAt: loginTimestamp,
-      authMode: 'online',
     };
 
     this.saveUser(this._currentUser);
-    await this.persistMotherProfile(this._currentUser);
     return this._currentUser;
-  }
-
-  async persistMotherProfile(user) {
-    if (!isAndroidApp() || !user?.id || !['mother', 'patient'].includes(user.role)) return;
-    await secureStorage.set(authProfileKey(user.id), JSON.stringify(user));
-  }
-
-  async getCachedMotherProfile(userId) {
-    if (!isAndroidApp() || !userId) return null;
-    const stored = await secureStorage.get(authProfileKey(userId));
-    if (!stored) return null;
-    try {
-      const user = JSON.parse(stored);
-      if (user?.id !== userId || !['mother', 'patient'].includes(user.role) || user.isDeactivated) return null;
-      return { ...user, authMode: 'offline_authenticated' };
-    } catch (error) {
-      console.error('Could not read the saved mother profile:', error);
-      throw new Error('The saved account profile is damaged. Connect to the internet and sign in again.');
-    }
-  }
-
-  async clearCachedMotherProfile(userId) {
-    if (isAndroidApp() && userId) await secureStorage.remove(authProfileKey(userId));
   }
 
   async fetchProfileName(userId, role) {
@@ -353,7 +326,6 @@ export default class AuthService {
           .select('full_name, station_ass, stations:station_ass(id, station_name)')
           .eq('id', userId)
           .maybeSingle();
-        if (error) throw error;
         
         if (data?.full_name) {
           fullName = data.full_name;
@@ -369,7 +341,6 @@ export default class AuthService {
           .select('first_name, last_name')
           .eq('id', userId)
           .maybeSingle();
-        if (error) throw error;
         
         if (data?.first_name) {
           fullName = `${data.first_name} ${data.last_name}`;
@@ -430,14 +401,6 @@ export default class AuthService {
       return null;
     }
     const authUser = session.user;
-    if (isAndroidApp() && !navigator.onLine) {
-      const cachedUser = await this.getCachedMotherProfile(authUser.id);
-      if (cachedUser) {
-        const offlineUser = { ...cachedUser, authMode: 'offline_authenticated' };
-        this.saveUser(offlineUser);
-        return offlineUser;
-      }
-    }
 
     let userData;
     try {
@@ -447,19 +410,11 @@ export default class AuthService {
           .select('id, email_address, usertype, is_archived, is_deactivated')
           .eq('id', authUser.id)
           .maybeSingle(),
-        isAndroidApp() ? 5000 : this.defaultTimeout
+        this.defaultTimeout
       );
-      if (res.error) throw res.error;
       userData = res.data || res;
     } catch (err) {
       console.error('users lookup timed out or failed:', err);
-      if (isAndroidApp() && isNetworkError(err)) {
-        const cachedUser = await this.getCachedMotherProfile(authUser.id);
-        if (cachedUser) {
-          this.saveUser(cachedUser);
-          return cachedUser;
-        }
-      }
       this._currentUser = null;
       throw err;
     }
@@ -475,7 +430,7 @@ export default class AuthService {
       return null;
     }
 
-    let role;
+    let role = 'user';
     try {
       const typeRes = await this._withTimeout(
         this.supabase
@@ -483,27 +438,12 @@ export default class AuthService {
           .select('user_type')
           .eq('id', userData.usertype)
           .maybeSingle(),
-        isAndroidApp() ? 3500 : 5000
+        5000
       );
-      if (typeRes.error) throw typeRes.error;
       const typeData = typeRes.data || typeRes;
       if (typeData?.user_type) role = normalizeRoleName(typeData.user_type);
-      else if (isAndroidApp()) throw new Error('No role is assigned to this account.');
-      else role = 'user';
     } catch (err) {
       console.error('user_type lookup timed out or failed:', err);
-      if (isAndroidApp() && isNetworkError(err)) {
-        const cachedUser = await this.getCachedMotherProfile(authUser.id);
-        if (cachedUser) {
-          this.saveUser(cachedUser);
-          return cachedUser;
-        }
-      }
-      if (isAndroidApp()) {
-        this._currentUser = null;
-        throw err;
-      }
-      role = 'user';
     }
 
     const profile = await this.fetchProfileName(userData.id, role);
@@ -520,30 +460,16 @@ export default class AuthService {
       station: profile.assigned_station,
       stationId: profile.stationId || null,
       lastSignInAt: authUser.last_sign_in_at || null,
-      authMode: 'online',
     };
 
     this.saveUser(this._currentUser);
-    await this.persistMotherProfile(this._currentUser);
     return this._currentUser;
   }
 
   async logout() {
-    const currentUser = this._currentUser || cachedAuthUser;
-    if (currentUser?.id && ['mother', 'patient'].includes(currentUser.role)) {
-      await motherOfflineDataService.removePatient(currentUser.id);
-      await this.clearCachedMotherProfile(currentUser.id);
-    }
-    if (isAndroidApp()) await this.supabase.auth.signOut({ scope: 'local' });
-    else await this.supabase.auth.signOut();
+    await this.supabase.auth.signOut();
     this.clearUser();
     console.log('User logged out');
-  }
-
-  async clearOfflineMotherData(userId) {
-    if (!isAndroidApp() || !userId) return;
-    await motherOfflineDataService.removePatient(userId);
-    await this.clearCachedMotherProfile(userId);
   }
 
   // Keep user in-memory only; do not persist to localStorage
@@ -579,17 +505,15 @@ export default class AuthService {
     const device = getClientDeviceString();
     const record = { timestamp, device };
 
-    if (!isAndroidApp()) {
-      try {
-        localStorage.setItem(`dasmom_last_login_${userId}`, JSON.stringify(record));
-        localStorage.setItem('dasmom_last_login', JSON.stringify({
-          time: timestamp,
-          timestamp,
-          device
-        }));
-      } catch (err) {
-        console.warn('Failed to save login event to localStorage:', err);
-      }
+    try {
+      localStorage.setItem(`dasmom_last_login_${userId}`, JSON.stringify(record));
+      localStorage.setItem('dasmom_last_login', JSON.stringify({
+        time: timestamp,
+        timestamp,
+        device
+      }));
+    } catch (err) {
+      console.warn('Failed to save login event to localStorage:', err);
     }
 
     try {
@@ -600,32 +524,28 @@ export default class AuthService {
       }).catch(err => {
         console.warn('Background sync of last_login_event to Supabase failed:', err);
       });
-    } catch (error) {
-      console.warn('Unable to sync last_login_event to Supabase:', error);
-    }
+    } catch {}
 
     return record;
   }
 
   async getLoginHistory(userId) {
     // 1. Check user-specific localStorage first (immediate local state)
-    if (!isAndroidApp()) {
-      try {
-        if (userId) {
-          const local = localStorage.getItem(`dasmom_last_login_${userId}`);
-          if (local) {
-            const parsed = JSON.parse(local);
-            if (parsed?.timestamp) {
-              return {
-                timestamp: parsed.timestamp,
-                device: parsed.device || getClientDeviceString()
-              };
-            }
+    try {
+      if (userId) {
+        const local = localStorage.getItem(`dasmom_last_login_${userId}`);
+        if (local) {
+          const parsed = JSON.parse(local);
+          if (parsed?.timestamp) {
+            return {
+              timestamp: parsed.timestamp,
+              device: parsed.device || getClientDeviceString()
+            };
           }
         }
-      } catch (err) {
-        console.warn('Error reading local login history:', err);
       }
+    } catch (err) {
+      console.warn('Error reading local login history:', err);
     }
 
     // 2. Check Supabase auth session or user
@@ -646,12 +566,10 @@ export default class AuthService {
             timestamp: metaEvent.timestamp,
             device: metaEvent.device || getClientDeviceString()
           };
-          if (userId && !isAndroidApp()) {
+          if (userId) {
             try {
               localStorage.setItem(`dasmom_last_login_${userId}`, JSON.stringify(result));
-            } catch (error) {
-              console.warn('Unable to save local login history:', error);
-            }
+            } catch {}
           }
           return result;
         }
@@ -662,12 +580,10 @@ export default class AuthService {
             timestamp: authUser.last_sign_in_at,
             device: getClientDeviceString()
           };
-          if (userId && !isAndroidApp()) {
+          if (userId) {
             try {
               localStorage.setItem(`dasmom_last_login_${userId}`, JSON.stringify(result));
-            } catch (error) {
-              console.warn('Unable to save local login history:', error);
-            }
+            } catch {}
           }
           return result;
         }
@@ -685,23 +601,19 @@ export default class AuthService {
     }
 
     // 3. Fallback to generic local storage
-    if (!isAndroidApp()) {
-      try {
-        const generic = localStorage.getItem('dasmom_last_login');
-        if (generic) {
-          const parsed = JSON.parse(generic);
-          const ts = parsed?.timestamp || parsed?.time;
-          if (ts) {
-            return {
-              timestamp: ts,
-              device: parsed.device || getClientDeviceString()
-            };
-          }
+    try {
+      const generic = localStorage.getItem('dasmom_last_login');
+      if (generic) {
+        const parsed = JSON.parse(generic);
+        const ts = parsed?.timestamp || parsed?.time;
+        if (ts) {
+          return {
+            timestamp: ts,
+            device: parsed.device || getClientDeviceString()
+          };
         }
-      } catch (error) {
-        console.warn('Unable to read local login history:', error);
       }
-    }
+    } catch {}
 
     return null;
   }

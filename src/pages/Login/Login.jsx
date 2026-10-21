@@ -198,11 +198,11 @@ export default function Login() {
         });
   };
 
-    const handleGoogleLogin = async () => {
-        setIsLoading(true);
-        setErrors({ email: '', password: '', form: '', general: '' });
-        try {
-            await authService.signInWithGoogle(`${DASMOM_APP_URL}/login`);
+  const handleGoogleLogin = async () => {
+      setIsLoading(true);
+      setErrors({ email: '', password: '', form: '', general: '' });
+      try {
+          await authService.signInWithGoogle(`${DASMOM_APP_URL}/login`);
         } catch (error) {
             setErrors(prev => ({ ...prev, form: error.message || 'Google sign-in failed.' }));
             setIsLoading(false);

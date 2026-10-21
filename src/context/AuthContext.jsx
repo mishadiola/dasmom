@@ -1,8 +1,9 @@
-/* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useState, useEffect, useRef, useMemo } from 'react';
+import React, { createContext, useState, useEffect, useRef } from 'react';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Browser } from '@capacitor/browser';
 import AuthService from '../services/authservice';
 import supabase from '../config/supabaseclient';
-import visitNotificationService from '../services/visitNotificationService';
+import { NATIVE_AUTH_CALLBACK_URL } from '../config/appConfig';
 import { isAndroidApp } from '../services/secureStorage';
 
 export const AuthContext = createContext({
@@ -10,57 +11,88 @@ export const AuthContext = createContext({
   setUser: () => {},
   logout: () => {},
   isAuthLoading: true,
-  visitNotificationStatus: null,
 });
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [visitNotificationStatus, setVisitNotificationStatus] = useState(null);
   const userRef = useRef(null);
   userRef.current = user;
-  const authService = useMemo(() => new AuthService(), []);
-
-  useEffect(() => {
-    userRef.current = user;
-  }, [user]);
-
-  useEffect(() => {
-    const role = String(user?.role || '').toLowerCase();
-    if (isAuthLoading || !user?.id || !['mother', 'patient'].includes(role)) {
-      setVisitNotificationStatus(null);
-      return undefined;
-    }
-
-    let cancelled = false;
-    let stopNotifications;
-    setVisitNotificationStatus({ state: 'initializing', pendingCount: 0, message: '' });
-    visitNotificationService.start(user.id, setVisitNotificationStatus)
-      .then(stop => {
-        if (cancelled) stop();
-        else stopNotifications = stop;
-      })
-      .catch(error => {
-        console.error('Failed to initialize mother visit reminders:', error);
-        if (!cancelled) {
-          setVisitNotificationStatus({
-            state: 'failed',
-            pendingCount: 0,
-            message: 'Visit reminders could not be set up on this device. Please reopen DasMom to try again.'
-          });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-      stopNotifications?.();
-    };
-  }, [user, isAuthLoading]);
+  const authService = new AuthService();
 
   useEffect(() => {
     let isMounted = true;
     let initRequest = 0;
     let signInInitTimer = null;
+    let appUrlListener = null;
+    let handledOAuthCallback = null;
+
+    const showGoogleLoginError = message => {
+      sessionStorage.setItem('dasmom_google_login_error', message);
+      window.dispatchEvent(new CustomEvent('dasmom-google-login-error', { detail: message }));
+    };
+
+    const handleAppUrl = async url => {
+      let callbackUrl;
+      try {
+        callbackUrl = new URL(url);
+      } catch (error) {
+        console.error('Unable to parse app callback URL:', error);
+        return;
+      }
+
+      const expectedCallback = new URL(NATIVE_AUTH_CALLBACK_URL);
+      if (
+        callbackUrl.protocol !== expectedCallback.protocol
+        || callbackUrl.host !== expectedCallback.host
+        || callbackUrl.pathname !== expectedCallback.pathname
+        || handledOAuthCallback === url
+      ) return;
+
+      handledOAuthCallback = url;
+      try {
+        await Browser.close();
+      } catch (error) {
+        console.warn('Unable to close the Google sign-in browser:', error);
+      }
+
+      const oauthError = callbackUrl.searchParams.get('error_description')
+        || callbackUrl.searchParams.get('error');
+      if (oauthError) {
+        showGoogleLoginError(oauthError);
+        return;
+      }
+
+      const code = callbackUrl.searchParams.get('code');
+      if (!code) {
+        showGoogleLoginError('Google sign-in did not return an authorization code. Please try again.');
+        return;
+      }
+
+      try {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) throw error;
+      } catch (error) {
+        console.error('Unable to complete Google sign-in in the app:', error);
+        showGoogleLoginError(error.message || 'Google sign-in could not be completed. Please try again.');
+      }
+    };
+
+    if (isAndroidApp()) {
+      CapacitorApp.addListener('appUrlOpen', ({ url }) => handleAppUrl(url))
+        .then(listener => {
+          if (isMounted) appUrlListener = listener;
+          else listener.remove();
+        })
+        .catch(error => console.error('Unable to register the app URL listener:', error));
+
+      CapacitorApp.getLaunchUrl()
+        .then(launchUrl => {
+          if (isMounted && launchUrl?.url) return handleAppUrl(launchUrl.url);
+          return undefined;
+        })
+        .catch(error => console.error('Unable to read the app launch URL:', error));
+    }
 
     const initAuth = async (isTokenRefresh = false) => {
       const requestId = ++initRequest;
@@ -68,9 +100,9 @@ export const AuthProvider = ({ children }) => {
         if (!isTokenRefresh) {
           authService.clearUser();
         }
-        
+
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
+
         if (sessionError || !session?.user) {
           if (isMounted && requestId === initRequest) {
             setUser(null);
@@ -81,55 +113,51 @@ export const AuthProvider = ({ children }) => {
           if (isTokenRefresh && userRef.current?.id === session.user.id) {
             return;
           }
+
           const current = await authService.getAuthUser();
-          if (isAndroidApp() && current && !['mother', 'patient'].includes(String(current.role || '').toLowerCase())) {
-            if (session.user.app_metadata?.provider === 'google') {
-              sessionStorage.setItem(
-                'dasmom_google_login_error',
-                'This Google account is not registered as a mother account.'
-              );
-            }
-            await supabase.auth.signOut({ scope: 'local' });
-            authService.clearUser();
-            setUser(null);
-            return;
+          const isGoogleLogin = session.user.app_metadata?.provider === 'google';
+          if (isGoogleLogin && current?.id) {
+            authService.recordLoginEvent(current.id);
           }
+          localStorage.removeItem('dasmom_google_email');
           if (isMounted && requestId === initRequest) {
 
             if (!current) {
-              await visitNotificationService.cancelAndClearMother(session.user.id);
-              if (session.user.app_metadata?.provider === 'google') {
+              if (isGoogleLogin) {
                 sessionStorage.setItem(
                   'dasmom_google_login_error',
                   'This Google account is not linked to a registered DasMom account.'
                 );
-                const { error: cleanupError } = await supabase.functions.invoke('google-account-check', {
-                  body: { action: 'cleanup' },
-                });
-                if (cleanupError) console.error('Unable to clean up unregistered Google account:', cleanupError);
+                window.dispatchEvent(new CustomEvent('dasmom-google-login-error', {
+                  detail: 'This Google account is not linked to a registered DasMom account.'
+                }));
+                try {
+                  const { error: cleanupError } = await supabase.functions.invoke(
+                    'google-account-check',
+                    { body: { action: 'cleanup' } }
+                  );
+                  if (cleanupError) console.error('Unable to clean up unregistered Google account:', cleanupError);
+                } catch (cleanupError) {
+                  console.error('Unable to clean up unregistered Google account:', cleanupError);
+                }
               }
-              if (isAndroidApp()) await supabase.auth.signOut({ scope: 'local' });
-              else await supabase.auth.signOut();
+              await supabase.auth.signOut();
+              return;
             }
-            setUser(current);
+            // Only update state if user changed to prevent re-render storms
+            if (!userRef.current || userRef.current.id !== current?.id || userRef.current.role !== current?.role) {
+              setUser(current);
+            }
+            console.log('AuthContext: User loaded from active session', current);
           }
         }
       }
       catch (err) {
         console.error('AuthContext: Error during auth init', err);
-        supabase.auth.getSession().then(({ data: { session } }) => {
-          if (session?.user?.id) {
-            return visitNotificationService.reconcilePersistedSchedulesForSession(session.user.id);
-          }
-          return undefined;
-        }).catch(notificationError => {
-          console.error('Failed to reconcile saved reminders during auth recovery:', notificationError);
-        });
         if (isMounted && requestId === initRequest) {
           setUser(null);
         }
-      }
-      finally {
+      } finally {
         if (isMounted && requestId === initRequest) {
           setIsAuthLoading(false);
         }
@@ -140,15 +168,6 @@ export const AuthProvider = ({ children }) => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
-        const previousUser = userRef.current;
-        if (previousUser?.id && ['mother', 'patient'].includes(String(previousUser.role || '').toLowerCase())) {
-          visitNotificationService.cancelAndClearMother(previousUser.id).catch(error => {
-            console.error('Failed to cancel mother reminders on sign out:', error);
-          });
-          authService.clearOfflineMotherData(previousUser.id).catch(error => {
-            console.error('Failed to clear saved mother records on sign out:', error);
-          });
-        }
         initRequest += 1;
         authService.clearUser();
         setUser(null);
@@ -183,41 +202,22 @@ export const AuthProvider = ({ children }) => {
       }
     });
 
-    const handleReconnect = () => {
-      initAuth();
-      if (userRef.current?.id) visitNotificationService.requestSync();
-    };
-    if (isAndroidApp()) window.addEventListener('online', handleReconnect);
-
     return () => {
       isMounted = false;
-      if (isAndroidApp()) window.removeEventListener('online', handleReconnect);
       if (signInInitTimer !== null) window.clearTimeout(signInInitTimer);
+      appUrlListener?.remove();
       subscription.unsubscribe();
     };
-  }, [authService]);
+  }, []);
 
   const logout = async () => {
-    const currentUser = userRef.current;
-    if (currentUser?.id && ['mother', 'patient'].includes(String(currentUser.role || '').toLowerCase())) {
-      try {
-        await visitNotificationService.cancelAndClearMother(currentUser.id);
-      } catch (error) {
-        setVisitNotificationStatus({
-          state: 'failed',
-          pendingCount: 0,
-          message: 'Could not safely cancel this account’s reminders. Keep this account signed in and retry logout.'
-        });
-        throw error;
-      }
-    }
     await authService.logout();
     setUser(null);
     setIsAuthLoading(false);
   };
 
   return (
-    <AuthContext.Provider value={{ user, setUser, logout, isAuthLoading, visitNotificationStatus }}>
+    <AuthContext.Provider value={{ user, setUser, logout, isAuthLoading }}>
       {children}
     </AuthContext.Provider>
   );

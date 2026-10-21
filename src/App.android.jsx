@@ -1,6 +1,5 @@
-import React, { useContext } from 'react';
+import React from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { AuthContext } from './context/AuthContext';
 import { AuthProvider } from './context/AuthContext';
 import { RolePermissionProvider } from './context/RolePermissionContext';
 import { ModalProvider } from './context/ModalContext';
@@ -11,6 +10,7 @@ import ErrorBoundary from './components/Common/ErrorBoundary';
 import StaffPageLoader from './components/Common/StaffPageLoader';
 
 const DashboardLayout = React.lazy(() => import('./layouts/DashboardLayout'));
+const Landing = React.lazy(() => import('./pages/Landing/Landing'));
 const MotherLogin = React.lazy(() => import('./pages/MotherLogin/MotherLogin'));
 const ResetPassword = React.lazy(() => import('./pages/ResetPassword'));
 const MotherDashboard = React.lazy(() => import('./pages/MotherDashboard/MotherDashboard'));
@@ -23,14 +23,6 @@ const PregnancyTips = React.lazy(() => import('./pages/MotherDashboard/Pregnancy
 const TipDetailPage = React.lazy(() => import('./pages/MotherDashboard/TipDetailPage'));
 const PregnancyDeliveryInfo = React.lazy(() => import('./pages/MotherDashboard/PregnancyDeliveryInfo'));
 
-function MotherHomeRedirect() {
-  const { user, isAuthLoading } = useContext(AuthContext);
-  if (isAuthLoading) return <StaffPageLoader message="Verifying session..." minHeight="100vh" />;
-
-  const isMother = ['mother', 'patient'].includes(String(user?.role || '').toLowerCase());
-  return <Navigate to={isMother ? '/mother-home' : '/mother-login'} replace />;
-}
-
 export default function AndroidMotherApp() {
   return (
     <ErrorBoundary>
@@ -42,7 +34,8 @@ export default function AndroidMotherApp() {
                 <BrowserRouter>
                   <React.Suspense fallback={<StaffPageLoader />}>
                     <Routes>
-                      <Route path="/" element={<MotherHomeRedirect />} />
+                      <Route path="/" element={<Navigate to="/landing" replace />} />
+                      <Route path="/landing" element={<Landing />} />
                       <Route path="/mother-login" element={<MotherLogin />} />
                       <Route path="/reset-password" element={<ResetPassword />} />
                       <Route path="/mother-home" element={
@@ -60,7 +53,7 @@ export default function AndroidMotherApp() {
                         <Route path="user-tips/:id" element={<TipDetailPage />} />
                         <Route path="user-delivery-info" element={<PregnancyDeliveryInfo />} />
                       </Route>
-                      <Route path="*" element={<Navigate to="/mother-login" replace />} />
+                      <Route path="*" element={<Navigate to="/landing" replace />} />
                     </Routes>
                   </React.Suspense>
                 </BrowserRouter>
