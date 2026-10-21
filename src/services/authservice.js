@@ -216,7 +216,10 @@ export default class AuthService {
   async signInWithGoogle(redirectTo = `${DASMOM_APP_URL}/login`) {
     const { error } = await this.supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo },
+      options: {
+        redirectTo,
+        queryParams: { prompt: 'select_account' },
+      },
     });
     if (error) throw error;
   }
