@@ -46,11 +46,12 @@ const MotherLogin = () => {
     [user, isAuthLoading, navigate, location.state]);
 
     React.useEffect(() => {
+        if (isAuthLoading) return;
         const message = sessionStorage.getItem('dasmom_google_login_error');
         if (!message) return;
         sessionStorage.removeItem('dasmom_google_login_error');
         customAlert({ title: t('login_error_title'), text: message, iconType: 'danger' });
-    }, [customAlert, t]);
+    }, [customAlert, isAuthLoading, t]);
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
