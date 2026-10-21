@@ -226,18 +226,7 @@ export default class AuthService {
     return { id: functionData.userId };
   }
 
-  async signInWithGoogle(email, redirectTo = `${DASMOM_APP_URL}/login`) {
-    const normalizedEmail = String(email || '').trim().toLowerCase();
-    if (!normalizedEmail) throw new Error('Enter the email registered for your DasMom account first.');
-
-    const { data: check, error: checkError } = await this.supabase.functions.invoke('google-account-check', {
-      body: { email: normalizedEmail },
-    });
-    if (checkError) throw checkError;
-    if (!check?.allowed) throw new Error(check?.error || 'This email is not registered for a DasMom account.');
-
-    if (isAndroidApp()) await secureStorage.set('dasmom.google_email', normalizedEmail);
-    else localStorage.setItem('dasmom_google_email', normalizedEmail);
+  async signInWithGoogle(redirectTo = `${DASMOM_APP_URL}/login`) {
     const { error } = await this.supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo },

@@ -3,7 +3,7 @@ import React, { createContext, useState, useEffect, useRef, useMemo } from 'reac
 import AuthService from '../services/authservice';
 import supabase from '../config/supabaseclient';
 import visitNotificationService from '../services/visitNotificationService';
-import { isAndroidApp, secureStorage } from '../services/secureStorage';
+import { isAndroidApp } from '../services/secureStorage';
 
 export const AuthContext = createContext({
   user: null,
@@ -77,29 +77,18 @@ export const AuthProvider = ({ children }) => {
             console.log('AuthContext: No active session, user not loaded');
           }
         } else {
-          const expectedGoogleEmail = isAndroidApp()
-            ? await secureStorage.get('dasmom.google_email')
-            : localStorage.getItem('dasmom_google_email');
           // If token refreshed and user is already loaded with matching ID, no reload needed
           if (isTokenRefresh && userRef.current?.id === session.user.id) {
             return;
           }
-          const sessionEmail = session.user.email?.trim().toLowerCase();
-
-          if (expectedGoogleEmail && sessionEmail !== expectedGoogleEmail) {
-            if (isAndroidApp()) await secureStorage.remove('dasmom.google_email');
-            else localStorage.removeItem('dasmom_google_email');
-            await visitNotificationService.cancelAndClearMother(session.user.id);
-            await authService.clearOfflineMotherData(session.user.id);
-            if (isAndroidApp()) await supabase.auth.signOut({ scope: 'local' });
-            else await supabase.auth.signOut();
-            throw new Error('Use Google with the same email registered for your DasMom account.');
-          }
-
           const current = await authService.getAuthUser();
-          if (isAndroidApp()) await secureStorage.remove('dasmom.google_email');
-          else localStorage.removeItem('dasmom_google_email');
           if (isAndroidApp() && current && !['mother', 'patient'].includes(String(current.role || '').toLowerCase())) {
+            if (session.user.app_metadata?.provider === 'google') {
+              sessionStorage.setItem(
+                'dasmom_google_login_error',
+                'This Google account is not registered as a mother account.'
+              );
+            }
             await supabase.auth.signOut({ scope: 'local' });
             authService.clearUser();
             setUser(null);
@@ -109,8 +98,18 @@ export const AuthProvider = ({ children }) => {
 
             if (!current) {
               await visitNotificationService.cancelAndClearMother(session.user.id);
-              await supabase.functions.invoke('google-account-check', { body: { action: 'cleanup' } });
-              await supabase.auth.signOut();
+              if (session.user.app_metadata?.provider === 'google') {
+                sessionStorage.setItem(
+                  'dasmom_google_login_error',
+                  'This Google account is not linked to a registered DasMom account.'
+                );
+                const { error: cleanupError } = await supabase.functions.invoke('google-account-check', {
+                  body: { action: 'cleanup' },
+                });
+                if (cleanupError) console.error('Unable to clean up unregistered Google account:', cleanupError);
+              }
+              if (isAndroidApp()) await supabase.auth.signOut({ scope: 'local' });
+              else await supabase.auth.signOut();
             }
             setUser(current);
           }
