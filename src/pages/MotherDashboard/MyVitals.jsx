@@ -69,6 +69,7 @@ const MyVitals = () => {
     }, []);
 
     const CURRENT_VITALS = vitalsData.current || {};
+    const hasPostpartumVitals = CURRENT_VITALS.stage === 'Postpartum';
     const filteredVitals = filterTrimester === 'All' ? (vitalsData.visits || []) : (vitalsData.visits || []).filter(v => v.trimester === filterTrimester);
     const currentWeight = Number(CURRENT_VITALS.weight);
     const currentHeight = Number(CURRENT_VITALS.height);
@@ -320,13 +321,15 @@ const MyVitals = () => {
                                         </div>
                                     </div>
                                 )) : vitalsData.currentStage === 'Postpartum' ? (
-                                    <div className={`v-alert-banner ${CURRENT_VITALS.id ? 'v-alert-banner--success' : 'v-alert-banner--warning'}`}>
-                                        {CURRENT_VITALS.id ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
+                                    <div className={`v-alert-banner ${hasPostpartumVitals ? 'v-alert-banner--success' : 'v-alert-banner--warning'}`}>
+                                        {hasPostpartumVitals ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
                                         <div className="v-alert-text">
-                                            <h4>{CURRENT_VITALS.id ? 'Postpartum vitals' : 'No postpartum vitals recorded'}</h4>
-                                            <p>{CURRENT_VITALS.id
+                                            <h4>{hasPostpartumVitals ? 'Postpartum vitals' : 'No postpartum vitals recorded'}</h4>
+                                            <p>{hasPostpartumVitals
                                                 ? 'Your latest postpartum measurements are shown above.'
-                                                : 'Postpartum vital readings will appear here when recorded.'}
+                                                : CURRENT_VITALS.id
+                                                    ? 'Your latest prenatal measurements are shown above until postpartum readings are recorded.'
+                                                    : 'Postpartum vital readings will appear here when recorded.'}
                                             </p>
                                         </div>
                                     </div>

@@ -72,6 +72,28 @@ test('shows latest postpartum vitals as current while retaining prenatal and pos
     assert.deepEqual(data.chronological.map(visit => visit.id), ['prenatal-1', 'postpartum-1']);
 });
 
+test('falls back to latest prenatal vitals until postpartum vitals are recorded', () => {
+    const data = getMotherVitalsData({
+        pregnancyStatus: 'Postpartum',
+        currentPregnancy: {
+            visits: [
+                { id: 'prenatal-old', visit_date: '2026-10-10', weight_kg: 64, trimester: 3 },
+                { id: 'prenatal-new', visit_date: '2026-10-18', weight_kg: 65, bp_systolic: 110, bp_diastolic: 70, trimester: 3 }
+            ]
+        },
+        deliveries: [{
+            postpartum_visits: [
+                { id: 'postpartum-scheduled', scheduled_at: '2026-10-23T00:00:00Z', status: 'Scheduled' }
+            ]
+        }]
+    });
+
+    assert.equal(data.current.id, 'prenatal-new');
+    assert.equal(data.current.stage, 'Prenatal');
+    assert.equal(data.currentStage, 'Postpartum');
+    assert.deepEqual(data.visits.map(visit => visit.id), ['prenatal-new', 'prenatal-old']);
+});
+
 test('shows latest prenatal vitals as current for a pregnant mother', () => {
     const data = getMotherVitalsData({
         pregnancyStatus: 'Pregnant',
