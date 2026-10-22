@@ -49,7 +49,7 @@ const STATION_LEGEND_CATEGORIES = [
         title: "Indicator Definitions",
         items: [
             {
-                label: "Vaccination Coverage: Newborns with completed birth doses (Hepa B, BCG) out of recorded newborns in the station.",
+                label: "Vaccination Completion: Completed maternal and newborn vaccine doses out of all non-cancelled doses recorded in the selected period.",
                 style: { background: "#f8fafc", color: "#334155", textAlign: "left", fontSize: "11px", fontWeight: 500, lineHeight: "1.4" }
             },
             {
@@ -100,19 +100,17 @@ const StationReports = () => {
     const [selectedStation, setSelectedStation] = useState(null);
     const [expandedRow, setExpandedRow] = useState(null);
     const [showCharts, setShowCharts] = useState(true);
+    const [reportDateRange, setReportDateRange] = useState('quarterly');
     const mounted = useRef(false);
     const reportRequestId = useRef(0);
+    const fetchInFlightRef = useRef(false);
+    const pendingRefreshRef = useRef(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [summaryStats, setSummaryStats] = useState([
-        { label: 'Total Pregnant Patients', value: 0, color: 'sage', icon: Users, path: '/dashboard/patients', filter: null },
-        { label: 'Pregnancies with Health Conditions', value: 0, color: 'rose', icon: HeartPulse, path: '/dashboard/high-risk', filter: null },
-        { label: 'Total Deliveries (Month)', value: 0, color: 'orange', icon: Heart, path: '/dashboard/deliveries', filter: null },
-        { label: 'Vaccination Coverage', value: '0%', color: 'lilac', icon: Syringe, path: '/dashboard/inventory', filter: 'vaccines' },
-        { label: 'Supplements Distributed', value: 0, color: 'pink', icon: Pill, path: '/dashboard/inventory', filter: 'supplements' },
-    ]);
-
     const patientService = useMemo(() => new PatientService(), []);
+    const reportDateRangeRef = useRef(reportDateRange);
+    const hasStationDataRef = useRef(false);
+    reportDateRangeRef.current = reportDateRange;
 
     // Determine authorized stations based on role and permissions:
     // If Station Staff cannot view other stations, they see ONLY their assigned station.
@@ -132,88 +130,65 @@ const StationReports = () => {
         : stationFilter;
 
     const fetchStationData = useCallback(async (isSilent = false) => {
+        if (fetchInFlightRef.current) {
+            pendingRefreshRef.current = true;
+            return;
+        }
+        fetchInFlightRef.current = true;
         const requestId = ++reportRequestId.current;
         try {
-            if (!isSilent && stations.length === 0) {
+            if (!isSilent && !hasStationDataRef.current) {
                 setLoading(true);
             }
             setError(null);
-            const data = await patientService.getStationReports();
+            const data = await patientService.getStationReports(reportDateRangeRef.current);
             if (!mounted.current || requestId !== reportRequestId.current) return;
             setStations(data);
-
-            // Calculate summary stats from station data (scoped to authorized stations if Station Staff without cross-station permission)
-            const targetData = (isStationStaff && !canViewOtherStations) && userStation
-                ? data.filter(s => s.name?.toLowerCase() === userStation.toLowerCase() || formatStationName(s.name).toLowerCase() === formatStationName(userStation).toLowerCase())
-                : (stationFilter !== 'All' ? data.filter(s => s.name === stationFilter || formatStationName(s.name) === formatStationName(stationFilter)) : data);
-            const effectiveData = targetData.length > 0 ? targetData : data;
-
-            const totalPregnant = effectiveData.reduce((sum, s) => sum + s.totalPatients, 0);
-            const totalWithHealthConditions = effectiveData.reduce((sum, s) => sum + (s.withHealthConditions || 0), 0);
-            const totalDeliveries = effectiveData.reduce((sum, s) => sum + s.recentDeliveries, 0);
-            const avgVaccCoverage = effectiveData.length > 0
-                ? Math.round(effectiveData.reduce((sum, s) => sum + s.vaccCoverage, 0) / effectiveData.length)
-                : 0;
-            const totalSupplements = effectiveData.reduce((sum, s) => sum + s.totalSupplementsGiven, 0);
-
-            setSummaryStats([
-                { label: 'Total Pregnant Patients', value: totalPregnant, color: 'sage', icon: Users, path: '/dashboard/patients', filter: null },
-                { label: 'Pregnancies with Health Conditions', value: totalWithHealthConditions, color: 'rose', icon: HeartPulse, path: '/dashboard/high-risk', filter: null },
-                { label: 'Total Deliveries (Month)', value: totalDeliveries, color: 'orange', icon: Heart, path: '/dashboard/deliveries', filter: null },
-                { label: 'Vaccination Coverage', value: `${avgVaccCoverage}%`, color: 'lilac', icon: Syringe, path: '/dashboard/inventory', filter: 'vaccines' },
-                { label: 'Supplements Distributed', value: totalSupplements, color: 'pink', icon: Pill, path: '/dashboard/inventory', filter: 'supplements' },
-            ]);
+            hasStationDataRef.current = true;
         } catch (error) {
             console.error('Error fetching station data:', error);
             if (mounted.current && requestId === reportRequestId.current) setError(error);
         } finally {
             if (mounted.current && requestId === reportRequestId.current) setLoading(false);
+            fetchInFlightRef.current = false;
+            if (pendingRefreshRef.current && mounted.current) {
+                pendingRefreshRef.current = false;
+                setTimeout(() => {
+                    if (mounted.current) fetchStationData(true);
+                }, 0);
+            }
         }
-    }, [patientService, stations.length, isStationStaff, canViewOtherStations, userStation, stationFilter]);
+    }, [patientService]);
 
     useEffect(() => {
-        let pollingTimer = null;
+        fetchStationData();
+    }, [fetchStationData, reportDateRange]);
+
+    useEffect(() => {
         let refreshTimer = null;
         mounted.current = true;
 
-        const startPollingFallback = () => {
-            if (!pollingTimer) {
-                pollingTimer = setInterval(() => {
-                    fetchStationData();
-                    }, 30000);
-            }
-        };
-        const stopPollingFallback = () => {
-            if (!pollingTimer) return;
-            clearInterval(pollingTimer);
-            pollingTimer = null;
-        };
-
-        fetchStationData();
         const channel = supabase
             .channel('station-reports-live-data');
         const scheduleRefresh = () => {
             if (refreshTimer) clearTimeout(refreshTimer);
             refreshTimer = setTimeout(() => {
                 fetchStationData();
-                }, 250);
+            }, 250);
         };
-        const realtimeTables = ['stations', 'patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'deliveries', 'newborns', 'vaccinations', 'supplements'];
+        const realtimeTables = ['stations', 'patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'postpartum_visits', 'deliveries', 'newborns', 'vaccinations', 'supplements'];
         realtimeTables.forEach(table => {
             channel.on('postgres_changes', { event: '*', schema: 'public', table }, scheduleRefresh);
         });
-        channel.subscribe(status => {
-                if (status === 'SUBSCRIBED') {
-                    stopPollingFallback();
-                } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
-                    startPollingFallback();
-                }
-            });
+        channel.subscribe((status, error) => {
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                console.error(`Station Reports Supabase Realtime subscription failed: ${status}`, error || '');
+            }
+        });
 
         return () => {
             mounted.current = false;
             reportRequestId.current += 1;
-            stopPollingFallback();
             if (refreshTimer) clearTimeout(refreshTimer);
             supabase.removeChannel(channel);
         };
@@ -242,10 +217,13 @@ const StationReports = () => {
             'With Health Conditions': s.withHealthConditions,
             'Deliveries (Month)': s.recentDeliveries,
             'Newborns': s.newborns,
-            'Vaccination Coverage (%)': s.vaccCoverage,
+            'Vaccination Completion (%)': s.vaccCoverage,
+            'Completed Vaccination Doses': s.completedVaccinations || 0,
+            'Total Vaccination Doses': s.totalVaccinations || 0,
             'Supplement Coverage (%)': s.suppCoverage,
             'Missed Appointments': s.missedAppointments || 0,
-            'Appointments Due': s.appointmentsDue || 0,
+            'Appointments in Period': s.appointmentsDue || 0,
+            'Missed Rate (%)': s.missedRate || 0,
             '1st Trimester': s.trimester?.first || 0,
             '2nd Trimester': s.trimester?.second || 0,
             '3rd Trimester': s.trimester?.third || 0,
@@ -277,7 +255,7 @@ const StationReports = () => {
             XLSX.writeFile(wb, `Station_Reports_${new Date().toISOString().split('T')[0]}.xlsx`);
         } else if (format === 'pdf') {
             const dateStr = new Date().toISOString().split('T')[0];
-            const head = exportData.length > 0 ? [Object.keys(exportData[0])] : [["Station", "Total Patients", "With Health Conditions", "Deliveries", "Newborns", "Vaccination Coverage (%)", "Supplement Coverage (%)"]];
+            const head = exportData.length > 0 ? [Object.keys(exportData[0])] : [["Station", "Total Patients", "With Health Conditions", "Deliveries", "Newborns", "Vaccination Completion (%)", "Supplement Coverage (%)"]];
             const body = exportData.length > 0 ? exportData.map(obj => Object.values(obj)) : [];
 
             exportStandardStaffPdf({
@@ -320,6 +298,20 @@ const StationReports = () => {
                     <p className="page-subtitle">Compare patient records, documented health conditions, and maternal-newborn care services across CHO III stations.</p>
                 </div>
                 <div className="header-actions">
+                    <label className="st-period-filter">
+                        <span>Period</span>
+                        <select
+                            className="st-station-filter-select"
+                            value={reportDateRange}
+                            onChange={event => setReportDateRange(event.target.value)}
+                            aria-label="Station report date range"
+                        >
+                            <option value="monthly">Monthly</option>
+                            <option value="quarterly">Quarterly</option>
+                            <option value="semiannual">Semi Annual</option>
+                            <option value="annual">Annual</option>
+                        </select>
+                    </label>
                     <button className="btn btn-primary" onClick={() => setShowExportModal(true)}>
                         <Download size={16} /> Export Report
                     </button>
@@ -483,7 +475,7 @@ const StationReports = () => {
                                     <th>Total Patients</th>
                                     <th>With Health Conditions</th>
                                     <th>Deliveries</th>
-                                    <th>Vaccination Coverage</th>
+                                    <th>Vaccination Completion</th>
                                     <th>Newborns</th>
                                     <th>Supplement Coverage</th>
                                     <th>Trimester Mix</th>
@@ -509,19 +501,15 @@ const StationReports = () => {
                                                 <td><span className="st-num">{b.withHealthConditions}</span></td>
                                                 <td><span className="st-num">{b.recentDeliveries}</span></td>
                                                 <td>
-                                                    {(!b.newborns || b.newborns <= 0) ? (
-                                                        <span className="st-na-badge" title="No eligible newborns recorded for this station">N/A</span>
-                                                    ) : (
-                                                        <div className="st-coverage-cell">
-                                                            <span className="st-coverage-val">{b.vaccCoverage}%</span>
-                                                            <div className="st-mini-progress" title={`Vaccination Coverage: ${b.vaccCoverage}%`}>
-                                                                <div 
-                                                                    className={`st-mini-progress-fill st-mini-progress-fill--${getCoverageClass(b.vaccCoverage)}`} 
-                                                                    style={{ width: `${Math.min(100, Math.max(0, b.vaccCoverage))}%` }}
-                                                                />
-                                                            </div>
+                                                    <div className="st-coverage-cell">
+                                                        <span className="st-coverage-val">{b.vaccCoverage}%</span>
+                                                        <div className="st-mini-progress" title={`Vaccination Completion: ${b.vaccCoverage}%`}>
+                                                            <div
+                                                                className={`st-mini-progress-fill st-mini-progress-fill--${getCoverageClass(b.vaccCoverage)}`}
+                                                                style={{ width: `${Math.min(100, Math.max(0, b.vaccCoverage))}%` }}
+                                                            />
                                                         </div>
-                                                    )}
+                                                    </div>
                                                 </td>
                                                 <td><span className="st-num">{b.newborns}</span></td>
                                                 <td>
@@ -792,21 +780,21 @@ const ChartsSection = ({ stations, isStationStaff = false }) => {
             <div className="st-chart-group">
                 <div className="st-chart-group-label">HEALTH SERVICE COVERAGE</div>
                 <div className="st-charts-grid">
-                    {/* Left: Vaccination Coverage by Station */}
+                    {/* Left: Vaccination Completion by Station */}
                     <div className="st-chart-card">
                         <div className="st-chart-header">
                             <div className="st-chart-icon st-chart-icon--vacc">
                                 <Syringe size={18} />
                             </div>
                             <div className="st-chart-title-group">
-                                <h3 className="st-chart-title">Vaccination Coverage by Station</h3>
-                                <p className="st-chart-subtitle">Percentage of eligible patients with complete vaccination</p>
+                                <h3 className="st-chart-title">Vaccination Completion by Station</h3>
+                                <p className="st-chart-subtitle">Maternal and newborn doses completed in the selected period</p>
                             </div>
                         </div>
                         <div className="st-chart-body">
                             <div className="st-hbar-chart">
                                 {sortedByVacc.map(b => {
-                                    const hasEligible = (b.newborns || 0) > 0;
+                                    const hasEligible = (b.totalVaccinations || 0) > 0;
                                     const tKey = `vacc-${b.id || b.name}`;
                                     const isTooltipOpen = activeTooltipId === tKey;
 
@@ -832,20 +820,20 @@ const ChartsSection = ({ stations, isStationStaff = false }) => {
                                                     <div className="st-tooltip-title">{formatStationName(b.name)}</div>
                                                     <div className="st-tooltip-divider" />
                                                     <div className="st-tooltip-row">
-                                                        <span>Fully Vaccinated:</span>
-                                                        <strong>{b.totalNewbornVaccinated || 0}</strong>
+                                                        <span>Completed Doses:</span>
+                                                        <strong>{b.completedVaccinations || 0}</strong>
                                                     </div>
                                                     <div className="st-tooltip-row">
-                                                        <span>Total Eligible:</span>
-                                                        <strong>{b.newborns || 0}</strong>
+                                                        <span>Total Doses:</span>
+                                                        <strong>{b.totalVaccinations || 0}</strong>
                                                     </div>
                                                     <div className="st-tooltip-row">
                                                         <span>Coverage:</span>
-                                                        <strong>{hasEligible ? `${b.vaccCoverage}%` : 'N/A'}</strong>
+                                                        <strong>{b.vaccCoverage}%</strong>
                                                     </div>
                                                 </div>
                                             </div>
-                                            <span className="st-hbar-val">{hasEligible ? `${b.vaccCoverage}%` : 'N/A'}</span>
+                                            <span className="st-hbar-val">{b.vaccCoverage}%</span>
                                         </div>
                                     );
                                 })}
@@ -927,7 +915,7 @@ const ChartsSection = ({ stations, isStationStaff = false }) => {
                             </div>
                             <div className="st-chart-title-group">
                                 <h3 className="st-chart-title">Missed Appointments by Station</h3>
-                                <p className="st-chart-subtitle">Missed scheduled visits across CHO III stations.</p>
+                                <p className="st-chart-subtitle">Missed prenatal, postpartum, and vaccination appointments in the selected period.</p>
                             </div>
                         </div>
                         <div className="st-chart-body">
@@ -964,7 +952,7 @@ const ChartsSection = ({ stations, isStationStaff = false }) => {
                                                         <strong>{missed}</strong>
                                                     </div>
                                                     <div className="st-tooltip-row">
-                                                        <span>Appointments Due:</span>
+                                                        <span>Appointments in Period:</span>
                                                         <strong>{due}</strong>
                                                     </div>
                                                     <div className="st-tooltip-row">
@@ -1010,7 +998,7 @@ const DetailModal = ({ station, onClose, navigate }) => {
             'Newborns': station.newborns,
             'Low Birth Weight': station.lbwBabies || 0,
             'NICU': station.nicuBabies || 0,
-            'Vaccination Coverage (%)': station.vaccCoverage,
+            'Vaccination Completion (%)': station.vaccCoverage,
             'Supplement Coverage (%)': station.suppCoverage,
             '1st Trimester': station.trimester?.first || 0,
             '2nd Trimester': station.trimester?.second || 0,
@@ -1151,14 +1139,14 @@ const DetailModal = ({ station, onClose, navigate }) => {
                     {tab === 'vacc' && (
                         <div>
                             <div className="detail-stats-grid">
-                                <div className="detail-stat"><span>Overall Coverage</span><strong>{station.vaccCoverage}%</strong></div>
+                                <div className="detail-stat"><span>Vaccination Completion</span><strong>{station.vaccCoverage}%</strong></div>
                                 <div className="detail-stat"><span>Newborn Vaccines</span><strong>{station.newbornVaccCoverage}%</strong></div>
                                 <div className="detail-stat"><span>Supplement Coverage</span><strong>{station.suppCoverage}%</strong></div>
                             </div>
                             <div className="detail-section">
                                 <h4>Coverage Breakdown</h4>
                                 {[
-                                    { label: 'Overall Vaccination', value: station.vaccCoverage },
+                                    { label: 'Maternal and Newborn Dose Completion', value: station.vaccCoverage },
                                     { label: 'Newborn Vaccines', value: station.newbornVaccCoverage },
                                     { label: 'Supplement Coverage', value: station.suppCoverage },
                                 ].map(item => (

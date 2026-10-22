@@ -5,6 +5,7 @@ import { isBatchExpired } from '../utils/inventoryUtils';
 import { buildPregnancyHistory, getLatestPregnancyRecord, getPregnancyStatus } from '../utils/pregnancyUtils';
 import { numberPrenatalVisitsChronologically } from '../utils/prenatalVisitNumbering';
 import { formatMotherId, getFirstFourDigits } from '../utils/displayIds';
+import { getAppointmentMetrics, getReportDateBounds, getVaccinationMetrics, isVaccinationCompleted } from '../utils/reportMetricUtils';
 
 const inventoryService = new InventoryService();
 const TIME_SLOTS_8TO4 = [
@@ -3740,11 +3741,39 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
     return this.getDocumentedHealthConditions(riskFactorsInput).length > 0;
   }
 
-  async getStationReports() {
+  async getStationReports(dateRange = 'quarterly') {
     try {
       const { role, stationId } = await this.getCurrentUserAccess();
       const isStationRestricted = role === 'staff';
       if (isStationRestricted && !stationId) return [];
+      const reportBounds = getReportDateBounds(dateRange);
+      const withinReportPeriod = (query, column) => reportBounds
+        ? query.gte(column, reportBounds.startDate).lt(column, reportBounds.endDateExclusive)
+        : query;
+      const postpartumReportBounds = reportBounds && (() => {
+        const end = new Date(`${reportBounds.endDateExclusive}T00:00:00`);
+        end.setDate(end.getDate() + 42);
+        return {
+          ...reportBounds,
+          endDateExclusive: [
+            end.getFullYear(),
+            String(end.getMonth() + 1).padStart(2, '0'),
+            String(end.getDate()).padStart(2, '0')
+          ].join('-')
+        };
+      })();
+      const withinPostpartumReportPeriod = query => postpartumReportBounds
+        ? query.gte('scheduled_date', postpartumReportBounds.startDate).lt('scheduled_date', postpartumReportBounds.endDateExclusive)
+        : query;
+      const vaccinationsWithinReportPeriod = query => {
+        if (!reportBounds) return query;
+        const { startDate, endDateExclusive } = reportBounds;
+        return query.or([
+          `and(vaccinated_date.gte.${startDate},vaccinated_date.lt.${endDateExclusive})`,
+          `and(vaccinated_date.is.null,scheduled_vaccination.gte.${startDate},scheduled_vaccination.lt.${endDateExclusive})`,
+          `and(vaccinated_date.is.null,scheduled_vaccination.is.null,created_at.gte.${startDate},created_at.lt.${endDateExclusive})`
+        ].join(','));
+      };
 
       let stationsQuery = this.supabase
         .from('stations')
@@ -3791,7 +3820,12 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
           newbornVaccCoverage: 0,
           totalPregnantPatients: 0,
           totalNewbornVaccinated: 0,
-          totalSupplementsGiven: 0
+          totalSupplementsGiven: 0,
+          totalVaccinations: 0,
+          completedVaccinations: 0,
+          missedAppointments: 0,
+          appointmentsDue: 0,
+          missedRate: 0
         });
       });
 
@@ -3818,7 +3852,12 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
             newbornVaccCoverage: 0,
             totalPregnantPatients: 0,
             totalNewbornVaccinated: 0,
-            totalSupplementsGiven: 0
+            totalSupplementsGiven: 0,
+            totalVaccinations: 0,
+            completedVaccinations: 0,
+            missedAppointments: 0,
+            appointmentsDue: 0,
+            missedRate: 0
           });
         }
       });
@@ -3828,24 +3867,41 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
         .from('pregnancy_info')
         .select('patient_id, pregn_postp, pregnancy_type, gravida, lmd, edd, created_at')
         .order('created_at', { ascending: false });
-      let visitsQuery = this.supabase
-        .from('prenatal_visits')
-        .select('patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm, trimester')
-        .order('visit_date', { ascending: false });
+      let visitsQuery = withinReportPeriod(
+        this.supabase
+          .from('prenatal_visits')
+          .select('patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm, trimester')
+          .order('visit_date', { ascending: false }),
+        'visit_date'
+      );
+      let postpartumVisitsQuery = withinPostpartumReportPeriod(
+        this.supabase
+          .from('postpartum_visits')
+          .select('patient_id, scheduled_date, status')
+          .order('scheduled_date', { ascending: false })
+      );
       if (isStationRestricted && patientIds.length > 0) {
         pregnancyQuery = pregnancyQuery.in('patient_id', patientIds);
         visitsQuery = visitsQuery.in('patient_id', patientIds);
+        postpartumVisitsQuery = postpartumVisitsQuery.in('patient_id', patientIds);
       } else if (patientIds.length === 0) {
         pregnancyQuery = Promise.resolve(emptyResult);
         visitsQuery = Promise.resolve(emptyResult);
+        postpartumVisitsQuery = Promise.resolve(emptyResult);
       }
-      const [{ data: pregnancies, error: pregError }, { data: visits, error: visitsError }] = await Promise.all([
+      const [
+        { data: pregnancies, error: pregError },
+        { data: visits, error: visitsError },
+        { data: postpartumVisits, error: postpartumVisitsError }
+      ] = await Promise.all([
         pregnancyQuery,
-        visitsQuery
+        visitsQuery,
+        postpartumVisitsQuery
       ]);
 
       if (pregError) throw pregError;
       if (visitsError) throw visitsError;
+      if (postpartumVisitsError) throw postpartumVisitsError;
 
       const latestPregMap = new Map();
       (pregnancies || []).forEach(p => {
@@ -3908,23 +3964,84 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
       if (suppError) throw suppError;
 
       const newbornIds = (newborns || []).map(newborn => newborn.id).filter(Boolean);
-      const { data: vaccinations, error: vaccError } = newbornIds.length > 0
-        ? await this.supabase.from('vaccinations').select('newborn_id, status').in('newborn_id', newbornIds)
-        : emptyResult;
-      if (vaccError) throw vaccError;
+      const vaccinationQueries = [];
+      if (patientIds.length > 0) {
+        vaccinationQueries.push(vaccinationsWithinReportPeriod(
+          this.supabase.from('vaccinations')
+            .select('id, patient_id, newborn_id, status, vaccinated_date, scheduled_vaccination, created_at')
+            .in('patient_id', patientIds)
+        ));
+      }
+      if (newbornIds.length > 0) {
+        vaccinationQueries.push(vaccinationsWithinReportPeriod(
+          this.supabase.from('vaccinations')
+            .select('id, patient_id, newborn_id, status, vaccinated_date, scheduled_vaccination, created_at')
+            .in('newborn_id', newbornIds)
+        ));
+      }
+      const vaccinationResults = await Promise.all(vaccinationQueries);
+      const vaccinationError = vaccinationResults.find(result => result.error)?.error;
+      if (vaccinationError) throw vaccinationError;
+      const vaccinations = [...new Map(
+        vaccinationResults.flatMap(result => result.data || []).map(vaccination => [vaccination.id, vaccination])
+      ).values()];
 
       const completedSupplementsByPatient = new Set(
         (supplements || []).filter(supplement => supplement.status === 'Completed').map(supplement => supplement.patient_id)
       );
       const newbornsByMother = new Map();
+      const newbornsById = new Map((newborns || []).map(newborn => [newborn.id, newborn]));
       (newborns || []).forEach(newborn => {
         const motherNewborns = newbornsByMother.get(newborn.mother_id) || [];
         motherNewborns.push(newborn);
         newbornsByMother.set(newborn.mother_id, motherNewborns);
       });
       const vaccinatedNewbornIds = new Set(
-        (vaccinations || []).filter(vaccination => vaccination.status === 'Completed').map(vaccination => vaccination.newborn_id)
+        vaccinations.filter(vaccination => vaccination.newborn_id && isVaccinationCompleted(vaccination)).map(vaccination => vaccination.newborn_id)
       );
+      const patientById = new Map((patients || []).map(patient => [patient.id, patient]));
+      const vaccinationsByStation = new Map();
+      vaccinations.forEach(vaccination => {
+        const newborn = newbornsById.get(vaccination.newborn_id);
+        const patientId = vaccination.newborn_id ? newborn?.mother_id : vaccination.patient_id;
+        const patient = patientById.get(patientId);
+        const stationName = patient ? getPatientStationLabel(patient) : null;
+        if (!stationName || !stationMap.has(stationName)) return;
+        const stationVaccinations = vaccinationsByStation.get(stationName) || [];
+        stationVaccinations.push(vaccination);
+        vaccinationsByStation.set(stationName, stationVaccinations);
+      });
+      vaccinationsByStation.forEach((stationVaccinations, stationName) => {
+        const metrics = getVaccinationMetrics(stationVaccinations, dateRange);
+        Object.assign(stationMap.get(stationName), {
+          totalVaccinations: metrics.totalVaccinations,
+          completedVaccinations: metrics.completedVaccinations,
+          vaccCoverage: metrics.vaccinationRate
+        });
+      });
+
+      const appointmentsByStation = new Map();
+      const addStationAppointments = (records, dateColumn) => records.forEach(record => {
+        const patient = patientById.get(record.patient_id);
+        const stationName = patient ? getPatientStationLabel(patient) : null;
+        if (!stationName || !stationMap.has(stationName)) return;
+        const stationAppointments = appointmentsByStation.get(stationName) || [];
+        stationAppointments.push({ ...record, visit_date: record[dateColumn] || record.vaccinated_date });
+        appointmentsByStation.set(stationName, stationAppointments);
+      });
+      addStationAppointments(visits || [], 'visit_date');
+      addStationAppointments(postpartumVisits || [], 'scheduled_date');
+      vaccinationsByStation.forEach((stationVaccinations, stationName) => {
+        const stationAppointments = appointmentsByStation.get(stationName) || [];
+        stationAppointments.push(...stationVaccinations.map(vaccination => ({
+          ...vaccination,
+          visit_date: vaccination.vaccinated_date || vaccination.scheduled_vaccination
+        })));
+        appointmentsByStation.set(stationName, stationAppointments);
+      });
+      appointmentsByStation.forEach((appointments, stationName) => {
+        Object.assign(stationMap.get(stationName), getAppointmentMetrics(appointments, dateRange));
+      });
 
       (patients || []).forEach(patient => {
         const stationName = getPatientStationLabel(patient);
@@ -4010,20 +4127,19 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
         station.newbornVaccCoverage = station.newborns > 0
           ? Math.round((station.totalNewbornVaccinated / station.newborns) * 100)
           : 0;
-        station.vaccCoverage = station.newbornVaccCoverage;
         station.suppCoverage = station.totalPregnantPatients > 0
           ? Math.round((station.totalSupplementsGiven / station.totalPregnantPatients) * 100)
           : 0;
         const highRiskPercent = station.totalPregnantPatients > 0
           ? (station.highRisk / station.totalPregnantPatients) * 100
           : 0;
-        if (highRiskPercent >= 30 || station.vaccCoverage < 70) {
+        if (highRiskPercent >= 30 || (station.totalVaccinations > 0 && station.vaccCoverage < 70)) {
           station.riskStatus = 'Critical';
           station.alerts = [];
           if (highRiskPercent >= 30) station.alerts.push(`High rate of health conditions: ${highRiskPercent.toFixed(0)}%`);
           if (station.vaccCoverage < 70) station.alerts.push(`Vaccination coverage critically low (${station.vaccCoverage}%)`);
           if (station.suppCoverage < 70) station.alerts.push(`Supplement coverage below 70%`);
-        } else if (highRiskPercent >= 15 || station.vaccCoverage < 80) {
+        } else if (highRiskPercent >= 15 || (station.totalVaccinations > 0 && station.vaccCoverage < 80)) {
           station.riskStatus = 'Monitor';
           station.alerts = [];
           if (highRiskPercent >= 15) station.alerts.push(`${station.withHealthConditions} pregnancies with health conditions`);

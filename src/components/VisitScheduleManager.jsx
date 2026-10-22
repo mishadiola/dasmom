@@ -139,6 +139,11 @@ const VisitScheduleManager = ({ patientId, onClose, onChanged }) => {
     const canScheduleCurrentKind = kind === 'prenatal' || kind === 'postpartum'
         ? hasPermission(patientSchedulePermission)
         : hasPermission(vaccineSchedulePermission);
+    const canManageVisit = visit => {
+        if (!canManage) return false;
+        const isVaccination = visit.category === 'maternal_vaccination' || visit.category === 'newborn_vaccination';
+        return hasPermission(isVaccination ? vaccineSchedulePermission : patientSchedulePermission);
+    };
 
     const updateDate = async visit => {
         const nextDate = window.prompt(`New date for ${visit.display} (YYYY-MM-DD):`, visit.scheduledDate);
@@ -358,7 +363,7 @@ const VisitScheduleManager = ({ patientId, onClose, onChanged }) => {
                             </span>
                             Manage Visit Schedule
                         </h2>
-                        <p>Edit or cancel future visits. Completed and historical records are retained.</p>
+                        <p>{canManage ? 'Manage permitted future visits. Completed and historical records are retained.' : 'View scheduled visits. Completed and historical records are retained.'}</p>
                     </div>
                     <button
                         type="button"
@@ -495,7 +500,7 @@ const VisitScheduleManager = ({ patientId, onClose, onChanged }) => {
                         ) : (
                             <div className="vsm-visits-list">
                                 {visits.map(visit => {
-                                    const eligible = canManage && isEligible(visit);
+                                    const eligible = canManageVisit(visit) && isEligible(visit);
                                     return (
                                         <div
                                             key={`${visit.category}-${visit.id}`}
@@ -539,7 +544,9 @@ const VisitScheduleManager = ({ patientId, onClose, onChanged }) => {
                                                 </div>
                                             ) : (
                                                 <span className="vsm-readonly-tag">
-                                                    {visit.status === 'Attended' || visit.status === 'Completed' ? 'Completed record' : 'Historical record'}
+                                                    {visit.status === 'Attended' || visit.status === 'Completed'
+                                                        ? 'Completed record'
+                                                        : visit.scheduledDate && visit.scheduledDate >= today() ? 'View only' : 'Historical record'}
                                                 </span>
                                             )}
                                         </div>

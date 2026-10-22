@@ -26,6 +26,15 @@
     flex-wrap: wrap;
 }
 
+.st-period-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-text, #2d2638);
+    font-size: 12px;
+    font-weight: 700;
+}
+
 /* ════════════════════════════════════════════
    ANALYTICS CHART CARDS — GRID
 ════════════════════════════════════════════ */

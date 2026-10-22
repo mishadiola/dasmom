@@ -15,6 +15,12 @@ import { buildPregnancyRiskTrend } from '../../utils/analyticsTrendUtils';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
 import { drawStaffPdfHeader, getStaffTableStyles, finalizeAndSaveStaffPdf, JsPDFConstructor, runAutoTable } from '../../utils/staffPdfTemplate';
 import PregnancyAgeReport from './PregnancyAgeReport';
+import {
+    getAppointmentMetrics,
+    getReportDateBounds,
+    getVaccinationMetrics,
+    isReportDateWithinRange
+} from '../../utils/reportMetricUtils';
 
 /* ════════════════════════════════════════════════════════════════
    ERROR BOUNDARY — catches render crashes and shows fallback UI
@@ -91,19 +97,6 @@ const formatPercentChange = (current, previous) => {
 
 const isWithin = (date, start, end) => date >= start && date < end;
 
-const isDateWithinRange = (dateString, dateRange) => {
-    if (!dateString) return true;
-    const date = new Date(dateString);
-    if (Number.isNaN(date.getTime())) return true;
-    const now = new Date();
-    const monthsAgo = (now.getFullYear() - date.getFullYear()) * 12 + (now.getMonth() - date.getMonth());
-    if (dateRange === 'monthly') return monthsAgo === 0;
-    if (dateRange === 'quarterly') return monthsAgo >= 0 && monthsAgo < 3;
-    if (dateRange === 'semiannual') return monthsAgo >= 0 && monthsAgo < 6;
-    if (dateRange === 'annual') return monthsAgo >= 0 && monthsAgo < 12;
-    return true;
-};
-
 const Analytics = () => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'maternal' | 'vaccination' | 'delivery'
@@ -122,10 +115,13 @@ const Analytics = () => {
     const [reloadKey, setReloadKey] = useState(0);
     const hasLoadedOnceRef = useRef(false);
     const [pregnancyAgeRows, setPregnancyAgeRows] = useState([]);
+    const ageReportLoadedRef = useRef(false);
+    const realtimeRefreshHandlerRef = useRef(null);
     const [dbData, setDbData] = useState({
         patients: [],
         pregnancies: [],
         visits: [],
+        postpartumVisits: [],
         deliveries: [],
         vaccinations: [],
         newborns: [],
@@ -159,31 +155,68 @@ const Analytics = () => {
     // ── Load live Supabase records ──
     useEffect(() => {
         let isMounted = true;
-        let pollingTimer = null;
         let refreshTimer = null;
         let hasLoadedOnce = hasLoadedOnceRef.current;
-        const realtimeTables = ['patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'deliveries', 'vaccinations', 'newborns', 'stations'];
+        const realtimeTables = ['patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'postpartum_visits', 'deliveries', 'vaccinations', 'newborns', 'stations'];
         const tableKeys = {
             patient_basic_info: 'patients',
             pregnancy_info: 'pregnancies',
             prenatal_visits: 'visits',
+            postpartum_visits: 'postpartumVisits',
             deliveries: 'deliveries',
             vaccinations: 'vaccinations',
             newborns: 'newborns',
             stations: 'stations'
         };
+        const reportBounds = getReportDateBounds(filters.dateRange);
+        const trendStart = new Date();
+        trendStart.setDate(trendStart.getDate() - 56);
+        const trendStartDate = [
+            trendStart.getFullYear(),
+            String(trendStart.getMonth() + 1).padStart(2, '0'),
+            String(trendStart.getDate()).padStart(2, '0')
+        ].join('-');
+        const dateBounds = reportBounds
+            ? { ...reportBounds, startDate: reportBounds.startDate < trendStartDate ? reportBounds.startDate : trendStartDate }
+            : null;
+        const withinDateRange = (query, column) => dateBounds
+            ? query.gte(column, dateBounds.startDate).lt(column, dateBounds.endDateExclusive)
+            : query;
+        const postpartumDateBounds = dateBounds && (() => {
+            const end = new Date(`${dateBounds.endDateExclusive}T00:00:00`);
+            end.setDate(end.getDate() + 42);
+            return {
+                ...dateBounds,
+                endDateExclusive: [
+                    end.getFullYear(),
+                    String(end.getMonth() + 1).padStart(2, '0'),
+                    String(end.getDate()).padStart(2, '0')
+                ].join('-')
+            };
+        })();
         const tableRequestIds = Object.fromEntries(realtimeTables.map(table => [table, 0]));
         const pendingTables = new Set();
+        let fetchInFlight = false;
+        let ageReportRequest = null;
+        let ageReportRefreshPending = false;
 
-        const startPollingFallback = (fetchData) => {
-            if (pollingTimer || !isMounted) return;
-            pollingTimer = setInterval(fetchData, 30000);
-        };
-
-        const stopPollingFallback = () => {
-            if (!pollingTimer) return;
-            clearInterval(pollingTimer);
-            pollingTimer = null;
+        const fetchAgeReport = () => {
+            if (ageReportRequest) {
+                ageReportRefreshPending = true;
+                return ageReportRequest;
+            }
+            ageReportRequest = new PatientService().getStationPregnancyAgeReport().then(rows => {
+                if (isMounted) setPregnancyAgeRows(rows || []);
+            }).catch(error => {
+                console.error('Error fetching station pregnancy age report in Analytics:', error);
+            }).finally(() => {
+                ageReportRequest = null;
+                if (ageReportRefreshPending && isMounted) {
+                    ageReportRefreshPending = false;
+                    fetchAgeReport();
+                }
+            });
+            return ageReportRequest;
         };
 
         const fetchTableData = (table) => {
@@ -193,11 +226,32 @@ const Analytics = () => {
                 case 'pregnancy_info':
                     return supabase.from(table).select('patient_id, pregn_postp, pregnancy_type, lmd, edd, gravida, para, miscarriage_info, created_at');
                 case 'prenatal_visits':
-                    return supabase.from(table).select('id, patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm, next_appt_date, next_appt_type');
+                    return withinDateRange(
+                        supabase.from(table).select('id, patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm, next_appt_date, next_appt_type'),
+                        'visit_date'
+                    );
+                case 'postpartum_visits':
+                    return postpartumDateBounds
+                        ? supabase.from(table)
+                            .select('id, patient_id, scheduled_date, status, attended_date')
+                            .gte('scheduled_date', postpartumDateBounds.startDate)
+                            .lt('scheduled_date', postpartumDateBounds.endDateExclusive)
+                        : supabase.from(table).select('id, patient_id, scheduled_date, status, attended_date');
                 case 'deliveries':
                     return supabase.from(table).select('id, mother_id, station_ass, stations:station_ass(station_name), delivery_date, delivery_type, complications, risk_level');
                 case 'vaccinations':
-                    return supabase.from(table).select('id, patient_id, newborn_id, status, dose_number, scheduled_vaccination, vaccinated_date, created_at');
+                    {
+                        let query = supabase.from(table).select('id, patient_id, newborn_id, status, dose_number, scheduled_vaccination, vaccinated_date, created_at');
+                        if (dateBounds) {
+                            const { startDate, endDateExclusive } = dateBounds;
+                            query = query.or([
+                                `and(vaccinated_date.gte.${startDate},vaccinated_date.lt.${endDateExclusive})`,
+                                `and(vaccinated_date.is.null,scheduled_vaccination.gte.${startDate},scheduled_vaccination.lt.${endDateExclusive})`,
+                                `and(vaccinated_date.is.null,scheduled_vaccination.is.null,created_at.gte.${startDate},created_at.lt.${endDateExclusive})`
+                            ].join(','));
+                        }
+                        return query;
+                    }
                 case 'newborns':
                     return supabase.from(table).select('id, mother_id, delivery_id');
                 case 'stations':
@@ -208,8 +262,11 @@ const Analytics = () => {
         };
 
         const fetchTables = async (tables, isInitialLoad = false) => {
-            const shouldFetchAgeReport = isInitialLoad || tables.includes('patient_basic_info') || tables.includes('pregnancy_info');
-            const patientService = new PatientService();
+            if (fetchInFlight) {
+                tables.forEach(table => pendingTables.add(table));
+                return;
+            }
+            fetchInFlight = true;
             const requests = tables.map(async table => {
                 const requestId = ++tableRequestIds[table];
                 const { data, error } = await fetchTableData(table);
@@ -220,13 +277,7 @@ const Analytics = () => {
             try {
                 if (isInitialLoad && !hasLoadedOnceRef.current) setLoading(true);
                 setFetchError(null);
-                const [results, ageReportRows] = await Promise.all([
-                    Promise.all(requests),
-                    shouldFetchAgeReport ? patientService.getStationPregnancyAgeReport().catch(err => {
-                        console.warn('Error fetching station pregnancy age report in Analytics:', err);
-                        return [];
-                    }) : Promise.resolve(null)
-                ]);
+                const results = await Promise.all(requests);
 
                 if (!isMounted) return;
                 setDbData(current => {
@@ -238,23 +289,37 @@ const Analytics = () => {
                     });
                     return next;
                 });
-                if (ageReportRows !== null) {
-                    setPregnancyAgeRows(ageReportRows || []);
-                }
                 hasLoadedOnce = true;
                 hasLoadedOnceRef.current = true;
+                if (isInitialLoad || tables.some(table =>
+                    ['patient_basic_info', 'pregnancy_info', 'deliveries', 'newborns'].includes(table)
+                )) {
+                    ageReportLoadedRef.current = true;
+                    void fetchAgeReport();
+                }
             } catch (error) {
                 console.error('Error fetching Supabase data in Analytics:', error);
                 if (isMounted) {
                     setFetchError(error);
-                    if (isInitialLoad) setPregnancyAgeRows([]);
                 }
             } finally {
                 if (isMounted && isInitialLoad) setLoading(false);
+                fetchInFlight = false;
+                flushPendingTables();
             }
         };
 
         const fetchAllData = () => fetchTables(realtimeTables, true);
+
+        function flushPendingTables() {
+            if (refreshTimer || fetchInFlight || !isMounted || pendingTables.size === 0) return;
+            refreshTimer = setTimeout(() => {
+                refreshTimer = null;
+                const tablesToRefresh = [...pendingTables];
+                pendingTables.clear();
+                void fetchTables(tablesToRefresh);
+            }, 250);
+        }
 
         const scheduleRefresh = (table) => {
             pendingTables.add(table);
@@ -262,35 +327,39 @@ const Analytics = () => {
                 pendingTables.add('patient_basic_info');
                 pendingTables.add('deliveries');
             }
-            if (refreshTimer) clearTimeout(refreshTimer);
-            refreshTimer = setTimeout(() => {
-                const tablesToRefresh = [...pendingTables];
-                pendingTables.clear();
-                fetchTables(tablesToRefresh);
-            }, 250);
+            flushPendingTables();
         };
+        realtimeRefreshHandlerRef.current = scheduleRefresh;
 
         fetchAllData();
 
-        const channel = supabase.channel('analytics-live-data');
-        realtimeTables.forEach(table => {
-            channel.on('postgres_changes', { event: '*', schema: 'public', table }, () => scheduleRefresh(table));
-        });
-        channel.subscribe(status => {
-                if (status === 'SUBSCRIBED') {
-                    stopPollingFallback();
-                } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
-                    startPollingFallback(fetchAllData);
-                }
-            });
-
         return () => {
             isMounted = false;
-            stopPollingFallback();
             if (refreshTimer) clearTimeout(refreshTimer);
+            if (realtimeRefreshHandlerRef.current === scheduleRefresh) {
+                realtimeRefreshHandlerRef.current = null;
+            }
+        };
+    }, [reloadKey, filters.dateRange]);
+
+    useEffect(() => {
+        const realtimeTables = ['patient_basic_info', 'pregnancy_info', 'prenatal_visits', 'postpartum_visits', 'deliveries', 'vaccinations', 'newborns', 'stations'];
+        const channel = supabase.channel('analytics-live-data');
+        realtimeTables.forEach(table => {
+            channel.on('postgres_changes', { event: '*', schema: 'public', table }, () => {
+                realtimeRefreshHandlerRef.current?.(table);
+            });
+        });
+        channel.subscribe((status, error) => {
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                console.error(`Analytics Supabase Realtime subscription failed: ${status}`, error || '');
+            }
+        });
+
+        return () => {
             supabase.removeChannel(channel);
         };
-    }, [reloadKey]);
+    }, []);
 
     // ── Dynamic Aggregator Logic ──
     // Processes Supabase DB data depending on active filters
@@ -300,22 +369,13 @@ const Analytics = () => {
         const liveAgg = Object.fromEntries(stationNames.map(station => [station, createStationMetrics(true)]));
 
         const now = new Date();
-        const isWithinDateRange = (dateString) => {
-            if (!dateString) return true;
-            const d = new Date(dateString);
-            if (isNaN(d.getTime())) return true;
-            const monthsAgo = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth());
-            if (filters.dateRange === 'monthly') return monthsAgo === 0;
-            if (filters.dateRange === 'quarterly') return monthsAgo >= 0 && monthsAgo < 3;
-            if (filters.dateRange === 'semiannual') return monthsAgo >= 0 && monthsAgo < 6;
-            if (filters.dateRange === 'annual') return monthsAgo >= 0 && monthsAgo < 12;
-            return true;
-        };
+        const isWithinDateRange = dateString => isReportDateWithinRange(dateString, filters.dateRange, now);
 
         const stationMap = new Map((dbData.stations || []).map(s => [s.id, s.station_name]));
         const riskService = new PatientService();
         const patientById = new Map(dbData.patients.map(patient => [patient.id, patient]));
         const visitsByPatient = new Map();
+        const postpartumVisitsByPatient = new Map();
         const newbornById = new Map(dbData.newborns.map(newborn => [newborn.id, newborn]));
 
         // Determine latest attended visit for each patient so resolved risk is removed.
@@ -331,6 +391,12 @@ const Analytics = () => {
                     latestVisits[v.patient_id] = v;
                 }
             }
+        });
+        dbData.postpartumVisits.forEach(visit => {
+            if (!visit.patient_id) return;
+            const patientVisits = postpartumVisitsByPatient.get(visit.patient_id) || [];
+            patientVisits.push(visit);
+            postpartumVisitsByPatient.set(visit.patient_id, patientVisits);
         });
 
         const latestPregnancies = {};
@@ -409,14 +475,28 @@ const Analytics = () => {
             }
         });
 
-        // Loop visits for missed appts
-        dbData.visits.forEach(v => {
-            const pat = patientById.get(v.patient_id);
-            const station = normalizeStation(pat?.stations?.station_name || stationMap.get(pat?.station_ass));
+        const appointmentsByStation = new Map();
+        const addAppointments = (records, dateColumn) => records.forEach(record => {
+            const patient = patientById.get(record.patient_id);
+            const station = normalizeStation(patient?.stations?.station_name || stationMap.get(patient?.station_ass));
             if (!liveAgg[station]) return;
-            if (!isWithinDateRange(v.visit_date)) return;
-            const isMissed = v.status === 'Missed' || (v.visit_date && new Date(v.visit_date) < new Date() && v.status === 'Scheduled');
-            if (isMissed) liveAgg[station].missedAppt++;
+            const appointments = appointmentsByStation.get(station) || [];
+            appointments.push({ ...record, visit_date: record[dateColumn] || record.vaccinated_date });
+            appointmentsByStation.set(station, appointments);
+        });
+        addAppointments(dbData.visits, 'visit_date');
+        addAppointments(dbData.postpartumVisits, 'scheduled_date');
+        dbData.vaccinations.forEach(vaccination => {
+            const newborn = newbornById.get(vaccination.newborn_id);
+            const patient = patientById.get(vaccination.newborn_id ? newborn?.mother_id : vaccination.patient_id);
+            const station = normalizeStation(patient?.stations?.station_name || stationMap.get(patient?.station_ass));
+            if (!liveAgg[station]) return;
+            const appointments = appointmentsByStation.get(station) || [];
+            appointments.push({ ...vaccination, visit_date: vaccination.vaccinated_date || vaccination.scheduled_vaccination });
+            appointmentsByStation.set(station, appointments);
+        });
+        appointmentsByStation.forEach((appointments, station) => {
+            liveAgg[station].missedAppt = getAppointmentMetrics(appointments, filters.dateRange, now).missedAppointments;
         });
 
         // Loop deliveries
@@ -454,9 +534,9 @@ const Analytics = () => {
             postpartumByStation[station].eligible++;
             const endDate = new Date(deliveryDate);
             endDate.setDate(endDate.getDate() + 42);
-            const completed = (visitsByPatient.get(delivery.mother_id) || []).some(visit => {
-                if (visit.patient_id !== delivery.mother_id || visit.status !== 'Attended') return false;
-                const visitDate = new Date(visit.visit_date);
+            const completed = (postpartumVisitsByPatient.get(delivery.mother_id) || []).some(visit => {
+                if (!visit.attended_date && !['attended', 'completed'].includes(String(visit.status || '').toLowerCase())) return false;
+                const visitDate = new Date(visit.attended_date || visit.scheduled_date);
                 return !Number.isNaN(visitDate.getTime()) && visitDate >= deliveryDate && visitDate <= endDate;
             });
             if (completed) postpartumByStation[station].completed++;
@@ -468,7 +548,7 @@ const Analytics = () => {
             }
         });
 
-        // Loop vaccinations
+        const vaccinationsByStation = new Map();
         dbData.vaccinations.forEach(v => {
             let mother = null;
             if (v.newborn_id) {
@@ -483,9 +563,14 @@ const Analytics = () => {
 
             const vaccDate = v.vaccinated_date || v.scheduled_vaccination || v.created_at;
             if (!isWithinDateRange(vaccDate)) return;
-
-            liveAgg[station].totalVacc++;
-            if (v.status === 'Completed') liveAgg[station].completedVacc++;
+            const vaccinations = vaccinationsByStation.get(station) || [];
+            vaccinations.push(v);
+            vaccinationsByStation.set(station, vaccinations);
+        });
+        vaccinationsByStation.forEach((vaccinations, station) => {
+            const metrics = getVaccinationMetrics(vaccinations, filters.dateRange, now);
+            liveAgg[station].totalVacc = metrics.totalVaccinations;
+            liveAgg[station].completedVacc = metrics.completedVaccinations;
         });
 
         const mergedStations = {};
@@ -569,12 +654,33 @@ const Analytics = () => {
         
         // Missed Appt Rate
         const stationMap = new Map((dbData.stations || []).map(s => [s.id, s.station_name]));
+        const newbornById = new Map(dbData.newborns.map(newborn => [newborn.id, newborn]));
         const selectedPatientIds = new Set(selectedStations.flatMap(station => dbData.patients
             .filter(patient => normalizeStation(patient.stations?.station_name || stationMap.get(patient.station_ass)) === station.name)
             .map(patient => patient.id)));
-        const scopedVisits = dbData.visits.filter(visit => selectedPatientIds.has(visit.patient_id) && isDateWithinRange(visit.visit_date, filters.dateRange));
-        const totalVisitsCount = scopedVisits.filter(visit => visit.status !== 'Cancelled').length;
-        const missedRate = totalVisitsCount > 0 ? Math.round((totals.missedAppt / totalVisitsCount) * 100) : 0;
+        const scopedAppointments = [
+            ...dbData.visits.filter(visit => selectedPatientIds.has(visit.patient_id)),
+            ...dbData.postpartumVisits.map(visit => ({ ...visit, visit_date: visit.scheduled_date }))
+                .filter(visit => selectedPatientIds.has(visit.patient_id)),
+            ...dbData.vaccinations.map(vaccination => {
+                const newborn = newbornById.get(vaccination.newborn_id);
+                return {
+                    ...vaccination,
+                    patient_id: vaccination.newborn_id ? newborn?.mother_id : vaccination.patient_id,
+                    visit_date: vaccination.vaccinated_date || vaccination.scheduled_vaccination
+                };
+            }).filter(vaccination => selectedPatientIds.has(vaccination.patient_id))
+        ];
+        const missedRate = getAppointmentMetrics(scopedAppointments, filters.dateRange).missedRate;
+        const scopedVaccinations = dbData.vaccinations.map(vaccination => {
+            const newborn = newbornById.get(vaccination.newborn_id);
+            return {
+                ...vaccination,
+                visit_date: vaccination.vaccinated_date || vaccination.scheduled_vaccination,
+                patient_id: vaccination.newborn_id ? newborn?.mother_id : vaccination.patient_id
+            };
+        }).filter(vaccination => selectedPatientIds.has(vaccination.patient_id));
+        const missedVaccinationCount = getAppointmentMetrics(scopedVaccinations, filters.dateRange).missedAppointments;
 
         return {
             totalPregnant: totals.patients,
@@ -587,6 +693,7 @@ const Analytics = () => {
             vaccRate: vaccRate,
             ppRate: ppRate,
             missedRate: missedRate,
+            missedVaccinationCount,
             
             // Raw values for breakdowns
             normalDel: totals.normalDel,
@@ -620,12 +727,12 @@ const Analytics = () => {
         const selectedPatientIds = new Set(dbData.patients
             .filter(patient => filters.station === 'All Stations' || normalizeStation(patient.stations?.station_name || stationMap.get(patient.station_ass)) === filters.station)
             .map(patient => patient.id));
-        const visitsByPatient = new Map();
-        dbData.visits.forEach(visit => {
+        const postpartumVisitsByPatient = new Map();
+        dbData.postpartumVisits.forEach(visit => {
             if (!visit.patient_id) return;
-            const visits = visitsByPatient.get(visit.patient_id) || [];
+            const visits = postpartumVisitsByPatient.get(visit.patient_id) || [];
             visits.push(visit);
-            visitsByPatient.set(visit.patient_id, visits);
+            postpartumVisitsByPatient.set(visit.patient_id, visits);
         });
         const newbornById = new Map(dbData.newborns.map(newborn => [newborn.id, newborn]));
         const bucket = (dateValue) => weeks.findIndex(week => {
@@ -643,9 +750,10 @@ const Analytics = () => {
                 riskService.getPregnancyRisk(patient, pregnancy, visit)
         });
         const deliveriesVal = weeks.map(() => 0);
-        const vaccNewborn = weeks.map(() => ({ completed: 0, total: 0 }));
+        const vaccMothers = weeks.map(() => []);
+        const vaccNewborns = weeks.map(() => []);
         const postpartum = weeks.map(() => ({ eligible: 0, completed: 0 }));
-        const visitsByWeek = weeks.map(() => ({ missed: 0, total: 0 }));
+        const appointmentsByWeek = weeks.map(() => []);
 
         dbData.deliveries.forEach(delivery => {
             if (!selectedPatientIds.has(delivery.mother_id)) return;
@@ -656,34 +764,45 @@ const Analytics = () => {
                 const deliveryDate = new Date(delivery.delivery_date);
                 const endDate = new Date(deliveryDate);
                 endDate.setDate(endDate.getDate() + 42);
-                if ((visitsByPatient.get(delivery.mother_id) || []).some(visit => visit.status === 'Attended' && new Date(visit.visit_date) >= deliveryDate && new Date(visit.visit_date) <= endDate)) postpartum[index].completed++;
+                if ((postpartumVisitsByPatient.get(delivery.mother_id) || []).some(visit =>
+                    visit.status === 'Attended'
+                    && new Date(visit.scheduled_date) >= deliveryDate
+                    && new Date(visit.scheduled_date) <= endDate
+                )) postpartum[index].completed++;
             }
         });
-        dbData.visits.forEach(visit => {
-            if (!selectedPatientIds.has(visit.patient_id)) return;
-            const index = bucket(visit.visit_date);
-            if (index < 0 || visit.status === 'Cancelled') return;
-            visitsByWeek[index].total++;
-            if (visit.status === 'Missed' || (visit.status === 'Scheduled' && new Date(visit.visit_date) < now)) visitsByWeek[index].missed++;
+        const addAppointmentsToTrend = (records, dateColumn) => records.forEach(record => {
+            if (!selectedPatientIds.has(record.patient_id)) return;
+            const index = bucket(record[dateColumn]);
+            if (index >= 0) appointmentsByWeek[index].push({
+                ...record,
+                visit_date: record[dateColumn] || record.vaccinated_date
+            });
         });
+        addAppointmentsToTrend(dbData.visits, 'visit_date');
+        addAppointmentsToTrend(dbData.postpartumVisits, 'scheduled_date');
         dbData.vaccinations.forEach(vaccination => {
-            if (!vaccination.newborn_id) return;
             const newborn = newbornById.get(vaccination.newborn_id);
-            if (!selectedPatientIds.has(newborn?.mother_id)) return;
-            const index = bucket(vaccination.vaccinated_date || vaccination.scheduled_vaccination || vaccination.created_at);
+            const patientId = vaccination.newborn_id ? newborn?.mother_id : vaccination.patient_id;
+            if (!selectedPatientIds.has(patientId)) return;
+            const date = vaccination.vaccinated_date || vaccination.scheduled_vaccination || vaccination.created_at;
+            const index = bucket(date);
             if (index < 0) return;
-            const series = vaccNewborn[index];
-            series.total++;
-            if (vaccination.status === 'Completed') series.completed++;
+            const record = { ...vaccination, scheduled_vaccination: date };
+            (vaccination.newborn_id ? vaccNewborns[index] : vaccMothers[index]).push(record);
+            appointmentsByWeek[index].push({ ...record, visit_date: date });
         });
         return {
             labels: weeks.map(week => week.label),
             totalVal,
             highRiskVal,
             deliveriesVal,
-            vaccNewborn: vaccNewborn.map(series => series.total ? Math.round((series.completed / series.total) * 100) : 0),
+            vaccMothers: vaccMothers.map(records => getVaccinationMetrics(records, 'all', now).vaccinationRate),
+            vaccNewborns: vaccNewborns.map(records => getVaccinationMetrics(records, 'all', now).vaccinationRate),
+            vaccMothersOverall: getVaccinationMetrics(vaccMothers.flat(), 'all', now).vaccinationRate,
+            vaccNewbornsOverall: getVaccinationMetrics(vaccNewborns.flat(), 'all', now).vaccinationRate,
             postpartumRate: postpartum.map(series => series.eligible ? Math.round((series.completed / series.eligible) * 100) : 0),
-            missedRate: visitsByWeek.map(series => series.total ? Math.round((series.missed / series.total) * 100) : 0)
+            missedRate: appointmentsByWeek.map(records => getAppointmentMetrics(records, 'all', now).missedRate)
         };
     }, [filters, dbData]);
 
@@ -892,9 +1011,7 @@ const Analytics = () => {
         const list = Object.values(dashboardMetrics);
         
         const computed = list.map(st => {
-            const vRate = st.totalVacc > 0 ? Math.round((st.completedVacc / st.totalVacc) * 100) : 85;
-            const missedTotal = st.patients * 4;
-            const mRate = missedTotal > 0 ? Math.round((st.missedAppt / missedTotal) * 100) : 6;
+            const vRate = st.totalVacc > 0 ? Math.round((st.completedVacc / st.totalVacc) * 100) : 0;
             
             return {
                 name: st.name,
@@ -1004,13 +1121,30 @@ const Analytics = () => {
             }
         });
 
-        dbData.visits.forEach(v => {
-            const pat = patientById.get(v.patient_id);
-            const station = normalizeStation(pat?.stations?.station_name);
-            if (!liveAgg[station]) return;
-            if (!isWithinExportDateRange(v.visit_date)) return;
-            const isMissed = v.status === 'Missed' || (v.visit_date && new Date(v.visit_date) < new Date() && v.status === 'Scheduled');
-            if (isMissed) liveAgg[station].missedAppt++;
+        const appointmentsByStation = new Map();
+        const addExportAppointments = (records, dateColumn) => records.forEach(record => {
+            const patient = patientById.get(record.patient_id);
+            const station = normalizeStation(patient?.stations?.station_name || stationMap.get(patient?.station_ass));
+            if (!liveAgg[station] || !isWithinExportDateRange(record[dateColumn] || record.vaccinated_date)) return;
+            const appointments = appointmentsByStation.get(station) || [];
+            appointments.push({ ...record, visit_date: record[dateColumn] || record.vaccinated_date });
+            appointmentsByStation.set(station, appointments);
+        });
+        const stationMap = new Map((dbData.stations || []).map(s => [s.id, s.station_name]));
+        addExportAppointments(dbData.visits, 'visit_date');
+        addExportAppointments(dbData.postpartumVisits, 'scheduled_date');
+        dbData.vaccinations.forEach(vaccination => {
+            const newborn = newbornById.get(vaccination.newborn_id);
+            const mother = patientById.get(vaccination.newborn_id ? newborn?.mother_id : vaccination.patient_id);
+            const station = normalizeStation(mother?.stations?.station_name || stationMap.get(mother?.station_ass));
+            const appointmentDate = vaccination.vaccinated_date || vaccination.scheduled_vaccination || vaccination.created_at;
+            if (!liveAgg[station] || !isWithinExportDateRange(appointmentDate)) return;
+            const appointments = appointmentsByStation.get(station) || [];
+            appointments.push({ ...vaccination, visit_date: appointmentDate });
+            appointmentsByStation.set(station, appointments);
+        });
+        appointmentsByStation.forEach((appointments, station) => {
+            liveAgg[station].missedAppt = getAppointmentMetrics(appointments, 'all').missedAppointments;
         });
 
         dbData.deliveries.forEach(d => {
@@ -1035,7 +1169,7 @@ const Analytics = () => {
             }
         });
 
-        const stationMap = new Map((dbData.stations || []).map(s => [s.id, s.station_name]));
+        const vaccinationsByStation = new Map();
         dbData.vaccinations.forEach(v => {
             let mother = null;
             if (v.newborn_id) {
@@ -1047,10 +1181,17 @@ const Analytics = () => {
             if (!mother) return;
             const station = normalizeStation(mother.stations?.station_name || stationMap.get(mother.station_ass));
             if (!liveAgg[station]) return;
-            if (!isWithinExportDateRange(v.vaccinated_date || v.scheduled_vaccination || v.created_at)) return;
-
-            liveAgg[station].totalVacc++;
-            if (v.status === 'Completed') liveAgg[station].completedVacc++;
+            const vaccinations = vaccinationsByStation.get(station) || [];
+            vaccinations.push(v);
+            vaccinationsByStation.set(station, vaccinations);
+        });
+        vaccinationsByStation.forEach((vaccinations, station) => {
+            const inRange = vaccinations.filter(vaccination =>
+                isWithinExportDateRange(vaccination.vaccinated_date || vaccination.scheduled_vaccination || vaccination.created_at)
+            );
+            const metrics = getVaccinationMetrics(inRange, 'all');
+            liveAgg[station].totalVacc = metrics.totalVaccinations;
+            liveAgg[station].completedVacc = metrics.completedVaccinations;
         });
 
         const mergedStations = {};
@@ -1074,8 +1215,8 @@ const Analytics = () => {
 
         const vaccRate = totals.totalVacc > 0 ? Math.round((totals.completedVacc / totals.totalVacc) * 100) : 0;
         const ppRate = totals.ppEligible > 0 ? Math.round((totals.ppCompleted / totals.ppEligible) * 100) : 0;
-        const totalVisits = totals.patients * 4;
-        const missedRate = totalVisits > 0 ? Math.round((totals.missedAppt / totalVisits) * 100) : 0;
+        const exportAppointments = relevantStations.flatMap(station => appointmentsByStation.get(station) || []);
+        const missedRate = getAppointmentMetrics(exportAppointments, 'all').missedRate;
 
         return {
             totalPregnant: totals.patients,
@@ -1117,10 +1258,8 @@ const Analytics = () => {
             { 'Intelligence Metric': 'Missed Appointment Rate', 'Value / Rate': `${data.missedRate}%` }
         ];
 
-        const stationComparison = Object.values(data.mergedStations).map((s, idx) => {
+        const stationComparison = Object.values(data.mergedStations).map(s => {
             const vRate = s.totalVacc > 0 ? Math.round((s.completedVacc / s.totalVacc) * 100) : 0;
-            const missedTotal = s.patients * 4;
-            const mRate = missedTotal > 0 ? Math.round((s.missedAppt / missedTotal) * 100) : 0;
             return {
                 'Station Area': s.name,
                 'Active Patients': s.patients,
@@ -1676,10 +1815,11 @@ const Analytics = () => {
                             <div className="card-header-compact">
                                 <div>
                                     <h2 className="section-header-title">Vaccination Progress</h2>
-                                    <p className="section-header-subtitle">Newborn immunization compliance rate</p>
+                                    <p className="section-header-subtitle">Maternal and newborn vaccine completion by week</p>
                                 </div>
                                 <div className="chart-legend">
-                                    <span className="legend-item"><span className="legend-dot color-vacc-nb"></span>Newborns ({activeData.vaccRate}%)</span>
+                                    <span className="legend-item"><span className="legend-dot color-vacc-m"></span>Mothers ({trendData.vaccMothersOverall}%)</span>
+                                    <span className="legend-item"><span className="legend-dot color-vacc-nb"></span>Newborns ({trendData.vaccNewbornsOverall}%)</span>
                                 </div>
                             </div>
                             <div className="chart-wrapper">
@@ -1688,7 +1828,8 @@ const Analytics = () => {
                                         <line key={i} x1="40" x2="480" y1={20 + ratio * 180} y2={20 + ratio * 180} stroke="#f1f3f5" strokeWidth="1" />
                                     ))}
                                     <line x1="40" x2="480" y1="38" y2="38" stroke="#b9818a" strokeWidth="1.5" strokeDasharray="4,4" className="vacc-target-line" />
-                                    <path d={getSvgLinePath(trendData.vaccNewborn, 500, 240, 40, 20, 20, 40, 100)} className="chart-line stroke-vacc-nb" />
+                                    <path d={getSvgLinePath(trendData.vaccMothers, 500, 240, 40, 20, 20, 40, 100)} className="chart-line stroke-vacc-m" />
+                                    <path d={getSvgLinePath(trendData.vaccNewborns, 500, 240, 40, 20, 20, 40, 100)} className="chart-line stroke-vacc-nb" />
                                     {trendData.labels.map((lbl, idx) => {
                                         const labelDivisor2 = trendData.labels.length <= 1 ? 1 : trendData.labels.length - 1;
                                         const x = 40 + (idx / labelDivisor2) * 440;
@@ -1861,7 +2002,7 @@ const Analytics = () => {
                                 <XCircle size={18} />
                             </div>
                             <div className="st-stat-info">
-                                <span className="st-stat-value">{activeData.missedCount || 12}</span>
+                                <span className="st-stat-value">{activeData.missedVaccinationCount}</span>
                                 <span className="st-stat-label">Missed Vaccinations</span>
                             </div>
                         </div>
