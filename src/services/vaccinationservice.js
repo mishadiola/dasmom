@@ -14,17 +14,10 @@ class VaccinationService {
   }
 
   async getCurrentUserStationId() {
-    const userId = await this.getCurrentUserId();
-    if (!userId) return null;
-
-    const { data, error } = await this.supabase
-      .from('staff_profiles')
-      .select('station_ass')
-      .eq('id', userId)
-      .maybeSingle();
-
+    const { data, error } = await this.supabase.rpc('get_inventory_user_scope');
     if (error) throw error;
-    return data?.station_ass || null;
+    const scope = Array.isArray(data) ? data[0] : data;
+    return scope?.station_id || null;
   }
 
   async getAssignedStaffForPatient(patientId) {
@@ -96,7 +89,7 @@ class VaccinationService {
    * Preference is exact name + brand, and the earliest expiration date wins.
    * When a station is provided, only stock that was distributed to that station is considered.
    */
-  async resolveInventoryItem({ itemType, itemName, brand = null, stationId = null }) {
+  async resolveInventoryItem({ itemType, itemName, brand = null, stationId = null, genericOnly = false }) {
     const normalizedName = String(itemName || '').trim();
     if (!normalizedName) return null;
 
@@ -136,6 +129,7 @@ class VaccinationService {
       }
       if (exactName) query = query.eq(nameField, exactName);
       if (brand) query = query.eq('brand', brand);
+      else if (genericOnly) query = query.is('brand', null);
 
       const { data, error } = await query;
       if (error) throw error;
@@ -148,7 +142,7 @@ class VaccinationService {
 
     const exactItems = await findEligible(normalizedName);
     if (exactItems.length > 0) return exactItems[0];
-    if (brand) return null;
+    if (brand || genericOnly) return null;
 
     const fallbackItems = await findEligible(null);
     const normalizedSearch = normalizedName.toLowerCase().replace(/[^a-z0-9]/g, '');

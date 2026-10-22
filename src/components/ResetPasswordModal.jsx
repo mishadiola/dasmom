@@ -4,7 +4,7 @@ import { Mail, X } from 'lucide-react';
 import supabase from '../config/supabaseclient';
 import { PASSWORD_RESET_URL } from '../config/appConfig';
 
-const ResetPasswordModal = ({ isOpen, onClose, initialEmail = '' }) => {
+const ResetPasswordModal = ({ isOpen, onClose, initialEmail = '', targetUserId = null }) => {
     const [email, setEmail] = useState('');
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
@@ -41,6 +41,7 @@ const ResetPasswordModal = ({ isOpen, onClose, initialEmail = '' }) => {
                 body: {
                     email: trimmedEmail,
                     redirectTo: PASSWORD_RESET_URL,
+                    ...(targetUserId ? { targetUserId } : {}),
                 }
             });
             

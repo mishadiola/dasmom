@@ -45,6 +45,14 @@ export default function Login() {
     }, [user, isAuthLoading, navigate, location.state]);
 
   useEffect(() => {
+    if (isAuthLoading) return;
+    const message = sessionStorage.getItem('dasmom_google_login_error');
+    if (!message) return;
+    sessionStorage.removeItem('dasmom_google_login_error');
+    setErrors(prev => ({ ...prev, form: message }));
+  }, [isAuthLoading]);
+
+  useEffect(() => {
     try {
       const saved = localStorage.getItem('dasmom_last_login');
       if (saved) {
@@ -191,17 +199,10 @@ export default function Login() {
   };
 
     const handleGoogleLogin = async () => {
-        const normalizedEmail = email.trim().toLowerCase();
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-            setErrors(prev => ({ ...prev, email: 'Enter your registered email before using Google sign-in.' }));
-            emailRef.current?.focus();
-            return;
-        }
-
         setIsLoading(true);
         setErrors({ email: '', password: '', form: '', general: '' });
         try {
-            await authService.signInWithGoogle(normalizedEmail, `${DASMOM_APP_URL}/login`);
+            await authService.signInWithGoogle(`${DASMOM_APP_URL}/login`);
         } catch (error) {
             setErrors(prev => ({ ...prev, form: error.message || 'Google sign-in failed.' }));
             setIsLoading(false);

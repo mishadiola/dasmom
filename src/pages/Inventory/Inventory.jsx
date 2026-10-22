@@ -35,7 +35,6 @@ import {
 import { AuthContext } from '../../context/AuthContext';
 import { useRolePermissions } from '../../context/RolePermissionContext';
 import InventoryService from '../../services/inventoryservice';
-import PatientService from '../../services/patientservice';
 import { useModal } from '../../context/ModalContext';
 import * as XLSX from 'xlsx';
 import ExportModal from '../../components/ExportModal';
@@ -51,7 +50,6 @@ import { useDefaultStation } from '../../hooks/useDefaultStation';
 
 
 const inventoryService = new InventoryService();
-const patientService = new PatientService();
 
 const normalizeRole = (role) => String(role || '').trim().toLowerCase();
 const isAdminRole = (role) => {
@@ -126,14 +124,6 @@ const Inventory = () => {
   useClickOutside(filterRowRef, () => setActivePopover(null));
   const [activeSummaryFilter, setActiveSummaryFilter] = useState(null);
   const [archiveFilter, setArchiveFilter] = useState('active'); // 'active' | 'archived' | 'all'
-  const [archivedIds, setArchivedIds] = useState(() => {
-    try {
-      const stored = localStorage.getItem('inventory_archived_ids');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
   const [dateFilter, setDateFilter] = useState('all');
   const [customDateFrom, setCustomDateFrom] = useState('');
   const [customDateTo, setCustomDateTo] = useState('');
@@ -156,7 +146,7 @@ const Inventory = () => {
       const targetItem = allLoaded.find(i => String(i.id) === targetId);
       if (targetItem) {
         setActiveTab(targetItem._tab);
-        const isArchived = archivedIds.includes(targetItem.id) || targetItem.status === 'archived';
+        const isArchived = targetItem.status === 'archived';
         if (isArchived) {
           setArchiveFilter('archived');
         } else {
@@ -172,7 +162,7 @@ const Inventory = () => {
       setStatusFilter(location.state.filterStatus);
       window.history.replaceState({}, document.title);
     }
-  }, [location.state, vaccines, supplements, archivedIds]);
+  }, [location.state, vaccines, supplements]);
 
   useEffect(() => {
     setUserScope({
@@ -185,6 +175,7 @@ const Inventory = () => {
     setSupplements([]);
     setStationCurrentInventory([]);
     setDistributionHistory([]);
+    setStationInventoryError('');
   }, [user?.id]);
 
 
@@ -206,6 +197,8 @@ const Inventory = () => {
   const [selectedDistRecord, setSelectedDistRecord] = useState(null);
   const [distributionHistory, setDistributionHistory] = useState([]);
   const [stationCurrentInventory, setStationCurrentInventory] = useState([]);
+  const [stationInventoryError, setStationInventoryError] = useState('');
+  const [stationDataRefreshKey, setStationDataRefreshKey] = useState(0);
   const [distForm, setDistForm] = useState({
     item_type: 'vaccine',
     item_id: '',
@@ -511,28 +504,13 @@ const Inventory = () => {
         }
         setError(null);
         try {
-          const [vaxData, suppData, stationsData, stationsRaw] = await Promise.all([
-            inventoryService.getVaccineInventory({ includeMainInventory: canViewMainInventory }),
-            inventoryService.getSupplementInventory({ includeMainInventory: canViewMainInventory }),
-            patientService.getAvailableStations(),
-            inventoryService.supabase.from('stations').select('id, station_name').order('station_name')
-          ]);
+        const pendingLoad = loadPendingVaccinations();
+        const [vaxData, suppData] = await Promise.all([
+          inventoryService.getVaccineInventory({ includeMainInventory: canViewMainInventory }),
+          inventoryService.getSupplementInventory({ includeMainInventory: canViewMainInventory })
+        ]);
 
-          if (stationsRaw?.data) {
-            setStationsDirectory(stationsRaw.data.map(s => ({ id: s.id, name: s.station_name })));
-          }
-
-          setAvailableStations(stationsData && stationsData.length > 0 ? stationsData : [
-            'City Health Office 3',
-            'Dasma 1',
-            'Dasma 3',
-            'Dasma 4',
-            'Salawag Proper',
-            'Armstrong',
-            'San Marino'
-          ]);
-
-          await loadPendingVaccinations();
+        await pendingLoad;
 
           const mappedVaccines = (vaxData || []).map(row => ({
             id: row?.id || '',
@@ -615,6 +593,8 @@ const Inventory = () => {
 
   // Separate effect for station inventory to prevent clearing on central inventory updates
   useEffect(() => {
+    if (mainTab !== 'distribution') return undefined;
+
     let isCurrent = true;
     let refreshTimer;
     let isFetching = false;
@@ -630,21 +610,53 @@ const Inventory = () => {
       try {
         do {
           refreshQueued = false;
-          try {
-            const [stationInventoryData, history] = await Promise.all([
-              canViewStationInventory
-                ? inventoryService.getStationInventorySnapshot()
-                : Promise.resolve([]),
-              canViewStationInventory || canDistributeToStations
-                ? inventoryService.getStationDistributionHistory()
-                : Promise.resolve([])
-            ]);
-            if (isCurrent) {
-              setStationCurrentInventory(stationInventoryData || []);
-              setDistributionHistory(history || []);
+          const [inventoryResult, historyResult, stationsResult] = await Promise.allSettled([
+            canViewStationInventory
+              ? inventoryService.getStationInventorySnapshot()
+              : Promise.resolve([]),
+            canViewStationInventory || canDistributeToStations
+              ? inventoryService.getStationDistributionHistory()
+              : Promise.resolve([]),
+            inventoryService.supabase.from('stations').select('id, station_name').order('station_name')
+          ]);
+          if (isCurrent) {
+            if (inventoryResult.status === 'fulfilled') {
+              setStationCurrentInventory(inventoryResult.value || []);
+              setStationInventoryError('');
+            } else {
+              console.warn('Failed to fetch station inventory:', inventoryResult.reason);
+              setStationInventoryError('Station inventory could not be loaded. Please retry.');
             }
-          } catch (err) {
-            console.warn('Failed to fetch station inventory/distribution data:', err);
+
+            if (historyResult.status === 'fulfilled') {
+              setDistributionHistory(historyResult.value || []);
+            } else {
+              console.warn('Failed to fetch station distribution history:', historyResult.reason);
+            }
+
+            if (stationsResult.status === 'fulfilled') {
+              const stationsRaw = stationsResult.value;
+              const stations = stationsRaw.data || [];
+              if (stationsRaw.error) {
+                console.warn('Failed to fetch inventory stations:', stationsRaw.error);
+              }
+              setStationsDirectory(stations.map(station => ({ id: station.id, name: station.station_name })));
+              if (stations.length > 0) {
+                setAvailableStations(stations.map(station => station.station_name));
+              } else {
+                setAvailableStations([
+                  'City Health Office 3',
+                  'Dasma 1',
+                  'Dasma 3',
+                  'Dasma 4',
+                  'Salawag Proper',
+                  'Armstrong',
+                  'San Marino'
+                ]);
+              }
+            } else {
+              console.warn('Failed to fetch inventory stations:', stationsResult.reason);
+            }
           }
         } while (refreshQueued && isCurrent);
       } finally {
@@ -688,7 +700,7 @@ const Inventory = () => {
       inventoryService.supabase.removeChannel(stationVaccineSub);
       inventoryService.supabase.removeChannel(stationSupplementSub);
     };
-  }, [user?.id, isAdmin, canViewOtherStations, canDistributeToStations, canViewStationInventory]);
+  }, [user?.id, mainTab, isAdmin, canViewOtherStations, canDistributeToStations, canViewStationInventory, stationDataRefreshKey]);
 
   const getStatus = (qty, maxStock, hasExpiredStock) => {
     return getInventoryStatus(qty, maxStock, hasExpiredStock);
@@ -816,7 +828,7 @@ const Inventory = () => {
       .map(item => {
         // Filter the items within the group based on the archiveFilter and dateFilter
         const filteredSubItems = (item.items || []).filter(i => {
-          const isArchived = archivedIds.includes(i.id) || i.status === 'archived';
+          const isArchived = i.status === 'archived';
           if (archiveFilter === 'active' && isArchived) return false;
           if (archiveFilter === 'archived' && !isArchived) return false;
           
@@ -837,12 +849,6 @@ const Inventory = () => {
           }
           
           return true;
-        }).map(i => {
-          // If it's in our local storage archived list, enforce the status so UI reflects it
-          if (archivedIds.includes(i.id)) {
-              return { ...i, status: 'archived' };
-          }
-          return i;
         });
 
         const total_quantity = filteredSubItems.reduce((sum, i) => sum + (i.isExpired ? 0 : (i.quantity || 0)), 0);
@@ -860,7 +866,7 @@ const Inventory = () => {
         };
       })
       .filter(item => item.items.length > 0);
-  }, [currentItems, archiveFilter, archivedIds, dateFilter, customDateFrom, customDateTo]);
+  }, [currentItems, archiveFilter, dateFilter, customDateFrom, customDateTo]);
 
   const filteredItems = useMemo(() => {
     return scopedItems.filter(item => {
@@ -920,7 +926,7 @@ const Inventory = () => {
       ...(vaccines || []).map(v => ({ ...v, _type: 'vaccines' })),
       ...(supplements || []).map(s => ({ ...s, _type: 'supplements' }))
     ].filter(item => {
-      const isArchived = archivedIds.includes(item.id) || item.status === 'archived';
+      const isArchived = item.status === 'archived';
       if (archiveFilter === 'active') return !isArchived;
       if (archiveFilter === 'archived') return isArchived;
       return true; // 'all'
@@ -1122,7 +1128,7 @@ const Inventory = () => {
     }
 
     return alerts.sort((a, b) => a.priority - b.priority);
-  }, [vaccines, supplements, archivedIds, pendingVaccinations, archiveFilter, activeTab]);
+  }, [vaccines, supplements, pendingVaccinations, archiveFilter, activeTab]);
 
   // Pagination logic
   const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
@@ -1554,12 +1560,12 @@ const Inventory = () => {
     });
     if (!isConfirmed) return;
     try {
-      const newArchivedIds = [...new Set([...archivedIds, ...ids])];
-      setArchivedIds(newArchivedIds);
-      localStorage.setItem('inventory_archived_ids', JSON.stringify(newArchivedIds));
-      
-      // Update UI manually or just rely on state change causing re-render
-      // fetchData() is optional if we just rely on state
+      await inventoryService.setInventoryArchived(table, ids, true);
+      const setArchivedStatus = items => items.map(item => (
+        ids.includes(item.id) ? { ...item, status: 'archived' } : item
+      ));
+      if (table === 'vaccine_inventory') setVaccines(setArchivedStatus);
+      else setSupplements(setArchivedStatus);
     } catch (error) {
       await customAlert({ title: 'Error', text: 'Failed to archive item: ' + error.message, iconType: 'danger' });
     }
@@ -1575,10 +1581,12 @@ const Inventory = () => {
     });
     if (!isConfirmed) return;
     try {
-      const newArchivedIds = archivedIds.filter(id => !ids.includes(id));
-      setArchivedIds(newArchivedIds);
-      localStorage.setItem('inventory_archived_ids', JSON.stringify(newArchivedIds));
-      
+      await inventoryService.setInventoryArchived(table, ids, false);
+      const setActiveStatus = items => items.map(item => (
+        ids.includes(item.id) ? { ...item, status: 'active' } : item
+      ));
+      if (table === 'vaccine_inventory') setVaccines(setActiveStatus);
+      else setSupplements(setActiveStatus);
     } catch (error) {
       await customAlert({ title: 'Error', text: 'Failed to restore item: ' + error.message, iconType: 'danger' });
     }
@@ -2674,7 +2682,16 @@ const Inventory = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedStationInventory.length > 0 ? selectedStationInventory.map((group) => {
+                  {stationInventoryError ? (
+                    <tr>
+                      <td colSpan={7} role="alert" style={{ padding: '20px', textAlign: 'center' }}>
+                        {stationInventoryError}{' '}
+                        <button type="button" onClick={() => setStationDataRefreshKey(key => key + 1)}>
+                          Retry
+                        </button>
+                      </td>
+                    </tr>
+                  ) : selectedStationInventory.length > 0 ? selectedStationInventory.map((group) => {
                     const isExpanded = expandedStationRows[group.groupKey];
                     return (
                       <React.Fragment key={group.groupKey}>
@@ -2768,7 +2785,24 @@ const Inventory = () => {
                   }) : (
                     <tr>
                       <td colSpan="7" style={{ padding: '40px', textAlign: 'center', color: '#888', fontSize: '13px' }}>
-                        No inventory records found for this station.
+                        {stationInvSearch || stationInvTypeFilter !== 'All' ? (
+                          <>
+                            No {stationInvTypeFilter === 'All' ? 'inventory items' : `${stationInvTypeFilter.toLowerCase()} items`} match the current filters.
+                            {' '}
+                            <button
+                              type="button"
+                              className="clear-filters-btn"
+                              onClick={() => {
+                                setStationInvSearch('');
+                                setStationInvTypeFilter('All');
+                              }}
+                            >
+                              Clear filters
+                            </button>
+                          </>
+                        ) : (
+                          'No inventory records found for this station.'
+                        )}
                       </td>
                     </tr>
                   )}

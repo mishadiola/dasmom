@@ -120,7 +120,7 @@ Deno.serve(async (request) => {
       return json({ error: 'Email, password, full name, and role are required' }, 400);
     }
 
-    if (!['admin', 'staff', 'cho personnel'].includes(role)) {
+    if (['patient', 'mother', 'user'].includes(role)) {
       return json({ error: 'Invalid staff role' }, 400);
     }
 
@@ -129,6 +129,16 @@ Deno.serve(async (request) => {
     }
     if (caller.role === 'cho personnel' && !['staff', 'cho personnel'].includes(role)) {
       return json({ error: 'CHO Personnel can only create Staff or CHO Personnel accounts' }, 403);
+    }
+    if (caller.role === 'admin') {
+      const { data: userTypes, error: userTypesError } = await admin
+        .from('user_type')
+        .select('user_type');
+      if (userTypesError) throw userTypesError;
+      const roleExists = (userTypes || []).some(userType =>
+        String(userType.user_type || '').trim().toLowerCase().replace(/_/g, ' ') === role.replace(/_/g, ' ')
+      );
+      if (!roleExists) return json({ error: 'Invalid staff role' }, 400);
     }
 
     let effectiveStationId = stationId;

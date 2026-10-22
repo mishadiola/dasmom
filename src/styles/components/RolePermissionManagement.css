@@ -65,6 +65,38 @@
     flex-shrink: 0;
 }
 
+.role-add-user-type {
+    display: grid;
+    grid-template-columns: minmax(140px, auto) minmax(180px, 1fr) auto auto;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    background: #faf8f9;
+    border: 1px solid rgba(185, 129, 138, 0.2);
+    border-radius: 12px;
+}
+
+.role-add-user-type label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text, #1e293b);
+}
+
+.role-add-user-type input {
+    min-width: 0;
+    padding: 9px 12px;
+    border: 1px solid #d9dde5;
+    border-radius: 8px;
+    font: inherit;
+}
+
+.role-add-user-type p {
+    grid-column: 2 / -1;
+    margin: -4px 0 0;
+    color: var(--color-text-muted, #64748b);
+    font-size: 12px;
+}
+
 /* Save Changes button */
 .role-permissions-save {
     display: inline-flex;
@@ -790,6 +822,14 @@
     .role-permissions-toolbar {
         grid-template-columns: 1fr;
         padding: 14px;
+    }
+
+    .role-add-user-type {
+        grid-template-columns: 1fr;
+    }
+
+    .role-add-user-type p {
+        grid-column: auto;
     }
 
     .role-permission-row {

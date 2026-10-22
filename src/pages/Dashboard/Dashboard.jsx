@@ -214,7 +214,8 @@ const Dashboard = () => {
                 { data: dashboardOverview, error: overviewError },
                 { data: prenatalApptData, error: prenatalError },
                 { data: postpartumApptData, error: postpartumError },
-                { data: vaccinationApptData, error: vaccinationError }
+                { data: vaccinationApptData, error: vaccinationError },
+                highRiskPatients
             ] = await Promise.all([
                 supabase.rpc('get_dashboard_overview'),
                 supabase.from('prenatal_visits').select(`
@@ -244,7 +245,8 @@ const Dashboard = () => {
                   .neq('status', 'Cancelled')
                   .neq('status', 'Missed')
                   .neq('status', 'cancelled')
-                  .neq('status', 'missed')
+                  .neq('status', 'missed'),
+                patientService.getHighRiskPatients()
             ]);
 
             if (overviewError) throw overviewError;
@@ -256,7 +258,6 @@ const Dashboard = () => {
             const getPostpartumPatientId = visit =>
                 visit.delivery?.mother_id || visit.delivery?.patient_basic_info?.id || visit.patient_id;
 
-            const highRiskPatients = dashboardOverview.highRiskPatients || [];
             const highRiskPatientMap = new Map(
                 highRiskPatients.filter(patient => patient.id).map(patient => [patient.id, patient])
             );
@@ -400,6 +401,7 @@ const Dashboard = () => {
                 // 1. Retrieve from the Health Conditions page dataset
                 if (highRiskPatientMap.has(patientId)) {
                     const hr = highRiskPatientMap.get(patientId);
+                    if (hr.documentedConditions?.length) return hr.documentedConditions;
                     const conditions = patientService.getRiskFactors(hr.risk_factors);
                     if (conditions.length > 0) return conditions;
                 }

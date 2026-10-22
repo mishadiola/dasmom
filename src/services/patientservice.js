@@ -101,7 +101,7 @@ export default class PatientService {
 
     if (role === 'station staff') role = 'staff';
 
-    if (role === 'cho personnel' || role === 'staff') {
+    if (currentUser?.id) {
       const { data } = await this.supabase
         .from('staff_profiles')
         .select('station_ass')
@@ -1233,7 +1233,7 @@ export default class PatientService {
         reschedule_reason,
         calculated_risk,
         risk_factors,
-        patient_basic_info!inner(first_name, last_name, middle_name)
+        patient_basic_info!inner(first_name, last_name, middle_name, station_ass)
       `)
       .order('visit_date', { ascending: false });
 
@@ -1273,6 +1273,7 @@ export default class PatientService {
       attendedDate: visit.attended_date,
       patientName: `${visit.patient_basic_info?.first_name || ''} ${visit.patient_basic_info?.middle_name ? visit.patient_basic_info.middle_name[0] + '. ' : ''}${visit.patient_basic_info?.last_name || ''}`.trim(),
       patientId: visit.patient_id,
+      patientStationId: visit.patient_basic_info?.station_ass || null,
       ga: visit.gestational_age || 'N/A',
       bp: visit.bp_systolic && visit.bp_diastolic ? `${visit.bp_systolic}/${visit.bp_diastolic}` : 'N/A',
       weight: visit.weight_kg ? `${visit.weight_kg}kg` : 'N/A',
@@ -1708,75 +1709,8 @@ async getSlotCount(dateStr, timeSlot) {
 
   async getHighRiskStats({ includeArchived = false } = {}) {
     try {
-      const archivedPatientIds = includeArchived ? new Set() : await this.getArchivedPatientIds();
-      const { data: deliveries } = await this.supabase
-        .from('deliveries')
-        .select('mother_id');
-
-      const deliveredPatients = new Set();
-      (deliveries || []).forEach(d => {
-        if (d.mother_id) deliveredPatients.add(d.mother_id);
-      });
-
-      const { data: visits, error } = await this.supabase
-        .from('prenatal_visits')
-        .select('patient_id, visit_date, status, risk_factors, bp_systolic, bp_diastolic, weight_kg, height_cm, temp_c, pulse_bpm, resp_rate_cpm, fhr_bpm')
-        .eq('status', 'Attended')
-        .order('visit_date', { ascending: false });
-
-      if (error) throw error;
-
-      const { data: pregnancies, error: pregError } = await this.supabase
-        .from('pregnancy_info')
-        .select('patient_id, pregn_postp, pregnancy_type, gravida, created_at')
-        .order('created_at', { ascending: false });
-
-      if (pregError) throw pregError;
-
-      const latestPregMap = new Map();
-      (pregnancies || []).forEach(p => {
-        if (!p.patient_id) return;
-        const existing = latestPregMap.get(p.patient_id);
-        const currentTime = new Date(p.created_at).getTime() || 0;
-        const existingTime = existing ? new Date(existing.created_at).getTime() || 0 : 0;
-        if (!existing || currentTime > existingTime) {
-          latestPregMap.set(p.patient_id, p);
-        }
-      });
-
-      const latestVisitMap = new Map();
-      const heightByPatientMap = new Map();
-      (visits || []).forEach(v => {
-        if (!v.patient_id) return;
-        if (Number(v.height_cm) > 0 && !heightByPatientMap.has(v.patient_id)) {
-          heightByPatientMap.set(v.patient_id, v.height_cm);
-        }
-        if (!includeArchived && archivedPatientIds.has(v.patient_id)) return;
-        if (deliveredPatients.has(v.patient_id)) return;
-        const preg = latestPregMap.get(v.patient_id);
-        if (!preg || preg.pregn_postp?.toLowerCase() !== 'pregnant') return;
-
-        const existing = latestVisitMap.get(v.patient_id);
-        if (!existing || new Date(v.visit_date) > new Date(existing.visit_date)) {
-          latestVisitMap.set(v.patient_id, v);
-        }
-      });
-
-      const { data: patients, error: patientError } = await this.supabase
-        .from('patient_basic_info')
-        .select('id, date_of_birth');
-      if (patientError) throw patientError;
-      const patientMap = new Map((patients || []).map(patient => [patient.id, patient]));
-
-      const highRiskCount = Array.from(latestPregMap.entries()).filter(([patientId, pregnancy]) => {
-        if (pregnancy.pregn_postp?.toLowerCase() !== 'pregnant') return false;
-        if (!includeArchived && archivedPatientIds.has(patientId)) return false;
-        if (deliveredPatients.has(patientId)) return false;
-        const visit = latestVisitMap.get(patientId);
-        return visit && this.hasDocumentedHealthConditions(visit.risk_factors);
-      }).length;
-
-      return { highRiskCount };
+      const patients = await this.getHighRiskPatients({ includeArchived });
+      return { highRiskCount: patients.length };
     } catch (err) {
       console.error('Error fetching health conditions stats:', err);
       return { highRiskCount: 0 };
@@ -1798,11 +1732,11 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
           : this.getArchivedPatientIds(),
       this.supabase
         .from('deliveries')
-        .select('mother_id')
+        .select('mother_id, delivery_date')
         .order('delivery_date', { ascending: false }),
       this.supabase
         .from('pregnancy_info')
-        .select('patient_id, pregn_postp, pregnancy_type, gravida, created_at')
+        .select('patient_id, pregn_postp, pregnancy_type, gravida, lmd, created_at')
         .order('created_at', { ascending: false }),
       this.supabase
         .from('prenatal_visits')
@@ -1841,9 +1775,13 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
     const { data: deliveries, error: deliveryError } = deliveryResult;
     if (deliveryError) throw deliveryError;
 
-    const deliveredPatients = new Set();
+    const latestDeliveryByPatient = new Map();
     (deliveries || []).forEach(d => {
-      if (d.mother_id) deliveredPatients.add(d.mother_id);
+      if (!d.mother_id || !d.delivery_date) return;
+      const existing = latestDeliveryByPatient.get(d.mother_id);
+      if (!existing || new Date(d.delivery_date) > new Date(existing)) {
+        latestDeliveryByPatient.set(d.mother_id, d.delivery_date);
+      }
     });
 
     const { data: pregnancies, error: pregnancyError } = pregnancyResult;
@@ -1886,9 +1824,20 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
     (data || []).forEach((visit) => {
       if (!visit.patient_id || visit.status !== 'Attended') return;
       if (!includeArchived && archivedPatientIds.has(visit.patient_id)) return;
-      if (deliveredPatients.has(visit.patient_id)) return;
       const preg = latestPregMap.get(visit.patient_id);
       if (!preg || preg.pregn_postp?.toLowerCase() !== 'pregnant') return;
+      const pregnancyStart = preg.lmd || preg.created_at;
+      const latestDelivery = latestDeliveryByPatient.get(visit.patient_id);
+      if (
+        latestDelivery &&
+        pregnancyStart &&
+        new Date(latestDelivery).getTime() >= new Date(pregnancyStart).getTime()
+      ) return;
+      if (
+        pregnancyStart &&
+        visit.visit_date &&
+        new Date(visit.visit_date).getTime() < new Date(pregnancyStart).getTime()
+      ) return;
 
       if (!latestAttendedByPatient.has(visit.patient_id)) {
         latestAttendedByPatient.set(visit.patient_id, visit);
@@ -1902,7 +1851,11 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
       };
       const pregnancy = latestPregMap.get(visit.patient_id) || {};
 
-      const patientVisits = visitsByPatientMap.get(visit.patient_id) || [visit];
+      const pregnancyStart = pregnancy.lmd || pregnancy.created_at;
+      const patientVisits = (visitsByPatientMap.get(visit.patient_id) || [visit]).filter(v =>
+        !pregnancyStart || !v.visit_date ||
+        new Date(v.visit_date).getTime() >= new Date(pregnancyStart).getTime()
+      );
       const conditionSet = new Set();
       const categorizedMap = new Map();
 
@@ -1920,10 +1873,26 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
         });
       };
 
+      const processVisitVitals = (currentVisit) => {
+        if (!this.isBPHighRisk(currentVisit.bp_systolic, currentVisit.bp_diastolic)) return;
+
+        const condition = this.getBPStatus(currentVisit.bp_systolic, currentVisit.bp_diastolic);
+        conditionSet.add(condition);
+        const key = `Pregnancy-Related Conditions:::${condition.toLowerCase()}`;
+        if (!categorizedMap.has(key)) {
+          categorizedMap.set(key, {
+            name: condition,
+            category: 'Pregnancy-Related Conditions',
+          });
+        }
+      };
+
       patientVisits.forEach(v => {
         processVisitRiskFactors(v.risk_factors);
+        processVisitVitals(v);
       });
       processVisitRiskFactors(visit.risk_factors);
+      processVisitVitals(visit);
 
       const documentedConditions = Array.from(conditionSet);
 
@@ -1983,6 +1952,7 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
         categorizedConditions: Array.from(categorizedMap.values()),
         condition: conditionDisplay,
         conditionsList: documentedConditions,
+        risk_factors: visit.risk_factors,
         gravida: pregnancy.gravida || null,
         lmd: lmd ? lmd.toISOString().split('T')[0] : null,
         edd: edd ? edd.toISOString().split('T')[0] : null,
@@ -2009,7 +1979,7 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
     }).filter(p => p.hasHealthConditions);
   } catch (err) {
     console.error('Error fetching patients with health conditions:', err);
-    return [];
+    throw err;
   }
 }
 
@@ -2165,7 +2135,8 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
         .select(`
           *,
           supplement_inventory (
-            supplement_name
+            supplement_name,
+            brand
           )
         `)
         .eq('patient_id', patientId)
@@ -2600,9 +2571,11 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
       supplements: (supplementsData || []).map(s => ({
         id: s.id,
         supplement_name: s.supplement_inventory?.supplement_name || 'Unknown',
+        supplement_inventory: s.supplement_inventory || null,
         dosage: s.dosage,
         start_date: s.start_date,
         end_date: s.end_date,
+        created_at: s.created_at,
         status: s.status,
         notes: s.notes,
         administered_by: s.administered_by || s.created_by || null,
@@ -2931,12 +2904,7 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
   }
 
   async reassignPrenatalVisit(visitId, assignedStaffId) {
-    const { role, stationId, currentUser } = await this.getCurrentUserAccess();
-    if (!['staff', 'cho personnel', 'admin'].includes(role)) {
-      throw new Error('Only station staff, CHO personnel, or admins can assign visits.');
-    }
-
-    let assignedStationId = role === 'admin' ? null : stationId;
+    let assignedStationId = null;
     if (assignedStaffId) {
       const { data: profile, error: profileError } = await this.supabase
         .from('staff_profiles')
@@ -2944,9 +2912,6 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
         .eq('id', assignedStaffId)
         .single();
       if (profileError) throw profileError;
-      if (role !== 'admin' && profile.station_ass !== stationId) {
-        throw new Error('You can assign only staff from your own station.');
-      }
       assignedStationId = profile.station_ass;
     }
 
@@ -3343,13 +3308,7 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
     if (existingVisit && existingVisit.status === 'Scheduled') {
       await this.completePrenatalVisit(existingVisit.id, visitData);
     } else {
-      const { data: patient, error: patientError } = await this.supabase
-        .from('patient_basic_info')
-        .select('station_ass')
-        .eq('id', patientId)
-        .single();
-      if (patientError) throw patientError;
-      const assignedStation = patient.station_ass;
+      const assignedStation = patientContext.stationId;
       const actualStation = serviceStation;
       const { count: visitCount } = await this.supabase
         .from('prenatal_visits')
@@ -3368,12 +3327,17 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
     }
 
     // Handle supplements
+    let supplementStockById = null;
     for (const sup of (supplements || [])) {
       const amount = parseInt(sup.amount);
       if (amount <= 0) continue;
 
-      // Check stock
-      const currentStock = await inventoryService.getSupplementInventory().then(data => data.find(i => i.id === sup.id)?.quantity || 0);
+      if (!supplementStockById) {
+        const inventory = await inventoryService.getSupplementInventory();
+        supplementStockById = new Map(inventory.map(item => [item.id, item.quantity]));
+      }
+
+      const currentStock = supplementStockById.get(sup.id) || 0;
       if (currentStock < amount) throw new Error(`Insufficient stock for supplement`);
 
       // Insert supplement record
@@ -3392,6 +3356,7 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
       if (supError) throw supError;
 
       await inventoryService.updateInventoryQuantity('supplement_inventory', sup.id, currentStock - amount);
+      supplementStockById.set(sup.id, currentStock - amount);
     }
   }
 
@@ -4079,27 +4044,34 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
 
   async getAnalyticsData() {
     try {
-      const { data: stationRows, error: stationError } = await this.supabase
+      const stationsQuery = this.supabase
         .from('stations')
         .select('station_name')
         .order('station_name', { ascending: true });
-
-      if (stationError) throw stationError;
-
-      const stations = [...new Set(stationRows?.map(s => s.station_name).filter(Boolean))];
-
-      const { data: patients, error: patientsError } = await this.supabase
+      const patientsQuery = this.supabase
         .from('patient_basic_info')
-        .select('id, first_name, last_name, station_ass, station_ass, date_of_birth, stations:station_ass (station_name)');
-
-      if (patientsError) throw patientsError;
-
-      const { data: pregnancies, error: pregError } = await this.supabase
+        .select('id, first_name, last_name, date_of_birth, municipality, stations:station_ass (station_name)');
+      const pregnanciesQuery = this.supabase
         .from('pregnancy_info')
         .select('patient_id, pregn_postp, lmd, edd, created_at')
         .order('created_at', { ascending: false });
+      const visitsQuery = this.supabase
+        .from('prenatal_visits')
+        .select('patient_id, visit_date, status, calculated_risk, risk_factors, trimester')
+        .eq('status', 'Attended')
+        .order('visit_date', { ascending: false });
 
+      const [
+        { data: stationRows, error: stationError },
+        { data: patients, error: patientsError },
+        { data: pregnancies, error: pregError },
+        { data: visits, error: visitsError }
+      ] = await Promise.all([stationsQuery, patientsQuery, pregnanciesQuery, visitsQuery]);
+      if (stationError) throw stationError;
+      const stations = [...new Set(stationRows?.map(s => s.station_name).filter(Boolean))];
+      if (patientsError) throw patientsError;
       if (pregError) throw pregError;
+      if (visitsError) throw visitsError;
 
       const latestPregMap = new Map();
       (pregnancies || []).forEach(p => {
@@ -4111,14 +4083,6 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
           latestPregMap.set(p.patient_id, p);
         }
       });
-
-      const { data: visits, error: visitsError } = await this.supabase
-        .from('prenatal_visits')
-        .select('patient_id, visit_date, status, calculated_risk, risk_factors, trimester')
-        .eq('status', 'Attended')
-        .order('visit_date', { ascending: false });
-
-      if (visitsError) throw visitsError;
 
       const latestAttendedVisitMap = new Map();
       (visits || []).forEach(v => {
@@ -4208,13 +4172,12 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
           id,
           baby_name,
           gender,
-          birth_weight,
           deliveries!inner (delivery_date),
           patient_basic_info!mother_id (
             first_name,
             last_name
           ),
-          vaccinations (
+          vaccinations!inner (
             dose_number,
             scheduled_vaccination,
             vaccinated_date,
@@ -4222,7 +4185,8 @@ async getHighRiskPatients({ includeArchived = false, archivedPatientIds: provide
               vaccine_name
             )
           )
-        `);
+        `)
+        .is('vaccinations.vaccinated_date', null);
 
       if (error) throw error;
 

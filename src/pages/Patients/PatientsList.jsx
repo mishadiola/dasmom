@@ -386,6 +386,8 @@ const PatientsList = () => {
     const filterMonth = filterDate.getMonth();
     const normalizedSearch = searchTerm.toLowerCase();
     const filteredPatients = useMemo(() => patients.filter(p => {
+        if (String(p.pregnancyStatus || '').toLowerCase() !== 'pregnant') return false;
+
         const conditionMatches = (p.activeCategories || []).some(cat => 
             cat.category.toLowerCase().includes(normalizedSearch) ||
             cat.conditions.some(cond => cond.toLowerCase().includes(normalizedSearch))
@@ -1019,7 +1021,6 @@ const PatientsList = () => {
                                                         patientId={p.id}
                                                         patientStationId={p.stationId}
                                                         assignedStaffId={p.assignedStaffId}
-                                                        role={assignmentAccess.role}
                                                         viewerStationId={assignmentAccess.stationId}
                                                         onAssigned={({ id: assignedStaffId }) => setPatients(previous => previous.map(patient =>
                                                             patient.id === p.id ? { ...patient, assignedStaffId } : patient

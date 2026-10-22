@@ -24,6 +24,7 @@ import ResetPasswordModal from '../../components/ResetPasswordModal';
 import ActionTooltip from '../../components/Common/ActionTooltip';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
 import RolePermissionManagement from '../../components/RolePermissionManagement';
+import { useRolePermissions } from '../../context/RolePermissionContext';
 
 /* ════════════════════════════
    MOCK DATA
@@ -750,6 +751,7 @@ const EditUserModal = ({ staff, onClose, onSuccess }) => {
 };
 const UserAccountsTab = () => {
     const { user } = useContext(AuthContext);
+    const { hasPermission } = useRolePermissions();
     const { confirm, alert: customAlert } = useModal();
     const staffService = new StaffService();
     const [search, setSearch] = useState('');
@@ -765,6 +767,7 @@ const UserAccountsTab = () => {
     const [stationOptions, setStationOptions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [currentPage, setCurrentPage] = useState(1);
+    const [resetPasswordTarget, setResetPasswordTarget] = useState(null);
 
     useEffect(() => {
         setCurrentPage(1);
@@ -867,6 +870,11 @@ const UserAccountsTab = () => {
 
     const hasActiveFilters = search !== '' || roleFilter !== 'All' || statusFilter !== 'Active' || stationFilter !== 'All';
     const isAdmin = ['admin', 'super admin'].includes(normalizeRoleValue(user?.role));
+    const canManageStaffAction = (staffUser, action) => {
+        const sameStation = formatStationName(staffUser.station) === formatStationName(user?.station);
+        const stationScope = sameStation ? 'own_station' : 'other_station';
+        return hasPermission(`staff.${action}.${stationScope}`);
+    };
 
     const handleModalSuccess = () => {
         fetchStaff();
@@ -1120,15 +1128,25 @@ const UserAccountsTab = () => {
                                             <ActionTooltip text="Edit Staff">
                                                 <button className="action-btn edit-btn" onClick={() => { setSelectedStaff(u); setShowEditModal(true); }}><Edit2 size={13} /></button>
                                             </ActionTooltip>
-                                            <ActionTooltip text="Reset Password">
-                                                <button className="action-btn key-btn"><Key size={13} /></button>
-                                            </ActionTooltip>
-                                            <ActionTooltip text={u.status === 'Active' ? 'Deactivate' : 'Activate'}>
-                                                <button className={`action-btn ${u.status === 'Active' ? 'deact-btn' : 'act-btn'}`} onClick={() => handleToggleDeactivation(u)}>
-                                                    {u.status === 'Active' ? <ToggleRight size={13} /> : <ToggleLeft size={13} />}
-                                                </button>
-                                            </ActionTooltip>
-                                            {u.role !== 'Super Admin' && (
+                                            {canManageStaffAction(u, 'password.reset') && u.email !== 'N/A' && (
+                                                <ActionTooltip text="Reset Password">
+                                                    <button
+                                                        className="action-btn key-btn"
+                                                        onClick={() => setResetPasswordTarget(u)}
+                                                        aria-label={`Send password reset link to ${u.name}`}
+                                                    >
+                                                        <Key size={13} />
+                                                    </button>
+                                                </ActionTooltip>
+                                            )}
+                                            {canManageStaffAction(u, 'deactivate') && (
+                                                <ActionTooltip text={u.status === 'Active' ? 'Deactivate' : 'Activate'}>
+                                                    <button className={`action-btn ${u.status === 'Active' ? 'deact-btn' : 'act-btn'}`} onClick={() => handleToggleDeactivation(u)}>
+                                                        {u.status === 'Active' ? <ToggleRight size={13} /> : <ToggleLeft size={13} />}
+                                                    </button>
+                                                </ActionTooltip>
+                                            )}
+                                            {u.role !== 'Super Admin' && canManageStaffAction(u, 'archive') && (
                                                 (u.archiveStatus || 'active') === 'archived' ? (
                                                     <ActionTooltip text="Restore Staff">
                                                         <button className="action-btn restore-btn" onClick={() => handleRestore(u.id)}>
@@ -1201,6 +1219,12 @@ const UserAccountsTab = () => {
 
             {showModal && <AddUserModal onClose={() => setShowModal(false)} onSuccess={handleModalSuccess} />}
             {showEditModal && <EditUserModal staff={selectedStaff} onClose={() => setShowEditModal(false)} onSuccess={handleModalSuccess} />}
+            <ResetPasswordModal
+                isOpen={Boolean(resetPasswordTarget)}
+                onClose={() => setResetPasswordTarget(null)}
+                initialEmail={resetPasswordTarget?.email || ''}
+                targetUserId={resetPasswordTarget?.id || null}
+            />
         </div>
     );
 };
@@ -1341,6 +1365,7 @@ const SystemSettingsTab = () => {
 ════════════════════════════ */
 const ProfileTab = () => {
     const { user, logout: handleLogout } = useContext(AuthContext);
+    const { hasPermission } = useRolePermissions();
     const authService = new AuthService();
 
     const [fullProfile, setFullProfile] = useState(null);
@@ -1353,6 +1378,8 @@ const ProfileTab = () => {
     
     // Password Reset
     const [resetModalOpen, setResetModalOpen] = useState(false);
+    const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
+    const [changingPassword, setChangingPassword] = useState(false);
     
 
     useEffect(() => {
@@ -1397,6 +1424,30 @@ const ProfileTab = () => {
             showToast('Failed to update profile.', 'error');
         } finally {
             setUpdating(false);
+        }
+    };
+
+    const handleChangePassword = async (e) => {
+        e.preventDefault();
+        if (passwordForm.newPassword.length < 8) {
+            showToast('Password must be at least 8 characters.', 'error');
+            return;
+        }
+        if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+            showToast('The passwords do not match.', 'error');
+            return;
+        }
+
+        setChangingPassword(true);
+        try {
+            await authService.updatePassword(passwordForm.newPassword);
+            setPasswordForm({ newPassword: '', confirmPassword: '' });
+            showToast('Password changed successfully.');
+        } catch (err) {
+            console.error('Failed to change password:', err);
+            showToast(err?.message || 'Failed to change password.', 'error');
+        } finally {
+            setChangingPassword(false);
         }
     };
 
@@ -1489,6 +1540,43 @@ const ProfileTab = () => {
                     <div className="settings-section">
                         <div className="section-header"><Lock size={16} /><h3>Security</h3></div>
                         <div style={{ padding: '8px 4px 16px' }}>
+                            {hasPermission('staff.password.change.own_station') && (
+                            <form onSubmit={handleChangePassword} style={{ marginBottom: '24px' }}>
+                                <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: 'var(--color-text)' }}>Change Password</h4>
+                                <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+                                    Choose a new password for your signed-in account.
+                                </p>
+                                <div className="form-grid-2">
+                                    <div className="form-group">
+                                        <label htmlFor="settings-new-password">New Password</label>
+                                        <input
+                                            id="settings-new-password"
+                                            type="password"
+                                            autoComplete="new-password"
+                                            minLength={8}
+                                            value={passwordForm.newPassword}
+                                            onChange={event => setPasswordForm(previous => ({ ...previous, newPassword: event.target.value }))}
+                                            required
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label htmlFor="settings-confirm-password">Confirm New Password</label>
+                                        <input
+                                            id="settings-confirm-password"
+                                            type="password"
+                                            autoComplete="new-password"
+                                            minLength={8}
+                                            value={passwordForm.confirmPassword}
+                                            onChange={event => setPasswordForm(previous => ({ ...previous, confirmPassword: event.target.value }))}
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <button type="submit" className="btn btn-outline" disabled={changingPassword}>
+                                    <Lock size={14} /> {changingPassword ? 'Changing...' : 'Change Password'}
+                                </button>
+                            </form>
+                            )}
                             <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: 'var(--color-text)' }}>Reset Password</h4>
                             <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
                                 Reset your password securely through your registered email address.

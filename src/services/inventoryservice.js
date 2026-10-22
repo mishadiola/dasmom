@@ -101,89 +101,64 @@ class InventoryService {
   }
 
   async _loadCurrentUserScope() {
-    const { data: { user }, error: authError } = await this.supabase.auth.getUser();
-    if (authError) throw authError;
-    if (!user?.id) {
+    const { data, error } = await this.supabase.rpc('get_inventory_user_scope');
+    if (error) throw error;
+    const scope = Array.isArray(data) ? data[0] : data;
+    if (!scope?.user_id) {
       return { role: 'user', stationId: null, stationName: null, userId: null };
     }
 
-    const { data: userRow, error: userError } = await this.supabase
-      .from('users')
-      .select('usertype')
-      .eq('id', user.id)
-      .maybeSingle();
-    if (userError) throw userError;
-    if (!userRow?.usertype) {
-      throw new Error(`No user type is assigned to authenticated user ${user.id}`);
-    }
-
-    const { data: typeRow, error: typeError } = await this.supabase
-      .from('user_type')
-      .select('user_type')
-      .eq('id', userRow.usertype)
-      .maybeSingle();
-    if (typeError) throw typeError;
-    if (!typeRow?.user_type) {
-      throw new Error(`User type ${userRow.usertype} was not found`);
-    }
-
-    const role = normalizeInventoryRole(typeRow.user_type);
+    const role = normalizeInventoryRole(scope.role);
     if (isAdminRole(role)) {
-      return { role: 'admin', stationId: null, stationName: null, userId: user.id };
+      return {
+        role: 'admin',
+        stationId: scope.station_id || null,
+        stationName: scope.station_name || null,
+        userId: scope.user_id
+      };
     }
 
     if (!['staff', 'cho personnel'].includes(role)) {
-      return { role, stationId: null, stationName: null, userId: user.id };
+      return { role, stationId: null, stationName: null, userId: scope.user_id };
     }
-
-    const { data: staffRow, error: staffError } = await this.supabase
-      .from('staff_profiles')
-      .select('station_ass, stations:station_ass (station_name)')
-      .eq('id', user.id)
-      .maybeSingle();
-    if (staffError) throw staffError;
-
     return {
       role,
-      stationId: staffRow?.station_ass || null,
-      stationName: staffRow?.stations?.station_name || null,
-      userId: user.id
+      stationId: scope.station_id || null,
+      stationName: scope.station_name || null,
+      userId: scope.user_id
     };
   }
 
-  async getStationInventorySnapshot() {
-    const scope = await this._getCurrentUserScope();
+  async getStationInventorySnapshot({ scope: suppliedScope } = {}) {
+    const scope = suppliedScope || await this._getCurrentUserScope();
     const isAdmin = scope.role === 'admin';
+    let stationId = isAdmin ? null : scope.stationId;
 
-    if (!isAdmin && !scope.stationId) {
-      throw new Error('Your account has no assigned station');
-    }
-
-    let stationIds = [scope.stationId];
-    if (isAdmin) {
-      const { data: stations, error } = await this.supabase.from('stations').select('id');
-      if (error) throw error;
-      stationIds = (stations || []).map(station => station.id).filter(Boolean);
-    } else {
-      const { data: canViewOtherStations, error: permissionError } = await this.supabase.rpc('has_permission', {
-        p_permission_key: 'inventory.station.view.other_station'
-      });
-      if (permissionError) throw permissionError;
-      if (canViewOtherStations === true) {
-        const { data: stations, error } = await this.supabase.from('stations').select('id');
-        if (error) throw error;
-        stationIds = (stations || []).map(station => station.id).filter(Boolean);
+    if (!isAdmin) {
+      if (!stationId) {
+        const { data: canViewOtherStations, error: permissionError } = await this.supabase.rpc('has_permission', {
+          p_permission_key: 'inventory.station.view.other_station'
+        });
+        if (permissionError) throw permissionError;
+        if (canViewOtherStations !== true) {
+          throw new Error('Your account has no assigned station');
+        }
+        stationId = null;
+      } else {
+        const { data: canViewOtherStations, error: permissionError } = await this.supabase.rpc('has_permission', {
+          p_permission_key: 'inventory.station.view.other_station'
+        });
+        if (permissionError) throw permissionError;
+        if (canViewOtherStations === true) stationId = null;
       }
     }
 
-    const results = await Promise.all(stationIds.map(station_id =>
-      this.supabase.rpc('get_station_inventory_catalog', { p_station_id: station_id })
-    ));
-    for (const result of results) {
-      if (result.error) throw result.error;
-    }
+    const { data: catalogRows, error } = await this.supabase.rpc('get_station_inventory_catalog', {
+      p_station_id: stationId
+    });
+    if (error) throw error;
 
-    const rows = results.flatMap(result => result.data || []).map(row => ({
+    const rows = (catalogRows || []).map(row => ({
       id: row.item_id,
       station_id: row.station_id,
       station: row.station_name || 'Unknown station',
@@ -551,7 +526,7 @@ class InventoryService {
       ]);
       const query = this.supabase
         .from('vaccine_inventory')
-        .select('id, vaccine_name, quantity, unit, max_quantity, created_by, created_at, brand, expiration_date, doses, batch, manufactured_date')
+        .select('id, vaccine_name, quantity, unit, max_quantity, created_by, created_at, brand, expiration_date, doses, batch, manufactured_date, status')
         .order('created_at', { ascending: false })
         .limit(200);
 
@@ -631,7 +606,7 @@ class InventoryService {
       ]);
       const query = this.supabase
         .from('supplement_inventory')
-        .select('id, supplement_name, quantity, unit, max_quant, created_by, created_at, brand, expiration_date, batch_number, manufactured_date')
+        .select('id, supplement_name, quantity, unit, max_quant, created_by, created_at, brand, expiration_date, batch_number, manufactured_date, status')
         .limit(200);
 
       const { data, error } = await query;
@@ -672,6 +647,19 @@ class InventoryService {
       console.error('Supplement inventory query failed:', err);
       throw err;
     }
+  }
+
+  async setInventoryArchived(table, ids, archived) {
+    if (!['vaccine_inventory', 'supplement_inventory'].includes(table)) {
+      throw new Error(`Unsupported inventory table: ${table}`);
+    }
+    if (!Array.isArray(ids) || ids.length === 0) return [];
+
+    const { error } = await this.supabase
+      .from(table)
+      .update({ status: archived ? 'archived' : 'active' })
+      .in('id', ids);
+    if (error) throw error;
   }
 
   async addInventoryItem(table, { item_name, quantity, max_stock, unit, brand, expiration_date, batch_number, manufactured_date }) {

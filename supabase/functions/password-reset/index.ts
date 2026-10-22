@@ -13,6 +13,7 @@ const admin = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 );
+const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: corsHeaders });
@@ -23,7 +24,52 @@ Deno.serve(async (request) => {
 
   try {
     const body = await request.json();
-    const email = String(body.email || '').trim().toLowerCase();
+    let email = String(body.email || '').trim().toLowerCase();
+    const targetUserId = String(body.targetUserId || '').trim();
+    if (targetUserId) {
+      const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
+      if (!token || !anonKey) return json({ error: 'Authentication required' }, 401);
+
+      const { data: authData, error: authError } = await admin.auth.getUser(token);
+      if (authError || !authData.user?.id) return json({ error: 'Authentication required' }, 401);
+
+      const [
+        { data: callerProfile, error: callerProfileError },
+        { data: targetProfile, error: targetProfileError },
+        { data: targetUser, error: targetUserError },
+      ] = await Promise.all([
+        admin.from('staff_profiles').select('station_ass').eq('id', authData.user.id).maybeSingle(),
+        admin.from('staff_profiles').select('station_ass').eq('id', targetUserId).maybeSingle(),
+        admin.from('users').select('email_address').eq('id', targetUserId).maybeSingle(),
+      ]);
+      if (callerProfileError) throw callerProfileError;
+      if (targetProfileError) throw targetProfileError;
+      if (targetUserError) throw targetUserError;
+      if (!callerProfile || !targetProfile || !targetUser?.email_address) {
+        return json({ error: 'Staff account not found' }, 404);
+      }
+
+      const sameStation = Boolean(
+        callerProfile.station_ass &&
+        callerProfile.station_ass === targetProfile.station_ass
+      );
+      const callerClient = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        anonKey,
+        {
+          global: { headers: { Authorization: `Bearer ${token}` } },
+          auth: { persistSession: false, autoRefreshToken: false },
+        },
+      );
+      const { data: allowed, error: permissionError } = await callerClient.rpc('has_permission', {
+        p_permission_key: `staff.password.reset.${sameStation ? 'own' : 'other'}_station`,
+      });
+      if (permissionError) throw permissionError;
+      if (allowed !== true) return json({ error: 'You do not have permission to reset this password' }, 403);
+
+      email = String(targetUser.email_address).trim().toLowerCase();
+    }
+
     if (!email) return json({ error: 'Email is required' }, 400);
 
     const { data: userRow, error: userError } = await admin

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import BabyService from '../../services/babyservices';
 import PatientService from '../../services/patientservice';
+import supabase from '../../config/supabaseclient';
 import * as XLSX from 'xlsx';
 import ExportModal from '../../components/ExportModal';
 import Legend from '../../components/Legend/Legend';
@@ -36,11 +37,12 @@ const formatReadableDate = (dateString) => {
    POSTPARTUM DETAIL MODAL
    ════════════════════════════ */
 const DetailModal = ({ mother, onClose }) => {
-    const babyService = new BabyService();
     const [detail, setDetail] = useState({
         deliveryFacility: 'N/A',
         deliveryStation: 'N/A',
         attendingStaff: 'N/A',
+        deliveryRecordedBy: 'N/A',
+        assignedStaff: 'Unassigned',
         deliveryComplications: mother.complications || 'None',
         birthWeight: 'N/A',
         breastfeeding: 'N/A',
@@ -55,7 +57,7 @@ const DetailModal = ({ mother, onClose }) => {
             try {
                 setLoading(true);
                 // Fetch delivery record with staff info
-                const { data: deliveries, error: deliveryError } = await babyService.supabase
+                const { data: deliveries, error: deliveryError } = await supabase
                     .from('deliveries')
                     .select(`
                         id,
@@ -73,19 +75,20 @@ const DetailModal = ({ mother, onClose }) => {
                     .single();
                 if (deliveryError) throw deliveryError;
 
-                const updatedDetail = {
-                    ...detail,
+                setDetail(previous => ({
+                    ...previous,
                     deliveryFacility: deliveries?.pregnancy_info?.place_of_delivery || deliveries?.patient_basic_info?.municipality || 'N/A',
-                    deliveryStation: deliveries?.stations?.station_name || 'N/A',
-                    attendingStaff: deliveries?.staff_profiles?.full_name || 'N/A',
+                    deliveryStation: deliveries?.stations?.station_name || mother.station || 'N/A',
+                    attendingStaff: deliveries?.staff_profiles?.full_name || mother.attendingStaff || 'N/A',
+                    deliveryRecordedBy: mother.deliveryRecordedBy || 'N/A',
+                    assignedStaff: mother.assignedStaff || 'Unassigned',
                     birthWeight: deliveries?.newborns?.[0]?.birth_weight ? `${deliveries.newborns[0].birth_weight} kg` : 'N/A',
                     deliveryComplications: mother.complications || 'None',
                     woundCondition: mother.deliveryType === 'CS' ? 'Healing Well' : 'N/A (NSD)',
                     postpartumVisits: mother.scheduledVisits || [],
                     postpartumAttendedDate: mother.postpartumAttendedDate || null,
                     postpartumRemarks: mother.postpartumRemarks || null
-                };
-                setDetail(updatedDetail);
+                }));
             } catch (error) {
                 console.error('Error fetching detail data:', error);
             } finally {
@@ -96,7 +99,7 @@ const DetailModal = ({ mother, onClose }) => {
         if (mother?.id) {
             fetchDetailData();
         }
-    }, [mother?.id]);
+    }, [mother]);
 
     const followUpStatusClass = (s) => {
         if (s === 'Completed') return 'fu-completed';
@@ -131,6 +134,8 @@ const DetailModal = ({ mother, onClose }) => {
                             <div className="detail-item"><span>Delivery Station</span><strong>{detail.deliveryStation}</strong></div>
                             <div className="detail-item"><span>Delivery Type</span><strong>{mother.deliveryType}</strong></div>
                             <div className="detail-item"><span>Attending Staff</span><strong>{detail.attendingStaff}</strong></div>
+                            <div className="detail-item"><span>Delivery Recorded By</span><strong>{detail.deliveryRecordedBy}</strong></div>
+                            <div className="detail-item"><span>Assigned Staff</span><strong>{detail.assignedStaff}</strong></div>
                             <div className="detail-item"><span>Complications During Delivery</span><strong>{detail.deliveryComplications}</strong></div>
                             <div className="detail-item"><span>Baby Outcome</span><strong>{mother.babyOutcome}</strong></div>
                         </div>
@@ -142,6 +147,8 @@ const DetailModal = ({ mother, onClose }) => {
                             <div className="detail-grid">
                                 <div className="detail-item"><span>Visit Date</span><strong>{formatReadableDate(detail.postpartumAttendedDate)}</strong></div>
                                 <div className="detail-item"><span>Personnel Present</span><strong>{detail.postpartumRemarks.personnel_present?.name || 'N/A'}</strong></div>
+                                <div className="detail-item"><span>Recorded By</span><strong>{detail.postpartumRemarks.recorded_by?.name || 'Not recorded'}</strong></div>
+                                <div className="detail-item"><span>Assigned Staff</span><strong>{detail.postpartumRemarks.assigned_staff?.name || detail.assignedStaff}</strong></div>
                                 {Object.entries(detail.postpartumRemarks.assessment).filter(([, value]) => value).map(([key, value]) => (
                                     <div className="detail-item" key={key}><span>{key.replaceAll('_', ' ')}</span><strong>{value}</strong></div>
                                 ))}
@@ -646,7 +653,7 @@ const PostpartumRecords = () => {
                                                     <div className="pp-avatar">{m.name.split(' ').map(n => n[0]).slice(0, 2).join('')}</div>
                                                     <div>
                                                         <span className="pp-name patient-name-link">{m.name}</span>
-                                                        <span className="pp-meta">{formatMotherId(m.patientId)} · {m.station}</span>
+                                                        <span className="pp-meta">{formatMotherId(m.patientId)} · {m.station} · Assigned: {m.assignedStaff || 'Unassigned'}</span>
                                                     </div>
                                                 </div>
                                             </td>

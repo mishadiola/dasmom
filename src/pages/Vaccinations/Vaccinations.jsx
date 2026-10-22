@@ -83,7 +83,6 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
         supplement: '',
         dose: '',
         date: new Date().toISOString().split('T')[0],
-        nextDue: '',
         staff: '',
         remarks: '',
         brand: ''
@@ -100,9 +99,10 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
     // 2. Vaccine loading & schedule states
     const [isLoadingVaccines, setIsLoadingVaccines] = useState(false);
     const [vaccineLoadError, setVaccineLoadError] = useState(null);
-    const [patientStationId, setPatientStationId] = useState(null);
+    const [inventoryStationId, setInventoryStationId] = useState(null);
     const [pendingVaccines, setPendingVaccines] = useState([]);
     const [vaccineTypes, setVaccineTypes] = useState([]);
+    const [vaccineInventoryItems, setVaccineInventoryItems] = useState([]);
     const [vaccineSearchQuery, setVaccineSearchQuery] = useState('');
     const [selectedVaccines, setSelectedVaccines] = useState({});
     const [selectedVaccineNames, setSelectedVaccineNames] = useState([]);
@@ -203,24 +203,19 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
             setIsLoadingSupplements(true);
             setSupplementLoadError(null);
             try {
-                let rows = [];
-                try {
-                    rows = await inventoryService.getStationInventorySnapshot();
-                } catch (snapshotErr) {
-                    console.warn('getStationInventorySnapshot failed, falling back to getSupplementInventory:', snapshotErr);
-                    const fallbackSupp = await inventoryService.getSupplementInventory();
-                    rows = (fallbackSupp || []).map(item => ({
-                        ...item,
-                        item_type: 'Supplement'
-                    }));
+                const scope = await inventoryService.getCurrentUserScope();
+                if (!scope.stationId) {
+                    throw new Error('Your account must have an assigned service station to administer supplements.');
                 }
+                const rows = await inventoryService.getStationInventorySnapshot({ scope });
 
                 if (!isMounted) return;
+                setInventoryStationId(scope.stationId);
 
                 const availableSupplements = (rows || []).filter(item => {
                     const isSupp = String(item.item_type || '').toLowerCase() === 'supplement';
                     const hasStock = Number(item.quantity) > 0;
-                    return isSupp && hasStock;
+                    return isSupp && hasStock && item.station_id === scope.stationId;
                 });
 
                 setSupplementInventoryItems(availableSupplements);
@@ -244,16 +239,11 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
         };
     }, [mode]);
 
-    // Active items prioritizing patient's station if stock exists there, otherwise all authorized station inventory
+    // Administration always consumes stock from the logged-in user's station.
     const activeSupplementItems = useMemo(() => {
-        if (patientStationId) {
-            const stationSpecific = supplementInventoryItems.filter(item => item.station_id === patientStationId);
-            if (stationSpecific.length > 0) {
-                return stationSpecific;
-            }
-        }
-        return supplementInventoryItems;
-    }, [supplementInventoryItems, patientStationId]);
+        if (!inventoryStationId) return [];
+        return supplementInventoryItems.filter(item => item.station_id === inventoryStationId);
+    }, [supplementInventoryItems, inventoryStationId]);
 
     // Deduplicated Supplement Types
     const supplementTypeOptions = useMemo(() => {
@@ -434,10 +424,11 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
         // Invalidate confirmed patient if user modifies text after selecting
         if (confirmedPatient) {
             setConfirmedPatient(null);
-            setPatientStationId(null);
+            setInventoryStationId(null);
             setPendingVaccines([]);
             setSelectedVaccines({});
             setVaccineTypes([]);
+            setVaccineInventoryItems([]);
             setSelectedVaccineNames([]);
             setVaccineBrandOptions({});
             setVaccineLoadError(null);
@@ -463,9 +454,10 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
         setPendingVaccines([]);
         setSelectedVaccines({});
         setVaccineTypes([]);
+        setVaccineInventoryItems([]);
         setSelectedVaccineNames([]);
         setVaccineBrandOptions({});
-        setPatientStationId(null);
+        setInventoryStationId(null);
         setVaccineLoadError(null);
     };
 
@@ -475,7 +467,8 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
             setPendingVaccines([]);
             setSelectedVaccines({});
             setVaccineTypes([]);
-            setPatientStationId(null);
+            setVaccineInventoryItems([]);
+            setInventoryStationId(null);
             setIsLoadingVaccines(false);
             setVaccineLoadError(null);
             return;
@@ -486,15 +479,13 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
 
         try {
             // 1. Resolve patient station
-            const { stationId, stationName } = await resolvePatientStation(patient.id, patient.type, patient.station);
-            let targetStationId = stationId;
-            try {
-                const inventoryScope = await inventoryService.getCurrentUserScope();
-                targetStationId = inventoryScope.stationId || stationId;
-            } catch (scopeErr) {
-                console.warn('Could not determine inventory user scope, using patient station:', scopeErr);
+            const { stationName } = await resolvePatientStation(patient.id, patient.type, patient.station);
+            const inventoryScope = await inventoryService.getCurrentUserScope();
+            const targetStationId = inventoryScope.stationId;
+            if (!targetStationId) {
+                throw new Error('Your account must have an assigned service station to administer vaccines.');
             }
-            setPatientStationId(targetStationId);
+            setInventoryStationId(targetStationId);
 
             // 2. Resolve staff for barangay / station
             const barangayHint = stationName || patient.station || '';
@@ -554,18 +545,14 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
 
             // 4. Fetch available vaccine inventory from station
             let availableVaccineNames = [];
-            let inventoryCatalog = [];
-            try {
-                inventoryCatalog = await inventoryService.getStationInventorySnapshot();
-            } catch (invErr) {
-                console.warn('Failed to get station inventory snapshot:', invErr);
-            }
+            const inventoryCatalog = await inventoryService.getStationInventorySnapshot({ scope: inventoryScope });
 
             const stationVaccines = (inventoryCatalog || []).filter(item =>
                 item.item_type === 'Vaccine' &&
-                (!targetStationId || item.station_id === targetStationId) &&
+                item.station_id === targetStationId &&
                 Number(item.quantity) > 0
             );
+            setVaccineInventoryItems(stationVaccines);
 
             // Deduplicate vaccine item names
             const uniqueNames = [...new Set(stationVaccines.map(item => item.item_name?.trim()).filter(Boolean))]
@@ -594,53 +581,31 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
             setPendingVaccines([]);
             setSelectedVaccines({});
             setVaccineTypes([]);
-            setPatientStationId(null);
+            setInventoryStationId(null);
             setVaccineLoadError(null);
             setIsLoadingVaccines(false);
         }
     }, [confirmedPatient?.id, confirmedPatient?.type, mode]);
 
     useEffect(() => {
-        const loadVaccineBrands = async () => {
-            if (mode !== 'vaccine' || !patientStationId) {
-                setVaccineBrandOptions({});
-                return;
-            }
+        if (mode !== 'vaccine' || selectedVaccineNames.length === 0) {
+            setVaccineBrandOptions({});
+            return;
+        }
 
-            const selectedNames = [...new Set(selectedVaccineNames.filter(Boolean))];
-            if (selectedNames.length === 0) {
-                setVaccineBrandOptions({});
-                return;
-            }
+        const nextOptions = {};
+        for (const vaccineName of selectedVaccineNames) {
+            nextOptions[vaccineName] = [...new Set(vaccineInventoryItems
+                .filter(item => item.item_name === vaccineName)
+                .map(item => item.brand)
+                .filter(Boolean))];
+        }
+        setVaccineBrandOptions(nextOptions);
+    }, [mode, selectedVaccineNames, vaccineInventoryItems]);
 
-            try {
-                const inventoryRows = await inventoryService.getStationInventorySnapshot();
-                const availableVaccines = inventoryRows.filter(item =>
-                    item.item_type === 'Vaccine' &&
-                    item.station_id === patientStationId &&
-                    Number(item.quantity) > 0
-                );
-
-                const nextOptions = {};
-                for (const vaccineName of selectedNames) {
-                    nextOptions[vaccineName] = [...new Set(availableVaccines
-                        .filter(item => item.item_name === vaccineName)
-                        .map(item => item.brand)
-                        .filter(Boolean))];
-                }
-                setVaccineBrandOptions(nextOptions);
-            } catch (error) {
-                console.error('Error fetching vaccine brands:', error);
-                setVaccineBrandOptions({});
-            }
-        };
-
-        loadVaccineBrands();
-    }, [mode, selectedVaccineNames, patientStationId]);
-
-    const resolveInventoryBatch = async (itemType, itemName, brand, stationId = null) => {
+    const resolveInventoryBatch = async (itemType, itemName, brand, stationId = null, genericOnly = false) => {
         const vaccinationService = new VaccinationService();
-        return vaccinationService.resolveInventoryItem({ itemType, itemName, brand, stationId });
+        return vaccinationService.resolveInventoryItem({ itemType, itemName, brand, stationId, genericOnly });
     };
 
     const handleSave = async () => {
@@ -675,7 +640,16 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
             return;
         }
 
-        if (!form.date) {
+        if (mode === 'supplement' && brandOptions.length > 1 && !selectedSupplementBrand) {
+            await customAlert({
+                title: 'Brand Required',
+                text: 'Please select the supplement brand to ensure the correct inventory batch is used.',
+                iconType: 'warning'
+            });
+            return;
+        }
+
+        if (mode === 'vaccine' && !form.date) {
             await customAlert({
                 title: 'Date Required',
                 text: 'Please select the administration date.',
@@ -686,12 +660,11 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
 
         setIsSaving(true);
         try {
-            const patientService = new PatientService();
-            const currentUser = await patientService.getCurrentUserId();
+            const inventoryScope = await inventoryService.getCurrentUserScope();
+            const currentUser = inventoryScope.userId;
             if (!currentUser) throw new Error('No logged-in user');
-            const access = await patientService.getCurrentUserAccess();
             const vaccinationService = new VaccinationService();
-            const performingStationId = access.stationId || await vaccinationService.getCurrentUserStationId();
+            const performingStationId = inventoryScope.stationId;
             if (!performingStationId) throw new Error('Your account must have an assigned service station.');
             const assignedStaff = form.patientType === 'Mother'
                 ? await vaccinationService.getAssignedStaffForPatient(patientId)
@@ -835,7 +808,6 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                     const vaccInv = await resolveInventoryBatch('vaccine', form.vaccine, form.brand || null, performingStationId);
                     const doseNumber = parseInt(form.dose.match(/\d+/)?.[0]) || 1;
                     const vaccinationRecord = {
-                        newborn_id: patientId,
                         dose_number: doseNumber,
                         vaccinated_date: form.date,
                         scheduled_vaccination: form.date,
@@ -846,6 +818,11 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                         assigned_staff: assignedStaff,
                         remarks: form.remarks || null
                     };
+                    if (form.patientType === 'Mother') {
+                        vaccinationRecord.patient_id = patientId;
+                    } else {
+                        vaccinationRecord.newborn_id = patientId;
+                    }
 
                     if (vaccInv) {
                         vaccinationRecord.vaccine_inventory_id = vaccInv.id;
@@ -866,13 +843,17 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                 }
             } else {
                 // Supplement handling
-                const selectedBrand = selectedSupplementBrand === 'Generic / Standard' ? null : (selectedSupplementBrand || form.brand || null);
+                const genericOnly = selectedSupplementBrand === 'Generic / Standard';
+                const selectedBrand = genericOnly ? null : (selectedSupplementBrand || form.brand || null);
 
                 // Find inventory item from loaded active inventory
                 let suppInv = null;
                 const matchingItem = activeSupplementItems.find(item => 
+                    item.station_id === performingStationId &&
                     item.item_name?.trim().toLowerCase() === form.supplement.trim().toLowerCase() &&
-                    (selectedBrand ? item.brand?.trim().toLowerCase() === selectedBrand.trim().toLowerCase() : true)
+                    (selectedBrand
+                        ? item.brand?.trim().toLowerCase() === selectedBrand.trim().toLowerCase()
+                        : genericOnly ? !item.brand?.trim() : true)
                 );
 
                 if (matchingItem) {
@@ -886,7 +867,7 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
 
                 // Fallback to resolveInventoryBatch if not found in active inventory
                 if (!suppInv) {
-                    suppInv = await resolveInventoryBatch('supplement', form.supplement, selectedBrand, performingStationId);
+                    suppInv = await resolveInventoryBatch('supplement', form.supplement, selectedBrand, performingStationId, genericOnly);
                 }
 
                 if (!suppInv) {
@@ -908,17 +889,12 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                 const supplementRecord = {
                     patient_id: targetPatientId,
                     dosage: form.dose,
-                    start_date: form.date,
-                    end_date: form.nextDue || form.date,
                     created_by: currentUser,
                     administered_by: currentUser,
                     station_ass: performingStationId,
-                    supplement_inventory_id: suppInv.id
+                    supplement_inventory_id: suppInv.id,
+                    notes: notesText
                 };
-
-                if (notesText) {
-                    supplementRecord.notes = notesText;
-                }
 
                 // 1. Insert record first
                 const { error: supplementError } = await supabase.from('supplements').insert([supplementRecord]);
@@ -965,8 +941,8 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                         </h2>
                         <p>
                             {mode === 'vaccine'
-                                ? 'Log a vaccine dose for a newborn.'
-                                : 'Record supplement distribution for a mother or newborn.'}
+                                ? 'Log a vaccine dose using inventory from your service station.'
+                                : 'Record a supplement for a mother or newborn using inventory from your service station.'}
                         </p>
                     </div>
                     <button className="modal-close" onClick={onClose} aria-label="Close modal"><X size={20} /></button>
@@ -1150,7 +1126,7 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                                         <label>Search & Select Vaccines <span className="req">*</span></label>
                                         <input 
                                             type="text" 
-                                            placeholder="Search vaccines available at patient's station..." 
+                                            placeholder="Search vaccines available at your station..."
                                             value={vaccineSearchQuery} 
                                             onChange={(e) => setVaccineSearchQuery(e.target.value)} 
                                             style={{ marginBottom: '10px', width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
@@ -1218,7 +1194,7 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                                             })()
                                         ) : (
                                             <p style={{ color: '#666', fontStyle: 'italic', fontSize: '0.9rem', margin: '8px 0' }}>
-                                                No eligible vaccines available at this patient's station inventory.
+                                                No eligible vaccines available at your station inventory.
                                             </p>
                                         )}
                                     </div>
@@ -1275,16 +1251,6 @@ export const RecordModal = ({ mode, initialPatientType, initialPatientName, init
                                 <div className="form-group">
                                     <label>Dose / Quantity <span className="req">*</span></label>
                                     <input type="text" placeholder="e.g. 60 mg/day or 1 tablet" value={form.dose} onChange={e => updateForm('dose', e.target.value)} />
-                                </div>
-                            </div>
-                            <div className="form-grid-2">
-                                <div className="form-group">
-                                    <label>Start Date <span className="req">*</span></label>
-                                    <input type="date" value={form.date} onChange={e => updateForm('date', e.target.value)} />
-                                </div>
-                                <div className="form-group">
-                                    <label>End Date</label>
-                                    <input type="date" value={form.nextDue} onChange={e => updateForm('nextDue', e.target.value)} />
                                 </div>
                             </div>
                         </>
@@ -1504,7 +1470,7 @@ const Vaccinations = () => {
                     .order('created_at', { ascending: false }),
                 supabase
                     .from('supplements')
-                    .select('id, patient_id, supplement_inventory_id, dosage, start_date, end_date, created_by, administered_by, station_ass, notes, status')
+                    .select('id, patient_id, supplement_inventory_id, dosage, created_at, created_by, administered_by, station_ass, notes, status')
                     .order('created_at', { ascending: false }),
                 supabase
                     .from('patient_basic_info')
@@ -1543,6 +1509,7 @@ const Vaccinations = () => {
             const vaccineMap = new Map((vaccineInvData || []).map(v => [v.id, v.item_name || v.vaccine_name]));
             const suppMap = new Map((suppInvData || []).map(s => [s.id, s.item_name || s.supplement_name]));
             const suppUnitMap = new Map((suppInvData || []).map(s => [s.id, s.unit]));
+            const suppExpirationMap = new Map((suppInvData || []).map(s => [s.id, s.expiration_date || null]));
             const staffMap = new Map((staff || []).map(s => [s.id, s.full_name]));
             
             const patientMap = new Map(allPatients?.map(p => [p.id, {
@@ -1643,7 +1610,7 @@ const Vaccinations = () => {
             const transformedSuppRecords = (suppRecords || [])
                 .filter(record => isVisiblePatientRecord(record.patient_id, null))
                 .map(record => {
-                const expirationDate = calculateExpirationDate(record.start_date, 'supplement');
+                const expirationDate = suppExpirationMap.get(record.supplement_inventory_id) || null;
                 const expStatus = getExpirationStatus(expirationDate);
                 return {
                     id: record.id,
@@ -1655,8 +1622,8 @@ const Vaccinations = () => {
                     supplement_inventory_id: record.supplement_inventory_id,
                     dose: record.dosage,
                     unit: suppUnitMap.get(record.supplement_inventory_id) || 'units',
-                    date: record.start_date,
-                    nextDue: record.end_date,
+                    date: record.created_at,
+                    nextDue: null,
                     expirationDate: expirationDate,
                     expirationStatus: expStatus.status,
                     expirationClass: expStatus.class,
@@ -2244,7 +2211,10 @@ const Vaccinations = () => {
 
 
     const SortBtn = ({ field }) => (
-        <button className="sort-btn" onClick={() => handleSort(field)}>
+        <button className="sort-btn" onClick={event => {
+            event.stopPropagation();
+            handleSort(field);
+        }}>
             {sortField === field ? (sortAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : <ChevronDown size={12} className="sort-inactive" />}
         </button>
     );
@@ -2600,6 +2570,11 @@ const Vaccinations = () => {
                                                                 {firstTwoRecords.map((record, rIdx) => (
                                                                     <div key={record.id || `${rowKey}-first-${rIdx}`} className="vacc-item-entry">
                                                                         <strong>{record.scheduledVaccination || record.itemName}</strong>
+                                                                        {isExpanded && record.scheduledDate && (
+                                                                            <small style={{ display: 'block' }}>
+                                                                                Scheduled: {formatReadableDate(record.scheduledDate)}
+                                                                            </small>
+                                                                        )}
                                                                         {record.actualVaccine && (
                                                                             <small style={{ display: 'block' }}>
                                                                                 Actual: {record.actualVaccine.vaccine_name}
@@ -2617,6 +2592,11 @@ const Vaccinations = () => {
                                                                         {remainingRecords.map((record, rIdx) => (
                                                                             <div key={record.id || `${rowKey}-rem-${rIdx}`} className="vacc-item-entry">
                                                                                 <strong>{record.scheduledVaccination || record.itemName}</strong>
+                                                                                {record.scheduledDate && (
+                                                                                    <small style={{ display: 'block' }}>
+                                                                                        Scheduled: {formatReadableDate(record.scheduledDate)}
+                                                                                    </small>
+                                                                                )}
                                                                                 {record.actualVaccine && (
                                                                                     <small style={{ display: 'block' }}>
                                                                                         Actual: {record.actualVaccine.vaccine_name}
@@ -2655,11 +2635,23 @@ const Vaccinations = () => {
                                                 })()}
                                             </td>
                                             <td className="col-date">
-                                                {activeTab === 'administered' ? (
-                                                    formatReadableDate(item.administeredDate) || <span className="not-yet">Unknown</span>
-                                                ) : (
-                                                    formatReadableDate(item.scheduledDate) || <span className="not-yet">Not scheduled</span>
-                                                )}
+                                                {(() => {
+                                                    const date = activeTab === 'administered'
+                                                        ? item.administeredDate
+                                                        : activeTab === 'missed'
+                                                            ? (item.records || [])
+                                                                .map(record => record.scheduledDate)
+                                                                .filter(Boolean)
+                                                                .sort()
+                                                                .pop()
+                                                            : item.scheduledDate;
+
+                                                    return formatReadableDate(date) || (
+                                                        <span className="not-yet">
+                                                            {activeTab === 'administered' ? 'Unknown' : 'Not scheduled'}
+                                                        </span>
+                                                    );
+                                                })()}
                                             </td>
                                             <td className="col-status">
                                                 <span className={`vacc-status ${

@@ -20,7 +20,8 @@ import {
     FolderKey,
     KeyRound,
     Filter,
-    Loader2
+    Loader2,
+    Plus
 } from 'lucide-react';
 import supabase from '../config/supabaseclient';
 import '../styles/components/RolePermissionManagement.css';
@@ -108,6 +109,9 @@ const RolePermissionManagement = () => {
     const [notice, setNotice] = useState('');
     const [expandedCategories, setExpandedCategories] = useState({});
     const [visibleKeys, setVisibleKeys] = useState({});
+    const [showAddUserType, setShowAddUserType] = useState(false);
+    const [newUserType, setNewUserType] = useState('');
+    const [addingUserType, setAddingUserType] = useState(false);
 
     // ── Load live permissions and catalog ──
     useEffect(() => {
@@ -136,9 +140,7 @@ const RolePermissionManagement = () => {
 
             if (cancelled) return;
 
-            const supportedRoles = (roleResult.data || []).filter(({ user_type }) =>
-                ['admin', 'staff', 'cho personnel', 'patient', 'mother'].includes(normalizeRole(user_type))
-            );
+            const supportedRoles = roleResult.data || [];
             const permissionRows = permissionResult.data || [];
             setRoles(supportedRoles);
             setCatalog(catalogResult.data || []);
@@ -283,6 +285,46 @@ const RolePermissionManagement = () => {
         }
     };
 
+    const addUserType = async (event) => {
+        event.preventDefault();
+        const name = newUserType.trim();
+        if (!name || addingUserType) return;
+
+        setAddingUserType(true);
+        setError('');
+        setNotice('');
+        try {
+            const { data: roleId, error: createError } = await supabase.rpc('create_user_type', {
+                p_user_type: name,
+            });
+            if (createError) throw createError;
+            if (!roleId) throw new Error('The user type was created without a role ID.');
+
+            const [roleResult, permissionResult] = await Promise.all([
+                supabase.from('user_type').select('id, user_type').order('user_type'),
+                supabase.from('role_permissions').select('role_id, permission_key, is_allowed'),
+            ]);
+            if (roleResult.error) throw roleResult.error;
+            if (permissionResult.error) throw permissionResult.error;
+
+            setRoles(roleResult.data || []);
+            setRows(permissionResult.data || []);
+            setSelectedRoleId(roleId);
+            setDraft({
+                roleId,
+                values: Object.fromEntries(catalog.map(permission => [permission.permission_key, false])),
+            });
+            setNewUserType('');
+            setShowAddUserType(false);
+            setNotice(`User type "${name}" created. Permissions are blocked until you configure them.`);
+        } catch (addError) {
+            console.error('Error creating user type:', addError);
+            setError(addError?.message || 'Unable to create this user type.');
+        } finally {
+            setAddingUserType(false);
+        }
+    };
+
     // ── Accordion toggle handlers ──
     const isSearching = Boolean(search.trim());
 
@@ -353,6 +395,18 @@ const RolePermissionManagement = () => {
 
                 <div className="role-header-actions">
                     <button
+                        className="btn"
+                        type="button"
+                        onClick={() => {
+                            setShowAddUserType(current => !current);
+                            setError('');
+                            setNotice('');
+                        }}
+                    >
+                        <Plus size={15} />
+                        <span>Add User Type</span>
+                    </button>
+                    <button
                         className={`btn role-permissions-save ${dirtyKeys.length > 0 ? 'is-dirty' : ''}`}
                         type="button"
                         onClick={saveChanges}
@@ -373,6 +427,29 @@ const RolePermissionManagement = () => {
                     </button>
                 </div>
             </div>
+
+            {showAddUserType && (
+                <form className="role-add-user-type" onSubmit={addUserType}>
+                    <label htmlFor="new-user-type">New user type</label>
+                    <input
+                        id="new-user-type"
+                        type="text"
+                        value={newUserType}
+                        onChange={event => setNewUserType(event.target.value)}
+                        maxLength={64}
+                        placeholder="e.g. Clinic Coordinator"
+                        required
+                    />
+                    <button className="btn role-permissions-save" type="submit" disabled={addingUserType || !newUserType.trim()}>
+                        {addingUserType ? <Loader2 size={15} className="spin" /> : <Plus size={15} />}
+                        <span>{addingUserType ? 'Adding...' : 'Create Type'}</span>
+                    </button>
+                    <button className="btn" type="button" onClick={() => setShowAddUserType(false)} disabled={addingUserType}>
+                        Cancel
+                    </button>
+                    <p>New user types start with all permissions blocked.</p>
+                </form>
+            )}
 
             {/* ── Toolbar: Role selector, Search, Category Filter ── */}
             <div className="role-permissions-toolbar">

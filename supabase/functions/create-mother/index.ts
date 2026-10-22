@@ -1,6 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { accountEmail, APK_DOWNLOAD_URL, APP_URL, DUPLICATE_EMAIL_MESSAGE, escapeHtml, isDuplicateEmailError, PASSWORD_RESET_URL, sendBrevoEmail } from '../_shared/email.ts';
+import { accountEmail, APK_DOWNLOAD_URL, DUPLICATE_EMAIL_MESSAGE, escapeHtml, isDuplicateEmailError, MOTHER_LANDING_URL, PASSWORD_RESET_URL, sendBrevoEmail } from '../_shared/email.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -41,49 +41,30 @@ async function emailAlreadyRegistered(email: string) {
 
 async function requireStaff(request: Request) {
   const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
-  if (!token) {
-    console.warn('[create-mother] staff verification failed: missing bearer token');
+  if (!token || !anonKey || !supabaseUrl) {
+    console.warn('[create-mother] staff verification failed: missing authorization configuration');
     return false;
   }
 
   const { data: authData, error: authError } = await getAdmin().auth.getUser(token);
-  if (authError) {
-    console.error('[create-mother] staff verification auth lookup failed:', authError);
-    return false;
-  }
-  const userId = authData.user?.id;
-  if (!userId) {
-    console.warn('[create-mother] staff verification failed: token has no user');
+  if (authError || !authData.user?.id) {
+    console.warn('[create-mother] staff verification failed: token could not be verified');
     return false;
   }
 
-  const { data: userRow, error: userError } = await getAdmin()
-    .from('users')
-    .select('usertype')
-    .eq('id', userId)
-    .maybeSingle();
-  if (userError) {
-    console.error('[create-mother] staff verification public.users lookup failed:', userError);
-    throw userError;
-  }
-  if (!userRow?.usertype) {
-    console.warn('[create-mother] staff verification failed: no public.users role for authenticated user');
-    return false;
+  const callerClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data: callerRole, error: roleError } = await callerClient.rpc('get_my_role');
+  if (roleError) {
+    console.error('[create-mother] staff role verification RPC failed:', roleError);
+    throw roleError;
   }
 
-  const { data: userTypeRow, error: userTypeError } = await getAdmin()
-    .from('user_type')
-    .select('user_type')
-    .eq('id', userRow.usertype)
-    .maybeSingle();
-  if (userTypeError) {
-    console.error('[create-mother] staff verification user_type lookup failed:', userTypeError);
-    throw userTypeError;
-  }
-
-  const role = String(userTypeRow?.user_type || '').trim().toLowerCase();
-  const allowed = ['admin', 'staff', 'cho personnel'].includes(role);
-  if (!allowed) console.warn('[create-mother] staff verification denied: role is not operational');
+  const role = String(callerRole || '').trim().toLowerCase().replace(/_/g, ' ');
+  const allowed = ['admin', 'staff', 'station staff', 'cho personnel'].includes(role);
+  if (!allowed) console.warn('[create-mother] staff verification denied:', { role: role || 'missing' });
   return allowed;
 }
 
@@ -282,7 +263,7 @@ Deno.serve(async (request: Request) => {
       passwordSetupBlock = `<p><a href="${escapeHtml(setupLink)}">Set or reset your DASMOM password</a></p>`;
     }
     const pregnancy = mother.pregnancy || {};
-    const html = `<h2>${isNewPregnancy ? `Congratulations, ${escapeHtml(name)}!` : `Welcome to DASMOM, ${escapeHtml(name)}!`}</h2><p>${isNewPregnancy ? 'Your new pregnancy has been registered in DASMOM.' : 'Your mother account has been created.'}</p>${passwordSetupBlock}<p><a href="${escapeHtml(APK_DOWNLOAD_URL)}">Download the DasMom Android app (APK)</a></p><h3>Pregnancy information</h3><p><strong>LMP:</strong> ${escapeHtml(dateLabel(pregnancy.lmd))}<br><strong>EDD:</strong> ${escapeHtml(dateLabel(pregnancy.edd))}<br><strong>Pregnancy type:</strong> ${escapeHtml(pregnancy.pregnancy_type || 'Not set')}<br><strong>Gravida / Para:</strong> ${escapeHtml(pregnancy.gravida || '-')} / ${escapeHtml(pregnancy.para || '-')}</p><h3>Your schedule</h3><table border="1" cellpadding="8" cellspacing="0"><thead><tr><th>Visit</th><th>Date</th><th>Type</th><th>Status</th></tr></thead><tbody>${scheduleRows(mother.visits)}</tbody></table><p><a href="${escapeHtml(APP_URL)}">Open DASMOM</a></p><p>Please contact your health worker if any information is incorrect.</p>`;
+    const html = `<h2>${isNewPregnancy ? `Congratulations, ${escapeHtml(name)}!` : `Welcome to DASMOM, ${escapeHtml(name)}!`}</h2><p>${isNewPregnancy ? 'Your new pregnancy has been registered in DASMOM.' : 'Your mother account has been created.'}</p>${passwordSetupBlock}<p><a href="${escapeHtml(APK_DOWNLOAD_URL)}">Download the DasMom Android app (APK)</a></p><h3>Pregnancy information</h3><p><strong>LMP:</strong> ${escapeHtml(dateLabel(pregnancy.lmd))}<br><strong>EDD:</strong> ${escapeHtml(dateLabel(pregnancy.edd))}<br><strong>Pregnancy type:</strong> ${escapeHtml(pregnancy.pregnancy_type || 'Not set')}<br><strong>Gravida / Para:</strong> ${escapeHtml(pregnancy.gravida || '-')} / ${escapeHtml(pregnancy.para || '-')}</p><h3>Your schedule</h3><table border="1" cellpadding="8" cellspacing="0"><thead><tr><th>Visit</th><th>Date</th><th>Type</th><th>Status</th></tr></thead><tbody>${scheduleRows(mother.visits)}</tbody></table><p><a href="${escapeHtml(MOTHER_LANDING_URL)}">Open DASMOM</a></p><p>Please contact your health worker if any information is incorrect.</p>`;
 
     currentStep = 'Brevo email sending';
     console.log('[create-mother] Sending Brevo email...');

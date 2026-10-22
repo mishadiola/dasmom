@@ -4,6 +4,7 @@ import {
   Shield,
   Lock,
   CheckCircle2,
+  Loader2,
   ArrowRight,
   Menu,
   X,
@@ -35,41 +36,59 @@ const Landing = () => {
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState(false);
   const [dbStats, setDbStats] = useState({
-    mothers: "—",
-    vaccinations: "—",
-    stations: "—",
-    deliveries: "—"
+    mothers: null,
+    vaccinations: null,
+    stations: null,
+    deliveries: null
   });
 
   useEffect(() => {
+    let isMounted = true;
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", handleScroll);
-    
+
     const fetchStats = async () => {
       try {
-        const [mothersRes, vaccinesRes, stationsRes, deliveriesRes] = await Promise.all([
-          supabase.from("patient_basic_info").select("*", { count: "exact", head: true }),
-          supabase.from("vaccinations").select("*", { count: "exact", head: true }),
-          supabase.from("stations").select("*", { count: "exact", head: true }),
-          supabase.from("deliveries").select("*", { count: "exact", head: true })
-        ]);
+        const { data, error } = await supabase.rpc("get_public_landing_stats");
+        if (error) throw error;
 
-        setDbStats({
-          mothers: mothersRes.count !== null ? mothersRes.count : "—",
-          vaccinations: vaccinesRes.count !== null ? vaccinesRes.count : "—",
-          stations: stationsRes.count !== null ? stationsRes.count : "—",
-          deliveries: deliveriesRes.count !== null ? deliveriesRes.count : "—"
-        });
+        const stats = {
+          mothers: Number(data?.mothers),
+          vaccinations: Number(data?.vaccinations),
+          stations: Number(data?.stations),
+          deliveries: Number(data?.deliveries)
+        };
+        if (Object.values(stats).some((value) => !Number.isFinite(value))) {
+          throw new Error("Landing statistics returned an invalid response.");
+        }
+
+        if (isMounted) setDbStats(stats);
       } catch (err) {
         console.error("Error fetching stats:", err);
+        if (isMounted) setStatsError(true);
+      } finally {
+        if (isMounted) setStatsLoading(false);
       }
     };
 
     fetchStats();
 
-    return () => window.removeEventListener("scroll", handleScroll);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("scroll", handleScroll);
+    };
   }, []);
+
+  const displayStat = (value) => {
+    if (statsLoading) {
+      return <Loader2 className="ldg-stat-spinner" size={22} aria-label="Loading live statistics" />;
+    }
+    if (statsError || value === null) return "—";
+    return value.toLocaleString();
+  };
 
   const scrollToSection = (id) => {
     const el = document.getElementById(id);
@@ -418,24 +437,29 @@ const Landing = () => {
                 {/* Mini stat chips */}
                 <div className="ldg-hero__mini-stats">
                   <div className="ldg-hero__mini-stat">
-                    <span className="ldg-hero__mini-stat-val">{dbStats.mothers}</span>
+                    <span className="ldg-hero__mini-stat-val">{displayStat(dbStats.mothers)}</span>
                     <span className="ldg-hero__mini-stat-lbl">
                       Mothers Supported
                     </span>
                   </div>
                   <div className="ldg-hero__mini-stat">
-                    <span className="ldg-hero__mini-stat-val">{dbStats.stations}</span>
+                    <span className="ldg-hero__mini-stat-val">{displayStat(dbStats.stations)}</span>
                     <span className="ldg-hero__mini-stat-lbl">
                       Connected Health Stations
                     </span>
                   </div>
                   <div className="ldg-hero__mini-stat">
-                    <span className="ldg-hero__mini-stat-val">{dbStats.deliveries}</span>
+                    <span className="ldg-hero__mini-stat-val">{displayStat(dbStats.deliveries)}</span>
                     <span className="ldg-hero__mini-stat-lbl">
                       Deliveries Recorded
                     </span>
                   </div>
                 </div>
+                {(statsLoading || statsError) && (
+                  <p className="ldg-stats-status" role="status">
+                    {statsLoading ? "Loading live statistics..." : "Live statistics are temporarily unavailable."}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -578,18 +602,18 @@ const Landing = () => {
 
                 <div className="ldg-about-visual-card__stats">
                   <div className="ldg-about-vc-stat">
-                    <span className="ldg-about-vc-stat__val">501</span>
+                    <span className="ldg-about-vc-stat__val">{displayStat(dbStats.mothers)}</span>
                     <span className="ldg-about-vc-stat__lbl">
-                      Active Mothers
+                      Mothers Supported
                     </span>
                   </div>
                   <div className="ldg-about-vc-stat">
-                    <span className="ldg-about-vc-stat__val">85%</span>
-                    <span className="ldg-about-vc-stat__lbl">Vacc. Rate</span>
+                    <span className="ldg-about-vc-stat__val">{displayStat(dbStats.vaccinations)}</span>
+                    <span className="ldg-about-vc-stat__lbl">Vaccinations Tracked</span>
                   </div>
                   <div className="ldg-about-vc-stat">
-                    <span className="ldg-about-vc-stat__val">7</span>
-                    <span className="ldg-about-vc-stat__lbl">Stations</span>
+                    <span className="ldg-about-vc-stat__val">{displayStat(dbStats.stations)}</span>
+                    <span className="ldg-about-vc-stat__lbl">Health Stations</span>
                   </div>
                 </div>
               </div>
@@ -759,7 +783,7 @@ const Landing = () => {
                 <div className="ldg-impact-card__icon">
                   <stat.icon size={32} strokeWidth={1.5} />
                 </div>
-                <div className="ldg-impact-card__val">{stat.val}</div>
+                <div className="ldg-impact-card__val">{displayStat(stat.val)}</div>
                 <div className="ldg-impact-card__lbl">{stat.lbl}</div>
               </div>
             ))}

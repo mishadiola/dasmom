@@ -50,8 +50,8 @@ export default class StaffService {
         value: role.user_type?.trim() || '',
         label: this.formatRoleLabel(role.user_type),
       })).filter(role => {
-        const val = role.value.toLowerCase();
-        return ['admin', 'staff', 'cho personnel'].includes(val);
+        const val = role.value.toLowerCase().replace(/_/g, ' ');
+        return !['patient', 'mother', 'user'].includes(val);
       });
     } catch (error) {
       console.error('❌ getAllUserRoles:', error);
@@ -161,26 +161,26 @@ export default class StaffService {
   }
 
   async archiveStaff(staffId) {
-    const { error } = await this.supabase
-      .from('users')
-      .update({ is_archived: true })
-      .eq('id', staffId);
+    const { error } = await this.supabase.rpc('set_staff_account_status', {
+      p_user_id: staffId,
+      p_is_archived: true,
+    });
     if (error) throw error;
   }
 
   async restoreStaff(staffId) {
-    const { error } = await this.supabase
-      .from('users')
-      .update({ is_archived: false })
-      .eq('id', staffId);
+    const { error } = await this.supabase.rpc('set_staff_account_status', {
+      p_user_id: staffId,
+      p_is_archived: false,
+    });
     if (error) throw error;
   }
 
   async setStaffDeactivated(staffId, isDeactivated) {
-    const { error } = await this.supabase
-      .from('users')
-      .update({ is_deactivated: Boolean(isDeactivated) })
-      .eq('id', staffId);
+    const { error } = await this.supabase.rpc('set_staff_account_status', {
+      p_user_id: staffId,
+      p_is_deactivated: Boolean(isDeactivated),
+    });
     if (error) throw error;
   }
 
@@ -398,6 +398,11 @@ export default class StaffService {
 
       if (!['admin', 'cho personnel', 'staff'].includes(callerRole)) {
         throw new Error('Insufficient permissions to add staff');
+      }
+      if (callerRole === 'admin') {
+        await this.getUserTypeIdByRole(targetRole);
+      } else if (!['admin', 'cho personnel', 'staff'].includes(targetRole)) {
+        throw new Error('Only administrators can create accounts with custom user types.');
       }
       if (callerRole === 'staff' && targetRole !== 'staff') {
         throw new Error('Staff can only add Staff accounts.');

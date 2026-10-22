@@ -213,20 +213,13 @@ export default class AuthService {
     return { id: functionData.userId };
   }
 
-  async signInWithGoogle(email, redirectTo = `${DASMOM_APP_URL}/login`) {
-    const normalizedEmail = String(email || '').trim().toLowerCase();
-    if (!normalizedEmail) throw new Error('Enter the email registered for your DasMom account first.');
-
-    const { data: check, error: checkError } = await this.supabase.functions.invoke('google-account-check', {
-      body: { email: normalizedEmail },
-    });
-    if (checkError) throw checkError;
-    if (!check?.allowed) throw new Error(check?.error || 'This email is not registered for a DasMom account.');
-
-    localStorage.setItem('dasmom_google_email', normalizedEmail);
+  async signInWithGoogle(redirectTo = `${DASMOM_APP_URL}/login`) {
     const { error } = await this.supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo },
+      options: {
+        redirectTo,
+        queryParams: { prompt: 'select_account' },
+      },
     });
     if (error) throw error;
   }
@@ -319,7 +312,7 @@ export default class AuthService {
     let assignedStationId = null;
 
     try {
-      if (role === 'admin' || role.includes('staff') || role === 'cho personnel' || role.includes('midwife') || role.includes('doctor')) {
+      if (!['mother', 'patient'].includes(role)) {
         const { data, error } = await this.supabase
           .from('staff_profiles')
           .select('full_name, station_ass, stations:station_ass(id, station_name)')
