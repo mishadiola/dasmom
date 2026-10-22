@@ -191,8 +191,7 @@ const HighRiskCases = () => {
       }
       setError(null);
 
-      const [statsData, patientsData, access] = await Promise.all([
-        service.getHighRiskStats(),
+      const [patientsData, access] = await Promise.all([
         service.getHighRiskPatients(),
         service.getCurrentUserAccess(),
       ]);
@@ -215,7 +214,7 @@ const HighRiskCases = () => {
       const patientsWithConditions = uniquePatients.filter((item) => item.hasHealthConditions);
 
       setStats({
-        ...statsData,
+        highRiskCount: patientsWithConditions.length,
         totalWithConditions: patientsWithConditions.length,
         criticalToday: 0,
         missedFollowups: 0,
