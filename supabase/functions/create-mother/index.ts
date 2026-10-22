@@ -1,6 +1,6 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { accountEmail, APK_DOWNLOAD_URL, DUPLICATE_EMAIL_MESSAGE, escapeHtml, isDuplicateEmailError, MOTHER_LANDING_URL, PASSWORD_RESET_URL, sendBrevoEmail } from '../_shared/email.ts';
+import { APK_DOWNLOAD_URL, DUPLICATE_EMAIL_MESSAGE, escapeHtml, isDuplicateEmailError, MOTHER_LANDING_URL, PASSWORD_RESET_URL, sendBrevoEmail } from '../_shared/email.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -211,27 +211,7 @@ Deno.serve(async (request: Request) => {
       publicUserCreated = true;
       console.log('[create-mother] public.users record created');
 
-      currentStep = 'password setup link generation';
-      const { data: setupLinkData, error: setupLinkError } = await getAdmin().auth.admin.generateLink({
-        type: 'recovery',
-        email,
-        options: { redirectTo: PASSWORD_RESET_URL },
-      });
-      if (setupLinkError) throw setupLinkError;
-      const setupLink = setupLinkData.properties?.action_link;
-      if (!setupLink) throw new Error('Supabase Auth did not return a password setup link');
-
-      currentStep = 'Brevo email sending';
-      console.log('[create-mother] Sending Brevo email...');
-      await sendBrevoEmail(email, 'Welcome to DASMOM', accountEmail({
-        name: String(body.motherName),
-        email,
-        role: 'mother',
-        setupLink,
-        accountType: 'mother',
-      }));
-      console.log('[create-mother] Brevo email sent');
-      return json({ success: true, userId: createdUserId, message: 'Mother account created and welcome email sent' });
+      return json({ success: true, userId: createdUserId, message: 'Mother account created' });
     }
 
     currentStep = 'staff authorization';

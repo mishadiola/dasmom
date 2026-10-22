@@ -183,7 +183,7 @@ export default class AuthService {
             stationId,
           }
         }),
-        15000
+        45000
       );
 
       if (functionError) await this._throwAccountCreationError(functionError);
