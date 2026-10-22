@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import {
     Users, Baby, AlertTriangle, CalendarCheck, TrendingUp,
     TrendingDown, Activity, Syringe, HeartPulse, MapPin,
-    ChevronRight, Plus, FileText, Eye, Filter,
+    ChevronRight, ChevronDown, ChevronUp, Plus, FileText, Eye, Filter,
     CheckCircle2, XCircle, Circle, Dot, MoreHorizontal,
     ArrowUpRight, Star, Smartphone, Download, QrCode
 } from 'lucide-react';
@@ -190,12 +190,23 @@ const Dashboard = () => {
     const [loadingHealth, setLoadingHealth] = useState(true);
     const isFetchingStats = useRef(false);
 
+    const [visibleApptCount, setVisibleApptCount] = useState(10);
+
     const displayedAppointments = useMemo(() => {
         if (!selectedStation || selectedStation === 'All') return todayAppts;
         return todayAppts.filter(a => matchStation(a.station, selectedStation));
     }, [todayAppts, selectedStation, matchStation]);
 
     const displayedApptCount = displayedAppointments.length;
+
+    // Reset visible appointment count to 10 when selected station changes
+    useEffect(() => {
+        setVisibleApptCount(10);
+    }, [selectedStation]);
+
+    const visibleAppointments = useMemo(() => {
+        return displayedAppointments.slice(0, visibleApptCount);
+    }, [displayedAppointments, visibleApptCount]);
 
     const fetchStats = async () => {
         if (isFetchingStats.current) return;
@@ -814,7 +825,7 @@ const Dashboard = () => {
                                             </td>
                                         </tr>
                                     ) : (
-                                        displayedAppointments.map((a) => (
+                                        visibleAppointments.map((a) => (
                                             <tr key={a.id} className="table-row">
                                                 <td>
                                                     <div className="patient-cell">
@@ -842,6 +853,38 @@ const Dashboard = () => {
                                 </tbody>
                             </table>
                         </div>
+
+                        {displayedApptCount > 10 && (
+                            <div className="dash-appt-footer" onClick={e => e.stopPropagation()}>
+                                <span className="dash-appt-count-indicator">
+                                    Showing {visibleAppointments.length} of {displayedApptCount} appointments
+                                </span>
+                                <button
+                                    type="button"
+                                    className="dash-appt-show-btn"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (visibleApptCount < displayedApptCount) {
+                                            setVisibleApptCount(prev => prev + 10);
+                                        } else {
+                                            setVisibleApptCount(10);
+                                        }
+                                    }}
+                                >
+                                    {visibleApptCount < displayedApptCount ? (
+                                        <>
+                                            <span>Show More</span>
+                                            <ChevronDown size={14} />
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span>Show Less</span>
+                                            <ChevronUp size={14} />
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     {/* VACCINE & SUPPLEMENT STOCK */}

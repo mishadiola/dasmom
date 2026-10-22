@@ -1163,3 +1163,124 @@
         flex: 1 1 100%;
     }
 }
+
+/* ── Recent Distribution History Card ── */
+.recent-dist-card {
+    background: #ffffff;
+    border-radius: 16px;
+    border: 1px solid #eef0f4;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+    margin-top: 24px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.recent-dist-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #f0f2f5;
+    background: #ffffff;
+}
+
+.recent-dist-info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.recent-dist-title-group {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.recent-dist-icon-box {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(91, 174, 208, 0.12);
+    color: #3a8db5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.recent-dist-title-box {
+    display: flex;
+    flex-direction: column;
+}
+
+.recent-dist-title-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.recent-dist-title-box h2 {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0;
+    color: var(--color-text, #1f2937);
+}
+
+.recent-dist-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 12px;
+    background: rgba(91, 174, 208, 0.12);
+    color: #3a8db5;
+    letter-spacing: 0.2px;
+    display: inline-flex;
+    align-items: center;
+}
+
+.recent-dist-title-box p {
+    font-size: 13px;
+    color: var(--color-text-muted, #6b7280);
+    margin: 4px 0 0;
+}
+
+.recent-dist-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.recent-dist-view-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-rose, #b9818a);
+    background: rgba(185, 129, 138, 0.08);
+    border: 1px solid rgba(185, 129, 138, 0.2);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.recent-dist-view-btn:hover {
+    background: rgba(185, 129, 138, 0.15);
+    border-color: rgba(185, 129, 138, 0.35);
+}
+
+@media (max-width: 768px) {
+    .recent-dist-header {
+        padding: 16px;
+    }
+    .recent-dist-info-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .recent-dist-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+}

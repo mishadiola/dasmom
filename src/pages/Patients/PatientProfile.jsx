@@ -6,7 +6,8 @@ import {
     CalendarCheck, User, MapPin, Phone,
     AlertTriangle, CheckCircle2, Clock, History,
     Shield, Mail, Home, FileText, Pill, Scale,
-    Ruler, Thermometer, Heart, Wind, ClipboardList
+    Ruler, Thermometer, Heart, Wind, ClipboardList,
+    UserCheck, Building2
 } from 'lucide-react';
 import '../../styles/pages/PatientProfile.css';
 import PatientService from '../../services/patientservice';
@@ -138,6 +139,14 @@ const getOrdinalSuffix = (num) => {
     if (lastDigit === 2) return num + 'nd';
     if (lastDigit === 3) return num + 'rd';
     return num + 'th';
+};
+
+const getVisitStatusClass = (status) => {
+    const s = String(status || '').toLowerCase().trim();
+    if (s === 'attended' || s === 'completed' || s === 'done') return 'attended';
+    if (s === 'missed') return 'missed';
+    if (s === 'cancelled') return 'cancelled';
+    return 'scheduled';
 };
 
 const getCategoryTheme = (category) => {
@@ -1176,11 +1185,64 @@ const PatientProfile = () => {
                                                         <span className="timeline-tag">{getOrdinalSuffix(v.trimester)} Trim.</span>
                                                     </div>
                                                 </div>
-                                                <div className="timeline-status">
-                                                    Assigned Staff: {v.assigned_staff_name || 'Unassigned'}
-                                                    {' · '}Performed By: {v.performed_by_name || (v.status === 'Attended' ? 'Not recorded' : 'Pending')}
-                                                    {' · '}Assigned Station: {v.assigned_station_name || 'Unassigned'}
-                                                    {' · '}Visit Station: {v.visit_station_name || 'Not recorded'}
+                                                <div className="timeline-visit-meta">
+                                                    <div className="timeline-meta-group">
+                                                        <span className="timeline-meta-label">
+                                                            <User size={12} className="timeline-meta-icon" />
+                                                            Assigned Staff
+                                                        </span>
+                                                        <span className={`timeline-meta-value ${!v.assigned_staff_name || v.assigned_staff_name === 'Unassigned' ? 'timeline-meta-value--muted' : ''}`}>
+                                                            {v.assigned_staff_name || 'Unassigned'}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="timeline-meta-group">
+                                                        <span className="timeline-meta-label">
+                                                            <UserCheck size={12} className="timeline-meta-icon" />
+                                                            Performed By
+                                                        </span>
+                                                        <span className={`timeline-meta-value ${!v.performed_by_name ? 'timeline-meta-value--muted' : ''}`}>
+                                                            {v.performed_by_name || (v.status === 'Attended' ? 'Not recorded' : 'Pending')}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="timeline-meta-group">
+                                                        <span className="timeline-meta-label">
+                                                            <MapPin size={12} className="timeline-meta-icon" />
+                                                            Assigned Station
+                                                        </span>
+                                                        <span className={`timeline-meta-value timeline-meta-value--station ${!v.assigned_station_name || v.assigned_station_name === 'Unassigned' ? 'timeline-meta-value--muted' : ''}`}>
+                                                            {v.assigned_station_name || 'Unassigned'}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="timeline-meta-group">
+                                                        <span className="timeline-meta-label">
+                                                            <Building2 size={12} className="timeline-meta-icon" />
+                                                            Visit Station
+                                                        </span>
+                                                        <span className={`timeline-meta-value timeline-meta-value--station ${!v.visit_station_name || v.visit_station_name === 'Not recorded' ? 'timeline-meta-value--muted' : ''}`}>
+                                                            {v.visit_station_name || 'Not recorded'}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="timeline-meta-group timeline-meta-group--status">
+                                                        <span className="timeline-meta-label">
+                                                            <CalendarCheck size={12} className="timeline-meta-icon" />
+                                                            Status
+                                                        </span>
+                                                        <div className="timeline-meta-status-wrap">
+                                                            <span className={`timeline-status-badge timeline-status-badge--${getVisitStatusClass(v.status)}`}>
+                                                                <span className="status-badge-dot" />
+                                                                {v.status || 'Scheduled'}
+                                                            </span>
+                                                            {v.status === 'Missed' && v.missed_reason && (
+                                                                <span className="timeline-missed-reason" title={v.missed_reason}>
+                                                                    ({v.missed_reason})
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
                                                 </div>
                                                 {v.status === 'Attended' && (
                                                     <div className="timeline-vitals-grid">
@@ -1266,12 +1328,6 @@ const PatientProfile = () => {
                                                                 <span className="detail-value">{v.advice_given}</span>
                                                             </div>
                                                         )}
-                                                    </div>
-                                                )}
-                                                {v.status !== 'Attended' && (
-                                                    <div className="timeline-status">
-                                                        Status: {v.status}
-                                                        {v.missed_reason && <span> - {v.missed_reason}</span>}
                                                     </div>
                                                 )}
                                             </div>
