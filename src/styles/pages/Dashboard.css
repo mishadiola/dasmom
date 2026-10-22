@@ -1740,3 +1740,42 @@
         width: 100%;
     }
 }
+/* ── Today's Appointments Show More / Show Less Footer ── */
+.dash-appt-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 16px 6px;
+    border-top: 1px solid #f1f5f9;
+    margin-top: 8px;
+}
+
+.dash-appt-count-indicator {
+    font-size: 12px;
+    color: var(--color-text-muted, #64748b);
+    font-weight: 500;
+}
+
+.dash-appt-show-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-rose, #b9818a);
+    background: rgba(185, 129, 138, 0.08);
+    border: 1px solid rgba(185, 129, 138, 0.2);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.dash-appt-show-btn:hover {
+    background: rgba(185, 129, 138, 0.15);
+    border-color: rgba(185, 129, 138, 0.35);
+    color: var(--color-rose, #b9818a);
+}

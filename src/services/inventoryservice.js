@@ -12,6 +12,10 @@ const isAdminRole = (role) => {
   const normalized = normalizeInventoryRole(role);
   return normalized === 'admin' || normalized === 'super admin' || normalized === 'super-admin' || normalized.includes('admin');
 };
+const isChoRole = (role) => {
+  const normalized = normalizeInventoryRole(role);
+  return normalized === 'cho personnel' || normalized === 'cho' || normalized.includes('cho');
+};
 
 class InventoryService {
   constructor() {
@@ -131,10 +135,11 @@ class InventoryService {
 
   async getStationInventorySnapshot({ scope: suppliedScope } = {}) {
     const scope = suppliedScope || await this._getCurrentUserScope();
-    const isAdmin = scope.role === 'admin';
-    let stationId = isAdmin ? null : scope.stationId;
+    const isAdmin = isAdminRole(scope.role);
+    const isCho = isChoRole(scope.role);
+    let stationId = (isAdmin || isCho) ? null : scope.stationId;
 
-    if (!isAdmin) {
+    if (!isAdmin && !isCho) {
       if (!stationId) {
         const { data: canViewOtherStations, error: permissionError } = await this.supabase.rpc('has_permission', {
           p_permission_key: 'inventory.station.view.other_station'
@@ -181,7 +186,8 @@ class InventoryService {
 
   async getStationDistributionHistory() {
     const scope = await this._getCurrentUserScope();
-    const isAdmin = scope.role === 'admin';
+    const isAdmin = isAdminRole(scope.role);
+    const isCho = isChoRole(scope.role);
 
     const vaccineQuery = this.supabase
       .from('vaccine_distribution')
@@ -210,7 +216,7 @@ class InventoryService {
         supplement_inventory:supplement_id (supplement_name, brand, batch_number, unit)
       `);
 
-    if (!isAdmin) {
+    if (!isAdmin && !isCho) {
       const [{ data: canViewOtherStations, error: otherPermissionError }, { data: canDistribute, error: distributionPermissionError }] = await Promise.all([
         this.supabase.rpc('has_permission', { p_permission_key: 'inventory.station.view.other_station' }),
         this.supabase.rpc('has_permission', { p_permission_key: 'inventory.main.distribute.to_stations' })

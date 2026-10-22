@@ -30,7 +30,9 @@ import {
   Send,
   Hash,
   Download,
-  Building2
+  Building2,
+  Clock,
+  History
 } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
 import { useRolePermissions } from '../../context/RolePermissionContext';
@@ -55,6 +57,10 @@ const normalizeRole = (role) => String(role || '').trim().toLowerCase();
 const isAdminRole = (role) => {
   const normalized = normalizeRole(role);
   return normalized === 'admin' || normalized === 'super admin' || normalized === 'super-admin' || normalized.includes('admin');
+};
+const isChoRole = (role) => {
+  const normalized = normalizeRole(role);
+  return normalized === 'cho personnel' || normalized === 'cho' || normalized.includes('cho');
 };
 
 const formatReadableDate = (dateString) => {
@@ -87,6 +93,8 @@ const Inventory = () => {
     isArray: false
   });
   const isAdmin = isAdminRole(userScope.role);
+  const isCho = isChoRole(userScope.role) || isChoRole(user?.role);
+  const canViewRecentDistributions = (isAdmin || isCho) && !isStationStaff;
   const canDistributeToStations = isAdmin || hasPermission('inventory.main.distribute.to_stations');
   const canViewMainInventory = isAdmin
     || hasPermission('inventory.main.view')
@@ -199,6 +207,9 @@ const Inventory = () => {
   const [stationCurrentInventory, setStationCurrentInventory] = useState([]);
   const [stationInventoryError, setStationInventoryError] = useState('');
   const [stationDataRefreshKey, setStationDataRefreshKey] = useState(0);
+  const [recentDistViewAll, setRecentDistViewAll] = useState(false);
+  const [recentDistPage, setRecentDistPage] = useState(1);
+  const recentDistPageSize = 10;
   const [distForm, setDistForm] = useState({
     item_type: 'vaccine',
     item_id: '',
@@ -614,7 +625,7 @@ const Inventory = () => {
             canViewStationInventory
               ? inventoryService.getStationInventorySnapshot()
               : Promise.resolve([]),
-            canViewStationInventory || canDistributeToStations
+            canViewStationInventory || canDistributeToStations || canViewRecentDistributions
               ? inventoryService.getStationDistributionHistory()
               : Promise.resolve([]),
             inventoryService.supabase.from('stations').select('id, station_name').order('station_name')
@@ -700,7 +711,7 @@ const Inventory = () => {
       inventoryService.supabase.removeChannel(stationVaccineSub);
       inventoryService.supabase.removeChannel(stationSupplementSub);
     };
-  }, [user?.id, mainTab, isAdmin, canViewOtherStations, canDistributeToStations, canViewStationInventory, stationDataRefreshKey]);
+  }, [user?.id, mainTab, isAdmin, canViewOtherStations, canDistributeToStations, canViewStationInventory, canViewRecentDistributions, stationDataRefreshKey]);
 
   const getStatus = (qty, maxStock, hasExpiredStock) => {
     return getInventoryStatus(qty, maxStock, hasExpiredStock);
@@ -1524,6 +1535,7 @@ const Inventory = () => {
       };
 
       setDistributionHistory(prev => [newRecord, ...prev]);
+      setStationDataRefreshKey(k => k + 1);
 
       // Reset form & close
       setShowDistributionModal(false);
@@ -1643,6 +1655,25 @@ const Inventory = () => {
   const distTotalPages = Math.ceil(filteredDistHistory.length / distItemsPerPage) || 1;
   const distStartIndex = (distPage - 1) * distItemsPerPage;
   const paginatedDistHistory = filteredDistHistory.slice(distStartIndex, distStartIndex + distItemsPerPage);
+
+  // Citywide Recent Distribution History (Admin and CHO Personnel only)
+  const recentDistributionList = useMemo(() => {
+    return [...(distributionHistory || [])].sort((a, b) => {
+      const aTime = a.distribution_date ? new Date(a.distribution_date).getTime() : 0;
+      const bTime = b.distribution_date ? new Date(b.distribution_date).getTime() : 0;
+      if (bTime !== aTime) return bTime - aTime;
+      return (Number(b.id) || 0) - (Number(a.id) || 0);
+    });
+  }, [distributionHistory]);
+
+  const recentDistTotalPages = Math.max(1, Math.ceil(recentDistributionList.length / recentDistPageSize));
+  const displayedRecentDistributions = useMemo(() => {
+    if (!recentDistViewAll) {
+      return recentDistributionList.slice(0, 5);
+    }
+    const start = (recentDistPage - 1) * recentDistPageSize;
+    return recentDistributionList.slice(start, start + recentDistPageSize);
+  }, [recentDistributionList, recentDistViewAll, recentDistPage, recentDistPageSize]);
 
   // Distribution summary stats scoped to selected station
   const distSummary = useMemo(() => {
@@ -3013,6 +3044,173 @@ const Inventory = () => {
           </div>
         )}
       </div>
+
+      {/* ── RECENT DISTRIBUTION HISTORY (Admin & CHO Personnel Only) ── */}
+      {canViewRecentDistributions && (
+        <div className="recent-dist-card">
+          <div className="recent-dist-header">
+            <div className="recent-dist-info-row">
+              <div className="recent-dist-title-group">
+                <div className="recent-dist-icon-box">
+                  <Clock size={20} />
+                </div>
+                <div className="recent-dist-title-box">
+                  <div className="recent-dist-title-line">
+                    <h2>Recent Distribution History</h2>
+                    <span className="recent-dist-badge">
+                      {recentDistViewAll
+                        ? `All Records (${recentDistributionList.length})`
+                        : `Latest ${Math.min(5, recentDistributionList.length)} Transactions`}
+                    </span>
+                  </div>
+                  <p>Latest vaccine and supplement distributions across health stations.</p>
+                </div>
+              </div>
+
+              {recentDistributionList.length > 5 && (
+                <div className="recent-dist-actions">
+                  <button
+                    type="button"
+                    className="recent-dist-view-btn"
+                    onClick={() => {
+                      setRecentDistViewAll(prev => !prev);
+                      setRecentDistPage(1);
+                    }}
+                  >
+                    {recentDistViewAll ? (
+                      <>
+                        <span>Show Latest 5</span>
+                        <ChevronUp size={14} />
+                      </>
+                    ) : (
+                      <>
+                        <span>View All ({recentDistributionList.length})</span>
+                        <ChevronDown size={14} />
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table className="inv-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Date</th>
+                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Item</th>
+                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Type</th>
+                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Brand</th>
+                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'center', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Quantity</th>
+                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Destination Station</th>
+                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Released By</th>
+                  <th style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', color: '#666', textAlign: 'left', background: '#fafbfc', borderBottom: '1px solid #eee' }}>Remarks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayedRecentDistributions.length > 0 ? (
+                  displayedRecentDistributions.map((rec) => (
+                    <tr
+                      key={`recent-dist-${rec.id}-${rec.item_type}`}
+                      style={{ borderBottom: '1px solid #f0f2f5', transition: 'background 0.2s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'}
+                      onMouseLeave={e => e.currentTarget.style.background = ''}
+                    >
+                      <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap' }}>
+                        {formatReadableDate(rec.distribution_date)}
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>
+                        <div style={{ fontWeight: '600' }}>{rec.item_name}</div>
+                        {rec.batch && rec.batch !== 'N/A' && (
+                          <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
+                            Batch {rec.batch}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '3px 10px',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: '600',
+                            background: rec.item_type === 'Vaccine' ? 'rgba(91,174,208,0.12)' : 'rgba(147,111,199,0.12)',
+                            color: rec.item_type === 'Vaccine' ? '#3a8db5' : '#7a4fa8'
+                          }}
+                        >
+                          {rec.item_type === 'Vaccine' ? <Syringe size={11} /> : <Pill size={11} />}
+                          {rec.item_type}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>
+                        {rec.brand || '—'}
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: '600', color: '#333', textAlign: 'center' }}>
+                        {rec.quantity} <span style={{ fontWeight: 400, color: '#888', fontSize: '11px' }}>{rec.unit}</span>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '13px', color: '#333' }}>
+                        {rec.destination_station}
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '13px', color: '#555' }}>
+                        {rec.released_by}
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '12px', color: '#777', maxWidth: '240px' }}>
+                        <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                          {rec.remarks || '—'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="8" style={{ padding: '48px 16px', textAlign: 'center', color: '#888', fontSize: '13px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                        <History size={32} style={{ color: '#ccc', strokeWidth: 1.5 }} />
+                        <span style={{ fontWeight: 600, color: '#555', fontSize: '14px' }}>No distribution records found</span>
+                        <span style={{ fontSize: '12px', color: '#999' }}>Distributions recorded across health stations will appear here.</span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {recentDistViewAll && recentDistributionList.length > recentDistPageSize && (
+            <div className="pagination-container" style={{ padding: '16px 24px', borderTop: '1px solid #f0f2f5' }}>
+              <div className="pagination-info">
+                Showing {(recentDistPage - 1) * recentDistPageSize + 1}-
+                {Math.min(recentDistPage * recentDistPageSize, recentDistributionList.length)} of {recentDistributionList.length}
+              </div>
+              <div className="pagination-controls">
+                <button
+                  type="button"
+                  className="pagination-btn"
+                  onClick={() => setRecentDistPage(prev => Math.max(1, prev - 1))}
+                  disabled={recentDistPage === 1}
+                >
+                  Previous
+                </button>
+                <span className="pagination-page-info">
+                  Page {recentDistPage} of {recentDistTotalPages}
+                </span>
+                <button
+                  type="button"
+                  className="pagination-btn"
+                  onClick={() => setRecentDistPage(prev => Math.min(recentDistTotalPages, prev + 1))}
+                  disabled={recentDistPage === recentDistTotalPages}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       </>
       )}
 
