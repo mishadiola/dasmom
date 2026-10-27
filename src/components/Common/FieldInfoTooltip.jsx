@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { Info } from 'lucide-react';
 
@@ -21,7 +21,8 @@ const FieldInfoTooltip = ({
   const [coords, setCoords] = useState({ top: 0, left: 0, placeAbove: true, arrowLeft: 0 });
   const buttonRef = useRef(null);
   const popoverRef = useRef(null);
-  const tooltipIdRef = useRef(`field-tooltip-${Math.random().toString(36).substr(2, 9)}`);
+  const pointerTypeRef = useRef(null);
+  const tooltipId = useId();
 
   const updatePosition = useCallback(() => {
     if (!buttonRef.current) return;
@@ -111,12 +112,22 @@ const FieldInfoTooltip = ({
         ref={buttonRef}
         type="button"
         className="field-info-icon-btn"
+        onPointerDown={(event) => {
+          pointerTypeRef.current = event.pointerType;
+        }}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          setIsOpen((prev) => !prev);
+          if (pointerTypeRef.current === 'touch' || e.detail === 0) {
+            setIsOpen((prev) => !prev);
+          }
+          pointerTypeRef.current = null;
         }}
-        onFocus={() => setIsOpen(true)}
+        onFocus={(event) => {
+          if (event.currentTarget.matches(':focus-visible')) {
+            setIsOpen(true);
+          }
+        }}
         onBlur={(e) => {
           if (!popoverRef.current?.contains(e.relatedTarget)) {
             setIsOpen(false);
@@ -124,7 +135,7 @@ const FieldInfoTooltip = ({
         }}
         aria-label={ariaLabel || `${title} information`}
         aria-expanded={isOpen}
-        aria-describedby={isOpen ? tooltipIdRef.current : undefined}
+        aria-describedby={isOpen ? tooltipId : undefined}
         style={{
           background: 'none',
           border: 'none',
@@ -148,7 +159,7 @@ const FieldInfoTooltip = ({
       {isOpen &&
         createPortal(
           <div
-            id={tooltipIdRef.current}
+            id={tooltipId}
             ref={popoverRef}
             role="tooltip"
             className="field-info-popover-portal"
