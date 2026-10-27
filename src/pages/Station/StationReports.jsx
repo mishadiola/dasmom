@@ -17,6 +17,13 @@ import StaffPageLoader from '../../components/Common/StaffPageLoader';
 import { exportStandardStaffPdf } from '../../utils/staffPdfTemplate';
 import { AuthContext } from '../../context/AuthContext';
 import { useDefaultStation } from '../../hooks/useDefaultStation';
+import { useRolePermissions } from '../../context/RolePermissionContext';
+import ReportTemplateBuilder from '../../components/ReportTemplateBuilder';
+import {
+    assertReportPermission,
+    STATION_TEMPLATE_FIELDS,
+    TEMPLATE_PERMISSION_KEYS
+} from '../../utils/reportTemplateUtils';
 
 /* ════════════════════════════
    HELPERS & LEGEND DEFINITIONS
@@ -70,6 +77,8 @@ const STATION_LEGEND_CATEGORIES = [
 const StationReports = () => {
     const navigate = useNavigate();
     const { user } = useContext(AuthContext);
+    const { hasPermission } = useRolePermissions();
+    const canExportStation = hasPermission(TEMPLATE_PERMISSION_KEYS.exportStation);
     const [stations, setStations] = useState([]);
     const stationNames = useMemo(() => stations.map(s => s.name), [stations]);
     const {
@@ -202,11 +211,32 @@ const StationReports = () => {
         });
     }, [authorizedStations, isStationStaff, canViewOtherStations, activeStationFilter, searchTerm]);
 
+    const templateRows = useMemo(() => filtered.map(station => ({
+        name: station.name,
+        totalPatients: station.totalPatients,
+        withHealthConditions: station.withHealthConditions || 0,
+        recentDeliveries: station.recentDeliveries,
+        newborns: station.newborns,
+        vaccCoverage: station.vaccCoverage,
+        completedVaccinations: station.completedVaccinations || 0,
+        totalVaccinations: station.totalVaccinations || 0,
+        suppCoverage: station.suppCoverage,
+        missedAppointments: station.missedAppointments || 0,
+        appointmentsDue: station.appointmentsDue || 0,
+        missedRate: station.missedRate || 0,
+        trimesterFirst: station.trimester?.first || 0,
+        trimesterSecond: station.trimester?.second || 0,
+        trimesterThird: station.trimester?.third || 0,
+        complications: station.complications || 0
+    })), [filtered]);
+
     const getCoverageClass = (v) => v >= 90 ? 'green' : v >= 80 ? 'amber' : 'red';
 
     const [showExportModal, setShowExportModal] = useState(false);
+    const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
 
     const handleExport = async (exportConfig) => {
+        await assertReportPermission(supabase, TEMPLATE_PERMISSION_KEYS.exportStation);
         const { format, reportPeriodText } = exportConfig;
         const exportStations = (isStationStaff && !canViewOtherStations)
             ? authorizedStations
@@ -312,9 +342,14 @@ const StationReports = () => {
                             <option value="annual">Annual</option>
                         </select>
                     </label>
-                    <button className="btn btn-primary" onClick={() => setShowExportModal(true)}>
-                        <Download size={16} /> Export Report
+                    <button className="btn btn-outline" onClick={() => setShowTemplateBuilder(true)}>
+                        <FileText size={16} /> Create Format
                     </button>
+                    {canExportStation && (
+                        <button className="btn btn-primary" onClick={() => setShowExportModal(true)}>
+                            <Download size={16} /> Export Report
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -622,12 +657,27 @@ const StationReports = () => {
             </div>
 
             {/* ── Detail Modal ── */}
-            {selectedStation && <DetailModal station={selectedStation} onClose={() => setSelectedStation(null)} navigate={navigate} />}
+            {selectedStation && <DetailModal station={selectedStation} onClose={() => setSelectedStation(null)} navigate={navigate} canExport={canExportStation} />}
 
             <ExportModal
-                isOpen={showExportModal}
+                isOpen={showExportModal && canExportStation}
                 onClose={() => setShowExportModal(false)}
                 onExport={handleExport}
+            />
+            <ReportTemplateBuilder
+                isOpen={showTemplateBuilder}
+                onClose={() => setShowTemplateBuilder(false)}
+                reportType="station.summary"
+                reportTypeLabel="Station Reports"
+                fields={STATION_TEMPLATE_FIELDS}
+                fieldMode="columns"
+                dataRows={templateRows}
+                context={{
+                    period: ({ monthly: 'Monthly', quarterly: 'Quarterly', semiannual: 'Semi Annual', annual: 'Annual' })[reportDateRange] || reportDateRange,
+                    station: activeStationFilter === 'All' ? 'All authorized stations' : activeStationFilter,
+                    filters: searchTerm ? `Search: ${searchTerm}` : 'Current station and access filters'
+                }}
+                exportPermissionKey={TEMPLATE_PERMISSION_KEYS.exportStation}
             />
         </div>
     );
@@ -981,11 +1031,12 @@ const ChartsSection = ({ stations, isStationStaff = false }) => {
 /* ════════════════════════════
    DETAIL MODAL
 ════════════════════════════ */
-const DetailModal = ({ station, onClose, navigate }) => {
+const DetailModal = ({ station, onClose, navigate, canExport }) => {
     const [tab, setTab] = useState('overview');
     const [showDetailExportModal, setShowDetailExportModal] = useState(false);
 
     const handleDetailExport = async (exportConfig) => {
+        await assertReportPermission(supabase, TEMPLATE_PERMISSION_KEYS.exportStation);
         const { format, reportPeriodText } = exportConfig;
         const exportData = [{
             'Station': station.name,
@@ -1225,11 +1276,13 @@ const DetailModal = ({ station, onClose, navigate }) => {
 
                 <div className="modal-footer">
                     <button className="btn btn-outline" onClick={onClose}>Close</button>
-                    <button className="btn btn-outline" onClick={() => setShowDetailExportModal(true)}>
-                        <Download size={14} /> Export
-                    </button>
+                    {canExport && (
+                        <button className="btn btn-outline" onClick={() => setShowDetailExportModal(true)}>
+                            <Download size={14} /> Export
+                        </button>
+                    )}
                     <ExportModal
-                        isOpen={showDetailExportModal}
+                        isOpen={showDetailExportModal && canExport}
                         onClose={() => setShowDetailExportModal(false)}
                         onExport={handleDetailExport}
                     />

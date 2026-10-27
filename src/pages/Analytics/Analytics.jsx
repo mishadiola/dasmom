@@ -4,7 +4,7 @@ import {
     Users, Activity, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown, Minus,
     Calendar, MapPin, Filter, ChevronRight, ArrowUpRight, Baby, PieChart,
     BarChart3, AlertCircle, Download, HeartPulse, Syringe, XCircle, ClipboardCheck, Award,
-    Clock, Sparkles, ShieldAlert
+    Clock, Sparkles, ShieldAlert, FileText
 } from 'lucide-react';
 import supabase from '../../config/supabaseclient';
 import PatientService from '../../services/patientservice';
@@ -15,6 +15,13 @@ import { buildPregnancyRiskTrend } from '../../utils/analyticsTrendUtils';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
 import { drawStaffPdfHeader, getStaffTableStyles, finalizeAndSaveStaffPdf, JsPDFConstructor, runAutoTable } from '../../utils/staffPdfTemplate';
 import PregnancyAgeReport from './PregnancyAgeReport';
+import ReportTemplateBuilder from '../../components/ReportTemplateBuilder';
+import { useRolePermissions } from '../../context/RolePermissionContext';
+import {
+    ANALYTICS_TEMPLATE_CATEGORIES,
+    assertReportPermission,
+    TEMPLATE_PERMISSION_KEYS
+} from '../../utils/reportTemplateUtils';
 import {
     getAppointmentMetrics,
     getReportDateBounds,
@@ -99,6 +106,8 @@ const isWithin = (date, start, end) => date >= start && date < end;
 
 const Analytics = () => {
     const navigate = useNavigate();
+    const { hasPermission } = useRolePermissions();
+    const canExportAnalytics = hasPermission(TEMPLATE_PERMISSION_KEYS.exportAnalytics);
     const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'maternal' | 'vaccination' | 'delivery'
     
     // ── Filters State ──
@@ -151,6 +160,7 @@ const Analytics = () => {
 
     // ── Export Modal State ──
     const [showExportModal, setShowExportModal] = useState(false);
+    const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
 
     // ── Load live Supabase records ──
     useEffect(() => {
@@ -712,6 +722,31 @@ const Analytics = () => {
         };
     }, [filters, dashboardMetrics, dbData]);
 
+    const analyticsTemplateRows = useMemo(() => [{
+        totalPregnant: activeData.totalPregnant,
+        highRisk: activeData.highRisk,
+        moderateRisk: activeData.moderateRisk,
+        lowRisk: activeData.lowRisk,
+        teenage: activeData.teenage,
+        advancedAge: activeData.advancedAge,
+        deliveries: activeData.deliveries,
+        vaccRate: activeData.vaccRate,
+        ppRate: activeData.ppRate,
+        missedRate: activeData.missedRate,
+        missedVaccinationCount: activeData.missedVaccinationCount,
+        normalDel: activeData.normalDel,
+        assistedDel: activeData.assistedDel,
+        csDel: activeData.csDel,
+        compHemorr: activeData.compHemorr,
+        compHyper: activeData.compHyper,
+        compInfect: activeData.compInfect,
+        compOther: activeData.compOther,
+        recNormal: activeData.recNormal,
+        recObs: activeData.recObs,
+        recComp: activeData.recComp
+    }], [activeData]);
+    const analyticsTemplateCategory = ANALYTICS_TEMPLATE_CATEGORIES[activeTab];
+
     // ── Time Series Trend Data Generative Engine ──
     const trendData = useMemo(() => {
         const now = new Date();
@@ -1243,6 +1278,7 @@ const Analytics = () => {
 
     // ── Export Sheet Handler ──
     const handleExport = async (exportConfig) => {
+        await assertReportPermission(supabase, TEMPLATE_PERMISSION_KEYS.exportAnalytics);
         const { format, dateRange, reportPeriodText } = exportConfig;
         const reportSettings = exportConfig.reportSettings || {};
         const data = getExportDataForDateRange(dateRange);
@@ -1608,10 +1644,16 @@ const Analytics = () => {
                     <p className="page-subtitle">View overall maternal health trends and performance across CHO III.</p>
                 </div>
                 <div className="analytics-header-actions">
-                    <button className="btn-export-analytics" onClick={() => setShowExportModal(true)} aria-label="Export report">
-                        <Download size={16} />
-                        <span>Export Analytics</span>
+                    <button className="btn-report-templates" onClick={() => setShowTemplateBuilder(true)}>
+                        <FileText size={16} />
+                        <span>Create Format</span>
                     </button>
+                    {canExportAnalytics && (
+                        <button className="btn-export-analytics" onClick={() => setShowExportModal(true)} aria-label="Export report">
+                            <Download size={16} />
+                            <span>Export Analytics</span>
+                        </button>
+                    )}
                 </div>
             </header>
 
@@ -2454,6 +2496,21 @@ const Analytics = () => {
                 isOpen={showExportModal} 
                 onClose={() => setShowExportModal(false)} 
                 onExport={handleExport} 
+            />
+            <ReportTemplateBuilder
+                isOpen={showTemplateBuilder}
+                onClose={() => setShowTemplateBuilder(false)}
+                reportType={analyticsTemplateCategory.reportType}
+                reportTypeLabel={analyticsTemplateCategory.label}
+                fields={analyticsTemplateCategory.fields}
+                fieldMode="rows"
+                dataRows={analyticsTemplateRows}
+                context={{
+                    period: DATE_RANGES.find(range => range.value === filters.dateRange)?.label || filters.dateRange,
+                    station: filters.station,
+                    filters: `${filters.trimester === 'All' ? 'All trimesters' : `Trimester ${filters.trimester}`} · ${filters.risk === 'All' ? 'All risk levels' : filters.risk}`
+                }}
+                exportPermissionKey={TEMPLATE_PERMISSION_KEYS.exportAnalytics}
             />
         </div>
     );
