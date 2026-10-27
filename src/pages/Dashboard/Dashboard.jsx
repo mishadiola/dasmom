@@ -627,6 +627,8 @@ const Dashboard = () => {
         const loadOverview = async () => {
             setLoadingOverview(true);
             setOverviewError(null);
+            setLoadingNewborns(true);
+            setNewbornError(null);
             try {
                 const { data, error: overviewLoadError } = await supabase.rpc('get_dashboard_overview');
                 if (overviewLoadError) throw overviewLoadError;
@@ -634,39 +636,26 @@ const Dashboard = () => {
                 if (!active) return;
                 setLiveStats(previous => ({
                     ...previous,
-                    totalPatients: Number(data.totalPatients) || 0
+                    totalPatients: Number(data.totalPatients) || 0,
+                    newborns: Number(data.totalNewborns) || 0
                 }));
                 setHealthSnapshot({
                     trimesterDist: data.trimesterDist || []
                 });
             } catch (overviewLoadError) {
                 console.error('Failed to load dashboard patient overview:', overviewLoadError);
-                if (active) setOverviewError(overviewLoadError);
+                if (active) {
+                    setOverviewError(overviewLoadError);
+                    setNewbornError(overviewLoadError);
+                }
             } finally {
-                if (active) setLoadingOverview(false);
+                if (active) {
+                    setLoadingOverview(false);
+                    setLoadingNewborns(false);
+                }
             }
         };
         enqueueDashboardRequest(loadOverview);
-        return () => { active = false; };
-    }, [enqueueDashboardRequest]);
-
-    useEffect(() => {
-        let active = true;
-        const loadNewbornCount = async () => {
-            setLoadingNewborns(true);
-            setNewbornError(null);
-            try {
-                const { data, error: countError } = await supabase.rpc('get_dashboard_newborn_count');
-                if (countError) throw countError;
-                if (active) setLiveStats(previous => ({ ...previous, newborns: Number(data) || 0 }));
-            } catch (loadError) {
-                console.error('Failed to load dashboard newborn count:', loadError);
-                if (active) setNewbornError(loadError);
-            } finally {
-                if (active) setLoadingNewborns(false);
-            }
-        };
-        enqueueDashboardRequest(loadNewbornCount);
         return () => { active = false; };
     }, [enqueueDashboardRequest]);
 

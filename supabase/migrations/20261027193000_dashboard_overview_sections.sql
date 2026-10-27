@@ -51,6 +51,16 @@ AS $$
   )
   SELECT JSONB_BUILD_OBJECT(
     'totalPatients', (SELECT COUNT(*) FROM active_pregnancies),
+    'totalNewborns', (
+      SELECT COUNT(*)
+      FROM public.newborns AS newborn
+      WHERE newborn.mother_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM archived_patients AS archived
+          WHERE archived.id = newborn.mother_id
+        )
+    ),
     'trimesterDist', JSONB_BUILD_ARRAY(
       JSONB_BUILD_OBJECT('label', '1st Trimester', 'count', trimester_summary.first_trimester, 'color', 'tri1'),
       JSONB_BUILD_OBJECT('label', '2nd Trimester', 'count', trimester_summary.second_trimester, 'color', 'tri2'),
