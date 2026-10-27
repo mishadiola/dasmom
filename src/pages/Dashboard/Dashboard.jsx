@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useContext, useRef, useMemo, useCallback } from 'react';
 import {
     Users, Baby, AlertTriangle, CalendarCheck, TrendingUp,
     TrendingDown, Activity, Syringe, HeartPulse, MapPin,
@@ -13,8 +13,9 @@ import PatientService from '../../services/patientservice';
 import supabase from '../../config/supabaseclient';
 import { AuthContext } from '../../context/AuthContext';
 import { formatDate } from '../../utils/formatters';
-import StaffPageLoader from '../../components/Common/StaffPageLoader';
 import { useDefaultStation } from '../../hooks/useDefaultStation';
+import { useRolePermissions } from '../../context/RolePermissionContext';
+import { getUpcomingEddSchedule } from '../../services/eddScheduleService';
 
 const authService = new AuthService();
 const APK_DOWNLOAD_URL = 'https://hcrpdvizautiuwgmfcqc.supabase.co/storage/v1/object/public/dasmom-apk/app-release.apk';
@@ -136,6 +137,7 @@ const HealthConditionsCell = ({ conditions }) => {
 const Dashboard = () => {
     const navigate = useNavigate();
     const {user} = useContext(AuthContext);
+    const { hasPermission, loading: permissionsLoading } = useRolePermissions();
     const patientService = useMemo(() => new PatientService(), []);
 
     const [availableStations, setAvailableStations] = useState([]);
@@ -180,15 +182,30 @@ const Dashboard = () => {
     }, [isStationStaff, assignedStation]);
     
     //const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
     const [liveStats, setLiveStats] = useState({ totalPatients: 0, highRisk: 0, newborns: 0, apptToday: 0 });
     const [vaccineStock, setVaccineStock] = useState([]);
     const [loadingStock, setLoadingStock] = useState(true);
+    const [stockError, setStockError] = useState(null);
     const [todayAppts, setTodayAppts] = useState([]);
-    const [healthSnapshot, setHealthSnapshot] = useState({ conditions: [], trimesterDist: [] });
-    const [loadingHealth, setLoadingHealth] = useState(true);
+    const [loadingAppointments, setLoadingAppointments] = useState(true);
+    const [appointmentError, setAppointmentError] = useState(null);
+    const [loadingOverview, setLoadingOverview] = useState(true);
+    const [overviewError, setOverviewError] = useState(null);
+    const [loadingNewborns, setLoadingNewborns] = useState(true);
+    const [newbornError, setNewbornError] = useState(null);
+    const [loadingHighRisk, setLoadingHighRisk] = useState(true);
+    const [highRiskError, setHighRiskError] = useState(null);
+    const [healthSnapshot, setHealthSnapshot] = useState({ trimesterDist: [] });
+    const [eddSchedule, setEddSchedule] = useState([]);
+    const [loadingEddSchedule, setLoadingEddSchedule] = useState(true);
+    const [eddScheduleError, setEddScheduleError] = useState(null);
     const isFetchingStats = useRef(false);
+    const dashboardRequestQueue = useRef(Promise.resolve());
+    const enqueueDashboardRequest = useCallback(task => {
+        const queuedRequest = dashboardRequestQueue.current.then(task, task);
+        dashboardRequestQueue.current = queuedRequest.then(() => undefined, () => undefined);
+        return queuedRequest;
+    }, []);
 
     const [visibleApptCount, setVisibleApptCount] = useState(10);
 
@@ -208,12 +225,13 @@ const Dashboard = () => {
         return displayedAppointments.slice(0, visibleApptCount);
     }, [displayedAppointments, visibleApptCount]);
 
-    const fetchStats = async () => {
+    const fetchStats = useCallback(async () => {
         if (isFetchingStats.current) return;
         isFetchingStats.current = true;
-        setLoading(true);
-        setError(null);
-        try {
+        setLoadingAppointments(true);
+        setAppointmentError(null);
+        return enqueueDashboardRequest(async () => {
+            try {
             const now = new Date();
             const todayStr = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0];
             const todayStart = new Date(now);
@@ -222,13 +240,10 @@ const Dashboard = () => {
             tomorrowStart.setDate(tomorrowStart.getDate() + 1);
 
             const [
-                { data: dashboardOverview, error: overviewError },
                 { data: prenatalApptData, error: prenatalError },
                 { data: postpartumApptData, error: postpartumError },
-                { data: vaccinationApptData, error: vaccinationError },
-                highRiskPatients
+                { data: vaccinationApptData, error: vaccinationError }
             ] = await Promise.all([
-                supabase.rpc('get_dashboard_overview'),
                 supabase.from('prenatal_visits').select(`
                     id, visit_date, patient_id, created_at, status, next_appt_type, risk_factors, gestational_age, trimester,
                     patient_basic_info!inner ( 
@@ -256,23 +271,15 @@ const Dashboard = () => {
                   .neq('status', 'Cancelled')
                   .neq('status', 'Missed')
                   .neq('status', 'cancelled')
-                  .neq('status', 'missed'),
-                patientService.getHighRiskPatients()
+                  .neq('status', 'missed')
             ]);
 
-            if (overviewError) throw overviewError;
             if (prenatalError) throw prenatalError;
             if (postpartumError) throw postpartumError;
             if (vaccinationError) throw vaccinationError;
-            if (!dashboardOverview) throw new Error('Dashboard overview returned no data');
 
             const getPostpartumPatientId = visit =>
                 visit.delivery?.mother_id || visit.delivery?.patient_basic_info?.id || visit.patient_id;
-
-            const highRiskPatientMap = new Map(
-                highRiskPatients.filter(patient => patient.id).map(patient => [patient.id, patient])
-            );
-            const healthConditionCount = highRiskPatients.length;
 
             const isTodayMatch = (rawDate) => {
                 if (!rawDate) return false;
@@ -409,21 +416,11 @@ const Dashboard = () => {
             });
 
             const getConditionsForPatient = (patientId, currentVisitRiskFactors = null) => {
-                // 1. Retrieve from the Health Conditions page dataset
-                if (highRiskPatientMap.has(patientId)) {
-                    const hr = highRiskPatientMap.get(patientId);
-                    if (hr.documentedConditions?.length) return hr.documentedConditions;
-                    const conditions = patientService.getRiskFactors(hr.risk_factors);
-                    if (conditions.length > 0) return conditions;
-                }
-
-                // 2. Fallback to documented risk factors evaluated through the same PatientService method
                 if (currentVisitRiskFactors) {
                     const parsed = patientService.getDocumentedHealthConditions(currentVisitRiskFactors);
                     if (parsed.length > 0) return parsed;
                 }
 
-                // 3. Fallback to any past visits with documented conditions
                 const pastVisits = patientVisitsMap.get(patientId) || [];
                 for (const v of pastVisits) {
                     if (v.risk_factors) {
@@ -609,63 +606,157 @@ const Dashboard = () => {
 
             setTodayAppts(uniqueAppts);
 
-            setLiveStats({
-                totalPatients: Number(dashboardOverview.totalPatients) || 0,
-                highRisk: healthConditionCount,
-                newborns: Number(dashboardOverview.totalNewborns) || 0,
-                apptToday: uniqueAppts.length,
-            });
-
-            // Fetch Vaccine Stock
-            setLoadingStock(true);
-            const stockData = await patientService.getVaccineInventory();
-            setVaccineStock(stockData);
-            setLoadingStock(false);
-
-            // Fetch Health Snapshot Data
-            setLoadingHealth(true);
-            setHealthSnapshot({
-                conditions: dashboardOverview.conditions || [],
-                trimesterDist: dashboardOverview.trimesterDist || [],
-            });
-            setLoadingHealth(false);
-            setLoading(false);
+            setLiveStats(previous => ({ ...previous, apptToday: uniqueAppts.length }));
+            setLoadingAppointments(false);
         } catch (err) {
-            console.error('Failed to load dashboard stats:', err);
-            setError(err);
-            setLoadingStock(false);
-            setLoadingHealth(false);
-            setLoading(false);
-        } finally {
-            isFetchingStats.current = false;
-        }
-    };
+            console.error('Failed to load dashboard appointments:', err);
+            setAppointmentError(err);
+            setLoadingAppointments(false);
+            } finally {
+                isFetchingStats.current = false;
+            }
+        });
+    }, [enqueueDashboardRequest, patientService]);
     
     useEffect(() => {
         fetchStats();
-    }, []);
+    }, [fetchStats]);
+
+    useEffect(() => {
+        let active = true;
+        const loadOverview = async () => {
+            setLoadingOverview(true);
+            setOverviewError(null);
+            try {
+                const { data, error: overviewLoadError } = await supabase.rpc('get_dashboard_overview');
+                if (overviewLoadError) throw overviewLoadError;
+                if (!data) throw new Error('Dashboard overview returned no data.');
+                if (!active) return;
+                setLiveStats(previous => ({
+                    ...previous,
+                    totalPatients: Number(data.totalPatients) || 0
+                }));
+                setHealthSnapshot({
+                    trimesterDist: data.trimesterDist || []
+                });
+            } catch (overviewLoadError) {
+                console.error('Failed to load dashboard patient overview:', overviewLoadError);
+                if (active) setOverviewError(overviewLoadError);
+            } finally {
+                if (active) setLoadingOverview(false);
+            }
+        };
+        enqueueDashboardRequest(loadOverview);
+        return () => { active = false; };
+    }, [enqueueDashboardRequest]);
+
+    useEffect(() => {
+        let active = true;
+        const loadNewbornCount = async () => {
+            setLoadingNewborns(true);
+            setNewbornError(null);
+            try {
+                const { data, error: countError } = await supabase.rpc('get_dashboard_newborn_count');
+                if (countError) throw countError;
+                if (active) setLiveStats(previous => ({ ...previous, newborns: Number(data) || 0 }));
+            } catch (loadError) {
+                console.error('Failed to load dashboard newborn count:', loadError);
+                if (active) setNewbornError(loadError);
+            } finally {
+                if (active) setLoadingNewborns(false);
+            }
+        };
+        enqueueDashboardRequest(loadNewbornCount);
+        return () => { active = false; };
+    }, [enqueueDashboardRequest]);
+
+    useEffect(() => {
+        let active = true;
+        const loadHighRiskCount = async () => {
+            setLoadingHighRisk(true);
+            setHighRiskError(null);
+            try {
+                const patients = await patientService.getHighRiskPatients();
+                if (active) setLiveStats(previous => ({ ...previous, highRisk: patients.length }));
+            } catch (loadError) {
+                console.error('Failed to load dashboard health-condition count:', loadError);
+                if (active) setHighRiskError(loadError);
+            } finally {
+                if (active) setLoadingHighRisk(false);
+            }
+        };
+        enqueueDashboardRequest(loadHighRiskCount);
+        return () => { active = false; };
+    }, [enqueueDashboardRequest, patientService]);
+
+    useEffect(() => {
+        let active = true;
+        const loadInventory = async () => {
+            setLoadingStock(true);
+            setStockError(null);
+            try {
+                const stockData = await patientService.getVaccineInventory();
+                if (active) setVaccineStock(stockData);
+            } catch (loadError) {
+                console.error('Failed to load dashboard inventory:', loadError);
+                if (active) setStockError(loadError);
+            } finally {
+                if (active) setLoadingStock(false);
+            }
+        };
+        enqueueDashboardRequest(loadInventory);
+        return () => { active = false; };
+    }, [enqueueDashboardRequest, patientService]);
+
+    useEffect(() => {
+        if (permissionsLoading) return undefined;
+        let active = true;
+        const loadEddSchedule = async () => {
+            setLoadingEddSchedule(true);
+            setEddScheduleError(null);
+            if (!hasPermission('edd.schedule.view.own_station')
+                && !hasPermission('edd.schedule.view.other_station')) {
+                setEddSchedule([]);
+                setLoadingEddSchedule(false);
+                return;
+            }
+            try {
+                const access = await patientService.getCurrentUserAccess();
+                const todayDate = new Intl.DateTimeFormat('en-CA', {
+                    timeZone: 'Asia/Manila',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit'
+                }).format(new Date());
+                const endDate = new Date(`${todayDate}T00:00:00.000Z`);
+                endDate.setUTCDate(endDate.getUTCDate() + 30);
+                const rows = await getUpcomingEddSchedule({
+                    startDate: todayDate,
+                    endDate: endDate.toISOString().slice(0, 10),
+                    stationId: access?.stationId || null,
+                    includeOtherStations: hasPermission('edd.schedule.view.other_station')
+                });
+                if (active) setEddSchedule(rows);
+            } catch (loadError) {
+                console.error('Failed to load the upcoming EDD schedule:', loadError);
+                if (active) setEddScheduleError(loadError);
+            } finally {
+                if (active) setLoadingEddSchedule(false);
+            }
+        };
+        enqueueDashboardRequest(loadEddSchedule);
+        return () => { active = false; };
+    }, [enqueueDashboardRequest, hasPermission, patientService, permissionsLoading]);
 
 
 
     const displayName = user?.displayName || (user?.email ? user.email.split('@')[0] : 'User');
-    const roleLabel = user?.role?.toUpperCase() || 'UNKNOWN';
-
     const today = new Date().toLocaleDateString('en-PH', {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
         day: 'numeric',
     });
-
-    if (loading) {
-        return (
-            <StaffPageLoader 
-                message="Loading dashboard overview..." 
-                error={error} 
-                onRetry={fetchStats} 
-            />
-        );
-    }
 
     return (
         <div className="dashboard staff-page-ready">
@@ -733,6 +824,20 @@ const Dashboard = () => {
             <div className="stats-grid">
                 {STAT_META.map((s) => {
                     const value = s.key === 'apptToday' ? displayedApptCount : (liveStats[s.key] ?? 0);
+                    const isStatLoading = s.key === 'apptToday'
+                        ? loadingAppointments
+                        : s.key === 'highRisk'
+                            ? loadingHighRisk
+                            : s.key === 'newborns'
+                                ? loadingNewborns
+                                : loadingOverview;
+                    const statError = s.key === 'apptToday'
+                        ? appointmentError
+                        : s.key === 'highRisk'
+                            ? highRiskError
+                            : s.key === 'newborns'
+                                ? newbornError
+                                : overviewError;
                     const Icon = s.icon;
                     return (
                         <div 
@@ -751,7 +856,9 @@ const Dashboard = () => {
                                     {'—'}
                                 </span>
                             </div>
-                            <div className="stat-value">{value}</div>
+                            <div className="stat-value" title={statError?.message || undefined}>
+                                {isStatLoading ? '...' : statError ? '—' : value}
+                            </div>
                             <div className="stat-label">{s.label}</div>
                             <div className="stat-sub">{s.sub}</div>
                         </div>
@@ -818,7 +925,18 @@ const Dashboard = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {displayedAppointments.length === 0 ? (
+                                    {loadingAppointments ? (
+                                        <tr>
+                                            <td colSpan="4" className="dashboard-section-loading">Loading today's appointments...</td>
+                                        </tr>
+                                    ) : appointmentError ? (
+                                        <tr>
+                                            <td colSpan="4" className="dashboard-section-error">
+                                                Could not load appointments: {appointmentError.message || 'Please try again.'}
+                                                <button type="button" className="card-link" onClick={event => { event.stopPropagation(); fetchStats(); }}>Retry</button>
+                                            </td>
+                                        </tr>
+                                    ) : displayedAppointments.length === 0 ? (
                                         <tr>
                                             <td colSpan="4" style={{textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)'}}>
                                                 No appointments scheduled for today{selectedStation !== 'All' ? ` in ${selectedStation}` : ''}.
@@ -922,6 +1040,8 @@ const Dashboard = () => {
                         <div className="stock-list">
                             {loadingStock ? (
                                 <div className="stock-loading">Loading inventory...</div>
+                            ) : stockError ? (
+                                <div className="stock-empty">Could not load inventory: {stockError.message || 'Please try again.'}</div>
                             ) : vaccineStock.length > 0 ? (
                                 vaccineStock
                                     .sort((a, b) => {
@@ -976,9 +1096,13 @@ const Dashboard = () => {
                             <h2 className="card-title"><Users size={16} />Patient Overview</h2>
                         </div>
                         <div className="patient-overview-list">
-                            {loadingHealth ? (
+                            {loadingOverview ? (
                                 <div style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
-                                    Loading...
+                                    Loading patient overview...
+                                </div>
+                            ) : overviewError ? (
+                                <div className="dashboard-section-error" role="alert">
+                                    Could not load patient overview: {overviewError.message || 'Please try again.'}
                                 </div>
                             ) : (
                                 <>
@@ -1009,6 +1133,52 @@ const Dashboard = () => {
                                         </div>
                                     ))}
                                 </>
+                            )}
+                        </div>
+                    </div>
+
+                    <div
+                        className="card clickable-card edd-dashboard-card"
+                        onClick={() => navigate('/dashboard/prenatal?tab=edd')}
+                        onKeyDown={event => {
+                            if (event.key === 'Enter' || event.key === ' ') navigate('/dashboard/prenatal?tab=edd');
+                        }}
+                        role="link"
+                        tabIndex={0}
+                        aria-label="Open the EDD calendar in Visits and Scheduling"
+                    >
+                        <div className="card-header">
+                            <h2 className="card-title"><CalendarCheck size={16} />Upcoming Estimated Due Dates</h2>
+                            <span className="card-badge card-badge--blue">{loadingEddSchedule ? '...' : eddSchedule.length}</span>
+                        </div>
+                        <p className="card-description">Estimated from LMP. Showing due dates from today through the next 30 days.</p>
+                        <div className="table-wrap">
+                            {permissionsLoading || loadingEddSchedule ? (
+                                <div className="dashboard-section-loading">Loading upcoming EDDs...</div>
+                            ) : !hasPermission('edd.schedule.view.own_station')
+                                && !hasPermission('edd.schedule.view.other_station') ? (
+                                <div className="dashboard-section-error">You do not have permission to view EDD schedules.</div>
+                            ) : eddScheduleError ? (
+                                <div className="dashboard-section-error" role="alert">
+                                    Could not load EDD schedule: {eddScheduleError.message || 'Please try again.'}
+                                </div>
+                            ) : eddSchedule.length === 0 ? (
+                                <div className="dashboard-section-loading">No EDDs are due in the next 30 days.</div>
+                            ) : (
+                                <table className="data-table">
+                                    <thead>
+                                        <tr><th>Patient</th><th>Station</th><th>EDD</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        {eddSchedule.slice(0, 8).map(row => (
+                                            <tr key={row.id} className="table-row">
+                                                <td>{row.patientName}</td>
+                                                <td>{row.stationName}</td>
+                                                <td>{formatDate(row.edd)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             )}
                         </div>
                     </div>

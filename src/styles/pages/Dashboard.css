@@ -1779,3 +1779,23 @@
     border-color: rgba(185, 129, 138, 0.35);
     color: var(--color-rose, #b9818a);
 }
+
+.dashboard-section-loading,
+.dashboard-section-error {
+    padding: 18px 12px;
+    text-align: center;
+    color: var(--color-text-muted, #64748b);
+    font-size: 13px;
+}
+
+.dashboard-section-error {
+    color: #a33b4b;
+}
+
+.dashboard .edd-dashboard-card {
+    cursor: pointer;
+}
+
+.dashboard .edd-dashboard-card .table-row {
+    cursor: pointer;
+}

@@ -15,7 +15,7 @@ import { AuthContext } from '../../context/AuthContext';
 import ScheduledVisitModal from '../../components/Prenatal/ScheduledVisitModal';
 import PatientModal from '../../components/Prenatal/PatientModal';
 import PostpartumVisitModal from '../../components/PostpartumVisitModal';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import ExportModal from '../../components/ExportModal';
 import Legend from '../../components/Legend/Legend';
@@ -26,6 +26,7 @@ import ActionTooltip from '../../components/Common/ActionTooltip';
 import StaffPageLoader from '../../components/Common/StaffPageLoader';
 import { useRolePermissions } from '../../context/RolePermissionContext';
 import { useDefaultStation } from '../../hooks/useDefaultStation';
+import { getUpcomingEddSchedule } from '../../services/eddScheduleService';
 
 const toLocalDateStr = (d) => {
     const offset = d.getTimezoneOffset() * 60000;
@@ -182,8 +183,11 @@ const SearchableDropdown = ({ patients, value, onChange }) => {
 
 const PrenatalVisits = () => {
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
     const { user } = useContext(AuthContext);
-    const { hasAnyPermission, hasPermission } = useRolePermissions();
+    const { hasAnyPermission, hasPermission, loading: permissionsLoading } = useRolePermissions();
+    const canViewEddCalendar = hasPermission('edd.schedule.view.own_station')
+        || hasPermission('edd.schedule.view.other_station');
 
     const [initialLoading, setInitialLoading] = useState(true);
     const [initialError, setInitialError] = useState(null);
@@ -225,7 +229,7 @@ const PrenatalVisits = () => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [toast, setToast] = useState(null);
     const toastTimeoutRef = useRef(null);
-    const [calendarView, setCalendarView] = useState('day');
+    const [calendarView, setCalendarView] = useState(searchParams.get('tab') === 'edd' ? 'month' : 'day');
     const [selectedVisit, setSelectedVisit] = useState(null);
     const [postpartumVisitMother, setPostpartumVisitMother] = useState(null);
     const [showExportMenu, setShowExportMenu] = useState(false);
@@ -237,7 +241,14 @@ const PrenatalVisits = () => {
     const [visitsTable, setVisitsTable] = useState([]);
     const [archivedPatientIds, setArchivedPatientIds] = useState(new Set());
     const [selectedPatient, setSelectedPatient] = useState(null);
-    const [visitTypeTab, setVisitTypeTab] = useState('prenatal'); // 'prenatal' | 'postpartum'
+    const [visitTypeTab, setVisitTypeTab] = useState(() => (
+        ['prenatal', 'postpartum', 'edd'].includes(searchParams.get('tab'))
+            ? searchParams.get('tab')
+            : 'prenatal'
+    ));
+    const [eddSchedule, setEddSchedule] = useState([]);
+    const [eddScheduleLoading, setEddScheduleLoading] = useState(false);
+    const [eddScheduleError, setEddScheduleError] = useState(null);
     const [visitCategoryTab, setVisitCategoryTab] = useState('upcoming'); // 'upcoming' | 'missed' | 'completed'
     const [dateFilter, setDateFilter] = useState('today'); // 'today' | 'all' (Today default)
     const [visitAccess, setVisitAccess] = useState(null);
@@ -459,6 +470,11 @@ const PrenatalVisits = () => {
 
     // Now useEffect for channel
     useEffect(() => {
+        if (visitTypeTab === 'edd') {
+            setInitialLoading(false);
+            return undefined;
+        }
+
         fetchData();
 
         const subscription = patientService.supabase
@@ -476,10 +492,11 @@ const PrenatalVisits = () => {
         return () => {
             patientService.supabase.removeChannel(subscription);
         };
-    }, [calendarView, currentDate, fetchData, patientService.supabase]);
+    }, [calendarView, currentDate, fetchData, patientService.supabase, visitTypeTab]);
 
     // Load patients and their latest delivery so the category and patient list stay in sync.
     useEffect(() => {
+        if (visitTypeTab === 'edd') return undefined;
         const loadPatients = async () => {
             try {
                 const [data, { data: deliveries, error }] = await Promise.all([
@@ -513,9 +530,11 @@ const PrenatalVisits = () => {
             }
         };
         loadPatients();
-    }, [patientService]);
+        return undefined;
+    }, [patientService, visitTypeTab]);
 
     useEffect(() => {
+        if (visitTypeTab === 'edd') return undefined;
         const loadPostpartumFollowUps = async () => {
             try {
                 const { data: postpartumVisits, error } = await patientService.supabase
@@ -595,9 +614,11 @@ const PrenatalVisits = () => {
         };
 
         loadPostpartumFollowUps();
-    }, [patientService.supabase]);
+        return undefined;
+    }, [patientService.supabase, visitTypeTab]);
 
     useEffect(() => {
+        if (visitTypeTab === 'edd') return undefined;
         let active = true;
         const loadVaccinationsForRescheduling = async () => {
             try {
@@ -661,7 +682,7 @@ const PrenatalVisits = () => {
         };
         loadVaccinationsForRescheduling();
         return () => { active = false; };
-    }, [patientService.supabase, scheduleToastClear]);
+    }, [patientService.supabase, scheduleToastClear, visitTypeTab]);
 
     const handleAddVisitSubmit = async (e) => {
         e.preventDefault();
@@ -1101,6 +1122,90 @@ const PrenatalVisits = () => {
 
 
     const visibleDays = getVisibleDays(currentDate, calendarView);
+    const eddRangeStart = visibleDays[0]?.date;
+    const eddRangeEnd = visibleDays[visibleDays.length - 1]?.date;
+    const filteredEddSchedule = eddSchedule.filter(row => matchStation(row.stationName, filterStation));
+    const getCalendarItemsForDay = dayDate => {
+        if (visitTypeTab === 'edd') {
+            return eddSchedule.filter(item => item.edd === dayDate && matchStation(item.stationName, filterStation));
+        }
+        if (visitTypeTab === 'postpartum') {
+            return postpartumTable.filter(item => item.patientRecordAvailable
+                && item.visitDateOnly === dayDate
+                && matchStation(item.assignedStation, filterStation));
+        }
+        return visitsTable.filter(item => item.visitDateOnly === dayDate
+            && matchStation(item.assignedStation || item.visitStation, filterStation));
+    };
+
+    const handleCalendarItemClick = (event, item) => {
+        event.stopPropagation();
+        if (visitTypeTab === 'edd') {
+            navigate(`/dashboard/patients/${item.patientId}?tab=visits`);
+            return;
+        }
+        setSelectedVisit({ ...item, type: visitTypeTab === 'postpartum' ? 'Postpartum' : 'Prenatal' });
+    };
+
+    useEffect(() => {
+        const requestedTab = searchParams.get('tab');
+        if (requestedTab === 'edd' && !permissionsLoading && !canViewEddCalendar) {
+            setVisitTypeTab('prenatal');
+            setSearchParams({}, { replace: true });
+            return;
+        }
+        if (['prenatal', 'postpartum', 'edd'].includes(requestedTab)
+            && requestedTab !== visitTypeTab
+            && (requestedTab !== 'edd' || canViewEddCalendar)) {
+            setVisitTypeTab(requestedTab);
+        }
+    }, [canViewEddCalendar, permissionsLoading, searchParams, setSearchParams, visitTypeTab]);
+
+    useEffect(() => {
+        if (visitTypeTab !== 'edd' || !canViewEddCalendar || !eddRangeStart || !eddRangeEnd) return undefined;
+        let active = true;
+        const loadEddSchedule = async () => {
+            setEddScheduleLoading(true);
+            setEddScheduleError(null);
+            try {
+                const rows = await getUpcomingEddSchedule({
+                    startDate: eddRangeStart,
+                    endDate: eddRangeEnd,
+                    stationId: visitAccess?.stationId || null,
+                    includeOtherStations: hasPermission('edd.schedule.view.other_station')
+                });
+                if (active) setEddSchedule(rows);
+            } catch (loadError) {
+                console.error('Could not load the EDD calendar:', loadError);
+                if (active) setEddScheduleError(loadError);
+            } finally {
+                if (active) setEddScheduleLoading(false);
+            }
+        };
+        loadEddSchedule();
+        return () => { active = false; };
+    }, [
+        canViewEddCalendar,
+        eddRangeEnd,
+        eddRangeStart,
+        hasPermission,
+        visitAccess?.stationId,
+        visitTypeTab
+    ]);
+
+    const handleVisitTypeTabChange = tab => {
+        if (tab !== 'edd' && visitTypeTab === 'edd' && visitsTable.length === 0) {
+            setInitialLoading(true);
+        }
+        setVisitTypeTab(tab);
+        setCurrentPage(1);
+        setSearchParams(tab === 'prenatal' ? {} : { tab });
+        if (tab === 'edd') {
+            setCalendarView('month');
+            setCurrentDate(new Date());
+        }
+    };
+
     const filteredVisits = useMemo(() => {
         const normalizedSearch = searchTerm.toLowerCase();
         return visitsTable.filter(v => {
@@ -1511,16 +1616,24 @@ const PrenatalVisits = () => {
             <div className="visit-type-tabs">
                 <button
                     className={`visit-type-tab ${visitTypeTab === 'prenatal' ? 'active' : ''}`}
-                    onClick={() => setVisitTypeTab('prenatal')}
+                    onClick={() => handleVisitTypeTabChange('prenatal')}
                 >
                     Prenatal
                 </button>
                 <button
                     className={`visit-type-tab ${visitTypeTab === 'postpartum' ? 'active' : ''}`}
-                    onClick={() => setVisitTypeTab('postpartum')}
+                    onClick={() => handleVisitTypeTabChange('postpartum')}
                 >
                     Postpartum
                 </button>
+                {canViewEddCalendar && (
+                    <button
+                        className={`visit-type-tab ${visitTypeTab === 'edd' ? 'active' : ''}`}
+                        onClick={() => handleVisitTypeTabChange('edd')}
+                    >
+                        EDD Calendar
+                    </button>
+                )}
             </div>
 
             <div className="pv-calendar-section">
@@ -1571,13 +1684,20 @@ const PrenatalVisits = () => {
                     </div>
                 </div>
 
-                <div className="pv-grid-container">
+                {visitTypeTab === 'edd' && eddScheduleLoading && (
+                    <div className="edd-calendar-message" role="status">Loading due dates for this calendar range...</div>
+                )}
+                {visitTypeTab === 'edd' && eddScheduleError && (
+                    <div className="edd-calendar-message edd-calendar-error" role="alert">
+                        Could not load EDD schedule: {eddScheduleError.message || 'Please try again.'}
+                    </div>
+                )}
+
+                <div className={`pv-grid-container ${visitTypeTab === 'edd' && (eddScheduleLoading || eddScheduleError) ? 'edd-calendar-hidden' : ''}`}>
                     {calendarView === 'day' ? (
                         <div className="day-view-container">
                             {visibleDays.map(day => {
-                                const dayItems = visitTypeTab === 'postpartum'
-                                    ? postpartumTable.filter(v => v.patientRecordAvailable && v.visitDateOnly === day.date && matchStation(v.assignedStation, filterStation))
-                                    : visitsTable.filter(v => v.visitDateOnly === day.date && matchStation(v.assignedStation || v.visitStation, filterStation));
+                                const dayItems = getCalendarItemsForDay(day.date);
 
                                 return (
                                     <div key={day.date} className={`day-schedule-card ${day.date === TODAY ? 'day-today' : ''}`}>
@@ -1594,20 +1714,26 @@ const PrenatalVisits = () => {
                                             {dayItems.map(item => (
                                                 <div
                                                     key={item.id}
-                                                    className={`schedule-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
-                                                    onClick={(e) => { e.stopPropagation(); setSelectedVisit({ ...item, type: visitTypeTab === 'postpartum' ? 'Postpartum' : 'Prenatal' }); }}
+                                                    className={`schedule-item status-${visitTypeTab === 'edd' ? 'scheduled' : (item.status || 'scheduled').toLowerCase()} clickable ${visitTypeTab === 'edd' ? 'edd-schedule-item' : ''}`}
+                                                    onClick={event => handleCalendarItemClick(event, item)}
                                                 >
                                                     <div className="schedule-details">
                                                         <span className="schedule-patient">{item.patientName}</span>
-                                                        <span className="schedule-id">{visitTypeTab === 'postpartum' ? 'Postpartum Follow-up' : formatMotherId(item.patientId)}</span>
-                                                        <span className="schedule-id">Assigned: {item.assignedStaff || 'Unassigned'}</span>
+                                                        <span className="schedule-id">
+                                                            {visitTypeTab === 'edd'
+                                                                ? `Estimated due date · LMP ${formatReadableDate(item.lmp)}`
+                                                                : visitTypeTab === 'postpartum' ? 'Postpartum Follow-up' : formatMotherId(item.patientId)}
+                                                        </span>
+                                                        <span className="schedule-id">
+                                                            {visitTypeTab === 'edd' ? item.stationName : `Assigned: ${item.assignedStaff || 'Unassigned'}`}
+                                                        </span>
                                                     </div>
                                                     <span className={`schedule-status status-${(item.status || 'scheduled').toLowerCase()}`}>
-                                                        {item.status || 'Scheduled'}
+                                                        {visitTypeTab === 'edd' ? formatReadableDate(item.edd) : item.status || 'Scheduled'}
                                                     </span>
                                                 </div>
                                             ))}
-                                            {dayItems.length === 0 && <div className="no-schedules">No schedules for this day</div>}
+                                            {dayItems.length === 0 && <div className="no-schedules">No {visitTypeTab === 'edd' ? 'due dates' : 'schedules'} for this day</div>}
                                         </div>
                                     </div>
                                 );
@@ -1618,9 +1744,7 @@ const PrenatalVisits = () => {
                             {calendarView === 'week' ? (
                                 <div className="week-row">
                                     {visibleDays.map(day => {
-                                        const dayItems = visitTypeTab === 'postpartum'
-                                            ? postpartumTable.filter(v => v.patientRecordAvailable && v.visitDateOnly === day.date && matchStation(v.assignedStation, filterStation))
-                                            : visitsTable.filter(v => v.visitDateOnly === day.date && matchStation(v.assignedStation || v.visitStation, filterStation));
+                                        const dayItems = getCalendarItemsForDay(day.date);
 
                                         return (
                                             <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`} onClick={() => { setCalendarView('day'); setCurrentDate(new Date(day.date)); }}>
@@ -1632,12 +1756,16 @@ const PrenatalVisits = () => {
                                                     {dayItems.map(item => (
                                                         <div 
                                                             key={item.id} 
-                                                            className={`visit-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
-                                                            onClick={(e) => { e.stopPropagation(); setSelectedVisit({ ...item, type: visitTypeTab === 'postpartum' ? 'Postpartum' : 'Prenatal' }); }}
+                                                            className={`visit-item status-${visitTypeTab === 'edd' ? 'scheduled' : (item.status || 'scheduled').toLowerCase()} clickable ${visitTypeTab === 'edd' ? 'edd-visit-item' : ''}`}
+                                                            onClick={event => handleCalendarItemClick(event, item)}
                                                         >
                                                             <span className="visit-patient">{item.patientName}</span>
-                                                            <span className="visit-status">{visitTypeTab === 'postpartum' ? 'Postpartum' : (item.status || 'Scheduled')}</span>
-                                                            <span className="visit-status">Assigned: {item.assignedStaff || 'Unassigned'}</span>
+                                                            <span className="visit-status">
+                                                                {visitTypeTab === 'edd' ? 'EST. DUE DATE' : visitTypeTab === 'postpartum' ? 'Postpartum' : (item.status || 'Scheduled')}
+                                                            </span>
+                                                            <span className="visit-status">
+                                                                {visitTypeTab === 'edd' ? formatReadableDate(item.edd) : `Assigned: ${item.assignedStaff || 'Unassigned'}`}
+                                                            </span>
                                                         </div>
                                                     ))}
                                                     {dayItems.length === 0 && (
@@ -1657,9 +1785,7 @@ const PrenatalVisits = () => {
                                     return weeks.map((week, weekIndex) => (
                                         <div key={weekIndex} className="week-row">
                                             {week.map(day => {
-                                                const dayItems = visitTypeTab === 'postpartum'
-                                                    ? postpartumTable.filter(v => v.patientRecordAvailable && v.visitDateOnly === day.date && matchStation(v.assignedStation, filterStation))
-                                                    : visitsTable.filter(v => v.visitDateOnly === day.date && matchStation(v.assignedStation || v.visitStation, filterStation));
+                                                const dayItems = getCalendarItemsForDay(day.date);
 
                                                 return (
                                                     <div key={day.date} className={`day-cell ${day.date === TODAY ? 'day-today' : ''}`} onClick={() => { setCalendarView('day'); setCurrentDate(new Date(day.date)); }}>
@@ -1671,12 +1797,16 @@ const PrenatalVisits = () => {
                                                             {dayItems.map(item => (
                                                                 <div 
                                                                     key={item.id} 
-                                                                    className={`visit-item status-${(item.status || 'scheduled').toLowerCase()} clickable`}
-                                                                    onClick={(e) => { e.stopPropagation(); setSelectedVisit({ ...item, type: visitTypeTab === 'postpartum' ? 'Postpartum' : 'Prenatal' }); }}
+                                                                    className={`visit-item status-${visitTypeTab === 'edd' ? 'scheduled' : (item.status || 'scheduled').toLowerCase()} clickable ${visitTypeTab === 'edd' ? 'edd-visit-item' : ''}`}
+                                                                    onClick={event => handleCalendarItemClick(event, item)}
                                                                 >
                                                                     <span className="visit-patient">{item.patientName}</span>
-                                                                    <span className="visit-status">{visitTypeTab === 'postpartum' ? 'Postpartum' : (item.status || 'Scheduled')}</span>
-                                                                    <span className="visit-status">Assigned: {item.assignedStaff || 'Unassigned'}</span>
+                                                                    <span className="visit-status">
+                                                                        {visitTypeTab === 'edd' ? 'EST. DUE DATE' : visitTypeTab === 'postpartum' ? 'Postpartum' : (item.status || 'Scheduled')}
+                                                                    </span>
+                                                                    <span className="visit-status">
+                                                                        {visitTypeTab === 'edd' ? formatReadableDate(item.edd) : `Assigned: ${item.assignedStaff || 'Unassigned'}`}
+                                                                    </span>
                                                                 </div>
                                                             ))}
                                                             {dayItems.length === 0 && (
@@ -1700,8 +1830,10 @@ const PrenatalVisits = () => {
             <div className="pv-table-section">
                 <div className="section-header-row">
                     <h2 className="section-title">
-                        <Clock size={18} /> Visit Records
+                        {visitTypeTab === 'edd' ? <CalendarIcon size={18} /> : <Clock size={18} />}
+                        {visitTypeTab === 'edd' ? 'Estimated Due Dates' : 'Visit Records'}
                     </h2>
+                    {visitTypeTab !== 'edd' && (
                     <div className="table-filters">
                         {/* ── Search Patient Name ── */}
                         <div className="shared-search-wrap pv-header-search">
@@ -1772,10 +1904,11 @@ const PrenatalVisits = () => {
                             </div>
                         </div>
                     </div>
+                    )}
                 </div>
 
                 {/* Category Tabs */}
-                <div className="visit-category-tabs">
+                {visitTypeTab !== 'edd' && <div className="visit-category-tabs">
                     <button
                         className={`visit-category-tab ${visitCategoryTab === 'upcoming' ? 'active' : ''}`}
                         onClick={() => { setVisitCategoryTab('upcoming'); setCurrentPage(1); }}
@@ -1797,9 +1930,54 @@ const PrenatalVisits = () => {
                         <span>Completed</span>
                         <span className="tab-count-badge">{categorizedVisits.completed.length}</span>
                     </button>
-                </div>
+                </div>}
 
-                {visitTypeTab === 'prenatal' ? (
+                {visitTypeTab === 'edd' ? (
+                    <div className="table-responsive">
+                        <table className="pv-table">
+                            <thead>
+                                <tr>
+                                    <th style={{ textAlign: 'center', width: '50px' }}>#</th>
+                                    <th>Patient Name</th>
+                                    <th>Station</th>
+                                    <th>Last Menstruation Period</th>
+                                    <th>Estimated Due Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredEddSchedule.length > 0
+                                    ? filteredEddSchedule.map((row, index) => (
+                                            <tr
+                                                key={row.id}
+                                                className="pv-clickable-row"
+                                                onClick={() => navigate(`/dashboard/patients/${row.patientId}?tab=visits`)}
+                                            >
+                                                <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--color-text-muted)', fontSize: '12.5px', width: '50px' }}>{index + 1}</td>
+                                                <td>
+                                                    <div className="p-info">
+                                                        <span className="p-name">{row.patientName}</span>
+                                                        <span className="p-id">{formatMotherId(row.patientId)}</span>
+                                                    </div>
+                                                </td>
+                                                <td>{row.stationName}</td>
+                                                <td><span className="visit-date">{formatReadableDate(row.lmp)}</span></td>
+                                                <td><span className="visit-date">{formatReadableDate(row.edd)}</span></td>
+                                            </tr>
+                                        ))
+                                    : (
+                                        <tr>
+                                            <td colSpan="5" className="empty-tab-state">
+                                                <div className="empty-state-content">
+                                                    <CalendarCheck size={32} />
+                                                    <p>{eddScheduleLoading ? 'Loading due dates...' : 'No due dates in this calendar range.'}</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : visitTypeTab === 'prenatal' ? (
                     <div className="table-responsive">
                         <table className="pv-table">
                             <thead>
@@ -1965,7 +2143,7 @@ const PrenatalVisits = () => {
                     </div>
                 )}
 
-                {tabTotalPages > 1 && (
+                {visitTypeTab !== 'edd' && tabTotalPages > 1 && (
                     <div className="pagination-wrap">
                         <span>
                             Showing {tabStartIndex + 1}–{Math.min(tabStartIndex + itemsPerPage, tabVisits.length)} of {tabVisits.length}

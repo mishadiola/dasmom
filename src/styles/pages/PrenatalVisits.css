@@ -2369,3 +2369,30 @@ padding-right: 16px;
     color: var(--color-text);
 }
 
+.edd-calendar-hidden {
+    display: none !important;
+}
+
+.edd-calendar-table-wrap {
+    margin: 0 16px 16px;
+}
+
+.edd-calendar-message {
+    padding: 20px;
+    text-align: center;
+    color: var(--color-text-muted, #736d71);
+}
+
+.edd-calendar-error {
+    color: #a33b4b;
+}
+
+.visit-item.edd-visit-item {
+    background: rgba(185, 129, 138, 0.1);
+    border-left: 3px solid var(--color-rose, #b9818a);
+}
+
+.schedule-item.edd-schedule-item {
+    border-left: 4px solid var(--color-rose, #b9818a);
+    background: rgba(185, 129, 138, 0.06);
+}
